@@ -4,8 +4,8 @@ use super::{
 };
 use crate::shards;
 use provenance_core::{
-    Contribution, PromotionDecisionRecord, PromotionState, ProposalCard, SchemaVersion,
-    SynthesisPacket,
+    validate_optional_confidence_score, Contribution, PromotionDecisionRecord, PromotionState,
+    ProposalCard, SchemaVersion, SynthesisPacket,
 };
 
 impl StateStore {
@@ -30,6 +30,9 @@ impl StateStore {
             uncertainty,
             open_questions,
         } = input;
+        for claim in &material_claims {
+            validate_optional_confidence_score(claim.confidence)?;
+        }
         let path = shards::contributions_path(&self.layout, &scope_id);
         self.mutate_jsonl_records(&path, |records: &mut Vec<Contribution>| {
             let contribution = Contribution {
@@ -118,6 +121,7 @@ impl StateStore {
             proposal_type,
             title,
             summary,
+            confidence,
             traceability,
             promotion_state,
             duplicate_of,
@@ -141,6 +145,7 @@ impl StateStore {
             | PromotionState::Rejected
             | PromotionState::Deferred => {}
         }
+        let confidence = validate_optional_confidence_score(confidence)?;
         let path = shards::proposal_cards_path(&self.layout, &scope_id);
         self.mutate_jsonl_records(&path, |records: &mut Vec<ProposalCard>| {
             let proposal = ProposalCard {
@@ -151,6 +156,7 @@ impl StateStore {
                 proposal_type,
                 title,
                 summary,
+                confidence,
                 traceability,
                 promotion_state,
                 duplicate_of,

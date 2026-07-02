@@ -83,7 +83,7 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
             "--evidence-json",
             r#"[{"reference_id":"evidence_code_line","evidence_type":"artifact","summary":"Existing payroll check","file_path":"src/payroll/overtime.rs","line":42}]"#,
             "--claims-json",
-            r#"[{"claim_id":"claim_overtime_threshold","statement":"Overtime starts after the award threshold.","evidence_type":"artifact","evidence_reference_ids":["evidence_code_line"]}]"#,
+            r#"[{"claim_id":"claim_overtime_threshold","statement":"Overtime starts after the award threshold.","evidence_type":"artifact","evidence_reference_ids":["evidence_code_line"],"confidence":0.87}]"#,
             "--risks-json",
             r#"["Payroll underpayment if the threshold is wrong"]"#,
             "--uncertainty-level",
@@ -95,7 +95,8 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
         ])
         .assert()
         .success()
-        .stdout(predicates::str::contains("contrib_reviewer_001"));
+        .stdout(predicates::str::contains("contrib_reviewer_001"))
+        .stdout(predicates::str::contains(r#""confidence": 0.87"#));
 
     Command::cargo_bin("provenance")
         .unwrap()
@@ -148,6 +149,8 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
             "Clarify overtime traceability",
             "--summary",
             "Add source-backed threshold language.",
+            "--confidence",
+            "0.83",
             "--target-type",
             "requirement",
             "--target-id",
@@ -165,7 +168,8 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
         ])
         .assert()
         .success()
-        .stdout(predicates::str::contains("proposal_overtime_traceability"));
+        .stdout(predicates::str::contains("proposal_overtime_traceability"))
+        .stdout(predicates::str::contains(r#""confidence": 0.83"#));
 
     Command::cargo_bin("provenance")
         .unwrap()
@@ -223,6 +227,7 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
         .assert()
         .success()
         .stdout(predicates::str::contains("src/payroll/overtime.rs"))
+        .stdout(predicates::str::contains(r#""confidence": 0.83"#))
         .stdout(predicates::str::contains(
             r#""promotion_state": "accepted""#,
         ));
@@ -245,6 +250,8 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
 
     let exported = std::fs::read_to_string(export_path).unwrap();
     assert!(exported.contains(r#""proposal_cards""#));
+    assert!(exported.contains(r#""confidence": 0.87"#));
+    assert!(exported.contains(r#""confidence": 0.83"#));
     assert!(exported.contains(r#""promotion_decisions""#));
     assert!(exported.contains(r#""contributions""#));
     assert!(exported.contains(r#""synthesis_packets""#));

@@ -86,7 +86,7 @@ pub async fn materialize_state(layout: &ProvenanceLayout) -> anyhow::Result<Mate
     for scope in &manifest.scopes {
         for source in store.list_sources(&scope.id)? {
             sqlx::query(
-                "INSERT INTO sources (scope_id, id, name, source_type, url, reference, effective_date, review_date, superseded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO sources (scope_id, id, name, source_type, url, reference, commit_pin, effective_date, review_date, superseded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .bind(source.scope_id.as_str())
             .bind(source.id.as_str())
@@ -94,6 +94,7 @@ pub async fn materialize_state(layout: &ProvenanceLayout) -> anyhow::Result<Mate
             .bind(serde_name(&source.source_type)?)
             .bind(source.url)
             .bind(source.reference)
+            .bind(source.commit_pin)
             .bind(source.effective_date)
             .bind(source.review_date)
             .bind(
@@ -311,13 +312,14 @@ pub async fn materialize_state(layout: &ProvenanceLayout) -> anyhow::Result<Mate
             records_loaded += 1;
         }
         for proposal in store.list_proposal_cards(&scope.id)? {
-            sqlx::query("INSERT INTO proposal_cards (scope_id, id, proposal_key, proposal_type, title, summary, target_type, target_id, traceability, promotion_state, duplicate_of, superseded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+            sqlx::query("INSERT INTO proposal_cards (scope_id, id, proposal_key, proposal_type, title, summary, confidence, target_type, target_id, traceability, promotion_state, duplicate_of, superseded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
                 .bind(proposal.scope_id.as_str())
                 .bind(proposal.id.as_str())
                 .bind(&proposal.proposal_key)
                 .bind(serde_name(&proposal.proposal_type)?)
                 .bind(&proposal.title)
                 .bind(&proposal.summary)
+                .bind(proposal.confidence)
                 .bind(serde_name(&proposal.traceability.target.artifact_type)?)
                 .bind(proposal.traceability.target.artifact_id.as_str())
                 .bind(serde_json::to_string(&proposal.traceability)?)
@@ -403,6 +405,7 @@ mod report_tests {
                 source_type: SourceType::Policy,
                 url: None,
                 reference: None,
+                commit_pin: None,
                 effective_date: None,
                 review_date: None,
                 superseded_by: None,
@@ -620,6 +623,7 @@ mod report_tests {
                 source_type: SourceType::Legislation,
                 url: Some("https://example.test/sah".into()),
                 reference: Some("Department guidance".into()),
+                commit_pin: None,
                 effective_date: Some(1_714_521_600_000),
                 review_date: Some(1_717_200_000_000),
                 superseded_by: Some(StableId::new("source_sah_2025").unwrap()),
@@ -680,5 +684,78 @@ mod report_tests {
         assert_eq!(resolution.2.as_deref(), Some("Approver Two"));
         assert_eq!(resolution.3, Some(1_714_780_800_000));
         assert_eq!(resolution.4.as_deref(), Some("res_sah_2025"));
+    }
+
+    #[tokio::test]
+    async fn materialize_state_caches_commit_pin_and_confidence_scores() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+        let layout = ProvenanceLayout::new(root);
+        std::fs::create_dir_all(layout.manifest_path().parent().unwrap()).unwrap();
+        let scope = ScopeId::new("default").unwrap();
+        std::fs::write(
+            layout.manifest_path(),
+            serde_json::to_string(&Manifest::default_with_scope(
+                scope.clone(),
+                RepoPathPrefix::new("."),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let sources_path = crate::shards::sources_path(&layout, &scope);
+        std::fs::create_dir_all(sources_path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &sources_path,
+            r#"{"schema_version":1,"scope_id":"default","id":"source_codebase","name":"Example API","source_type":"project_artifact","commit_pin":"5e1f2a9c4b6d8e0f1234567890abcdef12345678"}
+"#,
+        )
+        .unwrap();
+
+        let contributions_path = crate::shards::contributions_path(&layout, &scope);
+        std::fs::create_dir_all(contributions_path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &contributions_path,
+            r#"{"schema_version":1,"scope_id":"default","id":"contrib_reviewer_001","target":{"artifact_type":"requirement","artifact_id":"req_overtime"},"participant_slot":"reviewer","stance":"support","strongest_finding":"Supported by code evidence.","evidence_references":[],"material_claims":[{"claim_id":"claim_overtime_threshold","statement":"Overtime starts after the award threshold.","evidence_type":"artifact","evidence_reference_ids":[],"confidence":0.87}],"risks":[],"objections":[],"challenges":[],"suggested_artifact_changes":[],"unsupported_recommendations":[],"uncertainty":{"level":"low","rationale":"Direct code evidence."},"open_questions":[]}
+"#,
+        )
+        .unwrap();
+
+        let proposals_path = crate::shards::proposal_cards_path(&layout, &scope);
+        std::fs::create_dir_all(proposals_path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &proposals_path,
+            r#"{"schema_version":1,"scope_id":"default","id":"proposal_overtime_traceability","proposal_key":"req-overtime-traceability","proposal_type":"requirement_candidate","title":"Clarify overtime traceability","summary":"Add source-backed threshold language.","confidence":0.83,"traceability":{"target":{"artifact_type":"requirement","artifact_id":"req_overtime"},"source_ids":["source_codebase"],"evidence_references":[],"supporting_claim_ids":["claim_overtime_threshold"]},"promotion_state":"proposed"}
+"#,
+        )
+        .unwrap();
+
+        materialize_state(&layout).await.unwrap();
+        let pool = open_cache(&layout).await.unwrap();
+        let commit_pin: Option<String> =
+            sqlx::query_scalar("SELECT commit_pin FROM sources WHERE id = ?")
+                .bind("source_codebase")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let proposal_confidence: Option<f64> =
+            sqlx::query_scalar("SELECT confidence FROM proposal_cards WHERE id = ?")
+                .bind("proposal_overtime_traceability")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let contribution_payload: String =
+            sqlx::query_scalar("SELECT payload FROM contributions WHERE id = ?")
+                .bind("contrib_reviewer_001")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        assert_eq!(
+            commit_pin.as_deref(),
+            Some("5e1f2a9c4b6d8e0f1234567890abcdef12345678")
+        );
+        assert_eq!(proposal_confidence, Some(0.83));
+        assert!(contribution_payload.contains(r#""confidence":0.87"#));
     }
 }

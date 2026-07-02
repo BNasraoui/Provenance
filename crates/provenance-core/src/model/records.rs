@@ -1,5 +1,5 @@
 use camino::Utf8PathBuf;
-use serde::{Deserialize, Serialize};
+use serde::{de::Error, Deserialize, Deserializer, Serialize};
 
 use super::enums::{
     ArtifactChangeType, ArtifactLinkTargetType, CanonicalArtifactType, ContributionStance,
@@ -19,6 +19,59 @@ const fn empty_array() -> serde_json::Value {
     serde_json::json!([])
 }
 
+pub fn validate_confidence_score(confidence: f64) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        confidence.is_finite() && (0.0..=1.0).contains(&confidence),
+        "confidence must be between 0.0 and 1.0"
+    );
+    Ok(())
+}
+
+pub fn validate_optional_confidence_score(confidence: Option<f64>) -> anyhow::Result<Option<f64>> {
+    match confidence {
+        Some(confidence) => {
+            validate_confidence_score(confidence)?;
+            Ok(Some(confidence))
+        }
+        None => Ok(None),
+    }
+}
+
+fn deserialize_optional_confidence<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let confidence = Option::<f64>::deserialize(deserializer)?;
+    validate_optional_confidence_score(confidence).map_err(D::Error::custom)
+}
+
+pub fn validate_commit_pin(commit_pin: &str) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        (7..=64).contains(&commit_pin.len())
+            && commit_pin.bytes().all(|byte| byte.is_ascii_hexdigit()),
+        "commit pin must be a 7-64 character hexadecimal Git commit"
+    );
+    Ok(())
+}
+
+pub fn validate_optional_commit_pin(commit_pin: Option<String>) -> anyhow::Result<Option<String>> {
+    match commit_pin {
+        Some(commit_pin) => {
+            validate_commit_pin(&commit_pin)?;
+            Ok(Some(commit_pin))
+        }
+        None => Ok(None),
+    }
+}
+
+fn deserialize_optional_commit_pin<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let commit_pin = Option::<String>::deserialize(deserializer)?;
+    validate_optional_commit_pin(commit_pin).map_err(D::Error::custom)
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Source {
     pub schema_version: SchemaVersion,
@@ -30,6 +83,13 @@ pub struct Source {
     pub url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference: Option<String>,
+    #[serde(
+        default,
+        alias = "commitPin",
+        deserialize_with = "deserialize_optional_commit_pin",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub commit_pin: Option<String>,
     #[serde(
         default,
         alias = "effectiveDate",
@@ -197,7 +257,11 @@ pub struct Resolution {
     pub context: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub enforcement: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_confidence",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub confidence: Option<f64>,
     #[serde(default)]
     pub inputs: Vec<ResolutionInput>,
@@ -249,7 +313,11 @@ pub struct Rule {
     pub rule_type: Option<RuleType>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub modality: Option<RuleModality>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_confidence",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub confidence: Option<f64>,
     #[serde(
         default,
@@ -406,7 +474,7 @@ pub struct IdeationEvidenceReference {
     pub line: Option<u32>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MaterialClaim {
     #[serde(alias = "claimId")]
     pub claim_id: StableId,
@@ -415,6 +483,12 @@ pub struct MaterialClaim {
     pub evidence_type: IdeationEvidenceType,
     #[serde(alias = "evidenceReferenceIds")]
     pub evidence_reference_ids: Vec<StableId>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_confidence",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub confidence: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -449,7 +523,7 @@ pub struct UncertaintyRating {
     pub rationale: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Contribution {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,
@@ -579,7 +653,7 @@ pub struct ProposalTraceability {
     pub supporting_claim_ids: Vec<StableId>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProposalCard {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,
@@ -591,6 +665,12 @@ pub struct ProposalCard {
     pub proposal_type: ProposalType,
     pub title: String,
     pub summary: String,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_confidence",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub confidence: Option<f64>,
     pub traceability: ProposalTraceability,
     #[serde(alias = "promotionState")]
     pub promotion_state: PromotionState,

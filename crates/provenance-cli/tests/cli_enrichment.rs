@@ -38,6 +38,8 @@ fn cli_creates_and_exports_enriched_sources_and_resolutions() {
             "legislation",
             "--reference",
             "Department guidance",
+            "--commit-pin",
+            "5e1f2a9c4b6d8e0f1234567890abcdef12345678",
             "--effective-date",
             "1714521600000",
             "--review-date",
@@ -51,6 +53,9 @@ fn cli_creates_and_exports_enriched_sources_and_resolutions() {
         .success()
         .stdout(predicates::str::contains(
             r#""effective_date": 1714521600000"#,
+        ))
+        .stdout(predicates::str::contains(
+            r#""commit_pin": "5e1f2a9c4b6d8e0f1234567890abcdef12345678""#,
         ))
         .stdout(predicates::str::contains(
             r#""superseded_by": "source_sah_2025""#,
@@ -142,8 +147,52 @@ fn cli_creates_and_exports_enriched_sources_and_resolutions() {
         .success();
 
     let exported = std::fs::read_to_string(export_path).unwrap();
+    assert!(exported.contains(r#""commit_pin": "5e1f2a9c4b6d8e0f1234567890abcdef12345678""#));
     assert!(exported.contains(r#""effective_date": 1714521600000"#));
     assert!(exported.contains(r#""review_date": 1717200000000"#));
     assert!(exported.contains(r#""input_type": "regulatory""#));
     assert!(exported.contains(r#""approved_at": 1714780800000"#));
+}
+
+#[test]
+fn cli_rejects_invalid_source_commit_pin() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().to_string_lossy().to_string();
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "init",
+            "--path",
+            &repo,
+            "--scope",
+            "default",
+            "--path-prefix",
+            ".",
+        ])
+        .assert()
+        .success();
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "sources",
+            "create",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--id",
+            "source_codebase",
+            "--name",
+            "Codebase",
+            "--source-type",
+            "project_artifact",
+            "--commit-pin",
+            "main",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("commit pin must"));
 }
