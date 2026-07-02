@@ -8,16 +8,16 @@ mod writers;
 use crate::{layout::ProvenanceLayout, shards};
 use provenance_core::{
     ArtifactLink, Boundary, CanonicalArtifact, ClaimChallenge, ConsensusFinding, ContestedClaim,
-    Contribution, ContributionStance, Domain, Edge, EvidenceGap, IdeationEvidenceReference,
-    IdeationTarget, Manifest, MaterialClaim, Message, MessageRole, MinorityObjection,
-    PromotionActor, PromotionDecision, PromotionDecisionRecord, PromotionState, ProposalCard,
-    ProposalTraceability, ProposalType, Question, QuestionStatus, RequiredHumanDecision,
-    Requirement, RequirementStatus, Resolution, ResolutionInput, ResolutionMethod,
-    ResolutionStatus, Rule, RuleModality, RuleSeverity, RuleStatus, RuleType, ScopeId, Service,
-    ServiceBinding, ServiceBindingType, ServiceEnvironment, ServiceStatus, ServiceTier, Source,
-    SourceReference, SourceType, StableId, SuggestedArtifact, SuggestedArtifactChange,
-    SynthesisPacket, Thread, ThreadParent, Topic, TopicStatus, UncertaintyRating,
-    UnsupportedRecommendation, UnsupportedSpeculation,
+    Contribution, ContributionStance, Domain, Edge, EdgeType, EvidenceGap,
+    IdeationEvidenceReference, IdeationTarget, Manifest, MaterialClaim, Message, MessageRole,
+    MinorityObjection, NodeType, PromotionActor, PromotionDecision, PromotionDecisionRecord,
+    PromotionState, ProposalCard, ProposalTraceability, ProposalType, Question, QuestionStatus,
+    RequiredHumanDecision, Requirement, RequirementStatus, Resolution, ResolutionInput,
+    ResolutionMethod, ResolutionStatus, Rule, RuleModality, RuleSeverity, RuleStatus, RuleType,
+    ScopeId, Service, ServiceBinding, ServiceBindingType, ServiceEnvironment, ServiceStatus,
+    ServiceTier, Source, SourceReference, SourceType, StableId, SuggestedArtifact,
+    SuggestedArtifactChange, SynthesisPacket, Thread, ThreadParent, Topic, TopicStatus,
+    UncertaintyRating, UnsupportedRecommendation, UnsupportedSpeculation,
 };
 use serde::de::DeserializeOwned;
 
@@ -64,6 +64,15 @@ pub struct AddSourceReferenceInput {
     pub source_id: StableId,
     pub requirement_id: StableId,
     pub clause: Option<String>,
+}
+
+pub struct CreateEdgeInput {
+    pub scope_id: ScopeId,
+    pub edge_type: EdgeType,
+    pub from_type: NodeType,
+    pub from_id: StableId,
+    pub to_type: NodeType,
+    pub to_id: StableId,
 }
 
 pub struct CreateBoundaryInput {
@@ -322,7 +331,7 @@ mod tests {
     use super::*;
     use provenance_core::{
         ArtifactLink, ArtifactLinkTargetType, EdgeType, IdeationTargetType, IdentityType, Manifest,
-        QuestionStatus, RepoPathPrefix, SourceReference, TopicStatus, UncertaintyLevel,
+        NodeType, QuestionStatus, RepoPathPrefix, SourceReference, TopicStatus, UncertaintyLevel,
     };
 
     fn seeded_source_requirement_store() -> (tempfile::TempDir, StateStore, ScopeId) {
@@ -431,6 +440,53 @@ mod tests {
             store.list_edges().unwrap()[0].edge_type,
             EdgeType::References
         );
+    }
+
+    #[test]
+    fn generic_edges_validate_endpoints_and_delete() {
+        let (_dir, store, scope) = seeded_source_requirement_store();
+        store
+            .create_requirement(CreateRequirementInput {
+                scope_id: scope.clone(),
+                id: StableId::new("req_leave").unwrap(),
+                statement: "Leave".into(),
+                description: None,
+                status: RequirementStatus::Active,
+                domain_id: None,
+                origin_thread: None,
+                origin_message: None,
+            })
+            .unwrap();
+
+        let edge = store
+            .create_edge(CreateEdgeInput {
+                scope_id: scope.clone(),
+                edge_type: EdgeType::RefinesInto,
+                from_type: NodeType::Requirement,
+                from_id: StableId::new("req_overtime").unwrap(),
+                to_type: NodeType::Requirement,
+                to_id: StableId::new("req_leave").unwrap(),
+            })
+            .unwrap();
+
+        assert_eq!(edge.edge_type, EdgeType::RefinesInto);
+        assert_eq!(store.list_edges().unwrap()[0].id, edge.id);
+
+        let err = store
+            .create_edge(CreateEdgeInput {
+                scope_id: scope.clone(),
+                edge_type: EdgeType::RefinesInto,
+                from_type: NodeType::Requirement,
+                from_id: StableId::new("req_overtime").unwrap(),
+                to_type: NodeType::Requirement,
+                to_id: StableId::new("req_missing").unwrap(),
+            })
+            .unwrap_err();
+        assert!(err.to_string().contains("to endpoint does not exist"));
+
+        let deleted = store.delete_edge(&scope, &edge.id).unwrap();
+        assert_eq!(deleted.id, edge.id);
+        assert!(store.list_edges().unwrap().is_empty());
     }
 
     #[test]

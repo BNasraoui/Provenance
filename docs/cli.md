@@ -7,6 +7,7 @@ provenance init --path . --scope default --path-prefix .
 provenance sources create --scope default --id source_policy --name "Policy"
 provenance domains create --scope default --id domain_policy --name "Policy"
 provenance requirements create --scope default --id req_policy --statement "Follow policy" --domain-id domain_policy
+provenance edges create --scope default --type references --from-type source --from-id source_policy --to-type requirement --to-id req_policy
 provenance services create --scope default --id ex_api --name "api" --status active
 provenance service-bindings create --scope default --rule-id rule_policy --service-id ex_api --binding-type enforces
 provenance materialize --format json
@@ -24,6 +25,8 @@ and `provenance skills install --target claude|opencode|agents-md [--global] [--
 managed `AGENTS.md` section into a new repo. `provenance prime` reports whether those
 skills are installed and prints the repo-root install command; shaping/ideation commands
 emit a non-blocking stderr hint when skills are missing, suppressible with `--quiet`.
+
+Graph edge commands: `edges create --type references|refines_into|depends_on|contradicts|supersedes|needs|resolves|spawns|produces --from-type source|requirement|resolution|rule --from-id <id> --to-type source|requirement|resolution|rule --to-id <id>`, `edges list`, and `edges delete --id <edge-id>`. Creation validates edge type/endpoints and requires both endpoint records to exist.
 
 Shaping turn-state commands: `questions create` requires `--method` (grill, prototype, research, verify, or task); `topics claim/release/close` and `questions claim/release/answer` manage claim state (claiming an already-claimed item fails and reports the holder; closing a topic or answering a question clears its claim); `requirements fog set/show/clear` manages the deliberately unstructured fog text on an anchor requirement.
 

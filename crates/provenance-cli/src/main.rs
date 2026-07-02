@@ -8,21 +8,23 @@ use camino::Utf8PathBuf;
 use clap::Parser;
 use cli::{
     BoundariesCommand, Cli, Command, ContributionsCommand, CoverageCommand, DomainsCommand,
-    FogCommand, PromotionDecisionsCommand, ProposalsCommand, QuestionsCommand, RequirementsCommand,
-    ResolutionsCommand, RulesCommand, ServiceBindingsCommand, ServicesCommand, SkillsCommand,
-    SourceRefCommand, SourcesCommand, SynthesisPacketsCommand, ThreadCommand, TopicsCommand,
+    EdgesCommand, FogCommand, PromotionDecisionsCommand, ProposalsCommand, QuestionsCommand,
+    RequirementsCommand, ResolutionsCommand, RulesCommand, ServiceBindingsCommand, ServicesCommand,
+    SkillsCommand, SourceRefCommand, SourcesCommand, SynthesisPacketsCommand, ThreadCommand,
+    TopicsCommand,
 };
 use output::OutputFormat;
 use provenance_core::{
     ArtifactLink, CanonicalArtifact, CanonicalArtifactType, ClaimChallenge, ConsensusFinding,
-    ContestedClaim, ContributionStance, EvidenceGap, IdeationEvidenceReference, IdeationTarget,
-    IdeationTargetType, IdentityType, MaterialClaim, MessageRole, MinorityObjection, NodeType,
-    PromotionActor, PromotionDecision, PromotionState, ProposalTraceability, ProposalType,
-    QuestionStatus, RequiredHumanDecision, RequirementStatus, ResolutionInput, ResolutionInputType,
-    ResolutionMethod, ResolutionStatus, RuleModality, RuleSeverity, RuleStatus, RuleType, ScopeId,
-    ServiceBindingType, ServiceEnvironment, ServiceStatus, ServiceTier, SourceReference,
-    SourceType, StableId, SuggestedArtifact, SuggestedArtifactChange, ThreadParent, TopicStatus,
-    UncertaintyLevel, UncertaintyRating, UnsupportedRecommendation, UnsupportedSpeculation,
+    ContestedClaim, ContributionStance, EdgeType, EvidenceGap, IdeationEvidenceReference,
+    IdeationTarget, IdeationTargetType, IdentityType, MaterialClaim, MessageRole,
+    MinorityObjection, NodeType, PromotionActor, PromotionDecision, PromotionState,
+    ProposalTraceability, ProposalType, QuestionStatus, RequiredHumanDecision, RequirementStatus,
+    ResolutionInput, ResolutionInputType, ResolutionMethod, ResolutionStatus, RuleModality,
+    RuleSeverity, RuleStatus, RuleType, ScopeId, ServiceBindingType, ServiceEnvironment,
+    ServiceStatus, ServiceTier, SourceReference, SourceType, StableId, SuggestedArtifact,
+    SuggestedArtifactChange, ThreadParent, TopicStatus, UncertaintyLevel, UncertaintyRating,
+    UnsupportedRecommendation, UnsupportedSpeculation,
 };
 use provenance_store::{
     cache,
@@ -30,10 +32,11 @@ use provenance_store::{
     merge::{merge_records, read_jsonl_records, MergeOutcome},
     state_store::{
         AddSourceReferenceInput, CreateBoundaryInput, CreateContributionInput, CreateDomainInput,
-        CreatePromotionDecisionInput, CreateProposalCardInput, CreateQuestionInput,
-        CreateRequirementInput, CreateResolutionInput, CreateRuleInput, CreateServiceBindingInput,
-        CreateServiceInput, CreateSourceInput, CreateSynthesisPacketInput, CreateTopicInput,
-        PostMessageInput, StateStore, UpdateQuestionInput,
+        CreateEdgeInput, CreatePromotionDecisionInput, CreateProposalCardInput,
+        CreateQuestionInput, CreateRequirementInput, CreateResolutionInput, CreateRuleInput,
+        CreateServiceBindingInput, CreateServiceInput, CreateSourceInput,
+        CreateSynthesisPacketInput, CreateTopicInput, PostMessageInput, StateStore,
+        UpdateQuestionInput,
     },
 };
 use serde::de::DeserializeOwned;
@@ -282,6 +285,52 @@ async fn main() -> anyhow::Result<()> {
                 },
             }
         }
+        Command::Edges { command } => match command {
+            EdgesCommand::Create {
+                repo,
+                scope,
+                edge_type,
+                from_type,
+                from_id,
+                to_type,
+                to_id,
+                format,
+            } => {
+                let edge =
+                    StateStore::new(ProvenanceLayout::new(repo)).create_edge(CreateEdgeInput {
+                        scope_id: ScopeId::new(scope)?,
+                        edge_type: EdgeType::parse(&edge_type)?,
+                        from_type: NodeType::parse(&from_type)?,
+                        from_id: StableId::new(from_id)?,
+                        to_type: NodeType::parse(&to_type)?,
+                        to_id: StableId::new(to_id)?,
+                    })?;
+                output::print(format, &edge)?;
+            }
+            EdgesCommand::List {
+                repo,
+                scope,
+                format,
+            } => {
+                let scope_id = ScopeId::new(scope)?;
+                let edges: Vec<_> = StateStore::new(ProvenanceLayout::new(repo))
+                    .list_edges()?
+                    .into_iter()
+                    .filter(|edge| edge.scope_id == scope_id)
+                    .collect();
+                output::print(format, &edges)?;
+            }
+            EdgesCommand::Delete {
+                repo,
+                scope,
+                id,
+                format,
+            } => {
+                let edge = StateStore::new(ProvenanceLayout::new(repo))
+                    .delete_edge(&ScopeId::new(scope)?, &StableId::new(id)?)?;
+                output::print(format, &edge)?;
+            }
+        },
         Command::Domains { command } => match command {
             DomainsCommand::Create {
                 repo,
