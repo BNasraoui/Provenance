@@ -5,9 +5,9 @@ use super::enums::{
     ArtifactChangeType, ArtifactLinkTargetType, CanonicalArtifactType, ContributionStance,
     EdgeType, EvidenceQuality, IdeationEvidenceType, IdeationTargetType, IdentityType, MessageRole,
     NodeType, PromotionDecision, PromotionState, ProposalType, QuestionStatus, RequirementStatus,
-    ResolutionInputType, ResolutionStatus, RuleModality, RuleSeverity, RuleStatus, RuleType,
-    ServiceBindingType, ServiceEnvironment, ServiceStatus, ServiceTier, SourceType,
-    SpeculationMarker, ThreadStatus, TopicStatus, UncertaintyLevel,
+    ResolutionInputType, ResolutionMethod, ResolutionStatus, RuleModality, RuleSeverity,
+    RuleStatus, RuleType, ServiceBindingType, ServiceEnvironment, ServiceStatus, ServiceTier,
+    SourceType, SpeculationMarker, ThreadStatus, TopicStatus, UncertaintyLevel,
 };
 use super::ids::{SchemaVersion, ScopeId, StableId};
 
@@ -94,6 +94,10 @@ pub struct Requirement {
     pub statement: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// Deliberately unstructured free text: the dim view of decisions and
+    /// investigations that are coming but cannot yet be phrased sharply.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fog: Option<String>,
     pub status: RequirementStatus,
     #[serde(default, alias = "domainId", skip_serializing_if = "Option::is_none")]
     pub domain_id: Option<StableId>,
@@ -134,6 +138,10 @@ pub struct Topic {
     pub requirement_id: StableId,
     pub title: String,
     pub status: TopicStatus,
+    #[serde(default, alias = "claimedBy", skip_serializing_if = "Option::is_none")]
+    pub claimed_by: Option<String>,
+    #[serde(default, alias = "claimedAt", skip_serializing_if = "Option::is_none")]
+    pub claimed_at: Option<i64>,
     #[serde(default)]
     pub links: Vec<ArtifactLink>,
 }
@@ -148,7 +156,14 @@ pub struct Question {
     #[serde(alias = "requirementId")]
     pub requirement_id: StableId,
     pub question: String,
+    /// The verb that resolves this question, chosen when the question is minted.
+    #[serde(alias = "resolutionMethod")]
+    pub resolution_method: ResolutionMethod,
     pub status: QuestionStatus,
+    #[serde(default, alias = "claimedBy", skip_serializing_if = "Option::is_none")]
+    pub claimed_by: Option<String>,
+    #[serde(default, alias = "claimedAt", skip_serializing_if = "Option::is_none")]
+    pub claimed_at: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub answer: Option<String>,
     #[serde(default)]
