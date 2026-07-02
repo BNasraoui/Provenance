@@ -6,6 +6,9 @@ pub const RESOLUTIONS_RULES_MIGRATION_ID: &str = "003";
 pub const THREADS_MESSAGES_MIGRATION_ID: &str = "004";
 pub const REPORT_INDEXES_MIGRATION_ID: &str = "005";
 pub const IDEATION_OUTPUTS_MIGRATION_ID: &str = "006";
+pub const SHAPING_SCAFFOLDING_MIGRATION_ID: &str = "007";
+pub const RESOLUTION_SOURCE_ENRICHMENT_MIGRATION_ID: &str = "008";
+pub const DOMAINS_SERVICES_MIGRATION_ID: &str = "009";
 const INITIAL_SQL: &str = include_str!("../migrations/001_initial_cache.sql");
 const SOURCE_REQUIREMENT_SQL: &str =
     include_str!("../migrations/002_sources_requirements_edges.sql");
@@ -13,6 +16,10 @@ const RESOLUTIONS_RULES_SQL: &str = include_str!("../migrations/003_resolutions_
 const THREADS_MESSAGES_SQL: &str = include_str!("../migrations/004_threads_messages.sql");
 const REPORT_INDEXES_SQL: &str = include_str!("../migrations/005_report_indexes.sql");
 const IDEATION_OUTPUTS_SQL: &str = include_str!("../migrations/006_ideation_outputs.sql");
+const SHAPING_SCAFFOLDING_SQL: &str = include_str!("../migrations/007_shaping_scaffolding.sql");
+const RESOLUTION_SOURCE_ENRICHMENT_SQL: &str =
+    include_str!("../migrations/008_resolution_source_enrichment.sql");
+const DOMAINS_SERVICES_SQL: &str = include_str!("../migrations/009_domains_services.sql");
 
 pub async fn run_migrations(pool: &SqlitePool) -> anyhow::Result<Vec<String>> {
     pool.execute("CREATE TABLE IF NOT EXISTS _schema_migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").await?;
@@ -25,6 +32,12 @@ pub async fn run_migrations(pool: &SqlitePool) -> anyhow::Result<Vec<String>> {
         (THREADS_MESSAGES_MIGRATION_ID, THREADS_MESSAGES_SQL),
         (REPORT_INDEXES_MIGRATION_ID, REPORT_INDEXES_SQL),
         (IDEATION_OUTPUTS_MIGRATION_ID, IDEATION_OUTPUTS_SQL),
+        (SHAPING_SCAFFOLDING_MIGRATION_ID, SHAPING_SCAFFOLDING_SQL),
+        (
+            RESOLUTION_SOURCE_ENRICHMENT_MIGRATION_ID,
+            RESOLUTION_SOURCE_ENRICHMENT_SQL,
+        ),
+        (DOMAINS_SERVICES_MIGRATION_ID, DOMAINS_SERVICES_SQL),
     ] {
         let already_applied: Option<String> =
             sqlx::query_scalar("SELECT id FROM _schema_migrations WHERE id = ?")
@@ -62,12 +75,12 @@ mod tests {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         assert_eq!(
             run_migrations(&pool).await.unwrap(),
-            vec!["001", "002", "003", "004", "005", "006"]
+            vec!["001", "002", "003", "004", "005", "006", "007", "008", "009"]
         );
         assert!(run_migrations(&pool).await.unwrap().is_empty());
         assert_eq!(
             applied_migrations(&pool).await.unwrap(),
-            vec!["001", "002", "003", "004", "005", "006"]
+            vec!["001", "002", "003", "004", "005", "006", "007", "008", "009"]
         );
     }
 }

@@ -5,18 +5,21 @@ mod output;
 use anyhow::Context;
 use clap::Parser;
 use cli::{
-    Cli, Command, ContributionsCommand, CoverageCommand, PromotionDecisionsCommand,
-    ProposalsCommand, RequirementsCommand, ResolutionsCommand, RulesCommand, SourceRefCommand,
-    SourcesCommand, SynthesisPacketsCommand, ThreadCommand,
+    BoundariesCommand, Cli, Command, ContributionsCommand, CoverageCommand, DomainsCommand,
+    PromotionDecisionsCommand, ProposalsCommand, QuestionsCommand, RequirementsCommand,
+    ResolutionsCommand, RulesCommand, ServiceBindingsCommand, ServicesCommand, SourceRefCommand,
+    SourcesCommand, SynthesisPacketsCommand, ThreadCommand, TopicsCommand,
 };
 use output::OutputFormat;
 use provenance_core::{
-    CanonicalArtifact, CanonicalArtifactType, ClaimChallenge, ConsensusFinding, ContestedClaim,
-    ContributionStance, EvidenceGap, IdeationEvidenceReference, IdeationTarget, IdeationTargetType,
-    IdentityType, MaterialClaim, MessageRole, MinorityObjection, NodeType, PromotionActor,
-    PromotionDecision, PromotionState, ProposalTraceability, ProposalType, RequiredHumanDecision,
-    RequirementStatus, ResolutionStatus, RuleModality, RuleSeverity, RuleStatus, RuleType, ScopeId,
-    SourceType, StableId, SuggestedArtifact, SuggestedArtifactChange, ThreadParent,
+    ArtifactLink, CanonicalArtifact, CanonicalArtifactType, ClaimChallenge, ConsensusFinding,
+    ContestedClaim, ContributionStance, EvidenceGap, IdeationEvidenceReference, IdeationTarget,
+    IdeationTargetType, IdentityType, MaterialClaim, MessageRole, MinorityObjection, NodeType,
+    PromotionActor, PromotionDecision, PromotionState, ProposalTraceability, ProposalType,
+    QuestionStatus, RequiredHumanDecision, RequirementStatus, ResolutionInput, ResolutionInputType,
+    ResolutionStatus, RuleModality, RuleSeverity, RuleStatus, RuleType, ScopeId,
+    ServiceBindingType, ServiceEnvironment, ServiceStatus, ServiceTier, SourceReference,
+    SourceType, StableId, SuggestedArtifact, SuggestedArtifactChange, ThreadParent, TopicStatus,
     UncertaintyLevel, UncertaintyRating, UnsupportedRecommendation, UnsupportedSpeculation,
 };
 use provenance_store::{
@@ -24,9 +27,11 @@ use provenance_store::{
     layout::ProvenanceLayout,
     merge::{merge_records, read_jsonl_records, MergeOutcome},
     state_store::{
-        AddSourceReferenceInput, CreateContributionInput, CreatePromotionDecisionInput,
-        CreateProposalCardInput, CreateRequirementInput, CreateResolutionInput, CreateRuleInput,
-        CreateSourceInput, CreateSynthesisPacketInput, PostMessageInput, StateStore,
+        AddSourceReferenceInput, CreateBoundaryInput, CreateContributionInput, CreateDomainInput,
+        CreatePromotionDecisionInput, CreateProposalCardInput, CreateQuestionInput,
+        CreateRequirementInput, CreateResolutionInput, CreateRuleInput, CreateServiceBindingInput,
+        CreateServiceInput, CreateSourceInput, CreateSynthesisPacketInput, CreateTopicInput,
+        PostMessageInput, StateStore,
     },
 };
 use serde::de::DeserializeOwned;
@@ -37,6 +42,29 @@ fn parse_json_arg<T: DeserializeOwned>(flag: &str, value: &str) -> anyhow::Resul
 
 fn stable_ids(values: Vec<String>) -> anyhow::Result<Vec<StableId>> {
     values.into_iter().map(StableId::new).collect()
+}
+
+fn resolution_inputs(
+    input_types: Vec<String>,
+    references: Vec<String>,
+    summaries: Vec<String>,
+) -> anyhow::Result<Vec<ResolutionInput>> {
+    anyhow::ensure!(
+        input_types.len() == references.len() && references.len() == summaries.len(),
+        "--input-type, --input-reference, and --input-summary must be provided the same number of times"
+    );
+    input_types
+        .into_iter()
+        .zip(references)
+        .zip(summaries)
+        .map(|((input_type, reference), summary)| {
+            Ok(ResolutionInput {
+                input_type: ResolutionInputType::parse(&input_type)?,
+                reference,
+                summary,
+            })
+        })
+        .collect()
 }
 
 fn ideation_target(target_type: &str, target_id: String) -> anyhow::Result<IdeationTarget> {
@@ -59,6 +87,20 @@ fn canonical_artifact(
         _ => anyhow::bail!(
             "--canonical-artifact-type and --canonical-artifact-id must be provided together"
         ),
+    }
+}
+
+fn boundary_source_ref(
+    source_id: Option<String>,
+    source_clause: Option<String>,
+) -> anyhow::Result<Option<SourceReference>> {
+    match (source_id, source_clause) {
+        (Some(source_id), source_clause) => Ok(Some(SourceReference {
+            source_id: StableId::new(source_id)?,
+            clause: source_clause,
+        })),
+        (None, None) => Ok(None),
+        (None, Some(_)) => anyhow::bail!("--source-clause requires --source-id"),
     }
 }
 
@@ -85,6 +127,9 @@ async fn main() -> anyhow::Result<()> {
                 source_type,
                 url,
                 reference,
+                effective_date,
+                review_date,
+                superseded_by,
                 origin_thread,
                 origin_message,
                 format,
@@ -97,6 +142,9 @@ async fn main() -> anyhow::Result<()> {
                         source_type: SourceType::parse(&source_type)?,
                         url,
                         reference,
+                        effective_date,
+                        review_date,
+                        superseded_by: superseded_by.map(StableId::new).transpose()?,
                         origin_thread: origin_thread.map(StableId::new).transpose()?,
                         origin_message: origin_message.map(StableId::new).transpose()?,
                     },
@@ -113,6 +161,7 @@ async fn main() -> anyhow::Result<()> {
                     statement,
                     description,
                     status,
+                    domain_id,
                     origin_thread,
                     origin_message,
                     format,
@@ -124,6 +173,7 @@ async fn main() -> anyhow::Result<()> {
                             statement,
                             description,
                             status: RequirementStatus::parse(&status)?,
+                            domain_id: domain_id.map(StableId::new).transpose()?,
                             origin_thread: origin_thread.map(StableId::new).transpose()?,
                             origin_message: origin_message.map(StableId::new).transpose()?,
                         })?;
@@ -150,6 +200,139 @@ async fn main() -> anyhow::Result<()> {
                 },
             }
         }
+        Command::Domains { command } => match command {
+            DomainsCommand::Create {
+                repo,
+                scope,
+                id,
+                name,
+                description,
+                color,
+                format,
+            } => {
+                let domain = StateStore::new(ProvenanceLayout::new(repo)).create_domain(
+                    CreateDomainInput {
+                        scope_id: ScopeId::new(scope)?,
+                        id: StableId::new(id)?,
+                        name,
+                        description,
+                        color,
+                    },
+                )?;
+                output::print(format, &domain)?;
+            }
+            DomainsCommand::List {
+                repo,
+                scope,
+                format,
+            } => {
+                let domains = StateStore::new(ProvenanceLayout::new(repo))
+                    .list_domains(&ScopeId::new(scope)?)?;
+                output::print(format, &domains)?;
+            }
+        },
+        Command::Boundaries { command } => match command {
+            BoundariesCommand::Create {
+                repo,
+                scope,
+                id,
+                requirement_id,
+                statement,
+                source_id,
+                source_clause,
+                format,
+            } => {
+                let boundary = StateStore::new(ProvenanceLayout::new(repo)).create_boundary(
+                    CreateBoundaryInput {
+                        scope_id: ScopeId::new(scope)?,
+                        id: StableId::new(id)?,
+                        requirement_id: StableId::new(requirement_id)?,
+                        statement,
+                        source_ref: boundary_source_ref(source_id, source_clause)?,
+                    },
+                )?;
+                output::print(format, &boundary)?;
+            }
+            BoundariesCommand::List {
+                repo,
+                scope,
+                format,
+            } => {
+                let boundaries = StateStore::new(ProvenanceLayout::new(repo))
+                    .list_boundaries(&ScopeId::new(scope)?)?;
+                output::print(format, &boundaries)?;
+            }
+        },
+        Command::Topics { command } => match command {
+            TopicsCommand::Create {
+                repo,
+                scope,
+                id,
+                requirement_id,
+                title,
+                status,
+                links_json,
+                format,
+            } => {
+                let topic = StateStore::new(ProvenanceLayout::new(repo)).create_topic(
+                    CreateTopicInput {
+                        scope_id: ScopeId::new(scope)?,
+                        id: StableId::new(id)?,
+                        requirement_id: StableId::new(requirement_id)?,
+                        title,
+                        status: TopicStatus::parse(&status)?,
+                        links: parse_json_arg::<Vec<ArtifactLink>>("links-json", &links_json)?,
+                    },
+                )?;
+                output::print(format, &topic)?;
+            }
+            TopicsCommand::List {
+                repo,
+                scope,
+                format,
+            } => {
+                let topics = StateStore::new(ProvenanceLayout::new(repo))
+                    .list_topics(&ScopeId::new(scope)?)?;
+                output::print(format, &topics)?;
+            }
+        },
+        Command::Questions { command } => match command {
+            QuestionsCommand::Create {
+                repo,
+                scope,
+                id,
+                topic_id,
+                question,
+                status,
+                answer,
+                links_json,
+                resolution_id,
+                format,
+            } => {
+                let question = StateStore::new(ProvenanceLayout::new(repo)).create_question(
+                    CreateQuestionInput {
+                        scope_id: ScopeId::new(scope)?,
+                        id: StableId::new(id)?,
+                        topic_id: StableId::new(topic_id)?,
+                        question,
+                        status: QuestionStatus::parse(&status)?,
+                        answer,
+                        links: parse_json_arg::<Vec<ArtifactLink>>("links-json", &links_json)?,
+                        resolution_id: resolution_id.map(StableId::new).transpose()?,
+                    },
+                )?;
+                output::print(format, &question)?;
+            }
+            QuestionsCommand::List {
+                repo,
+                scope,
+                format,
+            } => {
+                let questions = StateStore::new(ProvenanceLayout::new(repo))
+                    .list_questions(&ScopeId::new(scope)?)?;
+                output::print(format, &questions)?;
+            }
+        },
         Command::Graph {
             requirement_id,
             repo,
@@ -176,6 +359,13 @@ async fn main() -> anyhow::Result<()> {
                 context,
                 enforcement,
                 confidence,
+                input_type,
+                input_reference,
+                input_summary,
+                made_by,
+                approved_by,
+                approved_at,
+                superseded_by,
                 origin_thread,
                 origin_message,
                 format,
@@ -192,6 +382,11 @@ async fn main() -> anyhow::Result<()> {
                         context,
                         enforcement,
                         confidence,
+                        inputs: resolution_inputs(input_type, input_reference, input_summary)?,
+                        made_by,
+                        approved_by,
+                        approved_at,
+                        superseded_by: superseded_by.map(StableId::new).transpose()?,
                         origin_thread: origin_thread.map(StableId::new).transpose()?,
                         origin_message: origin_message.map(StableId::new).transpose()?,
                     },
@@ -246,6 +441,79 @@ async fn main() -> anyhow::Result<()> {
                         origin_message: origin_message.map(StableId::new).transpose()?,
                     })?;
                 output::print(format, &rule)?;
+            }
+        },
+        Command::Services { command } => match command {
+            ServicesCommand::Create(args) => {
+                let cli::ServiceCreateArgs {
+                    repo,
+                    scope,
+                    id,
+                    name,
+                    description,
+                    owner,
+                    repository,
+                    environment,
+                    tier,
+                    external_id,
+                    status,
+                    format,
+                } = *args;
+                let service = StateStore::new(ProvenanceLayout::new(repo)).create_service(
+                    CreateServiceInput {
+                        scope_id: ScopeId::new(scope)?,
+                        id: StableId::new(id)?,
+                        name,
+                        description,
+                        owner,
+                        repository,
+                        environment: environment
+                            .map(|value| ServiceEnvironment::parse(&value))
+                            .transpose()?,
+                        tier: tier.map(|value| ServiceTier::parse(&value)).transpose()?,
+                        external_id,
+                        status: ServiceStatus::parse(&status)?,
+                    },
+                )?;
+                output::print(format, &service)?;
+            }
+            ServicesCommand::List {
+                repo,
+                scope,
+                format,
+            } => {
+                let services = StateStore::new(ProvenanceLayout::new(repo))
+                    .list_services(&ScopeId::new(scope)?)?;
+                output::print(format, &services)?;
+            }
+        },
+        Command::ServiceBindings { command } => match command {
+            ServiceBindingsCommand::Create {
+                repo,
+                scope,
+                rule_id,
+                service_id,
+                binding_type,
+                format,
+            } => {
+                let binding = StateStore::new(ProvenanceLayout::new(repo)).create_service_binding(
+                    CreateServiceBindingInput {
+                        scope_id: ScopeId::new(scope)?,
+                        rule_id: StableId::new(rule_id)?,
+                        service_id: StableId::new(service_id)?,
+                        binding_type: ServiceBindingType::parse(&binding_type)?,
+                    },
+                )?;
+                output::print(format, &binding)?;
+            }
+            ServiceBindingsCommand::List {
+                repo,
+                scope,
+                format,
+            } => {
+                let bindings = StateStore::new(ProvenanceLayout::new(repo))
+                    .list_service_bindings(&ScopeId::new(scope)?)?;
+                output::print(format, &bindings)?;
             }
         },
         Command::Traceability {

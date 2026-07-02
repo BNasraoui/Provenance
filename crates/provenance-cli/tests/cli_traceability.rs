@@ -1,0 +1,162 @@
+use assert_cmd::Command;
+
+#[allow(clippy::too_many_lines)]
+#[test]
+fn cli_traceability_chain_reports_rule_upstream_nodes_and_gaps() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().to_string_lossy().to_string();
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "init",
+            "--path",
+            &repo,
+            "--scope",
+            "default",
+            "--path-prefix",
+            ".",
+        ])
+        .assert()
+        .success();
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "sources",
+            "create",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--id",
+            "source_schads",
+            "--name",
+            "SCHADS Award",
+        ])
+        .assert()
+        .success();
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "requirements",
+            "create",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--id",
+            "req_schads_overtime",
+            "--statement",
+            "Overtime must follow SCHADS thresholds",
+        ])
+        .assert()
+        .success();
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "requirements",
+            "source-ref",
+            "add",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--requirement-id",
+            "req_schads_overtime",
+            "--source-id",
+            "source_schads",
+        ])
+        .assert()
+        .success();
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "resolutions",
+            "create",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--id",
+            "res_schads_overtime",
+            "--title",
+            "Overtime interpretation",
+            "--requirement-id",
+            "req_schads_overtime",
+            "--position",
+            "Use award threshold",
+            "--rationale",
+            "Matches source clause",
+        ])
+        .assert()
+        .success();
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "rules",
+            "create",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--id",
+            "rule_schads_pay_001",
+            "--rule-code",
+            "SCHADS-PAY-001",
+            "--requirement-id",
+            "req_schads_overtime",
+            "--resolution-id",
+            "res_schads_overtime",
+            "--statement",
+            "Pay overtime after the threshold",
+            "--severity",
+            "high",
+        ])
+        .assert()
+        .success();
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args(["materialize", "--repo", &repo, "--format", "json"])
+        .assert()
+        .success();
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "graph",
+            "req_schads_overtime",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("\"edge_type\": \"needs\""))
+        .stdout(predicates::str::contains("\"from_type\": \"requirement\""));
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "traceability",
+            "rule_schads_pay_001",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("source_schads"))
+        .stdout(predicates::str::contains("res_schads_overtime"));
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "gaps", "--repo", &repo, "--scope", "default", "--format", "json",
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("[]"));
+}

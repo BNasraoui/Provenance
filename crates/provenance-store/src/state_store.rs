@@ -1,18 +1,23 @@
+mod domain_service_writers;
 mod ideation_writers;
 mod rule_writers;
+mod shaping_writers;
 mod thread_writers;
 mod writers;
 
 use crate::{layout::ProvenanceLayout, shards};
 use provenance_core::{
-    CanonicalArtifact, ClaimChallenge, ConsensusFinding, ContestedClaim, Contribution,
-    ContributionStance, Edge, EvidenceGap, IdeationEvidenceReference, IdeationTarget, Manifest,
-    MaterialClaim, Message, MessageRole, MinorityObjection, PromotionActor, PromotionDecision,
-    PromotionDecisionRecord, PromotionState, ProposalCard, ProposalTraceability, ProposalType,
-    RequiredHumanDecision, Requirement, RequirementStatus, Resolution, ResolutionStatus, Rule,
-    RuleModality, RuleSeverity, RuleStatus, RuleType, ScopeId, Source, SourceType, StableId,
-    SuggestedArtifact, SuggestedArtifactChange, SynthesisPacket, Thread, ThreadParent,
-    UncertaintyRating, UnsupportedRecommendation, UnsupportedSpeculation,
+    ArtifactLink, Boundary, CanonicalArtifact, ClaimChallenge, ConsensusFinding, ContestedClaim,
+    Contribution, ContributionStance, Domain, Edge, EvidenceGap, IdeationEvidenceReference,
+    IdeationTarget, Manifest, MaterialClaim, Message, MessageRole, MinorityObjection,
+    PromotionActor, PromotionDecision, PromotionDecisionRecord, PromotionState, ProposalCard,
+    ProposalTraceability, ProposalType, Question, QuestionStatus, RequiredHumanDecision,
+    Requirement, RequirementStatus, Resolution, ResolutionInput, ResolutionStatus, Rule,
+    RuleModality, RuleSeverity, RuleStatus, RuleType, ScopeId, Service, ServiceBinding,
+    ServiceBindingType, ServiceEnvironment, ServiceStatus, ServiceTier, Source, SourceReference,
+    SourceType, StableId, SuggestedArtifact, SuggestedArtifactChange, SynthesisPacket, Thread,
+    ThreadParent, Topic, TopicStatus, UncertaintyRating, UnsupportedRecommendation,
+    UnsupportedSpeculation,
 };
 use serde::de::DeserializeOwned;
 
@@ -28,6 +33,9 @@ pub struct CreateSourceInput {
     pub source_type: SourceType,
     pub url: Option<String>,
     pub reference: Option<String>,
+    pub effective_date: Option<i64>,
+    pub review_date: Option<i64>,
+    pub superseded_by: Option<StableId>,
     pub origin_thread: Option<StableId>,
     pub origin_message: Option<StableId>,
 }
@@ -38,8 +46,17 @@ pub struct CreateRequirementInput {
     pub statement: String,
     pub description: Option<String>,
     pub status: RequirementStatus,
+    pub domain_id: Option<StableId>,
     pub origin_thread: Option<StableId>,
     pub origin_message: Option<StableId>,
+}
+
+pub struct CreateDomainInput {
+    pub scope_id: ScopeId,
+    pub id: StableId,
+    pub name: String,
+    pub description: Option<String>,
+    pub color: Option<String>,
 }
 
 pub struct AddSourceReferenceInput {
@@ -47,6 +64,34 @@ pub struct AddSourceReferenceInput {
     pub source_id: StableId,
     pub requirement_id: StableId,
     pub clause: Option<String>,
+}
+
+pub struct CreateBoundaryInput {
+    pub scope_id: ScopeId,
+    pub id: StableId,
+    pub requirement_id: StableId,
+    pub statement: String,
+    pub source_ref: Option<SourceReference>,
+}
+
+pub struct CreateTopicInput {
+    pub scope_id: ScopeId,
+    pub id: StableId,
+    pub requirement_id: StableId,
+    pub title: String,
+    pub status: TopicStatus,
+    pub links: Vec<ArtifactLink>,
+}
+
+pub struct CreateQuestionInput {
+    pub scope_id: ScopeId,
+    pub id: StableId,
+    pub topic_id: StableId,
+    pub question: String,
+    pub status: QuestionStatus,
+    pub answer: Option<String>,
+    pub links: Vec<ArtifactLink>,
+    pub resolution_id: Option<StableId>,
 }
 
 pub struct CreateResolutionInput {
@@ -60,6 +105,11 @@ pub struct CreateResolutionInput {
     pub context: Option<String>,
     pub enforcement: Option<String>,
     pub confidence: Option<f64>,
+    pub inputs: Vec<ResolutionInput>,
+    pub made_by: Option<String>,
+    pub approved_by: Option<String>,
+    pub approved_at: Option<i64>,
+    pub superseded_by: Option<StableId>,
     pub origin_thread: Option<StableId>,
     pub origin_message: Option<StableId>,
 }
@@ -83,6 +133,26 @@ pub struct CreateRuleInput {
     pub source_section: Option<String>,
     pub origin_thread: Option<StableId>,
     pub origin_message: Option<StableId>,
+}
+
+pub struct CreateServiceInput {
+    pub scope_id: ScopeId,
+    pub id: StableId,
+    pub name: String,
+    pub description: Option<String>,
+    pub owner: Option<String>,
+    pub repository: Option<String>,
+    pub environment: Option<ServiceEnvironment>,
+    pub tier: Option<ServiceTier>,
+    pub external_id: Option<String>,
+    pub status: ServiceStatus,
+}
+
+pub struct CreateServiceBindingInput {
+    pub scope_id: ScopeId,
+    pub rule_id: StableId,
+    pub service_id: StableId,
+    pub binding_type: ServiceBindingType,
 }
 
 pub struct PostMessageInput {
@@ -170,6 +240,18 @@ impl StateStore {
     pub fn list_requirements(&self, scope: &ScopeId) -> anyhow::Result<Vec<Requirement>> {
         read_jsonl(&shards::requirements_path(&self.layout, scope))
     }
+    pub fn list_domains(&self, scope: &ScopeId) -> anyhow::Result<Vec<Domain>> {
+        read_jsonl(&shards::domains_path(&self.layout, scope))
+    }
+    pub fn list_boundaries(&self, scope: &ScopeId) -> anyhow::Result<Vec<Boundary>> {
+        read_jsonl(&shards::boundaries_path(&self.layout, scope))
+    }
+    pub fn list_topics(&self, scope: &ScopeId) -> anyhow::Result<Vec<Topic>> {
+        read_jsonl(&shards::topics_path(&self.layout, scope))
+    }
+    pub fn list_questions(&self, scope: &ScopeId) -> anyhow::Result<Vec<Question>> {
+        read_jsonl(&shards::questions_path(&self.layout, scope))
+    }
     pub fn list_edges(&self) -> anyhow::Result<Vec<Edge>> {
         read_jsonl(&shards::edges_path(&self.layout))
     }
@@ -178,6 +260,12 @@ impl StateStore {
     }
     pub fn list_rules(&self, scope: &ScopeId) -> anyhow::Result<Vec<Rule>> {
         read_jsonl(&shards::rules_path(&self.layout, scope))
+    }
+    pub fn list_services(&self, scope: &ScopeId) -> anyhow::Result<Vec<Service>> {
+        read_jsonl(&shards::services_path(&self.layout, scope))
+    }
+    pub fn list_service_bindings(&self, scope: &ScopeId) -> anyhow::Result<Vec<ServiceBinding>> {
+        read_jsonl(&shards::service_bindings_path(&self.layout, scope))
     }
     pub fn list_threads(&self, scope: &ScopeId) -> anyhow::Result<Vec<Thread>> {
         read_jsonl(&shards::threads_path(&self.layout, scope))
@@ -223,8 +311,55 @@ fn read_jsonl<T: DeserializeOwned>(path: &camino::Utf8Path) -> anyhow::Result<Ve
 mod tests {
     use super::*;
     use provenance_core::{
-        EdgeType, IdeationTargetType, IdentityType, Manifest, RepoPathPrefix, UncertaintyLevel,
+        ArtifactLink, ArtifactLinkTargetType, EdgeType, IdeationTargetType, IdentityType, Manifest,
+        QuestionStatus, RepoPathPrefix, SourceReference, TopicStatus, UncertaintyLevel,
     };
+
+    fn seeded_source_requirement_store() -> (tempfile::TempDir, StateStore, ScopeId) {
+        let dir = tempfile::tempdir().unwrap();
+        let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+        let layout = ProvenanceLayout::new(root);
+        std::fs::create_dir_all(layout.manifest_path().parent().unwrap()).unwrap();
+        let scope = ScopeId::new("default").unwrap();
+        std::fs::write(
+            layout.manifest_path(),
+            serde_json::to_string(&Manifest::default_with_scope(
+                scope.clone(),
+                RepoPathPrefix::new("."),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let store = StateStore::new(layout);
+        store
+            .create_source(CreateSourceInput {
+                scope_id: scope.clone(),
+                id: StableId::new("source_schads").unwrap(),
+                name: "SCHADS Award".into(),
+                source_type: SourceType::Policy,
+                url: None,
+                reference: None,
+                effective_date: None,
+                review_date: None,
+                superseded_by: None,
+                origin_thread: None,
+                origin_message: None,
+            })
+            .unwrap();
+        store
+            .create_requirement(CreateRequirementInput {
+                scope_id: scope.clone(),
+                id: StableId::new("req_overtime").unwrap(),
+                statement: "Overtime".into(),
+                description: None,
+                status: RequirementStatus::Active,
+                domain_id: None,
+                origin_thread: None,
+                origin_message: None,
+            })
+            .unwrap();
+        (dir, store, scope)
+    }
 
     #[test]
     fn source_requirement_records_are_written_deterministically() {
@@ -251,6 +386,9 @@ mod tests {
                 source_type: SourceType::Policy,
                 url: None,
                 reference: None,
+                effective_date: None,
+                review_date: None,
+                superseded_by: None,
                 origin_thread: None,
                 origin_message: None,
             })
@@ -262,6 +400,7 @@ mod tests {
                 statement: "Overtime".into(),
                 description: None,
                 status: RequirementStatus::Active,
+                domain_id: None,
                 origin_thread: None,
                 origin_message: None,
             })
@@ -282,6 +421,99 @@ mod tests {
             store.list_edges().unwrap()[0].edge_type,
             EdgeType::References
         );
+    }
+
+    #[test]
+    fn shaping_records_are_written_deterministically_and_validate_relationships() {
+        let (_dir, store, scope) = seeded_source_requirement_store();
+
+        store
+            .create_topic(CreateTopicInput {
+                scope_id: scope.clone(),
+                id: StableId::new("topic_b").unwrap(),
+                requirement_id: StableId::new("req_overtime").unwrap(),
+                title: "B topic".into(),
+                status: TopicStatus::Open,
+                links: Vec::new(),
+            })
+            .unwrap();
+        store
+            .create_topic(CreateTopicInput {
+                scope_id: scope.clone(),
+                id: StableId::new("topic_a").unwrap(),
+                requirement_id: StableId::new("req_overtime").unwrap(),
+                title: "A topic".into(),
+                status: TopicStatus::Explored,
+                links: vec![
+                    ArtifactLink {
+                        target_type: ArtifactLinkTargetType::Source,
+                        target_id: StableId::new("source_schads").unwrap(),
+                    },
+                    ArtifactLink {
+                        target_type: ArtifactLinkTargetType::Requirement,
+                        target_id: StableId::new("req_overtime").unwrap(),
+                    },
+                    ArtifactLink {
+                        target_type: ArtifactLinkTargetType::Source,
+                        target_id: StableId::new("source_schads").unwrap(),
+                    },
+                ],
+            })
+            .unwrap();
+        store
+            .create_boundary(CreateBoundaryInput {
+                scope_id: scope.clone(),
+                id: StableId::new("boundary_no_manual_rework").unwrap(),
+                requirement_id: StableId::new("req_overtime").unwrap(),
+                statement: "No manual rework".into(),
+                source_ref: Some(SourceReference {
+                    source_id: StableId::new("source_schads").unwrap(),
+                    clause: Some("28.1".into()),
+                }),
+            })
+            .unwrap();
+        let question = store
+            .create_question(CreateQuestionInput {
+                scope_id: scope.clone(),
+                id: StableId::new("question_threshold").unwrap(),
+                topic_id: StableId::new("topic_a").unwrap(),
+                question: "Which threshold applies?".into(),
+                status: QuestionStatus::Open,
+                answer: None,
+                links: Vec::new(),
+                resolution_id: None,
+            })
+            .unwrap();
+
+        let topics = store.list_topics(&scope).unwrap();
+        assert_eq!(topics[0].id.as_str(), "topic_a");
+        assert_eq!(topics[0].links.len(), 2);
+        assert_eq!(topics[0].links[0].target_id.as_str(), "req_overtime");
+        assert_eq!(topics[0].links[1].target_id.as_str(), "source_schads");
+        assert_eq!(
+            store.list_boundaries(&scope).unwrap()[0]
+                .source_ref
+                .as_ref()
+                .unwrap()
+                .clause
+                .as_deref(),
+            Some("28.1")
+        );
+        assert_eq!(question.requirement_id.as_str(), "req_overtime");
+        assert!(store
+            .create_question(CreateQuestionInput {
+                scope_id: scope,
+                id: StableId::new("question_missing_topic").unwrap(),
+                topic_id: StableId::new("topic_missing").unwrap(),
+                question: "Missing topic?".into(),
+                status: QuestionStatus::Open,
+                answer: None,
+                links: Vec::new(),
+                resolution_id: None,
+            })
+            .unwrap_err()
+            .to_string()
+            .contains("topic does not exist"));
     }
 
     #[test]

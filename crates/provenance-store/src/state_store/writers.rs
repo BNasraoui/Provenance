@@ -14,6 +14,9 @@ impl StateStore {
             source_type,
             url,
             reference,
+            effective_date,
+            review_date,
+            superseded_by,
             origin_thread,
             origin_message,
         } = input;
@@ -26,6 +29,9 @@ impl StateStore {
             source_type,
             url,
             reference,
+            effective_date,
+            review_date,
+            superseded_by,
             origin_thread,
             origin_message,
         };
@@ -46,9 +52,18 @@ impl StateStore {
             statement,
             description,
             status,
+            domain_id,
             origin_thread,
             origin_message,
         } = input;
+        if let Some(domain_id) = &domain_id {
+            anyhow::ensure!(
+                self.list_domains(&scope_id)?
+                    .iter()
+                    .any(|domain| &domain.id == domain_id),
+                "domain does not exist"
+            );
+        }
         let mut records = self.list_requirements(&scope_id)?;
         let requirement = Requirement {
             schema_version: SchemaVersion(1),
@@ -57,6 +72,7 @@ impl StateStore {
             statement,
             description,
             status,
+            domain_id,
             source_refs: Vec::new(),
             origin_thread,
             origin_message,

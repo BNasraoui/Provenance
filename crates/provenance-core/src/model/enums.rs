@@ -82,6 +82,36 @@ pub enum NodeType {
     Resolution,
     #[serde(rename = "rule")]
     Rule,
+    #[serde(rename = "topic")]
+    Topic,
+    #[serde(rename = "question")]
+    Question,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ArtifactLinkTargetType {
+    #[serde(rename = "source")]
+    Source,
+    #[serde(rename = "requirement")]
+    Requirement,
+    #[serde(rename = "resolution")]
+    Resolution,
+    #[serde(rename = "rule")]
+    Rule,
+}
+
+impl ArtifactLinkTargetType {
+    pub fn parse(value: &str) -> anyhow::Result<Self> {
+        match normalize_enum_value(value).as_str() {
+            "source" => Ok(Self::Source),
+            "requirement" => Ok(Self::Requirement),
+            "resolution" => Ok(Self::Resolution),
+            "rule" => Ok(Self::Rule),
+            _ => anyhow::bail!(
+                "artifact link target type must be source, requirement, resolution, or rule"
+            ),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -344,12 +374,139 @@ impl PromotionDecision {
 
 impl NodeType {
     pub fn parse(value: &str) -> anyhow::Result<Self> {
-        match value {
+        match normalize_enum_value(value).as_str() {
             "source" => Ok(Self::Source),
             "requirement" => Ok(Self::Requirement),
             "resolution" => Ok(Self::Resolution),
             "rule" => Ok(Self::Rule),
-            _ => anyhow::bail!("parent type must be source, requirement, resolution, or rule"),
+            "topic" => Ok(Self::Topic),
+            "question" => Ok(Self::Question),
+            _ => anyhow::bail!(
+                "parent type must be source, requirement, resolution, rule, topic, or question"
+            ),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TopicStatus {
+    #[serde(rename = "open")]
+    Open,
+    #[serde(rename = "explored")]
+    Explored,
+    #[serde(rename = "closed")]
+    Closed,
+}
+
+impl TopicStatus {
+    pub fn parse(value: &str) -> anyhow::Result<Self> {
+        match normalize_enum_value(value).as_str() {
+            "open" => Ok(Self::Open),
+            "explored" => Ok(Self::Explored),
+            "closed" => Ok(Self::Closed),
+            _ => anyhow::bail!("topic status must be open, explored, or closed"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum QuestionStatus {
+    #[serde(rename = "open")]
+    Open,
+    #[serde(rename = "answered")]
+    Answered,
+}
+
+impl QuestionStatus {
+    pub fn parse(value: &str) -> anyhow::Result<Self> {
+        match normalize_enum_value(value).as_str() {
+            "open" => Ok(Self::Open),
+            "answered" => Ok(Self::Answered),
+            _ => anyhow::bail!("question status must be open or answered"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ServiceEnvironment {
+    #[serde(rename = "production")]
+    Production,
+    #[serde(rename = "staging")]
+    Staging,
+    #[serde(rename = "development")]
+    Development,
+}
+
+impl ServiceEnvironment {
+    pub fn parse(value: &str) -> anyhow::Result<Self> {
+        match normalize_enum_value(value).as_str() {
+            "production" => Ok(Self::Production),
+            "staging" => Ok(Self::Staging),
+            "development" => Ok(Self::Development),
+            _ => anyhow::bail!("service environment must be production, staging, or development"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ServiceTier {
+    #[serde(rename = "critical")]
+    Critical,
+    #[serde(rename = "standard")]
+    Standard,
+    #[serde(rename = "internal")]
+    Internal,
+}
+
+impl ServiceTier {
+    pub fn parse(value: &str) -> anyhow::Result<Self> {
+        match normalize_enum_value(value).as_str() {
+            "critical" => Ok(Self::Critical),
+            "standard" => Ok(Self::Standard),
+            "internal" => Ok(Self::Internal),
+            _ => anyhow::bail!("service tier must be critical, standard, or internal"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ServiceStatus {
+    #[serde(rename = "active")]
+    Active,
+    #[serde(rename = "deprecated")]
+    Deprecated,
+    #[serde(rename = "decommissioned")]
+    Decommissioned,
+}
+
+impl ServiceStatus {
+    pub fn parse(value: &str) -> anyhow::Result<Self> {
+        match normalize_enum_value(value).as_str() {
+            "active" => Ok(Self::Active),
+            "deprecated" => Ok(Self::Deprecated),
+            "decommissioned" => Ok(Self::Decommissioned),
+            _ => anyhow::bail!("service status must be active, deprecated, or decommissioned"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ServiceBindingType {
+    #[serde(rename = "enforces")]
+    Enforces,
+    #[serde(rename = "consumes")]
+    Consumes,
+    #[serde(rename = "monitors")]
+    Monitors,
+}
+
+impl ServiceBindingType {
+    pub fn parse(value: &str) -> anyhow::Result<Self> {
+        match normalize_enum_value(value).as_str() {
+            "enforces" => Ok(Self::Enforces),
+            "consumes" => Ok(Self::Consumes),
+            "monitors" => Ok(Self::Monitors),
+            _ => anyhow::bail!("service binding type must be enforces, consumes, or monitors"),
         }
     }
 }
@@ -425,6 +582,39 @@ impl ResolutionStatus {
             "superseded" => Ok(Self::Superseded),
             "abandoned" => Ok(Self::Abandoned),
             _ => anyhow::bail!("resolution status must be draft, review, proposed, approved, rejected, revised, superseded, or abandoned"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ResolutionInputType {
+    #[serde(rename = "regulatory")]
+    Regulatory,
+    #[serde(rename = "legal_advice")]
+    LegalAdvice,
+    #[serde(rename = "commercial")]
+    Commercial,
+    #[serde(rename = "benchmark")]
+    Benchmark,
+    #[serde(rename = "technical")]
+    Technical,
+    #[serde(rename = "incident")]
+    Incident,
+    #[serde(rename = "source_material")]
+    SourceMaterial,
+}
+
+impl ResolutionInputType {
+    pub fn parse(value: &str) -> anyhow::Result<Self> {
+        match normalize_enum_value(value).as_str() {
+            "regulatory" => Ok(Self::Regulatory),
+            "legal_advice" => Ok(Self::LegalAdvice),
+            "commercial" => Ok(Self::Commercial),
+            "benchmark" => Ok(Self::Benchmark),
+            "technical" => Ok(Self::Technical),
+            "incident" => Ok(Self::Incident),
+            "source_material" => Ok(Self::SourceMaterial),
+            _ => anyhow::bail!("resolution input type must be regulatory, legal_advice, commercial, benchmark, technical, incident, or source_material"),
         }
     }
 }
@@ -528,6 +718,8 @@ impl RuleModality {
 pub enum ThreadStatus {
     #[serde(rename = "active")]
     Active,
+    #[serde(rename = "resolved")]
+    Resolved,
     #[serde(rename = "archived")]
     Archived,
 }
