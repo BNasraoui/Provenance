@@ -1,4 +1,6 @@
-use super::{AddSourceReferenceInput, CreateRequirementInput, CreateSourceInput, StateStore};
+use super::{
+    AddSourceReferenceInput, CreateEdgeInput, CreateRequirementInput, CreateSourceInput, StateStore,
+};
 use crate::{jsonl, shards};
 use provenance_core::{
     edge_validation::validate_edge_endpoint, Edge, EdgeType, NodeType, Requirement, SchemaVersion,
@@ -192,6 +194,32 @@ impl StateStore {
         Ok(edge)
     }
 
+    pub fn create_edge(&self, input: CreateEdgeInput) -> anyhow::Result<Edge> {
+        let CreateEdgeInput {
+            scope_id,
+            edge_type,
+            from_type,
+            from_id,
+            to_type,
+            to_id,
+        } = input;
+        validate_edge_endpoint(edge_type, from_type, to_type)?;
+        self.ensure_edge_endpoint_exists(&scope_id, from_type, &from_id, "from")?;
+        self.ensure_edge_endpoint_exists(&scope_id, to_type, &to_id, "to")?;
+        self.add_edge(scope_id, edge_type, from_type, from_id, to_type, to_id)
+    }
+
+    pub fn delete_edge(&self, scope_id: &ScopeId, id: &StableId) -> anyhow::Result<Edge> {
+        let mut records = self.list_edges()?;
+        let index = records
+            .iter()
+            .position(|record| &record.scope_id == scope_id && &record.id == id)
+            .ok_or_else(|| anyhow::anyhow!("edge does not exist"))?;
+        let edge = records.remove(index);
+        jsonl::write_jsonl_atomic(&shards::edges_path(&self.layout), &records)?;
+        Ok(edge)
+    }
+
     pub(crate) fn add_edge(
         &self,
         scope_id: ScopeId,
@@ -228,5 +256,39 @@ impl StateStore {
         });
         jsonl::write_jsonl_atomic(&shards::edges_path(&self.layout), &records)?;
         Ok(edge)
+    }
+
+    fn ensure_edge_endpoint_exists(
+        &self,
+        scope_id: &ScopeId,
+        node_type: NodeType,
+        id: &StableId,
+        side: &str,
+    ) -> anyhow::Result<()> {
+        let exists = match node_type {
+            NodeType::Source => self
+                .list_sources(scope_id)?
+                .iter()
+                .any(|source| &source.id == id),
+            NodeType::Requirement => self
+                .list_requirements(scope_id)?
+                .iter()
+                .any(|requirement| &requirement.id == id),
+            NodeType::Resolution => self
+                .list_resolutions(scope_id)?
+                .iter()
+                .any(|resolution| &resolution.id == id),
+            NodeType::Rule => self.list_rules(scope_id)?.iter().any(|rule| &rule.id == id),
+            NodeType::Topic => self
+                .list_topics(scope_id)?
+                .iter()
+                .any(|topic| &topic.id == id),
+            NodeType::Question => self
+                .list_questions(scope_id)?
+                .iter()
+                .any(|question| &question.id == id),
+        };
+        anyhow::ensure!(exists, "{side} endpoint does not exist");
+        Ok(())
     }
 }

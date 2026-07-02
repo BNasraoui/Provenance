@@ -42,6 +42,10 @@ pub enum Command {
         #[command(subcommand)]
         command: RequirementsCommand,
     },
+    Edges {
+        #[command(subcommand)]
+        command: EdgesCommand,
+    },
     Domains {
         #[command(subcommand)]
         command: DomainsCommand,
@@ -212,6 +216,46 @@ pub enum Command {
         #[arg(long)]
         output: Option<Utf8PathBuf>,
         #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
+        format: OutputFormat,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum EdgesCommand {
+    Create {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long = "type")]
+        edge_type: String,
+        #[arg(long)]
+        from_type: String,
+        #[arg(long)]
+        from_id: String,
+        #[arg(long)]
+        to_type: String,
+        #[arg(long)]
+        to_id: String,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+    List {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+    Delete {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long)]
+        id: String,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },
 }
