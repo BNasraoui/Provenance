@@ -427,6 +427,35 @@ impl QuestionStatus {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ResolutionMethod {
+    #[serde(rename = "grill")]
+    Grill,
+    #[serde(rename = "prototype")]
+    Prototype,
+    #[serde(rename = "research")]
+    Research,
+    #[serde(rename = "verify")]
+    Verify,
+    #[serde(rename = "task")]
+    Task,
+}
+
+impl ResolutionMethod {
+    pub fn parse(value: &str) -> anyhow::Result<Self> {
+        match normalize_enum_value(value).as_str() {
+            "grill" => Ok(Self::Grill),
+            "prototype" => Ok(Self::Prototype),
+            "research" => Ok(Self::Research),
+            "verify" => Ok(Self::Verify),
+            "task" => Ok(Self::Task),
+            _ => anyhow::bail!(
+                "resolution method must be grill, prototype, research, verify, or task"
+            ),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ServiceEnvironment {
     #[serde(rename = "production")]
