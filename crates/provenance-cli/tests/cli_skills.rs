@@ -36,6 +36,25 @@ fn skills_list_and_show_embedded_skill_files() {
 }
 
 #[test]
+fn embedded_skills_include_turn_based_shaping_skill() {
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args(["skills", "list", "--format", "json"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(r#""name": "shaping""#));
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args(["skills", "show", "shaping"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("LAND-AS-YOU-GO"))
+        .stdout(predicate::str::contains("Chart"))
+        .stdout(predicate::str::contains("Work"));
+}
+
+#[test]
 fn skills_install_claude_target_is_idempotent_and_requires_force_for_drift() {
     let dir = tempfile::tempdir().unwrap();
 

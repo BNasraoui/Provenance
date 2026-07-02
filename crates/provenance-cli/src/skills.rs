@@ -18,6 +18,10 @@ const EMBEDDED_SKILLS: &[EmbeddedSkill] = &[
         content: include_str!("../../../skills/fork-tournament/SKILL.md"),
     },
     EmbeddedSkill {
+        directory: "shaping",
+        content: include_str!("../../../skills/shaping/SKILL.md"),
+    },
+    EmbeddedSkill {
         directory: "swarm-backtrace",
         content: include_str!("../../../skills/swarm-backtrace/SKILL.md"),
     },

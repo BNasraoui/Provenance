@@ -36,7 +36,7 @@ provenance prime
 | `provenance graph <requirement>` | Show the neighbourhood of a requirement |
 | `provenance traceability <rule>` | Walk a rule back to the decision and requirement behind it |
 | `provenance coverage scan --path .` | Match `@provenance` code annotations against rules |
-| `provenance skills install --target claude` | Install the bundled agent skills (`fork-tournament`, `swarm-backtrace`) |
+| `provenance skills install --target claude` | Install the bundled agent skills (`shaping`, `fork-tournament`, `swarm-backtrace`) |
 
 ### Documentation
 
