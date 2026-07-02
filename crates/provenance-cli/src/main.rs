@@ -1,14 +1,16 @@
 mod cli;
 mod handlers;
 mod output;
+mod skills;
 
 use anyhow::Context;
+use camino::Utf8PathBuf;
 use clap::Parser;
 use cli::{
     BoundariesCommand, Cli, Command, ContributionsCommand, CoverageCommand, DomainsCommand,
     FogCommand, PromotionDecisionsCommand, ProposalsCommand, QuestionsCommand, RequirementsCommand,
-    ResolutionsCommand, RulesCommand, ServiceBindingsCommand, ServicesCommand, SourceRefCommand,
-    SourcesCommand, SynthesisPacketsCommand, ThreadCommand, TopicsCommand,
+    ResolutionsCommand, RulesCommand, ServiceBindingsCommand, ServicesCommand, SkillsCommand,
+    SourceRefCommand, SourcesCommand, SynthesisPacketsCommand, ThreadCommand, TopicsCommand,
 };
 use output::OutputFormat;
 use provenance_core::{
@@ -96,6 +98,27 @@ struct FogView {
     fog: Option<String>,
 }
 
+#[derive(serde::Serialize)]
+struct PrimeOutput {
+    #[serde(flatten)]
+    view: cache::PrimeContextView,
+    skills: skills::SkillInstallStatus,
+}
+
+fn warn_if_skills_missing(repo: &Utf8PathBuf, quiet: bool) -> anyhow::Result<()> {
+    if quiet {
+        return Ok(());
+    }
+    let status = skills::install_status(repo.as_std_path())?;
+    if !status.installed {
+        eprintln!(
+            "hint: provenance skills are not installed; run `{}` from the repo root",
+            status.install_command
+        );
+    }
+    Ok(())
+}
+
 fn boundary_source_ref(
     source_id: Option<String>,
     source_clause: Option<String>,
@@ -113,7 +136,9 @@ fn boundary_source_ref(
 #[allow(clippy::too_many_lines)]
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    match Cli::parse().command {
+    let cli = Cli::parse();
+    let quiet = cli.quiet;
+    match cli.command {
         Command::Init {
             path,
             scope,
@@ -401,6 +426,7 @@ async fn main() -> anyhow::Result<()> {
                 resolution_id,
                 format,
             } => {
+                warn_if_skills_missing(&repo, quiet)?;
                 let question = StateStore::new(ProvenanceLayout::new(repo)).create_question(
                     CreateQuestionInput {
                         scope_id: ScopeId::new(scope)?,
@@ -421,6 +447,7 @@ async fn main() -> anyhow::Result<()> {
                 scope,
                 format,
             } => {
+                warn_if_skills_missing(&repo, quiet)?;
                 let questions = StateStore::new(ProvenanceLayout::new(repo))
                     .list_questions(&ScopeId::new(scope)?)?;
                 output::print(format, &questions)?;
@@ -432,6 +459,7 @@ async fn main() -> anyhow::Result<()> {
                 actor,
                 format,
             } => {
+                warn_if_skills_missing(&repo, quiet)?;
                 let question = StateStore::new(ProvenanceLayout::new(repo)).claim_question(
                     &ScopeId::new(scope)?,
                     &StableId::new(id)?,
@@ -445,6 +473,7 @@ async fn main() -> anyhow::Result<()> {
                 id,
                 format,
             } => {
+                warn_if_skills_missing(&repo, quiet)?;
                 let question = StateStore::new(ProvenanceLayout::new(repo))
                     .release_question(&ScopeId::new(scope)?, &StableId::new(id)?)?;
                 output::print(format, &question)?;
@@ -457,6 +486,7 @@ async fn main() -> anyhow::Result<()> {
                 resolution_id,
                 format,
             } => {
+                warn_if_skills_missing(&repo, quiet)?;
                 let question = StateStore::new(ProvenanceLayout::new(repo)).answer_question(
                     &ScopeId::new(scope)?,
                     &StableId::new(id)?,
@@ -725,6 +755,7 @@ async fn main() -> anyhow::Result<()> {
                 open_questions_json,
                 format,
             } => {
+                warn_if_skills_missing(&repo, quiet)?;
                 let contribution = StateStore::new(ProvenanceLayout::new(repo))
                     .create_contribution(CreateContributionInput {
                         scope_id: ScopeId::new(scope)?,
@@ -776,6 +807,7 @@ async fn main() -> anyhow::Result<()> {
                 scope,
                 format,
             } => {
+                warn_if_skills_missing(&repo, quiet)?;
                 let contributions = StateStore::new(ProvenanceLayout::new(repo))
                     .list_contributions(&ScopeId::new(scope)?)?;
                 output::print(format, &contributions)?;
@@ -799,6 +831,7 @@ async fn main() -> anyhow::Result<()> {
                 required_human_decisions_json,
                 format,
             } => {
+                warn_if_skills_missing(&repo, quiet)?;
                 let synthesis_packet = StateStore::new(ProvenanceLayout::new(repo))
                     .create_synthesis_packet(CreateSynthesisPacketInput {
                         scope_id: ScopeId::new(scope)?,
@@ -845,6 +878,7 @@ async fn main() -> anyhow::Result<()> {
                 scope,
                 format,
             } => {
+                warn_if_skills_missing(&repo, quiet)?;
                 let synthesis_packets = StateStore::new(ProvenanceLayout::new(repo))
                     .list_synthesis_packets(&ScopeId::new(scope)?)?;
                 output::print(format, &synthesis_packets)?;
@@ -869,6 +903,7 @@ async fn main() -> anyhow::Result<()> {
                 superseded_by,
                 format,
             } => {
+                warn_if_skills_missing(&repo, quiet)?;
                 let proposal = StateStore::new(ProvenanceLayout::new(repo)).create_proposal_card(
                     CreateProposalCardInput {
                         scope_id: ScopeId::new(scope)?,
@@ -898,6 +933,7 @@ async fn main() -> anyhow::Result<()> {
                 scope,
                 format,
             } => {
+                warn_if_skills_missing(&repo, quiet)?;
                 let proposals = StateStore::new(ProvenanceLayout::new(repo))
                     .list_proposal_cards(&ScopeId::new(scope)?)?;
                 output::print(format, &proposals)?;
@@ -953,15 +989,24 @@ async fn main() -> anyhow::Result<()> {
             format,
             include_threads,
         } => {
+            let skill_status = skills::install_status(repo.as_std_path())?;
             let view = cache::prime_context(
                 &ProvenanceLayout::new(repo),
                 &ScopeId::new(scope)?,
                 include_threads,
             )?;
             if matches!(format, OutputFormat::Markdown | OutputFormat::Toon) {
-                println!("{}", cache::render_prime_markdown(&view));
+                let mut rendered = cache::render_prime_markdown(&view);
+                rendered.push_str(&skills::render_status_markdown(&skill_status));
+                println!("{rendered}");
             } else {
-                output::print(format, &view)?;
+                output::print(
+                    format,
+                    &PrimeOutput {
+                        view,
+                        skills: skill_status,
+                    },
+                )?;
             }
         }
         Command::Impact {
@@ -1032,6 +1077,16 @@ async fn main() -> anyhow::Result<()> {
                     output::print(format, &report)?;
                 }
             }
+        },
+        Command::Skills { command } => match command {
+            SkillsCommand::List { format } => output::print(format, &skills::list()?)?,
+            SkillsCommand::Show { name } => print!("{}", skills::show(&name)?),
+            SkillsCommand::Install {
+                target,
+                global,
+                force,
+                format,
+            } => output::print(format, &skills::install(target, global, force)?)?,
         },
         Command::Export {
             repo,

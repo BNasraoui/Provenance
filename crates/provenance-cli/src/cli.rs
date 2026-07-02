@@ -1,10 +1,13 @@
 use crate::output::OutputFormat;
+use crate::skills::SkillInstallTarget;
 use camino::Utf8PathBuf;
 use clap::{Args, Parser, Subcommand};
 use serde::Serialize;
 
 #[derive(Parser)]
 pub struct Cli {
+    #[arg(long, global = true)]
+    pub quiet: bool,
     #[command(subcommand)]
     pub command: Command,
 }
@@ -176,6 +179,10 @@ pub enum Command {
         #[command(subcommand)]
         command: CoverageCommand,
     },
+    Skills {
+        #[command(subcommand)]
+        command: SkillsCommand,
+    },
     Export {
         #[arg(long, default_value = ".")]
         repo: Utf8PathBuf,
@@ -205,6 +212,27 @@ pub enum Command {
         #[arg(long)]
         output: Option<Utf8PathBuf>,
         #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
+        format: OutputFormat,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum SkillsCommand {
+    List {
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+    Show {
+        name: String,
+    },
+    Install {
+        #[arg(long, value_enum, default_value_t = SkillInstallTarget::AgentsMd)]
+        target: SkillInstallTarget,
+        #[arg(long)]
+        global: bool,
+        #[arg(long)]
+        force: bool,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },
 }
