@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "server",
+  "dolt_database": "provenance",
+  "project_id": "86d38c24-0ccc-492b-b278-359c81a22af1"
+}
