@@ -30,6 +30,16 @@ impl ProvenanceLayout {
     pub fn cache_db_path(&self) -> Utf8PathBuf {
         self.cache_dir().join("provenance.db")
     }
+    pub fn state_shard_lock_path(&self, shard_path: &Utf8Path) -> anyhow::Result<Utf8PathBuf> {
+        let relative = shard_path.strip_prefix(self.state_dir()).map_err(|_| {
+            anyhow::anyhow!("state shard path {shard_path} is outside the state directory")
+        })?;
+        Ok(self
+            .cache_dir()
+            .join("locks")
+            .join(relative)
+            .with_extension("jsonl.lock"))
+    }
 }
 
 pub fn locate_repo_root(start: &Utf8Path) -> anyhow::Result<Utf8PathBuf> {
@@ -56,6 +66,13 @@ mod tests {
         assert_eq!(
             layout.cache_db_path().as_str(),
             "/tmp/repo/.provenance/cache/provenance.db"
+        );
+        assert_eq!(
+            layout
+                .state_shard_lock_path(&layout.scopes_dir().join("default/sources/source.jsonl"))
+                .unwrap()
+                .as_str(),
+            "/tmp/repo/.provenance/cache/locks/scopes/default/sources/source.jsonl.lock"
         );
     }
 }

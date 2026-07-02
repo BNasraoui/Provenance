@@ -1,5 +1,5 @@
 use super::{CreateDomainInput, CreateServiceBindingInput, CreateServiceInput, StateStore};
-use crate::{jsonl, shards};
+use crate::shards;
 use provenance_core::{Domain, SchemaVersion, Service, ServiceBinding};
 
 impl StateStore {
@@ -11,27 +11,28 @@ impl StateStore {
             description,
             color,
         } = input;
-        let mut records = self.list_domains(&scope_id)?;
-        let domain = Domain {
-            schema_version: SchemaVersion(1),
-            scope_id: scope_id.clone(),
-            id,
-            name,
-            description,
-            color,
-        };
-        anyhow::ensure!(
-            !records.iter().any(|record| record.id == domain.id),
-            "domain already exists"
-        );
-        anyhow::ensure!(
-            !records.iter().any(|record| record.name == domain.name),
-            "domain name already exists"
-        );
-        records.push(domain.clone());
-        records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-        jsonl::write_jsonl_atomic(&shards::domains_path(&self.layout, &scope_id), &records)?;
-        Ok(domain)
+        let path = shards::domains_path(&self.layout, &scope_id);
+        self.mutate_jsonl_records(&path, |records: &mut Vec<Domain>| {
+            let domain = Domain {
+                schema_version: SchemaVersion(1),
+                scope_id: scope_id.clone(),
+                id,
+                name,
+                description,
+                color,
+            };
+            anyhow::ensure!(
+                !records.iter().any(|record| record.id == domain.id),
+                "domain already exists"
+            );
+            anyhow::ensure!(
+                !records.iter().any(|record| record.name == domain.name),
+                "domain name already exists"
+            );
+            records.push(domain.clone());
+            records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+            Ok(domain)
+        })
     }
 
     pub fn create_service(&self, input: CreateServiceInput) -> anyhow::Result<Service> {
@@ -47,32 +48,33 @@ impl StateStore {
             external_id,
             status,
         } = input;
-        let mut records = self.list_services(&scope_id)?;
-        let service = Service {
-            schema_version: SchemaVersion(1),
-            scope_id: scope_id.clone(),
-            id,
-            name,
-            description,
-            owner,
-            repository,
-            environment,
-            tier,
-            external_id,
-            status,
-        };
-        anyhow::ensure!(
-            !records.iter().any(|record| record.id == service.id),
-            "service already exists"
-        );
-        anyhow::ensure!(
-            !records.iter().any(|record| record.name == service.name),
-            "service name already exists"
-        );
-        records.push(service.clone());
-        records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-        jsonl::write_jsonl_atomic(&shards::services_path(&self.layout, &scope_id), &records)?;
-        Ok(service)
+        let path = shards::services_path(&self.layout, &scope_id);
+        self.mutate_jsonl_records(&path, |records: &mut Vec<Service>| {
+            let service = Service {
+                schema_version: SchemaVersion(1),
+                scope_id: scope_id.clone(),
+                id,
+                name,
+                description,
+                owner,
+                repository,
+                environment,
+                tier,
+                external_id,
+                status,
+            };
+            anyhow::ensure!(
+                !records.iter().any(|record| record.id == service.id),
+                "service already exists"
+            );
+            anyhow::ensure!(
+                !records.iter().any(|record| record.name == service.name),
+                "service name already exists"
+            );
+            records.push(service.clone());
+            records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+            Ok(service)
+        })
     }
 
     pub fn create_service_binding(
@@ -97,25 +99,23 @@ impl StateStore {
                 .any(|service| service.id == service_id),
             "service does not exist"
         );
-        let mut records = self.list_service_bindings(&scope_id)?;
-        let binding = ServiceBinding {
-            schema_version: SchemaVersion(1),
-            scope_id: scope_id.clone(),
-            id: ServiceBinding::stable_id(&rule_id, &service_id, binding_type)?,
-            rule_id,
-            service_id,
-            binding_type,
-        };
-        anyhow::ensure!(
-            !records.iter().any(|record| record.id == binding.id),
-            "service binding already exists"
-        );
-        records.push(binding.clone());
-        records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-        jsonl::write_jsonl_atomic(
-            &shards::service_bindings_path(&self.layout, &scope_id),
-            &records,
-        )?;
-        Ok(binding)
+        let path = shards::service_bindings_path(&self.layout, &scope_id);
+        self.mutate_jsonl_records(&path, |records: &mut Vec<ServiceBinding>| {
+            let binding = ServiceBinding {
+                schema_version: SchemaVersion(1),
+                scope_id: scope_id.clone(),
+                id: ServiceBinding::stable_id(&rule_id, &service_id, binding_type)?,
+                rule_id,
+                service_id,
+                binding_type,
+            };
+            anyhow::ensure!(
+                !records.iter().any(|record| record.id == binding.id),
+                "service binding already exists"
+            );
+            records.push(binding.clone());
+            records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+            Ok(binding)
+        })
     }
 }

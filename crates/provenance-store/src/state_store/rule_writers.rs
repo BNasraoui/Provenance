@@ -1,5 +1,5 @@
 use super::{CreateResolutionInput, CreateRuleInput, StateStore};
-use crate::{jsonl, shards};
+use crate::shards;
 use provenance_core::{EdgeType, NodeType, Resolution, Rule, SchemaVersion};
 
 impl StateStore {
@@ -31,35 +31,37 @@ impl StateStore {
                 "requirement does not exist"
             );
         }
-        let mut records = self.list_resolutions(&scope_id)?;
-        let resolution = Resolution {
-            schema_version: SchemaVersion(1),
-            scope_id: scope_id.clone(),
-            id: id.clone(),
-            title,
-            position,
-            rationale,
-            status,
-            context,
-            enforcement,
-            confidence,
-            inputs,
-            made_by,
-            approved_by,
-            approved_at,
-            superseded_by,
-            review_on: None,
-            review_triggers: serde_json::json!([]),
-            origin_thread,
-            origin_message,
-        };
-        anyhow::ensure!(
-            !records.iter().any(|record| record.id == resolution.id),
-            "resolution already exists"
-        );
-        records.push(resolution.clone());
-        records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-        jsonl::write_jsonl_atomic(&shards::resolutions_path(&self.layout, &scope_id), &records)?;
+        let path = shards::resolutions_path(&self.layout, &scope_id);
+        let resolution = self.mutate_jsonl_records(&path, |records: &mut Vec<Resolution>| {
+            let resolution = Resolution {
+                schema_version: SchemaVersion(1),
+                scope_id: scope_id.clone(),
+                id: id.clone(),
+                title,
+                position,
+                rationale,
+                status,
+                context,
+                enforcement,
+                confidence,
+                inputs,
+                made_by,
+                approved_by,
+                approved_at,
+                superseded_by,
+                review_on: None,
+                review_triggers: serde_json::json!([]),
+                origin_thread,
+                origin_message,
+            };
+            anyhow::ensure!(
+                !records.iter().any(|record| record.id == resolution.id),
+                "resolution already exists"
+            );
+            records.push(resolution.clone());
+            records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+            Ok(resolution)
+        })?;
         if let Some(requirement_id) = requirement_id {
             self.add_edge(
                 scope_id.clone(),
@@ -118,35 +120,37 @@ impl StateStore {
                 "resolution does not exist"
             );
         }
-        let mut records = self.list_rules(&scope_id)?;
-        let rule = Rule {
-            schema_version: SchemaVersion(1),
-            scope_id: scope_id.clone(),
-            id: id.clone(),
-            rule_code,
-            name,
-            description,
-            statement,
-            status,
-            severity,
-            rule_type,
-            modality,
-            confidence,
-            extraction_method,
-            source_document,
-            source_section,
-            origin_thread,
-            origin_message,
-            expression: serde_json::json!({}),
-            inputs: serde_json::json!([]),
-        };
-        anyhow::ensure!(
-            !records.iter().any(|record| record.id == rule.id),
-            "rule already exists"
-        );
-        records.push(rule.clone());
-        records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-        jsonl::write_jsonl_atomic(&shards::rules_path(&self.layout, &scope_id), &records)?;
+        let path = shards::rules_path(&self.layout, &scope_id);
+        let rule = self.mutate_jsonl_records(&path, |records: &mut Vec<Rule>| {
+            let rule = Rule {
+                schema_version: SchemaVersion(1),
+                scope_id: scope_id.clone(),
+                id: id.clone(),
+                rule_code,
+                name,
+                description,
+                statement,
+                status,
+                severity,
+                rule_type,
+                modality,
+                confidence,
+                extraction_method,
+                source_document,
+                source_section,
+                origin_thread,
+                origin_message,
+                expression: serde_json::json!({}),
+                inputs: serde_json::json!([]),
+            };
+            anyhow::ensure!(
+                !records.iter().any(|record| record.id == rule.id),
+                "rule already exists"
+            );
+            records.push(rule.clone());
+            records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+            Ok(rule)
+        })?;
         if let Some(requirement_id) = requirement_id {
             self.add_edge(
                 scope_id.clone(),

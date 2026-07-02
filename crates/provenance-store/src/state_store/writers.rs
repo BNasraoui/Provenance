@@ -1,7 +1,7 @@
 use super::{
     AddSourceReferenceInput, CreateEdgeInput, CreateRequirementInput, CreateSourceInput, StateStore,
 };
-use crate::{jsonl, shards};
+use crate::shards;
 use provenance_core::{
     edge_validation::validate_edge_endpoint, Edge, EdgeType, NodeType, Requirement, SchemaVersion,
     ScopeId, Source, SourceReference, StableId,
@@ -22,29 +22,30 @@ impl StateStore {
             origin_thread,
             origin_message,
         } = input;
-        let mut records = self.list_sources(&scope_id)?;
-        let source = Source {
-            schema_version: SchemaVersion(1),
-            scope_id: scope_id.clone(),
-            id,
-            name,
-            source_type,
-            url,
-            reference,
-            effective_date,
-            review_date,
-            superseded_by,
-            origin_thread,
-            origin_message,
-        };
-        anyhow::ensure!(
-            !records.iter().any(|record| record.id == source.id),
-            "source already exists"
-        );
-        records.push(source.clone());
-        records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-        jsonl::write_jsonl_atomic(&shards::sources_path(&self.layout, &scope_id), &records)?;
-        Ok(source)
+        let path = shards::sources_path(&self.layout, &scope_id);
+        self.mutate_jsonl_records(&path, |records: &mut Vec<Source>| {
+            let source = Source {
+                schema_version: SchemaVersion(1),
+                scope_id: scope_id.clone(),
+                id,
+                name,
+                source_type,
+                url,
+                reference,
+                effective_date,
+                review_date,
+                superseded_by,
+                origin_thread,
+                origin_message,
+            };
+            anyhow::ensure!(
+                !records.iter().any(|record| record.id == source.id),
+                "source already exists"
+            );
+            records.push(source.clone());
+            records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+            Ok(source)
+        })
     }
 
     pub fn create_requirement(&self, input: CreateRequirementInput) -> anyhow::Result<Requirement> {
@@ -66,31 +67,29 @@ impl StateStore {
                 "domain does not exist"
             );
         }
-        let mut records = self.list_requirements(&scope_id)?;
-        let requirement = Requirement {
-            schema_version: SchemaVersion(1),
-            scope_id: scope_id.clone(),
-            id,
-            statement,
-            description,
-            fog: None,
-            status,
-            domain_id,
-            source_refs: Vec::new(),
-            origin_thread,
-            origin_message,
-        };
-        anyhow::ensure!(
-            !records.iter().any(|record| record.id == requirement.id),
-            "requirement already exists"
-        );
-        records.push(requirement.clone());
-        records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-        jsonl::write_jsonl_atomic(
-            &shards::requirements_path(&self.layout, &scope_id),
-            &records,
-        )?;
-        Ok(requirement)
+        let path = shards::requirements_path(&self.layout, &scope_id);
+        self.mutate_jsonl_records(&path, |records: &mut Vec<Requirement>| {
+            let requirement = Requirement {
+                schema_version: SchemaVersion(1),
+                scope_id: scope_id.clone(),
+                id,
+                statement,
+                description,
+                fog: None,
+                status,
+                domain_id,
+                source_refs: Vec::new(),
+                origin_thread,
+                origin_message,
+            };
+            anyhow::ensure!(
+                !records.iter().any(|record| record.id == requirement.id),
+                "requirement already exists"
+            );
+            records.push(requirement.clone());
+            records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+            Ok(requirement)
+        })
     }
 
     /// Set (`Some`) or clear (`None`) the deliberately unstructured fog text
@@ -104,15 +103,15 @@ impl StateStore {
         if let Some(fog) = &fog {
             anyhow::ensure!(!fog.trim().is_empty(), "fog text must not be empty");
         }
-        let mut records = self.list_requirements(scope_id)?;
-        let requirement = records
-            .iter_mut()
-            .find(|requirement| &requirement.id == id)
-            .ok_or_else(|| anyhow::anyhow!("requirement does not exist"))?;
-        requirement.fog = fog;
-        let updated = requirement.clone();
-        jsonl::write_jsonl_atomic(&shards::requirements_path(&self.layout, scope_id), &records)?;
-        Ok(updated)
+        let path = shards::requirements_path(&self.layout, scope_id);
+        self.mutate_jsonl_records(&path, |records: &mut Vec<Requirement>| {
+            let requirement = records
+                .iter_mut()
+                .find(|requirement| &requirement.id == id)
+                .ok_or_else(|| anyhow::anyhow!("requirement does not exist"))?;
+            requirement.fog = fog;
+            Ok(requirement.clone())
+        })
     }
 
     pub fn add_source_reference(&self, input: AddSourceReferenceInput) -> anyhow::Result<Edge> {
@@ -133,34 +132,32 @@ impl StateStore {
                 .any(|source| source.id == source_id),
             "source does not exist"
         );
-        let mut requirements = self.list_requirements(&scope_id)?;
-        let requirement = requirements
-            .iter_mut()
-            .find(|requirement| requirement.id == requirement_id)
-            .ok_or_else(|| anyhow::anyhow!("requirement does not exist"))?;
         let source_ref = SourceReference {
             source_id: source_id.clone(),
             clause,
         };
-        if !requirement
-            .source_refs
-            .iter()
-            .any(|existing| existing == &source_ref)
-        {
-            requirement.source_refs.push(source_ref);
-            requirement.source_refs.sort_by(|a, b| {
-                a.source_id
-                    .as_str()
-                    .cmp(b.source_id.as_str())
-                    .then(a.clause.cmp(&b.clause))
-            });
-            requirements.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-            jsonl::write_jsonl_atomic(
-                &shards::requirements_path(&self.layout, &scope_id),
-                &requirements,
-            )?;
-        }
-        let mut records = self.list_edges()?;
+        let requirements_path = shards::requirements_path(&self.layout, &scope_id);
+        self.mutate_jsonl_records(&requirements_path, |requirements: &mut Vec<Requirement>| {
+            let requirement = requirements
+                .iter_mut()
+                .find(|requirement| requirement.id == requirement_id)
+                .ok_or_else(|| anyhow::anyhow!("requirement does not exist"))?;
+            if !requirement
+                .source_refs
+                .iter()
+                .any(|existing| existing == &source_ref)
+            {
+                requirement.source_refs.push(source_ref);
+                requirement.source_refs.sort_by(|a, b| {
+                    a.source_id
+                        .as_str()
+                        .cmp(b.source_id.as_str())
+                        .then(a.clause.cmp(&b.clause))
+                });
+                requirements.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+            }
+            Ok(())
+        })?;
         let edge = Edge {
             schema_version: SchemaVersion(1),
             scope_id,
@@ -178,20 +175,22 @@ impl StateStore {
             to_id: requirement_id,
             label: None,
         };
-        if !records
-            .iter()
-            .any(|record| record.id == edge.id && record.scope_id == edge.scope_id)
-        {
-            records.push(edge.clone());
-        }
-        records.sort_by(|a, b| {
-            a.scope_id
-                .as_str()
-                .cmp(b.scope_id.as_str())
-                .then(a.id.as_str().cmp(b.id.as_str()))
-        });
-        jsonl::write_jsonl_atomic(&shards::edges_path(&self.layout), &records)?;
-        Ok(edge)
+        let path = shards::edges_path(&self.layout);
+        self.mutate_jsonl_records(&path, |records: &mut Vec<Edge>| {
+            if !records
+                .iter()
+                .any(|record| record.id == edge.id && record.scope_id == edge.scope_id)
+            {
+                records.push(edge.clone());
+            }
+            records.sort_by(|a, b| {
+                a.scope_id
+                    .as_str()
+                    .cmp(b.scope_id.as_str())
+                    .then(a.id.as_str().cmp(b.id.as_str()))
+            });
+            Ok(edge)
+        })
     }
 
     pub fn create_edge(&self, input: CreateEdgeInput) -> anyhow::Result<Edge> {
@@ -210,14 +209,14 @@ impl StateStore {
     }
 
     pub fn delete_edge(&self, scope_id: &ScopeId, id: &StableId) -> anyhow::Result<Edge> {
-        let mut records = self.list_edges()?;
-        let index = records
-            .iter()
-            .position(|record| &record.scope_id == scope_id && &record.id == id)
-            .ok_or_else(|| anyhow::anyhow!("edge does not exist"))?;
-        let edge = records.remove(index);
-        jsonl::write_jsonl_atomic(&shards::edges_path(&self.layout), &records)?;
-        Ok(edge)
+        let path = shards::edges_path(&self.layout);
+        self.mutate_jsonl_records(&path, |records: &mut Vec<Edge>| {
+            let index = records
+                .iter()
+                .position(|record| &record.scope_id == scope_id && &record.id == id)
+                .ok_or_else(|| anyhow::anyhow!("edge does not exist"))?;
+            Ok(records.remove(index))
+        })
     }
 
     pub(crate) fn add_edge(
@@ -230,7 +229,6 @@ impl StateStore {
         to_id: StableId,
     ) -> anyhow::Result<Edge> {
         validate_edge_endpoint(edge_type, from_type, to_type)?;
-        let mut records = self.list_edges()?;
         let edge = Edge {
             schema_version: SchemaVersion(1),
             scope_id,
@@ -242,20 +240,22 @@ impl StateStore {
             to_id,
             label: None,
         };
-        if !records
-            .iter()
-            .any(|record| record.id == edge.id && record.scope_id == edge.scope_id)
-        {
-            records.push(edge.clone());
-        }
-        records.sort_by(|a, b| {
-            a.scope_id
-                .as_str()
-                .cmp(b.scope_id.as_str())
-                .then(a.id.as_str().cmp(b.id.as_str()))
-        });
-        jsonl::write_jsonl_atomic(&shards::edges_path(&self.layout), &records)?;
-        Ok(edge)
+        let path = shards::edges_path(&self.layout);
+        self.mutate_jsonl_records(&path, |records: &mut Vec<Edge>| {
+            if !records
+                .iter()
+                .any(|record| record.id == edge.id && record.scope_id == edge.scope_id)
+            {
+                records.push(edge.clone());
+            }
+            records.sort_by(|a, b| {
+                a.scope_id
+                    .as_str()
+                    .cmp(b.scope_id.as_str())
+                    .then(a.id.as_str().cmp(b.id.as_str()))
+            });
+            Ok(edge)
+        })
     }
 
     fn ensure_edge_endpoint_exists(
