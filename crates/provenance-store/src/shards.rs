@@ -17,6 +17,34 @@ pub fn requirements_path(layout: &ProvenanceLayout, scope: &ScopeId) -> Utf8Path
         .join("requirements/req.jsonl")
 }
 
+pub fn domains_path(layout: &ProvenanceLayout, scope: &ScopeId) -> Utf8PathBuf {
+    layout
+        .scopes_dir()
+        .join(scope.as_str())
+        .join("domains/domain.jsonl")
+}
+
+pub fn boundaries_path(layout: &ProvenanceLayout, scope: &ScopeId) -> Utf8PathBuf {
+    layout
+        .scopes_dir()
+        .join(scope.as_str())
+        .join("boundaries/boundary.jsonl")
+}
+
+pub fn topics_path(layout: &ProvenanceLayout, scope: &ScopeId) -> Utf8PathBuf {
+    layout
+        .scopes_dir()
+        .join(scope.as_str())
+        .join("topics/topic.jsonl")
+}
+
+pub fn questions_path(layout: &ProvenanceLayout, scope: &ScopeId) -> Utf8PathBuf {
+    layout
+        .scopes_dir()
+        .join(scope.as_str())
+        .join("questions/question.jsonl")
+}
+
 pub fn resolutions_path(layout: &ProvenanceLayout, scope: &ScopeId) -> Utf8PathBuf {
     layout
         .scopes_dir()
@@ -29,6 +57,20 @@ pub fn rules_path(layout: &ProvenanceLayout, scope: &ScopeId) -> Utf8PathBuf {
         .scopes_dir()
         .join(scope.as_str())
         .join("rules/rule.jsonl")
+}
+
+pub fn services_path(layout: &ProvenanceLayout, scope: &ScopeId) -> Utf8PathBuf {
+    layout
+        .scopes_dir()
+        .join(scope.as_str())
+        .join("services/service.jsonl")
+}
+
+pub fn service_bindings_path(layout: &ProvenanceLayout, scope: &ScopeId) -> Utf8PathBuf {
+    layout
+        .scopes_dir()
+        .join(scope.as_str())
+        .join("services/service_binding.jsonl")
 }
 
 pub fn threads_path(layout: &ProvenanceLayout, scope: &ScopeId) -> Utf8PathBuf {

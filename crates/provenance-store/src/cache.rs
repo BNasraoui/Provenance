@@ -44,7 +44,15 @@ pub async fn materialize_state(layout: &ProvenanceLayout) -> anyhow::Result<Mate
     let manifest = store.manifest()?;
     let mut tx = pool.begin().await?;
     sqlx::query("DELETE FROM sources").execute(&mut *tx).await?;
+    sqlx::query("DELETE FROM domains").execute(&mut *tx).await?;
     sqlx::query("DELETE FROM requirements")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM boundaries")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM topics").execute(&mut *tx).await?;
+    sqlx::query("DELETE FROM questions")
         .execute(&mut *tx)
         .await?;
     sqlx::query("DELETE FROM edges").execute(&mut *tx).await?;
@@ -52,6 +60,12 @@ pub async fn materialize_state(layout: &ProvenanceLayout) -> anyhow::Result<Mate
         .execute(&mut *tx)
         .await?;
     sqlx::query("DELETE FROM rules").execute(&mut *tx).await?;
+    sqlx::query("DELETE FROM services")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM service_bindings")
+        .execute(&mut *tx)
+        .await?;
     sqlx::query("DELETE FROM messages")
         .execute(&mut *tx)
         .await?;
@@ -72,31 +86,106 @@ pub async fn materialize_state(layout: &ProvenanceLayout) -> anyhow::Result<Mate
     for scope in &manifest.scopes {
         for source in store.list_sources(&scope.id)? {
             sqlx::query(
-                "INSERT INTO sources (scope_id, id, name, source_type, url) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO sources (scope_id, id, name, source_type, url, reference, effective_date, review_date, superseded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .bind(source.scope_id.as_str())
             .bind(source.id.as_str())
             .bind(source.name)
             .bind(serde_name(&source.source_type)?)
             .bind(source.url)
+            .bind(source.reference)
+            .bind(source.effective_date)
+            .bind(source.review_date)
+            .bind(
+                source
+                    .superseded_by
+                    .as_ref()
+                    .map(provenance_core::StableId::as_str),
+            )
             .execute(&mut *tx)
             .await?;
             records_loaded += 1;
         }
         for requirement in store.list_requirements(&scope.id)? {
             sqlx::query(
-                "INSERT INTO requirements (scope_id, id, statement, status) VALUES (?, ?, ?, ?)",
+                "INSERT INTO requirements (scope_id, id, statement, status, domain_id) VALUES (?, ?, ?, ?, ?)",
             )
             .bind(requirement.scope_id.as_str())
             .bind(requirement.id.as_str())
             .bind(requirement.statement)
             .bind(serde_name(&requirement.status)?)
+            .bind(
+                requirement
+                    .domain_id
+                    .as_ref()
+                    .map(provenance_core::StableId::as_str),
+            )
             .execute(&mut *tx)
             .await?;
             records_loaded += 1;
         }
+        for domain in store.list_domains(&scope.id)? {
+            sqlx::query(
+                "INSERT INTO domains (scope_id, id, name, description, color) VALUES (?, ?, ?, ?, ?)",
+            )
+            .bind(domain.scope_id.as_str())
+            .bind(domain.id.as_str())
+            .bind(domain.name)
+            .bind(domain.description)
+            .bind(domain.color)
+            .execute(&mut *tx)
+            .await?;
+            records_loaded += 1;
+        }
+        for boundary in store.list_boundaries(&scope.id)? {
+            let source_id = boundary
+                .source_ref
+                .as_ref()
+                .map(|source_ref| source_ref.source_id.as_str());
+            let source_clause = boundary
+                .source_ref
+                .as_ref()
+                .and_then(|source_ref| source_ref.clause.as_deref());
+            sqlx::query("INSERT INTO boundaries (scope_id, id, requirement_id, statement, source_id, source_clause) VALUES (?, ?, ?, ?, ?, ?)")
+                .bind(boundary.scope_id.as_str())
+                .bind(boundary.id.as_str())
+                .bind(boundary.requirement_id.as_str())
+                .bind(boundary.statement)
+                .bind(source_id)
+                .bind(source_clause)
+                .execute(&mut *tx)
+                .await?;
+            records_loaded += 1;
+        }
+        for topic in store.list_topics(&scope.id)? {
+            sqlx::query("INSERT INTO topics (scope_id, id, requirement_id, title, status, links) VALUES (?, ?, ?, ?, ?, ?)")
+                .bind(topic.scope_id.as_str())
+                .bind(topic.id.as_str())
+                .bind(topic.requirement_id.as_str())
+                .bind(topic.title)
+                .bind(serde_name(&topic.status)?)
+                .bind(serde_json::to_string(&topic.links)?)
+                .execute(&mut *tx)
+                .await?;
+            records_loaded += 1;
+        }
+        for question in store.list_questions(&scope.id)? {
+            sqlx::query("INSERT INTO questions (scope_id, id, topic_id, requirement_id, question, status, answer, links, resolution_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                .bind(question.scope_id.as_str())
+                .bind(question.id.as_str())
+                .bind(question.topic_id.as_str())
+                .bind(question.requirement_id.as_str())
+                .bind(question.question)
+                .bind(serde_name(&question.status)?)
+                .bind(question.answer)
+                .bind(serde_json::to_string(&question.links)?)
+                .bind(question.resolution_id.as_ref().map(provenance_core::StableId::as_str))
+                .execute(&mut *tx)
+                .await?;
+            records_loaded += 1;
+        }
         for resolution in store.list_resolutions(&scope.id)? {
-            sqlx::query("INSERT INTO resolutions (scope_id, id, title, position, rationale, status, review_on, review_triggers) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+            sqlx::query("INSERT INTO resolutions (scope_id, id, title, position, rationale, status, review_on, review_triggers, context, enforcement, confidence, inputs, made_by, approved_by, approved_at, superseded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
                 .bind(resolution.scope_id.as_str())
                 .bind(resolution.id.as_str())
                 .bind(resolution.title)
@@ -105,6 +194,19 @@ pub async fn materialize_state(layout: &ProvenanceLayout) -> anyhow::Result<Mate
                 .bind(serde_name(&resolution.status)?)
                 .bind(resolution.review_on)
                 .bind(resolution.review_triggers.to_string())
+                .bind(resolution.context)
+                .bind(resolution.enforcement)
+                .bind(resolution.confidence)
+                .bind(serde_json::to_string(&resolution.inputs)?)
+                .bind(resolution.made_by)
+                .bind(resolution.approved_by)
+                .bind(resolution.approved_at)
+                .bind(
+                    resolution
+                        .superseded_by
+                        .as_ref()
+                        .map(provenance_core::StableId::as_str),
+                )
                 .execute(&mut *tx)
                 .await?;
             records_loaded += 1;
@@ -119,6 +221,33 @@ pub async fn materialize_state(layout: &ProvenanceLayout) -> anyhow::Result<Mate
                 .bind(serde_name(&rule.severity)?)
                 .bind(rule.expression.to_string())
                 .bind(rule.inputs.to_string())
+                .execute(&mut *tx)
+                .await?;
+            records_loaded += 1;
+        }
+        for service in store.list_services(&scope.id)? {
+            sqlx::query("INSERT INTO services (scope_id, id, name, description, owner, repository, environment, tier, external_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+                .bind(service.scope_id.as_str())
+                .bind(service.id.as_str())
+                .bind(service.name)
+                .bind(service.description)
+                .bind(service.owner)
+                .bind(service.repository)
+                .bind(service.environment.as_ref().map(serde_name).transpose()?)
+                .bind(service.tier.as_ref().map(serde_name).transpose()?)
+                .bind(service.external_id)
+                .bind(serde_name(&service.status)?)
+                .execute(&mut *tx)
+                .await?;
+            records_loaded += 1;
+        }
+        for binding in store.list_service_bindings(&scope.id)? {
+            sqlx::query("INSERT INTO service_bindings (scope_id, id, rule_id, service_id, binding_type) VALUES (?, ?, ?, ?, ?)")
+                .bind(binding.scope_id.as_str())
+                .bind(binding.id.as_str())
+                .bind(binding.rule_id.as_str())
+                .bind(binding.service_id.as_str())
+                .bind(serde_name(&binding.binding_type)?)
                 .execute(&mut *tx)
                 .await?;
             records_loaded += 1;
@@ -239,8 +368,9 @@ mod report_tests {
         CreateSourceInput,
     };
     use provenance_core::{
-        Manifest, NodeType, RepoPathPrefix, RequirementStatus, ResolutionStatus, RuleSeverity,
-        RuleStatus, ScopeId, SourceType, StableId,
+        Manifest, NodeType, RepoPathPrefix, RequirementStatus, ResolutionInput,
+        ResolutionInputType, ResolutionStatus, RuleSeverity, RuleStatus, ScopeId, SourceType,
+        StableId,
     };
 
     fn seeded_layout() -> (tempfile::TempDir, ProvenanceLayout, ScopeId) {
@@ -267,6 +397,9 @@ mod report_tests {
                 source_type: SourceType::Policy,
                 url: None,
                 reference: None,
+                effective_date: None,
+                review_date: None,
+                superseded_by: None,
                 origin_thread: None,
                 origin_message: None,
             })
@@ -278,6 +411,7 @@ mod report_tests {
                 statement: "Overtime".into(),
                 description: None,
                 status: RequirementStatus::Active,
+                domain_id: None,
                 origin_thread: None,
                 origin_message: None,
             })
@@ -302,6 +436,11 @@ mod report_tests {
                 context: None,
                 enforcement: None,
                 confidence: None,
+                inputs: Vec::new(),
+                made_by: None,
+                approved_by: None,
+                approved_at: None,
+                superseded_by: None,
                 origin_thread: None,
                 origin_message: None,
             })
@@ -367,5 +506,92 @@ mod report_tests {
         assert_eq!(health.rules.total, 1);
         assert_eq!(health.rules.with_complete_traceability, 1);
         assert_eq!(health.gaps.total, 0);
+    }
+
+    #[tokio::test]
+    async fn materialize_state_caches_enriched_source_and_resolution_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+        let layout = ProvenanceLayout::new(root);
+        std::fs::create_dir_all(layout.manifest_path().parent().unwrap()).unwrap();
+        let scope = ScopeId::new("default").unwrap();
+        std::fs::write(
+            layout.manifest_path(),
+            serde_json::to_string(&Manifest::default_with_scope(
+                scope.clone(),
+                RepoPathPrefix::new("."),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let store = StateStore::new(layout.clone());
+        store
+            .create_source(CreateSourceInput {
+                scope_id: scope.clone(),
+                id: StableId::new("source_sah").unwrap(),
+                name: "Support at Home".into(),
+                source_type: SourceType::Legislation,
+                url: Some("https://example.test/sah".into()),
+                reference: Some("Department guidance".into()),
+                effective_date: Some(1_714_521_600_000),
+                review_date: Some(1_717_200_000_000),
+                superseded_by: Some(StableId::new("source_sah_2025").unwrap()),
+                origin_thread: None,
+                origin_message: None,
+            })
+            .unwrap();
+        store
+            .create_resolution(CreateResolutionInput {
+                scope_id: scope.clone(),
+                id: StableId::new("res_sah").unwrap(),
+                title: "SAH extraction".into(),
+                requirement_id: None,
+                position: "Keep as draft extraction".into(),
+                rationale: "Needs human review".into(),
+                status: ResolutionStatus::Draft,
+                context: Some("Codebase scan".into()),
+                enforcement: Some("specification".into()),
+                confidence: Some(0.91),
+                inputs: vec![ResolutionInput {
+                    input_type: ResolutionInputType::Regulatory,
+                    reference: "SAH program manual".into(),
+                    summary: "Program rules reviewed".into(),
+                }],
+                made_by: Some("Analyst One".into()),
+                approved_by: Some("Approver Two".into()),
+                approved_at: Some(1_714_780_800_000),
+                superseded_by: Some(StableId::new("res_sah_2025").unwrap()),
+                origin_thread: None,
+                origin_message: None,
+            })
+            .unwrap();
+
+        materialize_state(&layout).await.unwrap();
+        let pool = open_cache(&layout).await.unwrap();
+        let source: (Option<String>, Option<i64>, Option<i64>, Option<String>) = sqlx::query_as(
+            "SELECT reference, effective_date, review_date, superseded_by FROM sources WHERE id = ?",
+        )
+        .bind("source_sah")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let resolution: (String, Option<String>, Option<String>, Option<i64>, Option<String>) =
+            sqlx::query_as(
+                "SELECT inputs, made_by, approved_by, approved_at, superseded_by FROM resolutions WHERE id = ?",
+            )
+            .bind("res_sah")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+        assert_eq!(source.0.as_deref(), Some("Department guidance"));
+        assert_eq!(source.1, Some(1_714_521_600_000));
+        assert_eq!(source.2, Some(1_717_200_000_000));
+        assert_eq!(source.3.as_deref(), Some("source_sah_2025"));
+        assert!(resolution.0.contains(r#""input_type":"regulatory""#));
+        assert_eq!(resolution.1.as_deref(), Some("Analyst One"));
+        assert_eq!(resolution.2.as_deref(), Some("Approver Two"));
+        assert_eq!(resolution.3, Some(1_714_780_800_000));
+        assert_eq!(resolution.4.as_deref(), Some("res_sah_2025"));
     }
 }

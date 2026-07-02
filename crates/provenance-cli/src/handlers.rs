@@ -11,9 +11,21 @@ use std::fmt::Write;
 pub struct ScopeExport {
     pub scope: String,
     pub sources: Vec<provenance_core::Source>,
+    #[serde(default)]
+    pub domains: Vec<provenance_core::Domain>,
     pub requirements: Vec<provenance_core::Requirement>,
+    #[serde(default)]
+    pub boundaries: Vec<provenance_core::Boundary>,
+    #[serde(default)]
+    pub topics: Vec<provenance_core::Topic>,
+    #[serde(default)]
+    pub questions: Vec<provenance_core::Question>,
     pub resolutions: Vec<provenance_core::Resolution>,
     pub rules: Vec<provenance_core::Rule>,
+    #[serde(default)]
+    pub services: Vec<provenance_core::Service>,
+    #[serde(default)]
+    pub service_bindings: Vec<provenance_core::ServiceBinding>,
     pub edges: Vec<provenance_core::Edge>,
     pub threads: Vec<provenance_core::Thread>,
     pub messages: Vec<provenance_core::Message>,
@@ -40,9 +52,15 @@ pub fn export_scope(repo: Utf8PathBuf, scope: String) -> anyhow::Result<ScopeExp
     Ok(ScopeExport {
         scope,
         sources: store.list_sources(&scope_id)?,
+        domains: store.list_domains(&scope_id)?,
         requirements: store.list_requirements(&scope_id)?,
+        boundaries: store.list_boundaries(&scope_id)?,
+        topics: store.list_topics(&scope_id)?,
+        questions: store.list_questions(&scope_id)?,
         resolutions: store.list_resolutions(&scope_id)?,
         rules: store.list_rules(&scope_id)?,
+        services: store.list_services(&scope_id)?,
+        service_bindings: store.list_service_bindings(&scope_id)?,
         edges: store
             .list_edges()?
             .into_iter()
@@ -73,32 +91,50 @@ pub fn render_export(format: OutputFormat, exported: &ScopeExport) -> anyhow::Re
             Ok(out)
         }
         OutputFormat::Markdown => Ok(format!(
-            "# Provenance Export\n\n- Scope: {}\n- Sources: {}\n- Requirements: {}\n- Resolutions: {}\n- Rules: {}\n- Edges: {}\n- Proposals: {}\n",
+            "# Provenance Export\n\n- Scope: {}\n- Sources: {}\n- Domains: {}\n- Requirements: {}\n- Boundaries: {}\n- Topics: {}\n- Questions: {}\n- Resolutions: {}\n- Rules: {}\n- Services: {}\n- Service bindings: {}\n- Edges: {}\n- Proposals: {}\n",
             exported.scope,
             exported.sources.len(),
+            exported.domains.len(),
             exported.requirements.len(),
+            exported.boundaries.len(),
+            exported.topics.len(),
+            exported.questions.len(),
             exported.resolutions.len(),
             exported.rules.len(),
+            exported.services.len(),
+            exported.service_bindings.len(),
             exported.edges.len(),
             exported.proposal_cards.len()
         )),
         OutputFormat::Toon => Ok(format!(
-            "scope: {}\nsources: {}\nrequirements: {}\nresolutions: {}\nrules: {}\nedges: {}\nproposals: {}\n",
+            "scope: {}\nsources: {}\ndomains: {}\nrequirements: {}\nboundaries: {}\ntopics: {}\nquestions: {}\nresolutions: {}\nrules: {}\nservices: {}\nservice_bindings: {}\nedges: {}\nproposals: {}\n",
             exported.scope,
             exported.sources.len(),
+            exported.domains.len(),
             exported.requirements.len(),
+            exported.boundaries.len(),
+            exported.topics.len(),
+            exported.questions.len(),
             exported.resolutions.len(),
             exported.rules.len(),
+            exported.services.len(),
+            exported.service_bindings.len(),
             exported.edges.len(),
             exported.proposal_cards.len()
         )),
         OutputFormat::Table => Ok(format!(
-            "scope\tsources\trequirements\tresolutions\trules\tedges\tproposals\n{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+            "scope\tsources\tdomains\trequirements\tboundaries\ttopics\tquestions\tresolutions\trules\tservices\tservice_bindings\tedges\tproposals\n{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
             exported.scope,
             exported.sources.len(),
+            exported.domains.len(),
             exported.requirements.len(),
+            exported.boundaries.len(),
+            exported.topics.len(),
+            exported.questions.len(),
             exported.resolutions.len(),
             exported.rules.len(),
+            exported.services.len(),
+            exported.service_bindings.len(),
             exported.edges.len(),
             exported.proposal_cards.len()
         )),
@@ -117,9 +153,15 @@ pub fn import_scope(
         "import scope does not match --scope"
     );
     let records = exported.sources.len()
+        + exported.domains.len()
         + exported.requirements.len()
+        + exported.boundaries.len()
+        + exported.topics.len()
+        + exported.questions.len()
         + exported.resolutions.len()
         + exported.rules.len()
+        + exported.services.len()
+        + exported.service_bindings.len()
         + exported.edges.len()
         + exported.threads.len()
         + exported.messages.len()
@@ -135,8 +177,24 @@ pub fn import_scope(
             &exported.sources,
         )?;
         provenance_store::jsonl::write_jsonl_atomic(
+            &provenance_store::shards::domains_path(&layout, &scope_id),
+            &exported.domains,
+        )?;
+        provenance_store::jsonl::write_jsonl_atomic(
             &provenance_store::shards::requirements_path(&layout, &scope_id),
             &exported.requirements,
+        )?;
+        provenance_store::jsonl::write_jsonl_atomic(
+            &provenance_store::shards::boundaries_path(&layout, &scope_id),
+            &exported.boundaries,
+        )?;
+        provenance_store::jsonl::write_jsonl_atomic(
+            &provenance_store::shards::topics_path(&layout, &scope_id),
+            &exported.topics,
+        )?;
+        provenance_store::jsonl::write_jsonl_atomic(
+            &provenance_store::shards::questions_path(&layout, &scope_id),
+            &exported.questions,
         )?;
         provenance_store::jsonl::write_jsonl_atomic(
             &provenance_store::shards::resolutions_path(&layout, &scope_id),
@@ -145,6 +203,14 @@ pub fn import_scope(
         provenance_store::jsonl::write_jsonl_atomic(
             &provenance_store::shards::rules_path(&layout, &scope_id),
             &exported.rules,
+        )?;
+        provenance_store::jsonl::write_jsonl_atomic(
+            &provenance_store::shards::services_path(&layout, &scope_id),
+            &exported.services,
+        )?;
+        provenance_store::jsonl::write_jsonl_atomic(
+            &provenance_store::shards::service_bindings_path(&layout, &scope_id),
+            &exported.service_bindings,
         )?;
         provenance_store::jsonl::write_jsonl_atomic(
             &provenance_store::shards::edges_path(&layout),

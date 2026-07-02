@@ -2,11 +2,12 @@ use camino::Utf8PathBuf;
 use serde::{Deserialize, Serialize};
 
 use super::enums::{
-    ArtifactChangeType, CanonicalArtifactType, ContributionStance, EdgeType, EvidenceQuality,
-    IdeationEvidenceType, IdeationTargetType, IdentityType, MessageRole, NodeType,
-    PromotionDecision, PromotionState, ProposalType, RequirementStatus, ResolutionStatus,
-    RuleModality, RuleSeverity, RuleStatus, RuleType, SourceType, SpeculationMarker, ThreadStatus,
-    UncertaintyLevel,
+    ArtifactChangeType, ArtifactLinkTargetType, CanonicalArtifactType, ContributionStance,
+    EdgeType, EvidenceQuality, IdeationEvidenceType, IdeationTargetType, IdentityType, MessageRole,
+    NodeType, PromotionDecision, PromotionState, ProposalType, QuestionStatus, RequirementStatus,
+    ResolutionInputType, ResolutionStatus, RuleModality, RuleSeverity, RuleStatus, RuleType,
+    ServiceBindingType, ServiceEnvironment, ServiceStatus, ServiceTier, SourceType,
+    SpeculationMarker, ThreadStatus, TopicStatus, UncertaintyLevel,
 };
 use super::ids::{SchemaVersion, ScopeId, StableId};
 
@@ -31,6 +32,20 @@ pub struct Source {
     pub reference: Option<String>,
     #[serde(
         default,
+        alias = "effectiveDate",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub effective_date: Option<i64>,
+    #[serde(default, alias = "reviewDate", skip_serializing_if = "Option::is_none")]
+    pub review_date: Option<i64>,
+    #[serde(
+        default,
+        alias = "supersededBy",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub superseded_by: Option<StableId>,
+    #[serde(
+        default,
         alias = "originThread",
         skip_serializing_if = "Option::is_none"
     )]
@@ -45,9 +60,30 @@ pub struct Source {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SourceReference {
+    #[serde(alias = "sourceId")]
     pub source_id: StableId,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clause: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ArtifactLink {
+    #[serde(alias = "targetType")]
+    pub target_type: ArtifactLinkTargetType,
+    #[serde(alias = "targetId")]
+    pub target_id: StableId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Domain {
+    pub schema_version: SchemaVersion,
+    pub scope_id: ScopeId,
+    pub id: StableId,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -59,6 +95,8 @@ pub struct Requirement {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub status: RequirementStatus,
+    #[serde(default, alias = "domainId", skip_serializing_if = "Option::is_none")]
+    pub domain_id: Option<StableId>,
     #[serde(default, alias = "sourceRefs", skip_serializing_if = "Vec::is_empty")]
     pub source_refs: Vec<SourceReference>,
     #[serde(
@@ -73,6 +111,62 @@ pub struct Requirement {
         skip_serializing_if = "Option::is_none"
     )]
     pub origin_message: Option<StableId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Boundary {
+    pub schema_version: SchemaVersion,
+    pub scope_id: ScopeId,
+    pub id: StableId,
+    #[serde(alias = "requirementId")]
+    pub requirement_id: StableId,
+    pub statement: String,
+    #[serde(default, alias = "sourceRef", skip_serializing_if = "Option::is_none")]
+    pub source_ref: Option<SourceReference>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Topic {
+    pub schema_version: SchemaVersion,
+    pub scope_id: ScopeId,
+    pub id: StableId,
+    #[serde(alias = "requirementId")]
+    pub requirement_id: StableId,
+    pub title: String,
+    pub status: TopicStatus,
+    #[serde(default)]
+    pub links: Vec<ArtifactLink>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Question {
+    pub schema_version: SchemaVersion,
+    pub scope_id: ScopeId,
+    pub id: StableId,
+    #[serde(alias = "topicId")]
+    pub topic_id: StableId,
+    #[serde(alias = "requirementId")]
+    pub requirement_id: StableId,
+    pub question: String,
+    pub status: QuestionStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answer: Option<String>,
+    #[serde(default)]
+    pub links: Vec<ArtifactLink>,
+    #[serde(
+        default,
+        alias = "resolutionId",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub resolution_id: Option<StableId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResolutionInput {
+    #[serde(alias = "inputType")]
+    pub input_type: ResolutionInputType,
+    pub reference: String,
+    pub summary: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -90,6 +184,20 @@ pub struct Resolution {
     pub enforcement: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub confidence: Option<f64>,
+    #[serde(default)]
+    pub inputs: Vec<ResolutionInput>,
+    #[serde(default, alias = "madeBy", skip_serializing_if = "Option::is_none")]
+    pub made_by: Option<String>,
+    #[serde(default, alias = "approvedBy", skip_serializing_if = "Option::is_none")]
+    pub approved_by: Option<String>,
+    #[serde(default, alias = "approvedAt", skip_serializing_if = "Option::is_none")]
+    pub approved_at: Option<i64>,
+    #[serde(
+        default,
+        alias = "supersededBy",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub superseded_by: Option<StableId>,
     #[serde(alias = "reviewOn")]
     pub review_on: Option<String>,
     #[serde(default = "empty_array", alias = "reviewTriggers")]
@@ -162,6 +270,60 @@ pub struct Rule {
     pub expression: serde_json::Value,
     #[serde(default = "empty_array")]
     pub inputs: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Service {
+    pub schema_version: SchemaVersion,
+    pub scope_id: ScopeId,
+    pub id: StableId,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub environment: Option<ServiceEnvironment>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tier: Option<ServiceTier>,
+    #[serde(default, alias = "externalId", skip_serializing_if = "Option::is_none")]
+    pub external_id: Option<String>,
+    pub status: ServiceStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ServiceBinding {
+    pub schema_version: SchemaVersion,
+    pub scope_id: ScopeId,
+    pub id: StableId,
+    #[serde(alias = "ruleId")]
+    pub rule_id: StableId,
+    #[serde(alias = "serviceId")]
+    pub service_id: StableId,
+    #[serde(alias = "bindingType")]
+    pub binding_type: ServiceBindingType,
+}
+
+impl ServiceBinding {
+    pub fn stable_id(
+        rule_id: &StableId,
+        service_id: &StableId,
+        binding_type: ServiceBindingType,
+    ) -> anyhow::Result<StableId> {
+        let binding_type = match binding_type {
+            ServiceBindingType::Enforces => "enforces",
+            ServiceBindingType::Consumes => "consumes",
+            ServiceBindingType::Monitors => "monitors",
+        };
+        StableId::new(format!(
+            "service_binding_{}_{}_{}",
+            rule_id.as_str(),
+            service_id.as_str(),
+            binding_type,
+        ))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

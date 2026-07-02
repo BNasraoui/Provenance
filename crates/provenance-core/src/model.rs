@@ -11,7 +11,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn enriched_v1_records_roundtrip_without_schema_bump() {
+    fn enriched_source_and_requirement_records_roundtrip_without_schema_bump() {
         let source = serde_json::json!({
             "schema_version": 1,
             "scope_id": "default",
@@ -20,6 +20,9 @@ mod tests {
             "source_type": "legislation",
             "url": "https://example.test/sah",
             "reference": "Department guidance",
+            "effectiveDate": 1_714_521_600_000_i64,
+            "reviewDate": 1_717_200_000_000_i64,
+            "supersededBy": "source_sah_2025",
             "originThread": "thread_req_origin",
             "originMessage": "msg_000001"
         });
@@ -34,6 +37,31 @@ mod tests {
             "originThread": "thread_req_origin",
             "originMessage": "msg_000001"
         });
+
+        let source: Source = serde_json::from_value(source).unwrap();
+        let requirement: Requirement = serde_json::from_value(requirement).unwrap();
+
+        let source = serde_json::to_value(source).unwrap();
+        let requirement = serde_json::to_value(requirement).unwrap();
+
+        assert_eq!(source["schema_version"], 1);
+        assert_eq!(source["source_type"], "legislation");
+        assert_eq!(source["reference"], "Department guidance");
+        assert_eq!(source["effective_date"], 1_714_521_600_000_i64);
+        assert_eq!(source["review_date"], 1_717_200_000_000_i64);
+        assert_eq!(source["superseded_by"], "source_sah_2025");
+        assert_eq!(source["origin_thread"], "thread_req_origin");
+        assert_eq!(source["origin_message"], "msg_000001");
+        assert_eq!(requirement["schema_version"], 1);
+        assert_eq!(requirement["status"], "discovery");
+        assert_eq!(requirement["description"], "Cloud import description");
+        assert_eq!(requirement["source_refs"][0]["clause"], "Program overview");
+        assert_eq!(requirement["origin_thread"], "thread_req_origin");
+        assert_eq!(requirement["origin_message"], "msg_000001");
+    }
+
+    #[test]
+    fn enriched_resolution_and_rule_records_roundtrip_without_schema_bump() {
         let resolution = serde_json::json!({
             "schema_version": 1,
             "scope_id": "default",
@@ -47,6 +75,15 @@ mod tests {
             "context": "Codebase scan",
             "enforcement": "specification",
             "confidence": 0.91,
+            "inputs": [{
+                "inputType": "regulatory",
+                "reference": "SAH program manual",
+                "summary": "Program rules reviewed"
+            }],
+            "madeBy": "Analyst One",
+            "approvedBy": "Approver Two",
+            "approvedAt": 1_714_780_800_000_i64,
+            "supersededBy": "res_sah_2025",
             "originThread": "thread_req_origin",
             "originMessage": "msg_000001"
         });
@@ -72,30 +109,22 @@ mod tests {
             "originMessage": "msg_000001"
         });
 
-        let source: Source = serde_json::from_value(source).unwrap();
-        let requirement: Requirement = serde_json::from_value(requirement).unwrap();
         let resolution: Resolution = serde_json::from_value(resolution).unwrap();
         let rule: Rule = serde_json::from_value(rule).unwrap();
 
-        let source = serde_json::to_value(source).unwrap();
-        let requirement = serde_json::to_value(requirement).unwrap();
         let resolution = serde_json::to_value(resolution).unwrap();
         let rule = serde_json::to_value(rule).unwrap();
 
-        assert_eq!(source["schema_version"], 1);
-        assert_eq!(source["source_type"], "legislation");
-        assert_eq!(source["reference"], "Department guidance");
-        assert_eq!(source["origin_thread"], "thread_req_origin");
-        assert_eq!(source["origin_message"], "msg_000001");
-        assert_eq!(requirement["schema_version"], 1);
-        assert_eq!(requirement["status"], "discovery");
-        assert_eq!(requirement["description"], "Cloud import description");
-        assert_eq!(requirement["source_refs"][0]["clause"], "Program overview");
-        assert_eq!(requirement["origin_thread"], "thread_req_origin");
-        assert_eq!(requirement["origin_message"], "msg_000001");
         assert_eq!(resolution["schema_version"], 1);
         assert_eq!(resolution["status"], "draft");
         assert_eq!(resolution["confidence"], 0.91);
+        assert_eq!(resolution["inputs"][0]["input_type"], "regulatory");
+        assert_eq!(resolution["inputs"][0]["reference"], "SAH program manual");
+        assert_eq!(resolution["inputs"][0]["summary"], "Program rules reviewed");
+        assert_eq!(resolution["made_by"], "Analyst One");
+        assert_eq!(resolution["approved_by"], "Approver Two");
+        assert_eq!(resolution["approved_at"], 1_714_780_800_000_i64);
+        assert_eq!(resolution["superseded_by"], "res_sah_2025");
         assert_eq!(resolution["origin_thread"], "thread_req_origin");
         assert_eq!(resolution["origin_message"], "msg_000001");
         assert_eq!(rule["schema_version"], 1);
@@ -107,6 +136,26 @@ mod tests {
         );
         assert_eq!(rule["origin_thread"], "thread_req_origin");
         assert_eq!(rule["origin_message"], "msg_000001");
+    }
+
+    #[test]
+    fn resolved_threads_roundtrip_as_v1_state() {
+        let thread = serde_json::json!({
+            "schema_version": 1,
+            "scope_id": "default",
+            "id": "thread_rule_rule_sah_001",
+            "parent": {
+                "node_type": "rule",
+                "node_id": "rule_sah_001"
+            },
+            "status": "resolved",
+            "created_at": 1
+        });
+
+        let thread: Thread = serde_json::from_value(thread).unwrap();
+        let thread = serde_json::to_value(thread).unwrap();
+
+        assert_eq!(thread["status"], "resolved");
     }
 
     #[test]
@@ -312,5 +361,142 @@ mod tests {
             "proposal_overtime_traceability"
         );
         assert_eq!(decision.actor.id, "ben");
+    }
+
+    #[test]
+    fn shaping_records_roundtrip_from_convex_style_json() {
+        let boundary = serde_json::json!({
+            "schema_version": 1,
+            "scope_id": "default",
+            "id": "boundary_no_manual_payroll",
+            "requirementId": "req_payroll",
+            "statement": "Do not require manual payroll reconciliation",
+            "sourceRef": {"sourceId": "source_schads", "clause": "28.1"}
+        });
+        let topic = serde_json::json!({
+            "schema_version": 1,
+            "scope_id": "default",
+            "id": "topic_overtime",
+            "requirementId": "req_payroll",
+            "title": "Overtime eligibility",
+            "status": "explored",
+            "links": [{"targetType": "source", "targetId": "source_schads"}]
+        });
+        let question = serde_json::json!({
+            "schema_version": 1,
+            "scope_id": "default",
+            "id": "question_overtime_threshold",
+            "topicId": "topic_overtime",
+            "requirementId": "req_payroll",
+            "question": "Which threshold applies?",
+            "status": "answered",
+            "answer": "Use the SCHADS overtime threshold.",
+            "links": [{"targetType": "resolution", "targetId": "res_overtime"}],
+            "resolutionId": "res_overtime"
+        });
+
+        let boundary: Boundary = serde_json::from_value(boundary).unwrap();
+        let topic: Topic = serde_json::from_value(topic).unwrap();
+        let question: Question = serde_json::from_value(question).unwrap();
+
+        assert_eq!(boundary.requirement_id.as_str(), "req_payroll");
+        assert_eq!(
+            boundary.source_ref.as_ref().unwrap().source_id.as_str(),
+            "source_schads"
+        );
+        assert_eq!(topic.status, TopicStatus::Explored);
+        assert_eq!(topic.links[0].target_type, ArtifactLinkTargetType::Source);
+        assert_eq!(question.topic_id.as_str(), "topic_overtime");
+        assert_eq!(question.status, QuestionStatus::Answered);
+        assert_eq!(
+            question.resolution_id.as_ref().unwrap().as_str(),
+            "res_overtime"
+        );
+
+        let boundary = serde_json::to_value(boundary).unwrap();
+        let topic = serde_json::to_value(topic).unwrap();
+        let question = serde_json::to_value(question).unwrap();
+
+        assert_eq!(boundary["schema_version"], 1);
+        assert_eq!(boundary["requirement_id"], "req_payroll");
+        assert_eq!(boundary["source_ref"]["source_id"], "source_schads");
+        assert_eq!(topic["status"], "explored");
+        assert_eq!(topic["links"][0]["target_type"], "source");
+        assert_eq!(question["status"], "answered");
+        assert_eq!(question["resolution_id"], "res_overtime");
+    }
+
+    #[test]
+    fn topic_and_question_are_thread_parent_node_types_but_not_edge_endpoints() {
+        assert_eq!(NodeType::parse("topic").unwrap(), NodeType::Topic);
+        assert_eq!(NodeType::parse("question").unwrap(), NodeType::Question);
+        assert!(crate::edge_validation::validate_edge_endpoint(
+            EdgeType::DependsOn,
+            NodeType::Topic,
+            NodeType::Topic,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn domain_service_records_roundtrip_without_hosted_fields() {
+        let domain = serde_json::json!({
+            "schema_version": 1,
+            "scope_id": "default",
+            "id": "domain_payroll",
+            "name": "Payroll",
+            "description": "Payroll compliance requirements",
+            "color": "#3b82f6"
+        });
+        let requirement = serde_json::json!({
+            "schema_version": 1,
+            "scope_id": "default",
+            "id": "req_overtime",
+            "statement": "Overtime must be traceable",
+            "status": "discovery",
+            "domainId": "domain_payroll"
+        });
+        let service = serde_json::json!({
+            "schema_version": 1,
+            "scope_id": "default",
+            "id": "service_payroll_api",
+            "name": "payroll-api",
+            "description": "Calculates payroll",
+            "owner": "platform",
+            "repository": "github.com/example/payroll-api",
+            "environment": "production",
+            "tier": "critical",
+            "externalId": "backstage:component/payroll-api",
+            "status": "active"
+        });
+        let service_binding = serde_json::json!({
+            "schema_version": 1,
+            "scope_id": "default",
+            "id": "binding_overtime_payroll_enforces",
+            "ruleId": "rule_overtime",
+            "serviceId": "service_payroll_api",
+            "bindingType": "enforces"
+        });
+
+        let domain: Domain = serde_json::from_value(domain).unwrap();
+        let requirement: Requirement = serde_json::from_value(requirement).unwrap();
+        let service: Service = serde_json::from_value(service).unwrap();
+        let service_binding: ServiceBinding = serde_json::from_value(service_binding).unwrap();
+
+        let domain = serde_json::to_value(domain).unwrap();
+        let requirement = serde_json::to_value(requirement).unwrap();
+        let service = serde_json::to_value(service).unwrap();
+        let service_binding = serde_json::to_value(service_binding).unwrap();
+
+        assert_eq!(domain["schema_version"], 1);
+        assert_eq!(domain["id"], "domain_payroll");
+        assert!(domain.get("createdBy").is_none());
+        assert!(domain.get("updatedAt").is_none());
+        assert_eq!(requirement["domain_id"], "domain_payroll");
+        assert_eq!(service["environment"], "production");
+        assert_eq!(service["tier"], "critical");
+        assert_eq!(service["external_id"], "backstage:component/payroll-api");
+        assert_eq!(service_binding["binding_type"], "enforces");
+        assert_eq!(service_binding["rule_id"], "rule_overtime");
     }
 }

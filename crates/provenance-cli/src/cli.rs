@@ -1,6 +1,6 @@
 use crate::output::OutputFormat;
 use camino::Utf8PathBuf;
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use serde::Serialize;
 
 #[derive(Parser)]
@@ -39,6 +39,22 @@ pub enum Command {
         #[command(subcommand)]
         command: RequirementsCommand,
     },
+    Domains {
+        #[command(subcommand)]
+        command: DomainsCommand,
+    },
+    Boundaries {
+        #[command(subcommand)]
+        command: BoundariesCommand,
+    },
+    Topics {
+        #[command(subcommand)]
+        command: TopicsCommand,
+    },
+    Questions {
+        #[command(subcommand)]
+        command: QuestionsCommand,
+    },
     Graph {
         requirement_id: String,
         #[arg(long, default_value = ".")]
@@ -55,6 +71,14 @@ pub enum Command {
     Rules {
         #[command(subcommand)]
         command: RulesCommand,
+    },
+    Services {
+        #[command(subcommand)]
+        command: ServicesCommand,
+    },
+    ServiceBindings {
+        #[command(subcommand)]
+        command: ServiceBindingsCommand,
     },
     Traceability {
         rule_id: String,
@@ -439,6 +463,20 @@ pub enum ResolutionsCommand {
         enforcement: Option<String>,
         #[arg(long)]
         confidence: Option<f64>,
+        #[arg(long = "input-type")]
+        input_type: Vec<String>,
+        #[arg(long = "input-reference")]
+        input_reference: Vec<String>,
+        #[arg(long = "input-summary")]
+        input_summary: Vec<String>,
+        #[arg(long)]
+        made_by: Option<String>,
+        #[arg(long)]
+        approved_by: Option<String>,
+        #[arg(long)]
+        approved_at: Option<i64>,
+        #[arg(long)]
+        superseded_by: Option<String>,
         #[arg(long)]
         origin_thread: Option<String>,
         #[arg(long)]
@@ -494,6 +532,73 @@ pub enum RulesCommand {
     },
 }
 
+#[derive(Args)]
+pub struct ServiceCreateArgs {
+    #[arg(long, default_value = ".")]
+    pub repo: Utf8PathBuf,
+    #[arg(long)]
+    pub scope: String,
+    #[arg(long)]
+    pub id: String,
+    #[arg(long)]
+    pub name: String,
+    #[arg(long)]
+    pub description: Option<String>,
+    #[arg(long)]
+    pub owner: Option<String>,
+    #[arg(long)]
+    pub repository: Option<String>,
+    #[arg(long)]
+    pub environment: Option<String>,
+    #[arg(long)]
+    pub tier: Option<String>,
+    #[arg(long)]
+    pub external_id: Option<String>,
+    #[arg(long, default_value = "active")]
+    pub status: String,
+    #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+    pub format: OutputFormat,
+}
+
+#[derive(Subcommand)]
+pub enum ServicesCommand {
+    Create(Box<ServiceCreateArgs>),
+    List {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ServiceBindingsCommand {
+    Create {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long)]
+        rule_id: String,
+        #[arg(long)]
+        service_id: String,
+        #[arg(long)]
+        binding_type: String,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+    List {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+}
+
 #[derive(Subcommand)]
 pub enum SourcesCommand {
     Create {
@@ -511,6 +616,12 @@ pub enum SourcesCommand {
         url: Option<String>,
         #[arg(long)]
         reference: Option<String>,
+        #[arg(long)]
+        effective_date: Option<i64>,
+        #[arg(long)]
+        review_date: Option<i64>,
+        #[arg(long)]
+        superseded_by: Option<String>,
         #[arg(long)]
         origin_thread: Option<String>,
         #[arg(long)]
@@ -536,6 +647,8 @@ pub enum RequirementsCommand {
         #[arg(long, default_value = "active")]
         status: String,
         #[arg(long)]
+        domain_id: Option<String>,
+        #[arg(long)]
         origin_thread: Option<String>,
         #[arg(long)]
         origin_message: Option<String>,
@@ -545,6 +658,128 @@ pub enum RequirementsCommand {
     SourceRef {
         #[command(subcommand)]
         command: SourceRefCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum DomainsCommand {
+    Create {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        description: Option<String>,
+        #[arg(long)]
+        color: Option<String>,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+    List {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum BoundariesCommand {
+    Create {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        requirement_id: String,
+        #[arg(long)]
+        statement: String,
+        #[arg(long)]
+        source_id: Option<String>,
+        #[arg(long)]
+        source_clause: Option<String>,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+    List {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum TopicsCommand {
+    Create {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        requirement_id: String,
+        #[arg(long)]
+        title: String,
+        #[arg(long, default_value = "open")]
+        status: String,
+        #[arg(long, default_value = "[]")]
+        links_json: String,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+    List {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum QuestionsCommand {
+    Create {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        topic_id: String,
+        #[arg(long)]
+        question: String,
+        #[arg(long, default_value = "open")]
+        status: String,
+        #[arg(long)]
+        answer: Option<String>,
+        #[arg(long, default_value = "[]")]
+        links_json: String,
+        #[arg(long)]
+        resolution_id: Option<String>,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+    List {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
     },
 }
 

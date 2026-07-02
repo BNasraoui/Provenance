@@ -223,7 +223,9 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
         .assert()
         .success()
         .stdout(predicates::str::contains("src/payroll/overtime.rs"))
-        .stdout(predicates::str::contains(r#""promotion_state": "accepted""#));
+        .stdout(predicates::str::contains(
+            r#""promotion_state": "accepted""#,
+        ));
 
     Command::cargo_bin("provenance")
         .unwrap()
