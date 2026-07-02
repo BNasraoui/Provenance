@@ -71,6 +71,7 @@ impl StateStore {
             id,
             statement,
             description,
+            fog: None,
             status,
             domain_id,
             source_refs: Vec::new(),
@@ -88,6 +89,28 @@ impl StateStore {
             &records,
         )?;
         Ok(requirement)
+    }
+
+    /// Set (`Some`) or clear (`None`) the deliberately unstructured fog text
+    /// on a requirement.
+    pub fn set_requirement_fog(
+        &self,
+        scope_id: &ScopeId,
+        id: &StableId,
+        fog: Option<String>,
+    ) -> anyhow::Result<Requirement> {
+        if let Some(fog) = &fog {
+            anyhow::ensure!(!fog.trim().is_empty(), "fog text must not be empty");
+        }
+        let mut records = self.list_requirements(scope_id)?;
+        let requirement = records
+            .iter_mut()
+            .find(|requirement| &requirement.id == id)
+            .ok_or_else(|| anyhow::anyhow!("requirement does not exist"))?;
+        requirement.fog = fog;
+        let updated = requirement.clone();
+        jsonl::write_jsonl_atomic(&shards::requirements_path(&self.layout, scope_id), &records)?;
+        Ok(updated)
     }
 
     pub fn add_source_reference(&self, input: AddSourceReferenceInput) -> anyhow::Result<Edge> {

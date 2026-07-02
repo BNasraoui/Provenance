@@ -108,7 +108,7 @@ pub async fn materialize_state(layout: &ProvenanceLayout) -> anyhow::Result<Mate
         }
         for requirement in store.list_requirements(&scope.id)? {
             sqlx::query(
-                "INSERT INTO requirements (scope_id, id, statement, status, domain_id) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO requirements (scope_id, id, statement, status, domain_id, fog) VALUES (?, ?, ?, ?, ?, ?)",
             )
             .bind(requirement.scope_id.as_str())
             .bind(requirement.id.as_str())
@@ -120,6 +120,7 @@ pub async fn materialize_state(layout: &ProvenanceLayout) -> anyhow::Result<Mate
                     .as_ref()
                     .map(provenance_core::StableId::as_str),
             )
+            .bind(requirement.fog)
             .execute(&mut *tx)
             .await?;
             records_loaded += 1;
@@ -158,25 +159,30 @@ pub async fn materialize_state(layout: &ProvenanceLayout) -> anyhow::Result<Mate
             records_loaded += 1;
         }
         for topic in store.list_topics(&scope.id)? {
-            sqlx::query("INSERT INTO topics (scope_id, id, requirement_id, title, status, links) VALUES (?, ?, ?, ?, ?, ?)")
+            sqlx::query("INSERT INTO topics (scope_id, id, requirement_id, title, status, claimed_by, claimed_at, links) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
                 .bind(topic.scope_id.as_str())
                 .bind(topic.id.as_str())
                 .bind(topic.requirement_id.as_str())
                 .bind(topic.title)
                 .bind(serde_name(&topic.status)?)
+                .bind(topic.claimed_by)
+                .bind(topic.claimed_at)
                 .bind(serde_json::to_string(&topic.links)?)
                 .execute(&mut *tx)
                 .await?;
             records_loaded += 1;
         }
         for question in store.list_questions(&scope.id)? {
-            sqlx::query("INSERT INTO questions (scope_id, id, topic_id, requirement_id, question, status, answer, links, resolution_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+            sqlx::query("INSERT INTO questions (scope_id, id, topic_id, requirement_id, question, resolution_method, status, claimed_by, claimed_at, answer, links, resolution_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
                 .bind(question.scope_id.as_str())
                 .bind(question.id.as_str())
                 .bind(question.topic_id.as_str())
                 .bind(question.requirement_id.as_str())
                 .bind(question.question)
+                .bind(serde_name(&question.resolution_method)?)
                 .bind(serde_name(&question.status)?)
+                .bind(question.claimed_by)
+                .bind(question.claimed_at)
                 .bind(question.answer)
                 .bind(serde_json::to_string(&question.links)?)
                 .bind(question.resolution_id.as_ref().map(provenance_core::StableId::as_str))
@@ -506,6 +512,87 @@ mod report_tests {
         assert_eq!(health.rules.total, 1);
         assert_eq!(health.rules.with_complete_traceability, 1);
         assert_eq!(health.gaps.total, 0);
+    }
+
+    #[tokio::test]
+    async fn materialize_state_caches_fog_resolution_method_and_claim_state() {
+        let (_dir, layout, scope) = seeded_layout();
+        let store = StateStore::new(layout.clone());
+        store
+            .set_requirement_fog(
+                &scope,
+                &StableId::new("req_schads_overtime").unwrap(),
+                Some("sleepover rules; something about broken shifts".into()),
+            )
+            .unwrap();
+        store
+            .create_topic(crate::state_store::CreateTopicInput {
+                scope_id: scope.clone(),
+                id: StableId::new("topic_overtime").unwrap(),
+                requirement_id: StableId::new("req_schads_overtime").unwrap(),
+                title: "Overtime eligibility".into(),
+                status: provenance_core::TopicStatus::Open,
+                links: Vec::new(),
+            })
+            .unwrap();
+        store
+            .create_question(crate::state_store::CreateQuestionInput {
+                scope_id: scope.clone(),
+                id: StableId::new("question_threshold").unwrap(),
+                topic_id: StableId::new("topic_overtime").unwrap(),
+                question: "Which threshold applies?".into(),
+                resolution_method: provenance_core::ResolutionMethod::Verify,
+                status: provenance_core::QuestionStatus::Open,
+                answer: None,
+                links: Vec::new(),
+                resolution_id: None,
+            })
+            .unwrap();
+        store
+            .claim_topic(
+                &scope,
+                &StableId::new("topic_overtime").unwrap(),
+                "agent-one",
+            )
+            .unwrap();
+        store
+            .claim_question(
+                &scope,
+                &StableId::new("question_threshold").unwrap(),
+                "agent-two",
+            )
+            .unwrap();
+
+        materialize_state(&layout).await.unwrap();
+        let pool = open_cache(&layout).await.unwrap();
+        let fog: Option<String> = sqlx::query_scalar("SELECT fog FROM requirements WHERE id = ?")
+            .bind("req_schads_overtime")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let topic: (Option<String>, Option<i64>) =
+            sqlx::query_as("SELECT claimed_by, claimed_at FROM topics WHERE id = ?")
+                .bind("topic_overtime")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        let question: (String, Option<String>, Option<i64>) = sqlx::query_as(
+            "SELECT resolution_method, claimed_by, claimed_at FROM questions WHERE id = ?",
+        )
+        .bind("question_threshold")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        assert_eq!(
+            fog.as_deref(),
+            Some("sleepover rules; something about broken shifts")
+        );
+        assert_eq!(topic.0.as_deref(), Some("agent-one"));
+        assert!(topic.1.unwrap() > 0);
+        assert_eq!(question.0, "verify");
+        assert_eq!(question.1.as_deref(), Some("agent-two"));
+        assert!(question.2.unwrap() > 0);
     }
 
     #[tokio::test]

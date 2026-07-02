@@ -659,6 +659,51 @@ pub enum RequirementsCommand {
         #[command(subcommand)]
         command: SourceRefCommand,
     },
+    /// Set, show, or clear the unstructured fog text on a requirement.
+    Fog {
+        #[command(subcommand)]
+        command: FogCommand,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum FogCommand {
+    /// Set the fog text: the decisions and investigations sensed but not yet
+    /// sharp enough to state as questions.
+    Set {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long)]
+        requirement_id: String,
+        #[arg(long)]
+        text: String,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+    /// Show the fog text on a requirement.
+    Show {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long)]
+        requirement_id: String,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+    /// Clear the fog text on a requirement.
+    Clear {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long)]
+        requirement_id: String,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
 }
 
 #[derive(Subcommand)]
@@ -747,10 +792,49 @@ pub enum TopicsCommand {
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },
+    /// Claim a topic so concurrent sessions skip it. Claiming an
+    /// already-claimed topic is an error showing who holds it.
+    Claim {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long)]
+        id: String,
+        /// Actor name recorded on the claim.
+        #[arg(long)]
+        actor: String,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+    /// Release a claimed topic without closing it.
+    Release {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long)]
+        id: String,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+    /// Close a topic. Closing clears any claim on it.
+    Close {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long)]
+        id: String,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
 }
 
 #[derive(Subcommand)]
 pub enum QuestionsCommand {
+    /// Create a question. A question should be resolvable in one agent
+    /// session; otherwise it is fog or needs decomposition.
     Create {
         #[arg(long, default_value = ".")]
         repo: Utf8PathBuf,
@@ -762,6 +846,9 @@ pub enum QuestionsCommand {
         topic_id: String,
         #[arg(long)]
         question: String,
+        /// Resolution method: grill, prototype, research, verify, or task.
+        #[arg(long)]
+        method: String,
         #[arg(long, default_value = "open")]
         status: String,
         #[arg(long)]
@@ -778,6 +865,47 @@ pub enum QuestionsCommand {
         repo: Utf8PathBuf,
         #[arg(long)]
         scope: String,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+    /// Claim a question so concurrent sessions skip it. Claiming an
+    /// already-claimed question is an error showing who holds it.
+    Claim {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long)]
+        id: String,
+        /// Actor name recorded on the claim.
+        #[arg(long)]
+        actor: String,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+    /// Release a claimed question without answering it.
+    Release {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long)]
+        id: String,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+    /// Record the answer to a question. Answering clears any claim on it.
+    Answer {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        answer: String,
+        #[arg(long)]
+        resolution_id: Option<String>,
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },
