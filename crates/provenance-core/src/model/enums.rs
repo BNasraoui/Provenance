@@ -413,6 +413,8 @@ impl TopicStatus {
 pub enum QuestionStatus {
     #[serde(rename = "open")]
     Open,
+    #[serde(rename = "blocked_on_human", alias = "blocked-on-human")]
+    BlockedOnHuman,
     #[serde(rename = "answered")]
     Answered,
 }
@@ -421,8 +423,9 @@ impl QuestionStatus {
     pub fn parse(value: &str) -> anyhow::Result<Self> {
         match normalize_enum_value(value).as_str() {
             "open" => Ok(Self::Open),
+            "blocked_on_human" => Ok(Self::BlockedOnHuman),
             "answered" => Ok(Self::Answered),
-            _ => anyhow::bail!("question status must be open or answered"),
+            _ => anyhow::bail!("question status must be open, blocked_on_human, or answered"),
         }
     }
 }

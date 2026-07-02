@@ -549,4 +549,25 @@ mod tests {
         assert_eq!(service_binding["binding_type"], "enforces");
         assert_eq!(service_binding["rule_id"], "rule_overtime");
     }
+
+    #[test]
+    fn question_blocked_on_human_status_accepts_hyphenated_state_and_roundtrips() {
+        let question = serde_json::json!({
+            "schema_version": 1,
+            "scope_id": "default",
+            "id": "question_fork",
+            "topicId": "topic_overtime",
+            "requirementId": "req_overtime",
+            "question": "Which UI direction should the shaping map use?",
+            "resolutionMethod": "prototype",
+            "status": "blocked-on-human",
+            "links": []
+        });
+
+        let question: Question = serde_json::from_value(question).unwrap();
+        let question = serde_json::to_value(question).unwrap();
+
+        assert_eq!(question["status"], "blocked_on_human");
+        assert_eq!(question["resolution_method"], "prototype");
+    }
 }

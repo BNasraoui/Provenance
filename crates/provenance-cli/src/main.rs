@@ -33,7 +33,7 @@ use provenance_store::{
         CreatePromotionDecisionInput, CreateProposalCardInput, CreateQuestionInput,
         CreateRequirementInput, CreateResolutionInput, CreateRuleInput, CreateServiceBindingInput,
         CreateServiceInput, CreateSourceInput, CreateSynthesisPacketInput, CreateTopicInput,
-        PostMessageInput, StateStore,
+        PostMessageInput, StateStore, UpdateQuestionInput,
     },
 };
 use serde::de::DeserializeOwned;
@@ -451,6 +451,35 @@ async fn main() -> anyhow::Result<()> {
                 let questions = StateStore::new(ProvenanceLayout::new(repo))
                     .list_questions(&ScopeId::new(scope)?)?;
                 output::print(format, &questions)?;
+            }
+            QuestionsCommand::Update {
+                repo,
+                scope,
+                id,
+                method,
+                status,
+                links_json,
+                resolution_id,
+                format,
+            } => {
+                warn_if_skills_missing(&repo, quiet)?;
+                let question = StateStore::new(ProvenanceLayout::new(repo)).update_question(
+                    UpdateQuestionInput {
+                        scope_id: ScopeId::new(scope)?,
+                        id: StableId::new(id)?,
+                        resolution_method: method
+                            .map(|value| ResolutionMethod::parse(&value))
+                            .transpose()?,
+                        status: status
+                            .map(|value| QuestionStatus::parse(&value))
+                            .transpose()?,
+                        links: links_json
+                            .map(|value| parse_json_arg::<Vec<ArtifactLink>>("links-json", &value))
+                            .transpose()?,
+                        resolution_id: resolution_id.map(StableId::new).transpose()?,
+                    },
+                )?;
+                output::print(format, &question)?;
             }
             QuestionsCommand::Claim {
                 repo,
