@@ -1,6 +1,8 @@
 use super::{CreateResolutionInput, CreateRuleInput, StateStore};
 use crate::shards;
-use provenance_core::{EdgeType, NodeType, Resolution, Rule, SchemaVersion};
+use provenance_core::{
+    validate_optional_confidence_score, EdgeType, NodeType, Resolution, Rule, SchemaVersion,
+};
 
 impl StateStore {
     pub fn create_resolution(&self, input: CreateResolutionInput) -> anyhow::Result<Resolution> {
@@ -23,6 +25,7 @@ impl StateStore {
             origin_thread,
             origin_message,
         } = input;
+        let confidence = validate_optional_confidence_score(confidence)?;
         if let Some(requirement_id) = &requirement_id {
             anyhow::ensure!(
                 self.list_requirements(&scope_id)?
@@ -104,6 +107,7 @@ impl StateStore {
             origin_thread,
             origin_message,
         } = input;
+        let confidence = validate_optional_confidence_score(confidence)?;
         if let Some(requirement_id) = &requirement_id {
             anyhow::ensure!(
                 self.list_requirements(&scope_id)?

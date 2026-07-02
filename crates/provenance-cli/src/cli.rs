@@ -398,6 +398,8 @@ pub enum ProposalsCommand {
         #[arg(long)]
         summary: String,
         #[arg(long)]
+        confidence: Option<f64>,
+        #[arg(long)]
         target_type: String,
         #[arg(long)]
         target_id: String,
@@ -688,6 +690,8 @@ pub enum SourcesCommand {
         url: Option<String>,
         #[arg(long)]
         reference: Option<String>,
+        #[arg(long)]
+        commit_pin: Option<String>,
         #[arg(long)]
         effective_date: Option<i64>,
         #[arg(long)]

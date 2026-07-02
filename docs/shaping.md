@@ -174,8 +174,9 @@ ported — skills and workflows own execution; only durable outputs enter state.
 The backtrace (`provenance-qho`) is charting in reverse: agents partition an existing
 codebase, extract candidate requirements ("what must be true for this code to be
 correct"), dedup keeping *all* evidence sites, and land everything as `proposed` — never
-`active` — with the codebase (pinned to a commit) as the source. Its output feeds the
-shaping loop: a human confirms "intentional" or discovers surprises, question by question.
+`active` — with the codebase source carrying a validated `commit_pin`. Proposals and
+material claims may carry `0.0`-`1.0` confidence scores. Its output feeds the shaping loop:
+a human confirms "intentional" or discovers surprises, question by question.
 
 ## Beyond "shaped"
 

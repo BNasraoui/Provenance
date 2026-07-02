@@ -20,6 +20,7 @@ mod tests {
             "source_type": "legislation",
             "url": "https://example.test/sah",
             "reference": "Department guidance",
+            "commitPin": "5e1f2a9c4b6d8e0f1234567890abcdef12345678",
             "effectiveDate": 1_714_521_600_000_i64,
             "reviewDate": 1_717_200_000_000_i64,
             "supersededBy": "source_sah_2025",
@@ -47,6 +48,10 @@ mod tests {
         assert_eq!(source["schema_version"], 1);
         assert_eq!(source["source_type"], "legislation");
         assert_eq!(source["reference"], "Department guidance");
+        assert_eq!(
+            source["commit_pin"],
+            "5e1f2a9c4b6d8e0f1234567890abcdef12345678"
+        );
         assert_eq!(source["effective_date"], 1_714_521_600_000_i64);
         assert_eq!(source["review_date"], 1_717_200_000_000_i64);
         assert_eq!(source["superseded_by"], "source_sah_2025");
@@ -58,6 +63,23 @@ mod tests {
         assert_eq!(requirement["source_refs"][0]["clause"], "Program overview");
         assert_eq!(requirement["origin_thread"], "thread_req_origin");
         assert_eq!(requirement["origin_message"], "msg_000001");
+    }
+
+    #[test]
+    fn source_commit_pin_must_be_hex_git_commit() {
+        let source = serde_json::json!({
+            "schema_version": 1,
+            "scope_id": "default",
+            "id": "source_codebase",
+            "name": "Codebase",
+            "source_type": "project_artifact",
+            "commitPin": "main"
+        });
+
+        assert!(serde_json::from_value::<Source>(source)
+            .unwrap_err()
+            .to_string()
+            .contains("commit pin"));
     }
 
     #[test]
@@ -130,10 +152,7 @@ mod tests {
         assert_eq!(rule["schema_version"], 1);
         assert_eq!(rule["status"], "draft");
         assert_eq!(rule["rule_type"], "business");
-        assert_eq!(
-            rule["source_document"],
-            "Example-API-main/src/example.php"
-        );
+        assert_eq!(rule["source_document"], "Example-API-main/src/example.php");
         assert_eq!(rule["origin_thread"], "thread_req_origin");
         assert_eq!(rule["origin_message"], "msg_000001");
     }
@@ -180,7 +199,8 @@ mod tests {
                 "claim_id": "claim_overtime_threshold",
                 "statement": "Overtime starts after the award threshold.",
                 "evidence_type": "source",
-                "evidence_reference_ids": ["evidence_award_clause"]
+                "evidence_reference_ids": ["evidence_award_clause"],
+                "confidence": 0.87
             }],
             "risks": ["Payroll underpayment if the threshold is wrong"],
             "objections": [],
@@ -253,6 +273,7 @@ mod tests {
             "proposal_type": "requirement_candidate",
             "title": "Clarify overtime traceability",
             "summary": "Add source-backed threshold language.",
+            "confidence": 0.83,
             "traceability": {
                 "target": {"artifact_type": "requirement", "artifact_id": "req_overtime"},
                 "source_ids": ["source_schads"],
@@ -297,22 +318,64 @@ mod tests {
         assert_eq!(decision.decision, PromotionDecision::Accepted);
 
         assert_eq!(
-            serde_json::to_value(contribution).unwrap()["schema_version"],
+            serde_json::to_value(&contribution).unwrap()["schema_version"],
             1
         );
         assert_eq!(
-            serde_json::to_value(synthesis).unwrap()["suggested_artifacts"][0]["proposal_type"],
-            "requirement_candidate"
+            serde_json::to_value(&contribution).unwrap()["material_claims"][0]["confidence"],
+            0.87
         );
         assert_eq!(
-            serde_json::to_value(proposal).unwrap()["traceability"]["evidence_references"][0]
+            serde_json::to_value(&synthesis).unwrap()["suggested_artifacts"][0]["proposal_type"],
+            "requirement_candidate"
+        );
+        assert_eq!(serde_json::to_value(&proposal).unwrap()["confidence"], 0.83);
+        assert_eq!(
+            serde_json::to_value(&proposal).unwrap()["traceability"]["evidence_references"][0]
                 ["line"],
             42
         );
         assert_eq!(
-            serde_json::to_value(decision).unwrap()["actor"]["identity_type"],
+            serde_json::to_value(&decision).unwrap()["actor"]["identity_type"],
             "human"
         );
+    }
+
+    #[test]
+    fn confidence_scores_must_be_in_unit_interval() {
+        let claim = serde_json::json!({
+            "claim_id": "claim_overtime_threshold",
+            "statement": "Overtime starts after the award threshold.",
+            "evidence_type": "source",
+            "evidence_reference_ids": ["evidence_award_clause"],
+            "confidence": 1.01
+        });
+        let proposal = serde_json::json!({
+            "schema_version": 1,
+            "scope_id": "default",
+            "id": "proposal_overtime_traceability",
+            "proposal_key": "req-overtime-traceability",
+            "proposal_type": "requirement_candidate",
+            "title": "Clarify overtime traceability",
+            "summary": "Add source-backed threshold language.",
+            "confidence": -0.01,
+            "traceability": {
+                "target": {"artifact_type": "requirement", "artifact_id": "req_overtime"},
+                "source_ids": ["source_schads"],
+                "evidence_references": [],
+                "supporting_claim_ids": ["claim_overtime_threshold"]
+            },
+            "promotion_state": "proposed"
+        });
+
+        assert!(serde_json::from_value::<MaterialClaim>(claim)
+            .unwrap_err()
+            .to_string()
+            .contains("confidence"));
+        assert!(serde_json::from_value::<ProposalCard>(proposal)
+            .unwrap_err()
+            .to_string()
+            .contains("confidence"));
     }
 
     #[test]

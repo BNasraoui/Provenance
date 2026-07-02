@@ -3,8 +3,8 @@ use super::{
 };
 use crate::shards;
 use provenance_core::{
-    edge_validation::validate_edge_endpoint, Edge, EdgeType, NodeType, Requirement, SchemaVersion,
-    ScopeId, Source, SourceReference, StableId,
+    edge_validation::validate_edge_endpoint, validate_optional_commit_pin, Edge, EdgeType,
+    NodeType, Requirement, SchemaVersion, ScopeId, Source, SourceReference, StableId,
 };
 
 impl StateStore {
@@ -16,12 +16,14 @@ impl StateStore {
             source_type,
             url,
             reference,
+            commit_pin,
             effective_date,
             review_date,
             superseded_by,
             origin_thread,
             origin_message,
         } = input;
+        let commit_pin = validate_optional_commit_pin(commit_pin)?;
         let path = shards::sources_path(&self.layout, &scope_id);
         self.mutate_jsonl_records(&path, |records: &mut Vec<Source>| {
             let source = Source {
@@ -32,6 +34,7 @@ impl StateStore {
                 source_type,
                 url,
                 reference,
+                commit_pin,
                 effective_date,
                 review_date,
                 superseded_by,

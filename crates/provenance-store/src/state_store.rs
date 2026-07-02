@@ -34,6 +34,7 @@ pub struct CreateSourceInput {
     pub source_type: SourceType,
     pub url: Option<String>,
     pub reference: Option<String>,
+    pub commit_pin: Option<String>,
     pub effective_date: Option<i64>,
     pub review_date: Option<i64>,
     pub superseded_by: Option<StableId>,
@@ -222,6 +223,7 @@ pub struct CreateProposalCardInput {
     pub proposal_type: ProposalType,
     pub title: String,
     pub summary: String,
+    pub confidence: Option<f64>,
     pub traceability: ProposalTraceability,
     pub promotion_state: PromotionState,
     pub duplicate_of: Option<StableId>,
@@ -371,6 +373,7 @@ mod tests {
                 source_type: SourceType::Policy,
                 url: None,
                 reference: None,
+                commit_pin: None,
                 effective_date: None,
                 review_date: None,
                 superseded_by: None,
@@ -418,6 +421,7 @@ mod tests {
                 source_type: SourceType::Policy,
                 url: None,
                 reference: None,
+                commit_pin: None,
                 effective_date: None,
                 review_date: None,
                 superseded_by: None,
@@ -482,6 +486,7 @@ mod tests {
                     source_type: SourceType::Policy,
                     url: None,
                     reference: None,
+                    commit_pin: None,
                     effective_date: None,
                     review_date: None,
                     superseded_by: None,
@@ -508,6 +513,7 @@ mod tests {
                         source_type: SourceType::Policy,
                         url: None,
                         reference: None,
+                        commit_pin: None,
                         effective_date: None,
                         review_date: None,
                         superseded_by: None,
@@ -921,6 +927,7 @@ mod tests {
                 proposal_type: ProposalType::RequirementCandidate,
                 title: "Duplicate proposal".into(),
                 summary: "This should point at the original proposal.".into(),
+                confidence: None,
                 traceability: ProposalTraceability {
                     target: IdeationTarget {
                         artifact_type: IdeationTargetType::Requirement,
@@ -967,6 +974,7 @@ mod tests {
                 proposal_type: ProposalType::RequirementCandidate,
                 title: "Clarify overtime".into(),
                 summary: "Clarify the overtime requirement.".into(),
+                confidence: None,
                 traceability: ProposalTraceability {
                     target: IdeationTarget {
                         artifact_type: IdeationTargetType::Requirement,
