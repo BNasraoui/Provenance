@@ -19,7 +19,9 @@ mod tests {
             "name": "Support at Home",
             "source_type": "legislation",
             "url": "https://example.test/sah",
-            "reference": "Department guidance"
+            "reference": "Department guidance",
+            "originThread": "thread_req_origin",
+            "originMessage": "msg_000001"
         });
         let requirement = serde_json::json!({
             "schema_version": 1,
@@ -28,7 +30,9 @@ mod tests {
             "statement": "Support at Home shall be traceable",
             "description": "Cloud import description",
             "status": "discovery",
-            "source_refs": [{"source_id": "source_sah", "clause": "Program overview"}]
+            "source_refs": [{"source_id": "source_sah", "clause": "Program overview"}],
+            "originThread": "thread_req_origin",
+            "originMessage": "msg_000001"
         });
         let resolution = serde_json::json!({
             "schema_version": 1,
@@ -42,7 +46,9 @@ mod tests {
             "review_triggers": [],
             "context": "Codebase scan",
             "enforcement": "specification",
-            "confidence": 0.91
+            "confidence": 0.91,
+            "originThread": "thread_req_origin",
+            "originMessage": "msg_000001"
         });
         let rule = serde_json::json!({
             "schema_version": 1,
@@ -61,7 +67,9 @@ mod tests {
             "source_document": "Example-API-main/src/example.php",
             "source_section": "lines 1-3",
             "expression": {},
-            "inputs": []
+            "inputs": [],
+            "originThread": "thread_req_origin",
+            "originMessage": "msg_000001"
         });
 
         let source: Source = serde_json::from_value(source).unwrap();
@@ -77,13 +85,19 @@ mod tests {
         assert_eq!(source["schema_version"], 1);
         assert_eq!(source["source_type"], "legislation");
         assert_eq!(source["reference"], "Department guidance");
+        assert_eq!(source["origin_thread"], "thread_req_origin");
+        assert_eq!(source["origin_message"], "msg_000001");
         assert_eq!(requirement["schema_version"], 1);
         assert_eq!(requirement["status"], "discovery");
         assert_eq!(requirement["description"], "Cloud import description");
         assert_eq!(requirement["source_refs"][0]["clause"], "Program overview");
+        assert_eq!(requirement["origin_thread"], "thread_req_origin");
+        assert_eq!(requirement["origin_message"], "msg_000001");
         assert_eq!(resolution["schema_version"], 1);
         assert_eq!(resolution["status"], "draft");
         assert_eq!(resolution["confidence"], 0.91);
+        assert_eq!(resolution["origin_thread"], "thread_req_origin");
+        assert_eq!(resolution["origin_message"], "msg_000001");
         assert_eq!(rule["schema_version"], 1);
         assert_eq!(rule["status"], "draft");
         assert_eq!(rule["rule_type"], "business");
@@ -91,6 +105,8 @@ mod tests {
             rule["source_document"],
             "Example-API-main/src/example.php"
         );
+        assert_eq!(rule["origin_thread"], "thread_req_origin");
+        assert_eq!(rule["origin_message"], "msg_000001");
     }
 
     #[test]

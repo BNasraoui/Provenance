@@ -29,6 +29,18 @@ pub struct Source {
     pub url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference: Option<String>,
+    #[serde(
+        default,
+        alias = "originThread",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub origin_thread: Option<StableId>,
+    #[serde(
+        default,
+        alias = "originMessage",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub origin_message: Option<StableId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -49,6 +61,18 @@ pub struct Requirement {
     pub status: RequirementStatus,
     #[serde(default, alias = "sourceRefs", skip_serializing_if = "Vec::is_empty")]
     pub source_refs: Vec<SourceReference>,
+    #[serde(
+        default,
+        alias = "originThread",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub origin_thread: Option<StableId>,
+    #[serde(
+        default,
+        alias = "originMessage",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub origin_message: Option<StableId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -70,6 +94,18 @@ pub struct Resolution {
     pub review_on: Option<String>,
     #[serde(default = "empty_array", alias = "reviewTriggers")]
     pub review_triggers: serde_json::Value,
+    #[serde(
+        default,
+        alias = "originThread",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub origin_thread: Option<StableId>,
+    #[serde(
+        default,
+        alias = "originMessage",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub origin_message: Option<StableId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -110,6 +146,18 @@ pub struct Rule {
         skip_serializing_if = "Option::is_none"
     )]
     pub source_section: Option<String>,
+    #[serde(
+        default,
+        alias = "originThread",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub origin_thread: Option<StableId>,
+    #[serde(
+        default,
+        alias = "originMessage",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub origin_message: Option<StableId>,
     #[serde(default = "empty_object")]
     pub expression: serde_json::Value,
     #[serde(default = "empty_array")]

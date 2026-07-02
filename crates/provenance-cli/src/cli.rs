@@ -439,6 +439,10 @@ pub enum ResolutionsCommand {
         enforcement: Option<String>,
         #[arg(long)]
         confidence: Option<f64>,
+        #[arg(long)]
+        origin_thread: Option<String>,
+        #[arg(long)]
+        origin_message: Option<String>,
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },
@@ -481,6 +485,10 @@ pub enum RulesCommand {
         source_document: Option<String>,
         #[arg(long)]
         source_section: Option<String>,
+        #[arg(long)]
+        origin_thread: Option<String>,
+        #[arg(long)]
+        origin_message: Option<String>,
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },
@@ -503,6 +511,10 @@ pub enum SourcesCommand {
         url: Option<String>,
         #[arg(long)]
         reference: Option<String>,
+        #[arg(long)]
+        origin_thread: Option<String>,
+        #[arg(long)]
+        origin_message: Option<String>,
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },
@@ -523,6 +535,10 @@ pub enum RequirementsCommand {
         description: Option<String>,
         #[arg(long, default_value = "active")]
         status: String,
+        #[arg(long)]
+        origin_thread: Option<String>,
+        #[arg(long)]
+        origin_message: Option<String>,
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },

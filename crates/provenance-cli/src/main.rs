@@ -85,6 +85,8 @@ async fn main() -> anyhow::Result<()> {
                 source_type,
                 url,
                 reference,
+                origin_thread,
+                origin_message,
                 format,
             } => {
                 let source = StateStore::new(ProvenanceLayout::new(repo)).create_source(
@@ -95,6 +97,8 @@ async fn main() -> anyhow::Result<()> {
                         source_type: SourceType::parse(&source_type)?,
                         url,
                         reference,
+                        origin_thread: origin_thread.map(StableId::new).transpose()?,
+                        origin_message: origin_message.map(StableId::new).transpose()?,
                     },
                 )?;
                 output::print(format, &source)?;
@@ -109,6 +113,8 @@ async fn main() -> anyhow::Result<()> {
                     statement,
                     description,
                     status,
+                    origin_thread,
+                    origin_message,
                     format,
                 } => {
                     let requirement = StateStore::new(ProvenanceLayout::new(repo))
@@ -118,6 +124,8 @@ async fn main() -> anyhow::Result<()> {
                             statement,
                             description,
                             status: RequirementStatus::parse(&status)?,
+                            origin_thread: origin_thread.map(StableId::new).transpose()?,
+                            origin_message: origin_message.map(StableId::new).transpose()?,
                         })?;
                     output::print(format, &requirement)?;
                 }
@@ -168,6 +176,8 @@ async fn main() -> anyhow::Result<()> {
                 context,
                 enforcement,
                 confidence,
+                origin_thread,
+                origin_message,
                 format,
             } => {
                 let resolution = StateStore::new(ProvenanceLayout::new(repo)).create_resolution(
@@ -182,6 +192,8 @@ async fn main() -> anyhow::Result<()> {
                         context,
                         enforcement,
                         confidence,
+                        origin_thread: origin_thread.map(StableId::new).transpose()?,
+                        origin_message: origin_message.map(StableId::new).transpose()?,
                     },
                 )?;
                 output::print(format, &resolution)?;
@@ -206,6 +218,8 @@ async fn main() -> anyhow::Result<()> {
                 extraction_method,
                 source_document,
                 source_section,
+                origin_thread,
+                origin_message,
                 format,
             } => {
                 let rule =
@@ -228,6 +242,8 @@ async fn main() -> anyhow::Result<()> {
                         extraction_method,
                         source_document,
                         source_section,
+                        origin_thread: origin_thread.map(StableId::new).transpose()?,
+                        origin_message: origin_message.map(StableId::new).transpose()?,
                     })?;
                 output::print(format, &rule)?;
             }

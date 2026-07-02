@@ -267,6 +267,8 @@ mod report_tests {
                 source_type: SourceType::Policy,
                 url: None,
                 reference: None,
+                origin_thread: None,
+                origin_message: None,
             })
             .unwrap();
         store
@@ -276,6 +278,8 @@ mod report_tests {
                 statement: "Overtime".into(),
                 description: None,
                 status: RequirementStatus::Active,
+                origin_thread: None,
+                origin_message: None,
             })
             .unwrap();
         store
@@ -298,6 +302,8 @@ mod report_tests {
                 context: None,
                 enforcement: None,
                 confidence: None,
+                origin_thread: None,
+                origin_message: None,
             })
             .unwrap();
         store
@@ -318,6 +324,8 @@ mod report_tests {
                 extraction_method: None,
                 source_document: None,
                 source_section: None,
+                origin_thread: None,
+                origin_message: None,
             })
             .unwrap();
         (dir, layout, scope)

@@ -28,6 +28,8 @@ pub struct CreateSourceInput {
     pub source_type: SourceType,
     pub url: Option<String>,
     pub reference: Option<String>,
+    pub origin_thread: Option<StableId>,
+    pub origin_message: Option<StableId>,
 }
 
 pub struct CreateRequirementInput {
@@ -36,6 +38,8 @@ pub struct CreateRequirementInput {
     pub statement: String,
     pub description: Option<String>,
     pub status: RequirementStatus,
+    pub origin_thread: Option<StableId>,
+    pub origin_message: Option<StableId>,
 }
 
 pub struct AddSourceReferenceInput {
@@ -56,6 +60,8 @@ pub struct CreateResolutionInput {
     pub context: Option<String>,
     pub enforcement: Option<String>,
     pub confidence: Option<f64>,
+    pub origin_thread: Option<StableId>,
+    pub origin_message: Option<StableId>,
 }
 
 pub struct CreateRuleInput {
@@ -75,6 +81,8 @@ pub struct CreateRuleInput {
     pub extraction_method: Option<String>,
     pub source_document: Option<String>,
     pub source_section: Option<String>,
+    pub origin_thread: Option<StableId>,
+    pub origin_message: Option<StableId>,
 }
 
 pub struct PostMessageInput {
@@ -243,6 +251,8 @@ mod tests {
                 source_type: SourceType::Policy,
                 url: None,
                 reference: None,
+                origin_thread: None,
+                origin_message: None,
             })
             .unwrap();
         store
@@ -252,6 +262,8 @@ mod tests {
                 statement: "Overtime".into(),
                 description: None,
                 status: RequirementStatus::Active,
+                origin_thread: None,
+                origin_message: None,
             })
             .unwrap();
         store
