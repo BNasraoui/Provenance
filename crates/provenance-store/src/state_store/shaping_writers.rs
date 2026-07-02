@@ -1,7 +1,7 @@
 use super::{
     CreateBoundaryInput, CreateQuestionInput, CreateTopicInput, StateStore, UpdateQuestionInput,
 };
-use crate::{jsonl, shards};
+use crate::shards;
 use provenance_core::{
     ArtifactLink, ArtifactLinkTargetType, Boundary, Question, QuestionStatus, SchemaVersion,
     ScopeId, StableId, Topic, TopicStatus,
@@ -30,23 +30,24 @@ impl StateStore {
                 "source does not exist"
             );
         }
-        let mut records = self.list_boundaries(&scope_id)?;
-        let boundary = Boundary {
-            schema_version: SchemaVersion(1),
-            scope_id: scope_id.clone(),
-            id,
-            requirement_id,
-            statement,
-            source_ref,
-        };
-        anyhow::ensure!(
-            !records.iter().any(|record| record.id == boundary.id),
-            "boundary already exists"
-        );
-        records.push(boundary.clone());
-        records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-        jsonl::write_jsonl_atomic(&shards::boundaries_path(&self.layout, &scope_id), &records)?;
-        Ok(boundary)
+        let path = shards::boundaries_path(&self.layout, &scope_id);
+        self.mutate_jsonl_records(&path, |records: &mut Vec<Boundary>| {
+            let boundary = Boundary {
+                schema_version: SchemaVersion(1),
+                scope_id: scope_id.clone(),
+                id,
+                requirement_id,
+                statement,
+                source_ref,
+            };
+            anyhow::ensure!(
+                !records.iter().any(|record| record.id == boundary.id),
+                "boundary already exists"
+            );
+            records.push(boundary.clone());
+            records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+            Ok(boundary)
+        })
     }
 
     pub fn create_topic(&self, input: CreateTopicInput) -> anyhow::Result<Topic> {
@@ -66,26 +67,27 @@ impl StateStore {
         );
         self.validate_artifact_links(&scope_id, &links)?;
         sort_artifact_links(&mut links);
-        let mut records = self.list_topics(&scope_id)?;
-        let topic = Topic {
-            schema_version: SchemaVersion(1),
-            scope_id: scope_id.clone(),
-            id,
-            requirement_id,
-            title,
-            status,
-            claimed_by: None,
-            claimed_at: None,
-            links,
-        };
-        anyhow::ensure!(
-            !records.iter().any(|record| record.id == topic.id),
-            "topic already exists"
-        );
-        records.push(topic.clone());
-        records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-        jsonl::write_jsonl_atomic(&shards::topics_path(&self.layout, &scope_id), &records)?;
-        Ok(topic)
+        let path = shards::topics_path(&self.layout, &scope_id);
+        self.mutate_jsonl_records(&path, |records: &mut Vec<Topic>| {
+            let topic = Topic {
+                schema_version: SchemaVersion(1),
+                scope_id: scope_id.clone(),
+                id,
+                requirement_id,
+                title,
+                status,
+                claimed_by: None,
+                claimed_at: None,
+                links,
+            };
+            anyhow::ensure!(
+                !records.iter().any(|record| record.id == topic.id),
+                "topic already exists"
+            );
+            records.push(topic.clone());
+            records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+            Ok(topic)
+        })
     }
 
     pub fn create_question(&self, input: CreateQuestionInput) -> anyhow::Result<Question> {
@@ -115,30 +117,31 @@ impl StateStore {
         }
         self.validate_artifact_links(&scope_id, &links)?;
         sort_artifact_links(&mut links);
-        let mut records = self.list_questions(&scope_id)?;
-        let question = Question {
-            schema_version: SchemaVersion(1),
-            scope_id: scope_id.clone(),
-            id,
-            topic_id,
-            requirement_id: topic.requirement_id,
-            question,
-            resolution_method,
-            status,
-            claimed_by: None,
-            claimed_at: None,
-            answer,
-            links,
-            resolution_id,
-        };
-        anyhow::ensure!(
-            !records.iter().any(|record| record.id == question.id),
-            "question already exists"
-        );
-        records.push(question.clone());
-        records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-        jsonl::write_jsonl_atomic(&shards::questions_path(&self.layout, &scope_id), &records)?;
-        Ok(question)
+        let path = shards::questions_path(&self.layout, &scope_id);
+        self.mutate_jsonl_records(&path, |records: &mut Vec<Question>| {
+            let question = Question {
+                schema_version: SchemaVersion(1),
+                scope_id: scope_id.clone(),
+                id,
+                topic_id,
+                requirement_id: topic.requirement_id,
+                question,
+                resolution_method,
+                status,
+                claimed_by: None,
+                claimed_at: None,
+                answer,
+                links,
+                resolution_id,
+            };
+            anyhow::ensure!(
+                !records.iter().any(|record| record.id == question.id),
+                "question already exists"
+            );
+            records.push(question.clone());
+            records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+            Ok(question)
+        })
     }
 
     pub fn claim_topic(
@@ -318,15 +321,15 @@ impl StateStore {
         id: &StableId,
         mutate: impl FnOnce(&mut Topic) -> anyhow::Result<()>,
     ) -> anyhow::Result<Topic> {
-        let mut records = self.list_topics(scope_id)?;
-        let topic = records
-            .iter_mut()
-            .find(|topic| &topic.id == id)
-            .ok_or_else(|| anyhow::anyhow!("topic does not exist"))?;
-        mutate(topic)?;
-        let updated = topic.clone();
-        jsonl::write_jsonl_atomic(&shards::topics_path(&self.layout, scope_id), &records)?;
-        Ok(updated)
+        let path = shards::topics_path(&self.layout, scope_id);
+        self.mutate_jsonl_records(&path, |records: &mut Vec<Topic>| {
+            let topic = records
+                .iter_mut()
+                .find(|topic| &topic.id == id)
+                .ok_or_else(|| anyhow::anyhow!("topic does not exist"))?;
+            mutate(topic)?;
+            Ok(topic.clone())
+        })
     }
 
     fn mutate_question(
@@ -335,15 +338,15 @@ impl StateStore {
         id: &StableId,
         mutate: impl FnOnce(&mut Question) -> anyhow::Result<()>,
     ) -> anyhow::Result<Question> {
-        let mut records = self.list_questions(scope_id)?;
-        let question = records
-            .iter_mut()
-            .find(|question| &question.id == id)
-            .ok_or_else(|| anyhow::anyhow!("question does not exist"))?;
-        mutate(question)?;
-        let updated = question.clone();
-        jsonl::write_jsonl_atomic(&shards::questions_path(&self.layout, scope_id), &records)?;
-        Ok(updated)
+        let path = shards::questions_path(&self.layout, scope_id);
+        self.mutate_jsonl_records(&path, |records: &mut Vec<Question>| {
+            let question = records
+                .iter_mut()
+                .find(|question| &question.id == id)
+                .ok_or_else(|| anyhow::anyhow!("question does not exist"))?;
+            mutate(question)?;
+            Ok(question.clone())
+        })
     }
 
     fn validate_artifact_links(

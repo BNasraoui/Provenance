@@ -6,6 +6,7 @@ mod thread_writers;
 mod writers;
 
 use crate::{layout::ProvenanceLayout, shards};
+use camino::Utf8Path;
 use provenance_core::{
     ArtifactLink, Boundary, CanonicalArtifact, ClaimChallenge, ConsensusFinding, ContestedClaim,
     Contribution, ContributionStance, Domain, Edge, EdgeType, EvidenceGap,
@@ -19,7 +20,7 @@ use provenance_core::{
     SuggestedArtifactChange, SynthesisPacket, Thread, ThreadParent, Topic, TopicStatus,
     UncertaintyRating, UnsupportedRecommendation, UnsupportedSpeculation,
 };
-use serde::de::DeserializeOwned;
+use serde::{de::DeserializeOwned, Serialize};
 
 #[derive(Debug, Clone)]
 pub struct StateStore {
@@ -307,6 +308,18 @@ impl StateStore {
     ) -> anyhow::Result<Vec<PromotionDecisionRecord>> {
         read_jsonl(&shards::promotion_decisions_path(&self.layout, scope))
     }
+
+    pub(crate) fn mutate_jsonl_records<T, R>(
+        &self,
+        path: &Utf8Path,
+        mutate: impl FnOnce(&mut Vec<T>) -> anyhow::Result<R>,
+    ) -> anyhow::Result<R>
+    where
+        T: DeserializeOwned + Serialize,
+    {
+        let lock_path = self.layout.state_shard_lock_path(path)?;
+        crate::jsonl::mutate_jsonl_locked(path, &lock_path, mutate)
+    }
 }
 
 pub(crate) fn serde_name<T: serde::Serialize>(value: &T) -> anyhow::Result<String> {
@@ -440,6 +453,81 @@ mod tests {
             store.list_edges().unwrap()[0].edge_type,
             EdgeType::References
         );
+    }
+
+    #[test]
+    fn concurrent_source_creates_preserve_all_records() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+        let layout = ProvenanceLayout::new(root);
+        std::fs::create_dir_all(layout.manifest_path().parent().unwrap()).unwrap();
+        let scope = ScopeId::new("default").unwrap();
+        std::fs::write(
+            layout.manifest_path(),
+            serde_json::to_string(&Manifest::default_with_scope(
+                scope.clone(),
+                RepoPathPrefix::new("."),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let store = StateStore::new(layout);
+
+        for index in 0..200 {
+            store
+                .create_source(CreateSourceInput {
+                    scope_id: scope.clone(),
+                    id: StableId::new(format!("source_seed_{index:03}")).unwrap(),
+                    name: format!("Seed {index:03}"),
+                    source_type: SourceType::Policy,
+                    url: None,
+                    reference: None,
+                    effective_date: None,
+                    review_date: None,
+                    superseded_by: None,
+                    origin_thread: None,
+                    origin_message: None,
+                })
+                .unwrap();
+        }
+
+        let writer_count = 16;
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(writer_count));
+        let mut handles = Vec::new();
+        for index in 0..writer_count {
+            let store = store.clone();
+            let scope = scope.clone();
+            let barrier = barrier.clone();
+            handles.push(std::thread::spawn(move || {
+                barrier.wait();
+                store
+                    .create_source(CreateSourceInput {
+                        scope_id: scope,
+                        id: StableId::new(format!("source_concurrent_{index:03}")).unwrap(),
+                        name: format!("Concurrent {index:03}"),
+                        source_type: SourceType::Policy,
+                        url: None,
+                        reference: None,
+                        effective_date: None,
+                        review_date: None,
+                        superseded_by: None,
+                        origin_thread: None,
+                        origin_message: None,
+                    })
+                    .unwrap();
+            }));
+        }
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        let sources = store.list_sources(&scope).unwrap();
+        assert_eq!(sources.len(), 200 + writer_count);
+        for index in 0..writer_count {
+            assert!(sources
+                .iter()
+                .any(|source| { source.id.as_str() == format!("source_concurrent_{index:03}") }));
+        }
     }
 
     #[test]

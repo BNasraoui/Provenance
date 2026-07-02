@@ -1101,6 +1101,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "camino",
+ "libc",
  "provenance-core",
  "serde",
  "serde_json",

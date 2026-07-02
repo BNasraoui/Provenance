@@ -2,7 +2,7 @@ use super::{
     CreateContributionInput, CreatePromotionDecisionInput, CreateProposalCardInput,
     CreateSynthesisPacketInput, StateStore,
 };
-use crate::{jsonl, shards};
+use crate::shards;
 use provenance_core::{
     Contribution, PromotionDecisionRecord, PromotionState, ProposalCard, SchemaVersion,
     SynthesisPacket,
@@ -30,36 +30,34 @@ impl StateStore {
             uncertainty,
             open_questions,
         } = input;
-        let mut records = self.list_contributions(&scope_id)?;
-        let contribution = Contribution {
-            schema_version: SchemaVersion(1),
-            scope_id: scope_id.clone(),
-            id,
-            target,
-            participant_slot,
-            stance,
-            strongest_finding,
-            evidence_references,
-            material_claims,
-            risks,
-            objections,
-            challenges,
-            suggested_artifact_changes,
-            unsupported_recommendations,
-            uncertainty,
-            open_questions,
-        };
-        anyhow::ensure!(
-            !records.iter().any(|record| record.id == contribution.id),
-            "contribution already exists"
-        );
-        records.push(contribution.clone());
-        records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-        jsonl::write_jsonl_atomic(
-            &shards::contributions_path(&self.layout, &scope_id),
-            &records,
-        )?;
-        Ok(contribution)
+        let path = shards::contributions_path(&self.layout, &scope_id);
+        self.mutate_jsonl_records(&path, |records: &mut Vec<Contribution>| {
+            let contribution = Contribution {
+                schema_version: SchemaVersion(1),
+                scope_id: scope_id.clone(),
+                id,
+                target,
+                participant_slot,
+                stance,
+                strongest_finding,
+                evidence_references,
+                material_claims,
+                risks,
+                objections,
+                challenges,
+                suggested_artifact_changes,
+                unsupported_recommendations,
+                uncertainty,
+                open_questions,
+            };
+            anyhow::ensure!(
+                !records.iter().any(|record| record.id == contribution.id),
+                "contribution already exists"
+            );
+            records.push(contribution.clone());
+            records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+            Ok(contribution)
+        })
     }
 
     pub fn create_synthesis_packet(
@@ -80,35 +78,33 @@ impl StateStore {
             suggested_artifacts,
             required_human_decisions,
         } = input;
-        let mut records = self.list_synthesis_packets(&scope_id)?;
-        let synthesis_packet = SynthesisPacket {
-            schema_version: SchemaVersion(1),
-            scope_id: scope_id.clone(),
-            id,
-            target,
-            summary,
-            consensus,
-            contested_claims,
-            minority_objections,
-            evidence_gaps,
-            unsupported_speculation,
-            open_questions,
-            suggested_artifacts,
-            required_human_decisions,
-        };
-        anyhow::ensure!(
-            !records
-                .iter()
-                .any(|record| record.id == synthesis_packet.id),
-            "synthesis packet already exists"
-        );
-        records.push(synthesis_packet.clone());
-        records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-        jsonl::write_jsonl_atomic(
-            &shards::synthesis_packets_path(&self.layout, &scope_id),
-            &records,
-        )?;
-        Ok(synthesis_packet)
+        let path = shards::synthesis_packets_path(&self.layout, &scope_id);
+        self.mutate_jsonl_records(&path, |records: &mut Vec<SynthesisPacket>| {
+            let synthesis_packet = SynthesisPacket {
+                schema_version: SchemaVersion(1),
+                scope_id: scope_id.clone(),
+                id,
+                target,
+                summary,
+                consensus,
+                contested_claims,
+                minority_objections,
+                evidence_gaps,
+                unsupported_speculation,
+                open_questions,
+                suggested_artifacts,
+                required_human_decisions,
+            };
+            anyhow::ensure!(
+                !records
+                    .iter()
+                    .any(|record| record.id == synthesis_packet.id),
+                "synthesis packet already exists"
+            );
+            records.push(synthesis_packet.clone());
+            records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+            Ok(synthesis_packet)
+        })
     }
 
     pub fn create_proposal_card(
@@ -145,31 +141,29 @@ impl StateStore {
             | PromotionState::Rejected
             | PromotionState::Deferred => {}
         }
-        let mut records = self.list_proposal_cards(&scope_id)?;
-        let proposal = ProposalCard {
-            schema_version: SchemaVersion(1),
-            scope_id: scope_id.clone(),
-            id,
-            proposal_key,
-            proposal_type,
-            title,
-            summary,
-            traceability,
-            promotion_state,
-            duplicate_of,
-            superseded_by,
-        };
-        anyhow::ensure!(
-            !records.iter().any(|record| record.id == proposal.id),
-            "proposal already exists"
-        );
-        records.push(proposal.clone());
-        records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-        jsonl::write_jsonl_atomic(
-            &shards::proposal_cards_path(&self.layout, &scope_id),
-            &records,
-        )?;
-        Ok(proposal)
+        let path = shards::proposal_cards_path(&self.layout, &scope_id);
+        self.mutate_jsonl_records(&path, |records: &mut Vec<ProposalCard>| {
+            let proposal = ProposalCard {
+                schema_version: SchemaVersion(1),
+                scope_id: scope_id.clone(),
+                id,
+                proposal_key,
+                proposal_type,
+                title,
+                summary,
+                traceability,
+                promotion_state,
+                duplicate_of,
+                superseded_by,
+            };
+            anyhow::ensure!(
+                !records.iter().any(|record| record.id == proposal.id),
+                "proposal already exists"
+            );
+            records.push(proposal.clone());
+            records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+            Ok(proposal)
+        })
     }
 
     pub fn create_promotion_decision(
@@ -185,12 +179,6 @@ impl StateStore {
             actor,
             canonical_artifact,
         } = input;
-        let mut proposals = self.list_proposal_cards(&scope_id)?;
-        let proposal = proposals
-            .iter_mut()
-            .find(|proposal| proposal.id == proposal_id)
-            .ok_or_else(|| anyhow::anyhow!("proposal does not exist"))?;
-        let mut records = self.list_promotion_decisions(&scope_id)?;
         let promotion_decision = PromotionDecisionRecord {
             schema_version: SchemaVersion(1),
             scope_id: scope_id.clone(),
@@ -202,27 +190,51 @@ impl StateStore {
             canonical_artifact,
         };
         anyhow::ensure!(
-            !records
+            self.list_proposal_cards(&scope_id)?
                 .iter()
-                .any(|record| record.id == promotion_decision.id),
-            "promotion decision already exists"
+                .any(|proposal| proposal.id == proposal_id),
+            "proposal does not exist"
         );
-        proposal.promotion_state = match decision {
-            provenance_core::PromotionDecision::Accepted => PromotionState::Accepted,
-            provenance_core::PromotionDecision::Rejected => PromotionState::Rejected,
-            provenance_core::PromotionDecision::Deferred => PromotionState::Deferred,
-        };
-        proposals.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-        jsonl::write_jsonl_atomic(
-            &shards::proposal_cards_path(&self.layout, &scope_id),
-            &proposals,
+        let decisions_path = shards::promotion_decisions_path(&self.layout, &scope_id);
+        self.mutate_jsonl_records(
+            &decisions_path,
+            |records: &mut Vec<PromotionDecisionRecord>| {
+                anyhow::ensure!(
+                    !records
+                        .iter()
+                        .any(|record| record.id == promotion_decision.id),
+                    "promotion decision already exists"
+                );
+                Ok(())
+            },
         )?;
-        records.push(promotion_decision.clone());
-        records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-        jsonl::write_jsonl_atomic(
-            &shards::promotion_decisions_path(&self.layout, &scope_id),
-            &records,
-        )?;
-        Ok(promotion_decision)
+        let proposals_path = shards::proposal_cards_path(&self.layout, &scope_id);
+        self.mutate_jsonl_records(&proposals_path, |proposals: &mut Vec<ProposalCard>| {
+            let proposal = proposals
+                .iter_mut()
+                .find(|proposal| proposal.id == proposal_id)
+                .ok_or_else(|| anyhow::anyhow!("proposal does not exist"))?;
+            proposal.promotion_state = match decision {
+                provenance_core::PromotionDecision::Accepted => PromotionState::Accepted,
+                provenance_core::PromotionDecision::Rejected => PromotionState::Rejected,
+                provenance_core::PromotionDecision::Deferred => PromotionState::Deferred,
+            };
+            proposals.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+            Ok(())
+        })?;
+        self.mutate_jsonl_records(
+            &decisions_path,
+            |records: &mut Vec<PromotionDecisionRecord>| {
+                anyhow::ensure!(
+                    !records
+                        .iter()
+                        .any(|record| record.id == promotion_decision.id),
+                    "promotion decision already exists"
+                );
+                records.push(promotion_decision.clone());
+                records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+                Ok(promotion_decision)
+            },
+        )
     }
 }
