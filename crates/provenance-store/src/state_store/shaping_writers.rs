@@ -1,7 +1,8 @@
 use super::{CreateBoundaryInput, CreateQuestionInput, CreateTopicInput, StateStore};
 use crate::{jsonl, shards};
 use provenance_core::{
-    ArtifactLink, ArtifactLinkTargetType, Boundary, Question, SchemaVersion, ScopeId, Topic,
+    ArtifactLink, ArtifactLinkTargetType, Boundary, Question, QuestionStatus, SchemaVersion,
+    ScopeId, StableId, Topic, TopicStatus,
 };
 
 impl StateStore {
@@ -71,6 +72,8 @@ impl StateStore {
             requirement_id,
             title,
             status,
+            claimed_by: None,
+            claimed_at: None,
             links,
         };
         anyhow::ensure!(
@@ -89,6 +92,7 @@ impl StateStore {
             id,
             topic_id,
             question,
+            resolution_method,
             status,
             answer,
             mut links,
@@ -117,7 +121,10 @@ impl StateStore {
             topic_id,
             requirement_id: topic.requirement_id,
             question,
+            resolution_method,
             status,
+            claimed_by: None,
+            claimed_at: None,
             answer,
             links,
             resolution_id,
@@ -130,6 +137,152 @@ impl StateStore {
         records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
         jsonl::write_jsonl_atomic(&shards::questions_path(&self.layout, &scope_id), &records)?;
         Ok(question)
+    }
+
+    pub fn claim_topic(
+        &self,
+        scope_id: &ScopeId,
+        id: &StableId,
+        actor: &str,
+    ) -> anyhow::Result<Topic> {
+        let actor = validated_actor(actor)?;
+        let claimed_at = now_ms()?;
+        self.update_topic(scope_id, id, |topic| {
+            anyhow::ensure!(
+                topic.status != TopicStatus::Closed,
+                "topic {} is closed and cannot be claimed",
+                topic.id.as_str()
+            );
+            if let Some(holder) = &topic.claimed_by {
+                anyhow::bail!("topic {} is already claimed by {holder}", topic.id.as_str());
+            }
+            topic.claimed_by = Some(actor);
+            topic.claimed_at = Some(claimed_at);
+            Ok(())
+        })
+    }
+
+    pub fn release_topic(&self, scope_id: &ScopeId, id: &StableId) -> anyhow::Result<Topic> {
+        self.update_topic(scope_id, id, |topic| {
+            anyhow::ensure!(
+                topic.claimed_by.is_some(),
+                "topic {} is not claimed",
+                topic.id.as_str()
+            );
+            topic.claimed_by = None;
+            topic.claimed_at = None;
+            Ok(())
+        })
+    }
+
+    pub fn close_topic(&self, scope_id: &ScopeId, id: &StableId) -> anyhow::Result<Topic> {
+        self.update_topic(scope_id, id, |topic| {
+            topic.status = TopicStatus::Closed;
+            topic.claimed_by = None;
+            topic.claimed_at = None;
+            Ok(())
+        })
+    }
+
+    pub fn claim_question(
+        &self,
+        scope_id: &ScopeId,
+        id: &StableId,
+        actor: &str,
+    ) -> anyhow::Result<Question> {
+        let actor = validated_actor(actor)?;
+        let claimed_at = now_ms()?;
+        self.update_question(scope_id, id, |question| {
+            anyhow::ensure!(
+                question.status != QuestionStatus::Answered,
+                "question {} is answered and cannot be claimed",
+                question.id.as_str()
+            );
+            if let Some(holder) = &question.claimed_by {
+                anyhow::bail!(
+                    "question {} is already claimed by {holder}",
+                    question.id.as_str()
+                );
+            }
+            question.claimed_by = Some(actor);
+            question.claimed_at = Some(claimed_at);
+            Ok(())
+        })
+    }
+
+    pub fn release_question(&self, scope_id: &ScopeId, id: &StableId) -> anyhow::Result<Question> {
+        self.update_question(scope_id, id, |question| {
+            anyhow::ensure!(
+                question.claimed_by.is_some(),
+                "question {} is not claimed",
+                question.id.as_str()
+            );
+            question.claimed_by = None;
+            question.claimed_at = None;
+            Ok(())
+        })
+    }
+
+    pub fn answer_question(
+        &self,
+        scope_id: &ScopeId,
+        id: &StableId,
+        answer: String,
+        resolution_id: Option<StableId>,
+    ) -> anyhow::Result<Question> {
+        anyhow::ensure!(!answer.trim().is_empty(), "answer must not be empty");
+        if let Some(resolution_id) = &resolution_id {
+            anyhow::ensure!(
+                self.list_resolutions(scope_id)?
+                    .iter()
+                    .any(|resolution| &resolution.id == resolution_id),
+                "resolution does not exist"
+            );
+        }
+        self.update_question(scope_id, id, |question| {
+            question.status = QuestionStatus::Answered;
+            question.answer = Some(answer);
+            if resolution_id.is_some() {
+                question.resolution_id = resolution_id;
+            }
+            question.claimed_by = None;
+            question.claimed_at = None;
+            Ok(())
+        })
+    }
+
+    fn update_topic(
+        &self,
+        scope_id: &ScopeId,
+        id: &StableId,
+        mutate: impl FnOnce(&mut Topic) -> anyhow::Result<()>,
+    ) -> anyhow::Result<Topic> {
+        let mut records = self.list_topics(scope_id)?;
+        let topic = records
+            .iter_mut()
+            .find(|topic| &topic.id == id)
+            .ok_or_else(|| anyhow::anyhow!("topic does not exist"))?;
+        mutate(topic)?;
+        let updated = topic.clone();
+        jsonl::write_jsonl_atomic(&shards::topics_path(&self.layout, scope_id), &records)?;
+        Ok(updated)
+    }
+
+    fn update_question(
+        &self,
+        scope_id: &ScopeId,
+        id: &StableId,
+        mutate: impl FnOnce(&mut Question) -> anyhow::Result<()>,
+    ) -> anyhow::Result<Question> {
+        let mut records = self.list_questions(scope_id)?;
+        let question = records
+            .iter_mut()
+            .find(|question| &question.id == id)
+            .ok_or_else(|| anyhow::anyhow!("question does not exist"))?;
+        mutate(question)?;
+        let updated = question.clone();
+        jsonl::write_jsonl_atomic(&shards::questions_path(&self.layout, scope_id), &records)?;
+        Ok(updated)
     }
 
     fn validate_artifact_links(
@@ -160,6 +313,20 @@ impl StateStore {
         }
         Ok(())
     }
+}
+
+fn validated_actor(actor: &str) -> anyhow::Result<String> {
+    let actor = actor.trim();
+    anyhow::ensure!(!actor.is_empty(), "actor must not be empty");
+    Ok(actor.to_string())
+}
+
+fn now_ms() -> anyhow::Result<i64> {
+    Ok(i64::try_from(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_millis(),
+    )?)
 }
 
 fn sort_artifact_links(links: &mut Vec<ArtifactLink>) {

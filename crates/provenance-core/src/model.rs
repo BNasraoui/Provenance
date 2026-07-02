@@ -389,7 +389,10 @@ mod tests {
             "topicId": "topic_overtime",
             "requirementId": "req_payroll",
             "question": "Which threshold applies?",
+            "resolutionMethod": "research",
             "status": "answered",
+            "claimedBy": "agent-shaper",
+            "claimedAt": 1_714_780_800_000_i64,
             "answer": "Use the SCHADS overtime threshold.",
             "links": [{"targetType": "resolution", "targetId": "res_overtime"}],
             "resolutionId": "res_overtime"
@@ -406,7 +409,11 @@ mod tests {
         );
         assert_eq!(topic.status, TopicStatus::Explored);
         assert_eq!(topic.links[0].target_type, ArtifactLinkTargetType::Source);
+        assert_eq!(topic.claimed_by, None);
         assert_eq!(question.topic_id.as_str(), "topic_overtime");
+        assert_eq!(question.resolution_method, ResolutionMethod::Research);
+        assert_eq!(question.claimed_by.as_deref(), Some("agent-shaper"));
+        assert_eq!(question.claimed_at, Some(1_714_780_800_000));
         assert_eq!(question.status, QuestionStatus::Answered);
         assert_eq!(
             question.resolution_id.as_ref().unwrap().as_str(),
@@ -422,8 +429,51 @@ mod tests {
         assert_eq!(boundary["source_ref"]["source_id"], "source_schads");
         assert_eq!(topic["status"], "explored");
         assert_eq!(topic["links"][0]["target_type"], "source");
+        assert!(topic.get("claimed_by").is_none());
+        assert!(topic.get("claimed_at").is_none());
+        assert_eq!(question["resolution_method"], "research");
         assert_eq!(question["status"], "answered");
+        assert_eq!(question["claimed_by"], "agent-shaper");
+        assert_eq!(question["claimed_at"], 1_714_780_800_000_i64);
         assert_eq!(question["resolution_id"], "res_overtime");
+    }
+
+    #[test]
+    fn requirement_fog_roundtrips_as_unstructured_text() {
+        let requirement = serde_json::json!({
+            "schema_version": 1,
+            "scope_id": "default",
+            "id": "req_share_links",
+            "statement": "Provenance docs shareable via short-lived link",
+            "status": "discovery",
+            "fog": "access auditing; expiry configuration; something about revocation"
+        });
+
+        let requirement: Requirement = serde_json::from_value(requirement).unwrap();
+        assert_eq!(
+            requirement.fog.as_deref(),
+            Some("access auditing; expiry configuration; something about revocation")
+        );
+
+        let requirement = serde_json::to_value(requirement).unwrap();
+        assert_eq!(
+            requirement["fog"],
+            "access auditing; expiry configuration; something about revocation"
+        );
+
+        let without_fog = serde_json::json!({
+            "schema_version": 1,
+            "scope_id": "default",
+            "id": "req_plain",
+            "statement": "Plain requirement",
+            "status": "active"
+        });
+        let without_fog: Requirement = serde_json::from_value(without_fog).unwrap();
+        assert_eq!(without_fog.fog, None);
+        assert!(serde_json::to_value(without_fog)
+            .unwrap()
+            .get("fog")
+            .is_none());
     }
 
     #[test]

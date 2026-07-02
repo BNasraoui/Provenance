@@ -12,12 +12,12 @@ use provenance_core::{
     IdeationTarget, Manifest, MaterialClaim, Message, MessageRole, MinorityObjection,
     PromotionActor, PromotionDecision, PromotionDecisionRecord, PromotionState, ProposalCard,
     ProposalTraceability, ProposalType, Question, QuestionStatus, RequiredHumanDecision,
-    Requirement, RequirementStatus, Resolution, ResolutionInput, ResolutionStatus, Rule,
-    RuleModality, RuleSeverity, RuleStatus, RuleType, ScopeId, Service, ServiceBinding,
-    ServiceBindingType, ServiceEnvironment, ServiceStatus, ServiceTier, Source, SourceReference,
-    SourceType, StableId, SuggestedArtifact, SuggestedArtifactChange, SynthesisPacket, Thread,
-    ThreadParent, Topic, TopicStatus, UncertaintyRating, UnsupportedRecommendation,
-    UnsupportedSpeculation,
+    Requirement, RequirementStatus, Resolution, ResolutionInput, ResolutionMethod,
+    ResolutionStatus, Rule, RuleModality, RuleSeverity, RuleStatus, RuleType, ScopeId, Service,
+    ServiceBinding, ServiceBindingType, ServiceEnvironment, ServiceStatus, ServiceTier, Source,
+    SourceReference, SourceType, StableId, SuggestedArtifact, SuggestedArtifactChange,
+    SynthesisPacket, Thread, ThreadParent, Topic, TopicStatus, UncertaintyRating,
+    UnsupportedRecommendation, UnsupportedSpeculation,
 };
 use serde::de::DeserializeOwned;
 
@@ -88,6 +88,7 @@ pub struct CreateQuestionInput {
     pub id: StableId,
     pub topic_id: StableId,
     pub question: String,
+    pub resolution_method: ResolutionMethod,
     pub status: QuestionStatus,
     pub answer: Option<String>,
     pub links: Vec<ArtifactLink>,
@@ -478,6 +479,7 @@ mod tests {
                 id: StableId::new("question_threshold").unwrap(),
                 topic_id: StableId::new("topic_a").unwrap(),
                 question: "Which threshold applies?".into(),
+                resolution_method: ResolutionMethod::Grill,
                 status: QuestionStatus::Open,
                 answer: None,
                 links: Vec::new(),
@@ -506,6 +508,7 @@ mod tests {
                 id: StableId::new("question_missing_topic").unwrap(),
                 topic_id: StableId::new("topic_missing").unwrap(),
                 question: "Missing topic?".into(),
+                resolution_method: ResolutionMethod::Grill,
                 status: QuestionStatus::Open,
                 answer: None,
                 links: Vec::new(),
@@ -514,6 +517,154 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("topic does not exist"));
+    }
+
+    #[test]
+    fn topic_claims_are_check_and_set_and_clear_on_close() {
+        let (_dir, store, scope) = seeded_source_requirement_store();
+        store
+            .create_topic(CreateTopicInput {
+                scope_id: scope.clone(),
+                id: StableId::new("topic_overtime").unwrap(),
+                requirement_id: StableId::new("req_overtime").unwrap(),
+                title: "Overtime eligibility".into(),
+                status: TopicStatus::Open,
+                links: Vec::new(),
+            })
+            .unwrap();
+        let topic_id = StableId::new("topic_overtime").unwrap();
+
+        let claimed = store.claim_topic(&scope, &topic_id, "agent-one").unwrap();
+        assert_eq!(claimed.claimed_by.as_deref(), Some("agent-one"));
+        assert!(claimed.claimed_at.unwrap() > 0);
+
+        let err = store
+            .claim_topic(&scope, &topic_id, "agent-two")
+            .unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("topic topic_overtime is already claimed by agent-one"));
+
+        let released = store.release_topic(&scope, &topic_id).unwrap();
+        assert_eq!(released.claimed_by, None);
+        assert_eq!(released.claimed_at, None);
+        assert!(store
+            .release_topic(&scope, &topic_id)
+            .unwrap_err()
+            .to_string()
+            .contains("topic topic_overtime is not claimed"));
+
+        store.claim_topic(&scope, &topic_id, "agent-two").unwrap();
+        let closed = store.close_topic(&scope, &topic_id).unwrap();
+        assert_eq!(closed.status, TopicStatus::Closed);
+        assert_eq!(closed.claimed_by, None);
+        assert_eq!(closed.claimed_at, None);
+        assert!(store
+            .claim_topic(&scope, &topic_id, "agent-one")
+            .unwrap_err()
+            .to_string()
+            .contains("closed"));
+        assert_eq!(
+            store.list_topics(&scope).unwrap()[0].status,
+            TopicStatus::Closed
+        );
+    }
+
+    #[test]
+    fn question_claims_clear_when_answered() {
+        let (_dir, store, scope) = seeded_source_requirement_store();
+        store
+            .create_topic(CreateTopicInput {
+                scope_id: scope.clone(),
+                id: StableId::new("topic_overtime").unwrap(),
+                requirement_id: StableId::new("req_overtime").unwrap(),
+                title: "Overtime eligibility".into(),
+                status: TopicStatus::Open,
+                links: Vec::new(),
+            })
+            .unwrap();
+        store
+            .create_question(CreateQuestionInput {
+                scope_id: scope.clone(),
+                id: StableId::new("question_threshold").unwrap(),
+                topic_id: StableId::new("topic_overtime").unwrap(),
+                question: "Which threshold applies?".into(),
+                resolution_method: ResolutionMethod::Research,
+                status: QuestionStatus::Open,
+                answer: None,
+                links: Vec::new(),
+                resolution_id: None,
+            })
+            .unwrap();
+        let question_id = StableId::new("question_threshold").unwrap();
+
+        let claimed = store
+            .claim_question(&scope, &question_id, "agent-one")
+            .unwrap();
+        assert_eq!(claimed.claimed_by.as_deref(), Some("agent-one"));
+        assert_eq!(claimed.resolution_method, ResolutionMethod::Research);
+        assert!(store
+            .claim_question(&scope, &question_id, "agent-two")
+            .unwrap_err()
+            .to_string()
+            .contains("question question_threshold is already claimed by agent-one"));
+
+        let answered = store
+            .answer_question(
+                &scope,
+                &question_id,
+                "Use the SCHADS threshold.".into(),
+                None,
+            )
+            .unwrap();
+        assert_eq!(answered.status, QuestionStatus::Answered);
+        assert_eq!(
+            answered.answer.as_deref(),
+            Some("Use the SCHADS threshold.")
+        );
+        assert_eq!(answered.claimed_by, None);
+        assert_eq!(answered.claimed_at, None);
+        assert!(store
+            .claim_question(&scope, &question_id, "agent-two")
+            .unwrap_err()
+            .to_string()
+            .contains("answered"));
+
+        let persisted = &store.list_questions(&scope).unwrap()[0];
+        assert_eq!(persisted.status, QuestionStatus::Answered);
+        assert_eq!(persisted.claimed_by, None);
+    }
+
+    #[test]
+    fn requirement_fog_is_set_and_cleared_as_free_text() {
+        let (_dir, store, scope) = seeded_source_requirement_store();
+        let requirement_id = StableId::new("req_overtime").unwrap();
+
+        let updated = store
+            .set_requirement_fog(
+                &scope,
+                &requirement_id,
+                Some("something about public holidays and sleepovers".into()),
+            )
+            .unwrap();
+        assert_eq!(
+            updated.fog.as_deref(),
+            Some("something about public holidays and sleepovers")
+        );
+        assert_eq!(
+            store.list_requirements(&scope).unwrap()[0].fog.as_deref(),
+            Some("something about public holidays and sleepovers")
+        );
+
+        let cleared = store
+            .set_requirement_fog(&scope, &requirement_id, None)
+            .unwrap();
+        assert_eq!(cleared.fog, None);
+        assert!(store
+            .set_requirement_fog(&scope, &StableId::new("req_missing").unwrap(), None)
+            .unwrap_err()
+            .to_string()
+            .contains("requirement does not exist"));
     }
 
     #[test]

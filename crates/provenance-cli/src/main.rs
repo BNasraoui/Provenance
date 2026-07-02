@@ -6,7 +6,7 @@ use anyhow::Context;
 use clap::Parser;
 use cli::{
     BoundariesCommand, Cli, Command, ContributionsCommand, CoverageCommand, DomainsCommand,
-    PromotionDecisionsCommand, ProposalsCommand, QuestionsCommand, RequirementsCommand,
+    FogCommand, PromotionDecisionsCommand, ProposalsCommand, QuestionsCommand, RequirementsCommand,
     ResolutionsCommand, RulesCommand, ServiceBindingsCommand, ServicesCommand, SourceRefCommand,
     SourcesCommand, SynthesisPacketsCommand, ThreadCommand, TopicsCommand,
 };
@@ -17,7 +17,7 @@ use provenance_core::{
     IdeationTargetType, IdentityType, MaterialClaim, MessageRole, MinorityObjection, NodeType,
     PromotionActor, PromotionDecision, PromotionState, ProposalTraceability, ProposalType,
     QuestionStatus, RequiredHumanDecision, RequirementStatus, ResolutionInput, ResolutionInputType,
-    ResolutionStatus, RuleModality, RuleSeverity, RuleStatus, RuleType, ScopeId,
+    ResolutionMethod, ResolutionStatus, RuleModality, RuleSeverity, RuleStatus, RuleType, ScopeId,
     ServiceBindingType, ServiceEnvironment, ServiceStatus, ServiceTier, SourceReference,
     SourceType, StableId, SuggestedArtifact, SuggestedArtifactChange, ThreadParent, TopicStatus,
     UncertaintyLevel, UncertaintyRating, UnsupportedRecommendation, UnsupportedSpeculation,
@@ -88,6 +88,12 @@ fn canonical_artifact(
             "--canonical-artifact-type and --canonical-artifact-id must be provided together"
         ),
     }
+}
+
+#[derive(serde::Serialize)]
+struct FogView {
+    requirement_id: String,
+    fog: Option<String>,
 }
 
 fn boundary_source_ref(
@@ -198,6 +204,57 @@ async fn main() -> anyhow::Result<()> {
                         output::print(format, &edge)?;
                     }
                 },
+                RequirementsCommand::Fog { command } => match command {
+                    FogCommand::Set {
+                        repo,
+                        scope,
+                        requirement_id,
+                        text,
+                        format,
+                    } => {
+                        let requirement = StateStore::new(ProvenanceLayout::new(repo))
+                            .set_requirement_fog(
+                                &ScopeId::new(scope)?,
+                                &StableId::new(requirement_id)?,
+                                Some(text),
+                            )?;
+                        output::print(format, &requirement)?;
+                    }
+                    FogCommand::Show {
+                        repo,
+                        scope,
+                        requirement_id,
+                        format,
+                    } => {
+                        let requirement_id = StableId::new(requirement_id)?;
+                        let requirement = StateStore::new(ProvenanceLayout::new(repo))
+                            .list_requirements(&ScopeId::new(scope)?)?
+                            .into_iter()
+                            .find(|requirement| requirement.id == requirement_id)
+                            .ok_or_else(|| anyhow::anyhow!("requirement does not exist"))?;
+                        output::print(
+                            format,
+                            &FogView {
+                                requirement_id: requirement.id.as_str().to_string(),
+                                fog: requirement.fog,
+                            },
+                        )?;
+                    }
+                    FogCommand::Clear {
+                        repo,
+                        scope,
+                        requirement_id,
+                        format,
+                    } => {
+                        let requirement = StateStore::new(ProvenanceLayout::new(repo))
+                            .set_requirement_fog(
+                                &ScopeId::new(scope)?,
+                                &StableId::new(requirement_id)?,
+                                None,
+                            )?;
+                        output::print(format, &requirement)?;
+                    }
+                },
             }
         }
         Command::Domains { command } => match command {
@@ -295,6 +352,40 @@ async fn main() -> anyhow::Result<()> {
                     .list_topics(&ScopeId::new(scope)?)?;
                 output::print(format, &topics)?;
             }
+            TopicsCommand::Claim {
+                repo,
+                scope,
+                id,
+                actor,
+                format,
+            } => {
+                let topic = StateStore::new(ProvenanceLayout::new(repo)).claim_topic(
+                    &ScopeId::new(scope)?,
+                    &StableId::new(id)?,
+                    &actor,
+                )?;
+                output::print(format, &topic)?;
+            }
+            TopicsCommand::Release {
+                repo,
+                scope,
+                id,
+                format,
+            } => {
+                let topic = StateStore::new(ProvenanceLayout::new(repo))
+                    .release_topic(&ScopeId::new(scope)?, &StableId::new(id)?)?;
+                output::print(format, &topic)?;
+            }
+            TopicsCommand::Close {
+                repo,
+                scope,
+                id,
+                format,
+            } => {
+                let topic = StateStore::new(ProvenanceLayout::new(repo))
+                    .close_topic(&ScopeId::new(scope)?, &StableId::new(id)?)?;
+                output::print(format, &topic)?;
+            }
         },
         Command::Questions { command } => match command {
             QuestionsCommand::Create {
@@ -303,6 +394,7 @@ async fn main() -> anyhow::Result<()> {
                 id,
                 topic_id,
                 question,
+                method,
                 status,
                 answer,
                 links_json,
@@ -315,6 +407,7 @@ async fn main() -> anyhow::Result<()> {
                         id: StableId::new(id)?,
                         topic_id: StableId::new(topic_id)?,
                         question,
+                        resolution_method: ResolutionMethod::parse(&method)?,
                         status: QuestionStatus::parse(&status)?,
                         answer,
                         links: parse_json_arg::<Vec<ArtifactLink>>("links-json", &links_json)?,
@@ -331,6 +424,46 @@ async fn main() -> anyhow::Result<()> {
                 let questions = StateStore::new(ProvenanceLayout::new(repo))
                     .list_questions(&ScopeId::new(scope)?)?;
                 output::print(format, &questions)?;
+            }
+            QuestionsCommand::Claim {
+                repo,
+                scope,
+                id,
+                actor,
+                format,
+            } => {
+                let question = StateStore::new(ProvenanceLayout::new(repo)).claim_question(
+                    &ScopeId::new(scope)?,
+                    &StableId::new(id)?,
+                    &actor,
+                )?;
+                output::print(format, &question)?;
+            }
+            QuestionsCommand::Release {
+                repo,
+                scope,
+                id,
+                format,
+            } => {
+                let question = StateStore::new(ProvenanceLayout::new(repo))
+                    .release_question(&ScopeId::new(scope)?, &StableId::new(id)?)?;
+                output::print(format, &question)?;
+            }
+            QuestionsCommand::Answer {
+                repo,
+                scope,
+                id,
+                answer,
+                resolution_id,
+                format,
+            } => {
+                let question = StateStore::new(ProvenanceLayout::new(repo)).answer_question(
+                    &ScopeId::new(scope)?,
+                    &StableId::new(id)?,
+                    answer,
+                    resolution_id.map(StableId::new).transpose()?,
+                )?;
+                output::print(format, &question)?;
             }
         },
         Command::Graph {
