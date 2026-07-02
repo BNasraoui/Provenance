@@ -1,0 +1,250 @@
+use assert_cmd::Command;
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn cli_creates_materializes_and_exports_ideation_outputs() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().to_string_lossy().to_string();
+    let export_path = dir.path().join("export.json").to_string_lossy().to_string();
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "init",
+            "--path",
+            &repo,
+            "--scope",
+            "default",
+            "--path-prefix",
+            ".",
+        ])
+        .assert()
+        .success();
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "sources",
+            "create",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--id",
+            "source_schads",
+            "--name",
+            "SCHADS Award",
+            "--source-type",
+            "policy",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success();
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "requirements",
+            "create",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--id",
+            "req_overtime",
+            "--statement",
+            "Overtime must be traceable",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success();
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "contributions",
+            "create",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--id",
+            "contrib_reviewer_001",
+            "--target-type",
+            "requirement",
+            "--target-id",
+            "req_overtime",
+            "--participant-slot",
+            "reviewer",
+            "--stance",
+            "support",
+            "--strongest-finding",
+            "The requirement is supported by source and code evidence.",
+            "--evidence-json",
+            r#"[{"reference_id":"evidence_code_line","evidence_type":"artifact","summary":"Existing payroll check","file_path":"src/payroll/overtime.rs","line":42}]"#,
+            "--claims-json",
+            r#"[{"claim_id":"claim_overtime_threshold","statement":"Overtime starts after the award threshold.","evidence_type":"artifact","evidence_reference_ids":["evidence_code_line"]}]"#,
+            "--risks-json",
+            r#"["Payroll underpayment if the threshold is wrong"]"#,
+            "--uncertainty-level",
+            "medium",
+            "--uncertainty-rationale",
+            "Agreement overrides were not reviewed.",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("contrib_reviewer_001"));
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "synthesis-packets",
+            "create",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--id",
+            "synth_overtime_001",
+            "--target-type",
+            "requirement",
+            "--target-id",
+            "req_overtime",
+            "--summary",
+            "Participants agree the threshold needs explicit traceability.",
+            "--consensus-json",
+            r#"[{"statement":"The requirement needs a source reference.","supporting_participant_slots":["reviewer"],"evidence_reference_ids":["evidence_code_line"]}]"#,
+            "--evidence-gaps-json",
+            r#"[{"question":"Which agreement applies?","needed_evidence_type":"source","blocking_promotion":true}]"#,
+            "--suggested-artifacts-json",
+            r#"[{"proposal_key":"req-overtime-traceability","proposal_type":"requirement_candidate","summary":"Clarify source traceability.","origin_participant_slots":["reviewer"]}]"#,
+            "--required-human-decisions-json",
+            r#"[{"decision_key":"decide_agreement_scope","prompt":"Confirm the governing agreement.","blocks_promotion":true}]"#,
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("synth_overtime_001"));
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "proposals",
+            "create",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--id",
+            "proposal_overtime_traceability",
+            "--proposal-key",
+            "req-overtime-traceability",
+            "--proposal-type",
+            "requirement_candidate",
+            "--title",
+            "Clarify overtime traceability",
+            "--summary",
+            "Add source-backed threshold language.",
+            "--target-type",
+            "requirement",
+            "--target-id",
+            "req_overtime",
+            "--source-id",
+            "source_schads",
+            "--evidence-json",
+            r#"[{"reference_id":"evidence_code_line","evidence_type":"artifact","summary":"Existing payroll check","file_path":"src/payroll/overtime.rs","line":42}]"#,
+            "--supporting-claim-id",
+            "claim_overtime_threshold",
+            "--promotion-state",
+            "proposed",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("proposal_overtime_traceability"));
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "promotion-decisions",
+            "create",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--id",
+            "decision_overtime_traceability",
+            "--proposal-id",
+            "proposal_overtime_traceability",
+            "--decision",
+            "accepted",
+            "--rationale",
+            "Human confirmed the source traceability.",
+            "--actor-id",
+            "ben",
+            "--actor-type",
+            "human",
+            "--actor-name",
+            "Ben",
+            "--canonical-artifact-type",
+            "requirement",
+            "--canonical-artifact-id",
+            "req_overtime",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("decision_overtime_traceability"));
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args(["materialize", "--repo", &repo, "--format", "json"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains(r#""records_loaded": 6"#));
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "proposals",
+            "list",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("src/payroll/overtime.rs"))
+        .stdout(predicates::str::contains(r#""promotion_state": "accepted""#));
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "export",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--format",
+            "json",
+            "--output",
+            &export_path,
+        ])
+        .assert()
+        .success();
+
+    let exported = std::fs::read_to_string(export_path).unwrap();
+    assert!(exported.contains(r#""proposal_cards""#));
+    assert!(exported.contains(r#""promotion_decisions""#));
+    assert!(exported.contains(r#""contributions""#));
+    assert!(exported.contains(r#""synthesis_packets""#));
+    assert!(exported.contains(r#""blocking_promotion": true"#));
+}
