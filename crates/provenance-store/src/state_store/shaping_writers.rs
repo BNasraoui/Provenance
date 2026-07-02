@@ -1,4 +1,6 @@
-use super::{CreateBoundaryInput, CreateQuestionInput, CreateTopicInput, StateStore};
+use super::{
+    CreateBoundaryInput, CreateQuestionInput, CreateTopicInput, StateStore, UpdateQuestionInput,
+};
 use crate::{jsonl, shards};
 use provenance_core::{
     ArtifactLink, ArtifactLinkTargetType, Boundary, Question, QuestionStatus, SchemaVersion,
@@ -192,12 +194,18 @@ impl StateStore {
     ) -> anyhow::Result<Question> {
         let actor = validated_actor(actor)?;
         let claimed_at = now_ms()?;
-        self.update_question(scope_id, id, |question| {
-            anyhow::ensure!(
-                question.status != QuestionStatus::Answered,
-                "question {} is answered and cannot be claimed",
-                question.id.as_str()
-            );
+        self.mutate_question(scope_id, id, |question| {
+            match question.status {
+                QuestionStatus::Open => {}
+                QuestionStatus::BlockedOnHuman => anyhow::bail!(
+                    "question {} is blocked_on_human and cannot be claimed",
+                    question.id.as_str()
+                ),
+                QuestionStatus::Answered => anyhow::bail!(
+                    "question {} is answered and cannot be claimed",
+                    question.id.as_str()
+                ),
+            }
             if let Some(holder) = &question.claimed_by {
                 anyhow::bail!(
                     "question {} is already claimed by {holder}",
@@ -211,7 +219,7 @@ impl StateStore {
     }
 
     pub fn release_question(&self, scope_id: &ScopeId, id: &StableId) -> anyhow::Result<Question> {
-        self.update_question(scope_id, id, |question| {
+        self.mutate_question(scope_id, id, |question| {
             anyhow::ensure!(
                 question.claimed_by.is_some(),
                 "question {} is not claimed",
@@ -239,7 +247,7 @@ impl StateStore {
                 "resolution does not exist"
             );
         }
-        self.update_question(scope_id, id, |question| {
+        self.mutate_question(scope_id, id, |question| {
             question.status = QuestionStatus::Answered;
             question.answer = Some(answer);
             if resolution_id.is_some() {
@@ -247,6 +255,59 @@ impl StateStore {
             }
             question.claimed_by = None;
             question.claimed_at = None;
+            Ok(())
+        })
+    }
+
+    pub fn update_question(&self, input: UpdateQuestionInput) -> anyhow::Result<Question> {
+        let UpdateQuestionInput {
+            scope_id,
+            id,
+            resolution_method,
+            status,
+            mut links,
+            resolution_id,
+        } = input;
+        anyhow::ensure!(
+            resolution_method.is_some()
+                || status.is_some()
+                || links.is_some()
+                || resolution_id.is_some(),
+            "at least one question field must be updated"
+        );
+        if let Some(resolution_id) = &resolution_id {
+            anyhow::ensure!(
+                self.list_resolutions(&scope_id)?
+                    .iter()
+                    .any(|resolution| &resolution.id == resolution_id),
+                "resolution does not exist"
+            );
+        }
+        if let Some(links) = &mut links {
+            self.validate_artifact_links(&scope_id, links)?;
+            sort_artifact_links(links);
+        }
+        self.mutate_question(&scope_id, &id, |question| {
+            if let Some(resolution_method) = resolution_method {
+                question.resolution_method = resolution_method;
+            }
+            if let Some(status) = status {
+                anyhow::ensure!(
+                    status != QuestionStatus::Answered || question.answer.is_some(),
+                    "use questions answer --answer to answer a question"
+                );
+                question.status = status;
+                if status != QuestionStatus::Open {
+                    question.claimed_by = None;
+                    question.claimed_at = None;
+                }
+            }
+            if let Some(links) = links {
+                question.links = links;
+            }
+            if let Some(resolution_id) = resolution_id {
+                question.resolution_id = Some(resolution_id);
+            }
             Ok(())
         })
     }
@@ -268,7 +329,7 @@ impl StateStore {
         Ok(updated)
     }
 
-    fn update_question(
+    fn mutate_question(
         &self,
         scope_id: &ScopeId,
         id: &StableId,

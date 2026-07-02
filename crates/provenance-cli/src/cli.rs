@@ -896,6 +896,27 @@ pub enum QuestionsCommand {
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },
+    /// Update mutable question state after creation.
+    Update {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        #[arg(long)]
+        id: String,
+        /// Resolution method: grill, prototype, research, verify, or task.
+        #[arg(long)]
+        method: Option<String>,
+        /// Status: open, `blocked_on_human`, or answered. Hyphens are accepted.
+        #[arg(long)]
+        status: Option<String>,
+        #[arg(long)]
+        links_json: Option<String>,
+        #[arg(long)]
+        resolution_id: Option<String>,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
     /// Claim a question so concurrent sessions skip it. Claiming an
     /// already-claimed question is an error showing who holds it.
     Claim {

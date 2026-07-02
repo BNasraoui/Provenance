@@ -58,8 +58,7 @@ before output. They do **not** provide independence — see Caveats.
 
 ## Phase 1 — turn N (agent work, no human)
 
-Prerequisite: the fork exists as a Question (`resolution_method: prototype` — record the
-method in the question text or its topic until the CLI carries the field; see Gaps).
+Prerequisite: the fork exists as a Question with `resolution_method: prototype`.
 Claim granularity is the **single question** (see the methods table in docs/shaping.md).
 
 1. **Spawn N agents in parallel** — one Agent tool call per stance, all in one message.
@@ -115,15 +114,18 @@ Claim granularity is the **single question** (see the methods table in docs/shap
      --required-human-decisions-json '<pick winner; graft list>'
    ```
 
-4. **Mark the question blocked-on-human** — post to its thread (status-level support is
-   a gap, see below):
+4. **Mark the question blocked-on-human** and post the proposal ids to its thread:
 
-   ```sh
-   provenance thread post --scope <scope> \
-     --parent-type question --parent-id <question_id> \
-     --role assistant \
-     "BLOCKED-ON-HUMAN: fork tournament landed. Competing proposals: prop_<...>, prop_<...>. Awaiting disposal."
-   ```
+    ```sh
+    provenance questions update --scope <scope> \
+      --id <question_id> \
+      --status blocked-on-human
+
+    provenance thread post --scope <scope> \
+      --parent-type question --parent-id <question_id> \
+      --role assistant \
+      "BLOCKED-ON-HUMAN: fork tournament landed. Competing proposals: prop_<...>, prop_<...>. Awaiting disposal."
+    ```
 
 5. **END THE SESSION.** The fork spawn is a two-phase boundary — a stop condition in the
    Work loop (docs/shaping.md, "Work", step 5). Do not present the artifacts in the same
@@ -194,12 +196,10 @@ The promotion gate, with a clock. This is a grill-shaped turn against the artifa
 
 ## CLI gaps and conventions (as of this writing)
 
-- **No `questions update`** and `QuestionStatus` is only `open|answered` — a question
-  cannot be marked blocked-on-human, nor flipped to `answered`/linked to its resolution
-  after creation. Convention: the `BLOCKED-ON-HUMAN` thread post (phase 1) and the
-  resolution's `--input-reference` trail (phase 2) carry the state.
-- **No `resolution_method` field on questions** — record `method: prototype` in the
-  question text until the schema carries it.
+- **Question status and method are first-class** — use `questions update --status
+  blocked-on-human` for the phase boundary, and `questions update --method prototype`
+  if an existing question was minted with the wrong method. Keep the thread post because
+  proposal ids are not question link targets.
 - **`promotion-decisions` supports only `accepted|rejected|deferred`** — `superseded`
   and `duplicate` states are settable only at proposal creation. Convention: reject
   losers with a rationale naming the superseding resolution.

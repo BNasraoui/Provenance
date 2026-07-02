@@ -135,7 +135,8 @@ fork, spawn N agents with **stance-based personas**. A stance is a value system 
 bar + exit criterion ("reduce until it fails the 5-second test" vs. "disclose
 progressively by altitude") — **not a character**. Each produces a competing artifact
 opening with a design-principles manifesto. Artifacts land as proposals linked to the
-question; the question goes blocked-on-human.
+question; the question's status is set to `blocked_on_human` until the human disposal
+turn.
 
 **Phase 2** (turn N+1 — human disposal, the promotion gate with a clock): the human
 reacts, picks a winner, grafts ideas from runners-up. The decision lands as a Resolution

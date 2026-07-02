@@ -95,6 +95,15 @@ pub struct CreateQuestionInput {
     pub resolution_id: Option<StableId>,
 }
 
+pub struct UpdateQuestionInput {
+    pub scope_id: ScopeId,
+    pub id: StableId,
+    pub resolution_method: Option<ResolutionMethod>,
+    pub status: Option<QuestionStatus>,
+    pub links: Option<Vec<ArtifactLink>>,
+    pub resolution_id: Option<StableId>,
+}
+
 pub struct CreateResolutionInput {
     pub scope_id: ScopeId,
     pub id: StableId,
