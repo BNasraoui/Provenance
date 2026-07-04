@@ -42,12 +42,20 @@ struct WikiBuildReport {
     out: Utf8PathBuf,
     page_count: usize,
     pages: Vec<WikiPageSummary>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    failures: Vec<WikiPageFailure>,
 }
 
 #[derive(Serialize)]
 struct WikiPageSummary {
     route: String,
     title: String,
+}
+
+#[derive(Serialize)]
+struct WikiPageFailure {
+    route: String,
+    error: String,
 }
 
 pub fn build(
@@ -64,19 +72,23 @@ pub fn build(
         })?;
         ProvenanceLayout::new(repo.clone()).wiki_dir()
     };
-    let out = &out;
+    let repo_hint = repo.clone();
     let corpus = assemble::load_corpus(repo, scope)?;
     let pages = render::render_corpus(&corpus);
+
+    // Each page is written independently: a page-specific failure (a
+    // colliding path, a permissions error) shouldn't hide every other page
+    // that built fine. Failures are collected and reported instead.
+    let mut failures = Vec::new();
     for page in &pages {
-        let path = static_page_path(out, &page.route);
-        let parent = path
-            .parent()
-            .with_context(|| format!("wiki page path {path} has no parent directory"))?;
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("failed to create wiki output directory {parent}"))?;
-        std::fs::write(&path, &page.html)
-            .with_context(|| format!("failed to write wiki page {path}"))?;
+        if let Err(error) = write_page(&out, page) {
+            failures.push(WikiPageFailure {
+                route: page.route.clone(),
+                error: format!("{error:#}"),
+            });
+        }
     }
+
     let stylesheet_path = out.join(WIKI_CSS_ROUTE.trim_start_matches('/'));
     let stylesheet_dir = stylesheet_path
         .parent()
@@ -86,11 +98,13 @@ pub fn build(
     std::fs::write(&stylesheet_path, theme::WIKI_CSS)
         .with_context(|| format!("failed to write wiki stylesheet {stylesheet_path}"))?;
 
+    let page_count = pages.len();
+    let failure_count = failures.len();
     let report = WikiBuildReport {
-        status: "ok",
+        status: if failures.is_empty() { "ok" } else { "partial" },
         scope: corpus.scope,
-        out: out.clone(),
-        page_count: pages.len(),
+        out,
+        page_count,
         pages: pages
             .into_iter()
             .map(|page| WikiPageSummary {
@@ -98,8 +112,57 @@ pub fn build(
                 title: page.title,
             })
             .collect(),
+        failures,
     };
-    output::print(format, &report)?;
+    print_build_report(format, &report, &repo_hint)?;
+
+    anyhow::ensure!(
+        failure_count == 0,
+        "{failure_count} of {page_count} wiki pages failed to write"
+    );
+    Ok(())
+}
+
+fn write_page(out: &Utf8PathBuf, page: &RenderedPage) -> anyhow::Result<()> {
+    let path = static_page_path(out, &page.route);
+    let parent = path
+        .parent()
+        .with_context(|| format!("wiki page path {path} has no parent directory"))?;
+    std::fs::create_dir_all(parent)
+        .with_context(|| format!("failed to create wiki output directory {parent}"))?;
+    std::fs::write(&path, &page.html)
+        .with_context(|| format!("failed to write wiki page {path}"))?;
+    Ok(())
+}
+
+/// JSON/JSONL get the full machine-readable report. The human-facing
+/// formats (table, the CLI default, and friends) get a short summary
+/// instead of a dump of every page -- with an explicit list of any pages
+/// that failed to write.
+fn print_build_report(
+    format: OutputFormat,
+    report: &WikiBuildReport,
+    repo: &Utf8PathBuf,
+) -> anyhow::Result<()> {
+    match format {
+        OutputFormat::Json | OutputFormat::Jsonl => output::print(format, report)?,
+        OutputFormat::Table | OutputFormat::Markdown | OutputFormat::Toon => {
+            let written = report.page_count - report.failures.len();
+            let noun = if written == 1 { "page" } else { "pages" };
+            println!(
+                "Built {written} {noun} for scope \"{}\" into {}",
+                report.scope, report.out
+            );
+            if report.failures.is_empty() {
+                println!("Run `provenance wiki serve --repo {repo}` to view them.");
+            } else {
+                eprintln!("Failed to write {} page(s):", report.failures.len());
+                for failure in &report.failures {
+                    eprintln!("  - {}: {}", failure.route, failure.error);
+                }
+            }
+        }
+    }
     Ok(())
 }
 
