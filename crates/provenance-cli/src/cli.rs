@@ -253,8 +253,11 @@ pub enum WikiCommand {
         repo: Utf8PathBuf,
         #[arg(long, default_value = "default")]
         scope: String,
+        /// Defaults to `.provenance/wiki`, which is added to `.gitignore`
+        /// automatically. Pass an explicit path to write elsewhere instead
+        /// (`.gitignore` is left untouched in that case).
         #[arg(long)]
-        out: Utf8PathBuf,
+        out: Option<Utf8PathBuf>,
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },
