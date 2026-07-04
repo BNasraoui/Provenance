@@ -58,6 +58,63 @@ fn wiki_build_writes_static_pages_and_stylesheet() {
 }
 
 #[test]
+fn wiki_build_defaults_output_to_the_provenance_wiki_dir_and_gitignores_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    let repo = repo.to_string_lossy().to_string();
+    seed_state(dir.path(), &repo);
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args(["wiki", "build", "--repo", &repo, "--format", "json"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains(".provenance/wiki"));
+
+    let default_out = std::path::Path::new(&repo).join(".provenance/wiki");
+    let index = std::fs::read_to_string(default_out.join("index.html")).unwrap();
+    assert!(index.contains("Provenance Wiki"), "{index}");
+
+    let gitignore =
+        std::fs::read_to_string(std::path::Path::new(&repo).join(".gitignore")).unwrap();
+    assert!(
+        gitignore
+            .lines()
+            .any(|line| line.trim() == ".provenance/wiki/"),
+        "{gitignore}"
+    );
+}
+
+#[test]
+fn wiki_build_with_an_explicit_out_does_not_touch_gitignore() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    let repo = repo.to_string_lossy().to_string();
+    let out = dir.path().join("site");
+    seed_state(dir.path(), &repo);
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "wiki",
+            "build",
+            "--repo",
+            &repo,
+            "--out",
+            &out.to_string_lossy(),
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success();
+
+    assert!(
+        !std::path::Path::new(&repo).join(".gitignore").exists(),
+        "explicit --out must not create or edit .gitignore"
+    );
+}
+
+#[test]
 fn wiki_serve_serves_pages_stylesheet_and_not_found() {
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path().join("repo");
