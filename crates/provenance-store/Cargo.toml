@@ -9,7 +9,7 @@ workspace = true
 [dependencies]
 anyhow.workspace = true
 camino.workspace = true
-libc.workspace = true
+fs2.workspace = true
 provenance-core = { path = "../provenance-core" }
 serde.workspace = true
 serde_json.workspace = true

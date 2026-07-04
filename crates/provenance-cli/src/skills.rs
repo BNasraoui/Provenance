@@ -1,5 +1,6 @@
 use anyhow::Context;
 use serde::Serialize;
+use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
@@ -401,7 +402,38 @@ fn fnv1a64(content: &str) -> String {
 }
 
 fn home_dir() -> anyhow::Result<PathBuf> {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .context("HOME is not set")
+    home_dir_from_env(|key| std::env::var_os(key))
+}
+
+fn home_dir_from_env(mut var: impl FnMut(&str) -> Option<OsString>) -> anyhow::Result<PathBuf> {
+    if let Some(home) = var("HOME") {
+        return Ok(PathBuf::from(home));
+    }
+    if let Some(profile) = var("USERPROFILE") {
+        return Ok(PathBuf::from(profile));
+    }
+    if let (Some(mut drive), Some(path)) = (var("HOMEDRIVE"), var("HOMEPATH")) {
+        drive.push(path);
+        return Ok(PathBuf::from(drive));
+    }
+    anyhow::bail!("HOME or USERPROFILE is not set")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn home_dir_uses_userprofile_when_home_is_absent() {
+        let resolved = home_dir_from_env(|key| {
+            if key == "USERPROFILE" {
+                Some(OsString::from(r"C:\Users\Ada"))
+            } else {
+                None
+            }
+        })
+        .unwrap();
+
+        assert_eq!(resolved, PathBuf::from(r"C:\Users\Ada"));
+    }
 }

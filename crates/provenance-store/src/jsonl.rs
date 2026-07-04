@@ -1,8 +1,8 @@
 use camino::Utf8Path;
+use fs2::FileExt;
 use serde::{de::DeserializeOwned, Serialize};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
-use std::os::fd::AsRawFd;
 
 struct AdvisoryLock {
     file: File,
@@ -19,19 +19,14 @@ impl AdvisoryLock {
             .create(true)
             .truncate(false)
             .open(path)?;
-        // SAFETY: flock operates on a valid file descriptor owned by `file`.
-        let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
-        if result == -1 {
-            return Err(std::io::Error::last_os_error().into());
-        }
+        file.lock_exclusive()?;
         Ok(Self { file })
     }
 }
 
 impl Drop for AdvisoryLock {
     fn drop(&mut self) {
-        // SAFETY: flock operates on a valid file descriptor owned by `self.file`.
-        let _ = unsafe { libc::flock(self.file.as_raw_fd(), libc::LOCK_UN) };
+        let _ = self.file.unlock();
     }
 }
 
