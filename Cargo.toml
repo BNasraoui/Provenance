@@ -19,16 +19,18 @@ module_name_repetitions = "allow"
 [workspace.dependencies]
 anyhow = "1.0"
 assert_cmd = "2.0"
+axum = "0.7"
 camino = { version = "1.1", features = ["serde1"] }
 clap = { version = "4.5", features = ["derive"] }
+fs2 = "0.4"
 insta = "1.39"
-libc = "0.2"
+pulldown-cmark = "0.10"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-sqlx = { version = "0.7", features = ["sqlite", "runtime-tokio-rustls"] }
+sqlx = { version = "0.7", default-features = false, features = ["sqlite", "runtime-tokio-rustls"] }
 tempfile = "3.10"
 thiserror = "1.0"
-tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.0", features = ["macros", "net", "rt-multi-thread"] }
 toml = "0.8"
 predicates = "3.1"
 walkdir = "2.5"

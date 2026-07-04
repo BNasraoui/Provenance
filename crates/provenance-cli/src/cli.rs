@@ -28,6 +28,14 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },
+    Docs {
+        #[command(subcommand)]
+        command: DocsCommand,
+    },
+    Wiki {
+        #[command(subcommand)]
+        command: WikiCommand,
+    },
     Materialize {
         #[arg(long, default_value = ".")]
         repo: Utf8PathBuf,
@@ -217,6 +225,48 @@ pub enum Command {
         output: Option<Utf8PathBuf>,
         #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
         format: OutputFormat,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum DocsCommand {
+    Check {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+    Serve {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+        #[arg(long, default_value_t = 5174)]
+        port: u16,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum WikiCommand {
+    Build {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long, default_value = "default")]
+        scope: String,
+        #[arg(long)]
+        out: Utf8PathBuf,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+    Serve {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long, default_value = "default")]
+        scope: String,
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+        #[arg(long, default_value_t = 5175)]
+        port: u16,
     },
 }
 

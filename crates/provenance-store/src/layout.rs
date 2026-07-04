@@ -58,21 +58,21 @@ mod tests {
     use super::*;
     #[test]
     fn layout_paths_are_under_provenance_directory() {
-        let layout = ProvenanceLayout::new("/tmp/repo");
+        let root = Utf8PathBuf::from("repo");
+        let layout = ProvenanceLayout::new(root.clone());
         assert_eq!(
-            layout.manifest_path().as_str(),
-            "/tmp/repo/.provenance/state/manifest.json"
+            layout.manifest_path(),
+            root.join(".provenance/state/manifest.json")
         );
         assert_eq!(
-            layout.cache_db_path().as_str(),
-            "/tmp/repo/.provenance/cache/provenance.db"
+            layout.cache_db_path(),
+            root.join(".provenance/cache/provenance.db")
         );
         assert_eq!(
             layout
                 .state_shard_lock_path(&layout.scopes_dir().join("default/sources/source.jsonl"))
-                .unwrap()
-                .as_str(),
-            "/tmp/repo/.provenance/cache/locks/scopes/default/sources/source.jsonl.lock"
+                .unwrap(),
+            root.join(".provenance/cache/locks/scopes/default/sources/source.jsonl.lock")
         );
     }
 }
