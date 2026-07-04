@@ -58,6 +58,90 @@ fn wiki_build_writes_static_pages_and_stylesheet() {
 }
 
 #[test]
+fn wiki_build_default_format_prints_a_concise_summary_not_a_page_dump() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    let repo = repo.to_string_lossy().to_string();
+    let out = dir.path().join("site");
+    seed_state(dir.path(), &repo);
+
+    let output = Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "wiki",
+            "build",
+            "--repo",
+            &repo,
+            "--out",
+            &out.to_string_lossy(),
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let stdout = String::from_utf8(output).unwrap();
+
+    assert!(!stdout.contains("\"pages\""), "{stdout}");
+    assert!(!stdout.contains("\"route\""), "{stdout}");
+    // 1 index + 2 requirements + 1 resolution + 1 rule + 1 source = 6 pages.
+    assert!(
+        stdout.contains("6 pages"),
+        "expected the page count: {stdout}"
+    );
+    assert!(
+        stdout.contains("wiki serve"),
+        "expected a hint to view the site: {stdout}"
+    );
+    assert!(
+        stdout.contains(&out.to_string_lossy().to_string()),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn wiki_build_reports_per_page_write_failures_without_aborting_the_rest() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    let repo = repo.to_string_lossy().to_string();
+    let out = dir.path().join("site");
+    seed_state(dir.path(), &repo);
+
+    // Collide with the directory `req_sah`'s page needs to create, forcing
+    // that one page's write to fail while the rest of the build proceeds.
+    std::fs::create_dir_all(out.join("requirements")).unwrap();
+    std::fs::write(out.join("requirements/req_sah"), "blocking file").unwrap();
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "wiki",
+            "build",
+            "--repo",
+            &repo,
+            "--out",
+            &out.to_string_lossy(),
+        ])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("req_sah"));
+
+    // Unaffected pages were still written, including ones ordered after the
+    // failing page (resolutions/rules/sources come after requirements) --
+    // proving the failure didn't abort the rest of the build.
+    let gapped = std::fs::read_to_string(out.join("requirements/req_gap/index.html")).unwrap();
+    assert!(gapped.contains("citation gap"), "{gapped}");
+    let index = std::fs::read_to_string(out.join("index.html")).unwrap();
+    assert!(index.contains("Provenance Wiki"), "{index}");
+    let resolution = std::fs::read_to_string(out.join("resolutions/res_sah/index.html")).unwrap();
+    assert!(resolution.contains("SAH extraction"), "{resolution}");
+    let rule = std::fs::read_to_string(out.join("rules/rule_sah_001/index.html")).unwrap();
+    assert!(rule.contains("SAH rule"), "{rule}");
+    let source = std::fs::read_to_string(out.join("sources/source_sah/index.html")).unwrap();
+    assert!(source.contains("Support at Home"), "{source}");
+}
+
+#[test]
 fn wiki_build_defaults_output_to_the_provenance_wiki_dir_and_gitignores_it() {
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path().join("repo");
