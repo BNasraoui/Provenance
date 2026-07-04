@@ -1,5 +1,6 @@
 mod cli;
 mod docs;
+mod gitignore;
 mod handlers;
 mod output;
 mod skills;
@@ -160,7 +161,7 @@ async fn main() -> anyhow::Result<()> {
                 scope,
                 out,
                 format,
-            } => wiki::site::build(repo, scope, &out, format)?,
+            } => wiki::site::build(repo, scope, out, format)?,
             WikiCommand::Serve {
                 repo,
                 scope,

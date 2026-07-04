@@ -6,6 +6,7 @@
 //! axum router (mirroring the docs server) or writes them out as a static
 //! tree with the vendored stylesheet under `assets/`.
 
+use crate::gitignore;
 use crate::output::{self, OutputFormat};
 use crate::wiki::assemble;
 use crate::wiki::render::{self, RenderedPage, WIKI_CSS_ROUTE};
@@ -19,9 +20,15 @@ use axum::{
     Router,
 };
 use camino::Utf8PathBuf;
+use provenance_store::layout::ProvenanceLayout;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::sync::Arc;
+
+/// Pattern written to `.gitignore` for the default wiki output directory.
+/// Trailing slash marks it as a directory, matching the existing
+/// `.provenance/cache/` entry.
+const WIKI_GITIGNORE_PATTERN: &str = ".provenance/wiki/";
 
 struct WikiSite {
     scope: String,
@@ -46,9 +53,18 @@ struct WikiPageSummary {
 pub fn build(
     repo: Utf8PathBuf,
     scope: String,
-    out: &Utf8PathBuf,
+    out: Option<Utf8PathBuf>,
     format: OutputFormat,
 ) -> anyhow::Result<()> {
+    let out = if let Some(out) = out {
+        out
+    } else {
+        gitignore::ensure_ignored(&repo, WIKI_GITIGNORE_PATTERN).with_context(|| {
+            format!("failed to update .gitignore for the default wiki output at {repo}")
+        })?;
+        ProvenanceLayout::new(repo.clone()).wiki_dir()
+    };
+    let out = &out;
     let corpus = assemble::load_corpus(repo, scope)?;
     let pages = render::render_corpus(&corpus);
     for page in &pages {
