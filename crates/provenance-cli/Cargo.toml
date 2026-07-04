@@ -12,14 +12,17 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
+axum.workspace = true
 camino.workspace = true
 clap.workspace = true
+pulldown-cmark.workspace = true
 provenance-core = { path = "../provenance-core" }
 provenance-scanner = { path = "../provenance-scanner" }
 provenance-store = { path = "../provenance-store" }
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+walkdir.workspace = true
 
 [features]
 default = []
@@ -27,5 +30,6 @@ scanner = []
 
 [dev-dependencies]
 assert_cmd.workspace = true
+insta.workspace = true
 tempfile.workspace = true
 predicates.workspace = true

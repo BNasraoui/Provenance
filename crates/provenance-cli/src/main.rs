@@ -1,17 +1,19 @@
 mod cli;
+mod docs;
 mod handlers;
 mod output;
 mod skills;
+mod wiki;
 
 use anyhow::Context;
 use camino::Utf8PathBuf;
 use clap::Parser;
 use cli::{
-    BoundariesCommand, Cli, Command, ContributionsCommand, CoverageCommand, DomainsCommand,
-    EdgesCommand, FogCommand, PromotionDecisionsCommand, ProposalsCommand, QuestionsCommand,
-    RequirementsCommand, ResolutionsCommand, RulesCommand, ServiceBindingsCommand, ServicesCommand,
-    SkillsCommand, SourceRefCommand, SourcesCommand, SynthesisPacketsCommand, ThreadCommand,
-    TopicsCommand,
+    BoundariesCommand, Cli, Command, ContributionsCommand, CoverageCommand, DocsCommand,
+    DomainsCommand, EdgesCommand, FogCommand, PromotionDecisionsCommand, ProposalsCommand,
+    QuestionsCommand, RequirementsCommand, ResolutionsCommand, RulesCommand,
+    ServiceBindingsCommand, ServicesCommand, SkillsCommand, SourceRefCommand, SourcesCommand,
+    SynthesisPacketsCommand, ThreadCommand, TopicsCommand, WikiCommand,
 };
 use output::OutputFormat;
 use provenance_core::{
@@ -148,6 +150,24 @@ async fn main() -> anyhow::Result<()> {
             path_prefix,
         } => handlers::init(path, scope, path_prefix)?,
         Command::Check { repo, format } => handlers::check(repo, format)?,
+        Command::Docs { command } => match command {
+            DocsCommand::Check { repo, format } => docs::check(&repo, format)?,
+            DocsCommand::Serve { repo, host, port } => docs::serve(repo, host, port).await?,
+        },
+        Command::Wiki { command } => match command {
+            WikiCommand::Build {
+                repo,
+                scope,
+                out,
+                format,
+            } => wiki::site::build(repo, scope, &out, format)?,
+            WikiCommand::Serve {
+                repo,
+                scope,
+                host,
+                port,
+            } => wiki::site::serve(repo, scope, host, port).await?,
+        },
         Command::Materialize { repo, format } => {
             let report = cache::materialize_state(&ProvenanceLayout::new(repo)).await?;
             output::print(format, &report)?;
