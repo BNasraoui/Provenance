@@ -1,5 +1,5 @@
 ---
-name: shaping
+name: provenance-shaping
 description: Guide turn-based requirement shaping in Provenance. Use when a user brings a loose idea, asks to refine requirements, work through open shaping questions, graduate fog, or run the Chart/Work loop against an anchor requirement. Land every resolved decision immediately into the graph.
 ---
 
@@ -235,7 +235,7 @@ or source gap, land that too before continuing.
 
 #### `prototype`
 
-Use the `fork-tournament` skill. This is two-phase work:
+Use the `provenance-fork-tournament` skill. This is two-phase work:
 
 1. Phase 1 spawns stance-based agents and lands proposals/contributions/synthesis.
 2. Mark the question `blocked-on-human` and stop the session.
