@@ -182,64 +182,42 @@ fn install_claude_symlink_or_copy(
     let link_path = claude_dir.join(name);
     let target = relative_claude_target(name);
 
-    if let Ok(metadata) = std::fs::symlink_metadata(&link_path) {
-        if metadata.file_type().is_symlink() {
-            let current_target = std::fs::read_link(&link_path)?;
-            if current_target == target {
-                return Ok(ClaudeInstall::Symlink(file_report(&link_path, "unchanged")));
-            }
-            anyhow::ensure!(
-                force,
-                "{} points at {}; rerun with --force to overwrite",
-                link_path.display(),
-                current_target.display()
-            );
-            std::fs::remove_file(&link_path)?;
-            return create_symlink_or_copy(
-                skill,
-                canonical_dir,
-                claude_dir,
-                &link_path,
-                &target,
-                "updated",
-            );
-        }
-
-        if metadata.is_dir() {
-            if force {
-                std::fs::remove_dir_all(&link_path)?;
-                return create_symlink_or_copy(
-                    skill,
-                    canonical_dir,
-                    claude_dir,
-                    &link_path,
-                    &target,
-                    "updated",
+    let status = match std::fs::symlink_metadata(&link_path) {
+        Err(_) => "linked",
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink() {
+                let current_target = std::fs::read_link(&link_path)?;
+                if current_target == target {
+                    return Ok(ClaudeInstall::Symlink(file_report(&link_path, "unchanged")));
+                }
+                anyhow::ensure!(
+                    force,
+                    "{} points at {}; rerun with --force to overwrite",
+                    link_path.display(),
+                    current_target.display()
                 );
+                std::fs::remove_file(&link_path)?;
+            } else if metadata.is_dir() {
+                if !force {
+                    let reason = format!("{} already exists as a directory", link_path.display());
+                    return Ok(ClaudeInstall::CopyFallback {
+                        report: copy_skill_dir(skill, canonical_dir, claude_dir, force)
+                            .with_context(|| reason.clone())?,
+                        reason,
+                    });
+                }
+                std::fs::remove_dir_all(&link_path)?;
+            } else {
+                anyhow::ensure!(
+                    force,
+                    "{} exists and is not a skill directory; rerun with --force to overwrite",
+                    link_path.display()
+                );
+                std::fs::remove_file(&link_path)?;
             }
-            let reason = format!("{} already exists as a directory", link_path.display());
-            return Ok(ClaudeInstall::CopyFallback {
-                report: copy_skill_dir(skill, canonical_dir, claude_dir, force)
-                    .with_context(|| reason.clone())?,
-                reason,
-            });
+            "updated"
         }
-
-        anyhow::ensure!(
-            force,
-            "{} exists and is not a skill directory; rerun with --force to overwrite",
-            link_path.display()
-        );
-        std::fs::remove_file(&link_path)?;
-        return create_symlink_or_copy(
-            skill,
-            canonical_dir,
-            claude_dir,
-            &link_path,
-            &target,
-            "updated",
-        );
-    }
+    };
 
     create_symlink_or_copy(
         skill,
@@ -247,7 +225,7 @@ fn install_claude_symlink_or_copy(
         claude_dir,
         &link_path,
         &target,
-        "linked",
+        status,
     )
 }
 
