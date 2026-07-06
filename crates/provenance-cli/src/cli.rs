@@ -1,5 +1,4 @@
 use crate::output::OutputFormat;
-use crate::skills::SkillInstallTarget;
 use camino::Utf8PathBuf;
 use clap::{Args, Parser, Subcommand};
 use serde::Serialize;
@@ -323,10 +322,10 @@ pub enum SkillsCommand {
         name: String,
     },
     Install {
-        #[arg(long, value_enum, default_value_t = SkillInstallTarget::AgentsMd)]
-        target: SkillInstallTarget,
         #[arg(long)]
         global: bool,
+        #[arg(long)]
+        copy: bool,
         #[arg(long)]
         force: bool,
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
