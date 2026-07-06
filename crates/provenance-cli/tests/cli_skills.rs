@@ -1,6 +1,7 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::collections::BTreeSet;
+use std::path::PathBuf;
 
 #[test]
 fn skills_list_and_show_embedded_skill_files() {
@@ -36,17 +37,17 @@ fn skills_list_and_show_embedded_skill_files() {
 }
 
 #[test]
-fn embedded_skills_include_turn_based_shaping_skill() {
+fn embedded_skills_include_turn_based_provenance_shaping_skill() {
     Command::cargo_bin("provenance")
         .unwrap()
         .args(["skills", "list", "--format", "json"])
         .assert()
         .success()
-        .stdout(predicate::str::contains(r#""name": "shaping""#));
+        .stdout(predicate::str::contains(r#""name": "provenance-shaping""#));
 
     Command::cargo_bin("provenance")
         .unwrap()
-        .args(["skills", "show", "shaping"])
+        .args(["skills", "show", "provenance-shaping"])
         .assert()
         .success()
         .stdout(predicate::str::contains("LAND-AS-YOU-GO"))
@@ -55,34 +56,146 @@ fn embedded_skills_include_turn_based_shaping_skill() {
 }
 
 #[test]
-fn skills_install_claude_target_is_idempotent_and_requires_force_for_drift() {
+fn skills_install_default_writes_canonical_files_and_relative_claude_symlinks() {
     let dir = tempfile::tempdir().unwrap();
+    let skill = "provenance-fork-tournament";
 
     Command::cargo_bin("provenance")
         .unwrap()
         .current_dir(dir.path())
-        .args([
-            "skills", "install", "--target", "claude", "--format", "json",
-        ])
+        .args(["skills", "install", "--format", "json"])
         .assert()
         .success()
-        .stdout(predicate::str::contains(r#""target": "claude""#));
+        .stdout(predicate::str::contains(r#""link_mode": "symlink""#));
 
-    let installed = dir.path().join(".claude/skills/fork-tournament/SKILL.md");
-    let installed_contents = std::fs::read_to_string(&installed).unwrap();
-    assert!(installed_contents.starts_with("---\nname: fork-tournament"));
-    assert!(installed_contents.contains(&format!(
+    let canonical = dir
+        .path()
+        .join(".agents/skills")
+        .join(skill)
+        .join("SKILL.md");
+    let canonical_contents = std::fs::read_to_string(&canonical).unwrap();
+    assert!(canonical_contents.starts_with("---\nname: provenance-fork-tournament"));
+    assert!(canonical_contents.contains(&format!(
         "Installed by provenance {}",
         env!("CARGO_PKG_VERSION")
     )));
-    assert!(installed_contents.contains("content hash fnv1a64:"));
+    assert!(canonical_contents.contains("content hash fnv1a64:"));
+
+    let link = dir.path().join(".claude/skills").join(skill);
+    let link_metadata = std::fs::symlink_metadata(&link).unwrap();
+    assert!(link_metadata.file_type().is_symlink());
+    assert_eq!(
+        std::fs::read_link(&link).unwrap(),
+        PathBuf::from("../../.agents/skills/provenance-fork-tournament")
+    );
+    assert_eq!(
+        std::fs::read_to_string(link.join("SKILL.md")).unwrap(),
+        canonical_contents
+    );
+}
+
+#[test]
+fn skills_install_copy_flag_copies_claude_skills_instead_of_symlinking() {
+    let dir = tempfile::tempdir().unwrap();
+    let skill = "provenance-swarm-backtrace";
 
     Command::cargo_bin("provenance")
         .unwrap()
         .current_dir(dir.path())
-        .args([
-            "skills", "install", "--target", "claude", "--format", "json",
-        ])
+        .args(["skills", "install", "--copy", "--format", "json"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(r#""link_mode": "copy""#));
+
+    let canonical = dir
+        .path()
+        .join(".agents/skills")
+        .join(skill)
+        .join("SKILL.md");
+    let copied = dir
+        .path()
+        .join(".claude/skills")
+        .join(skill)
+        .join("SKILL.md");
+    assert!(canonical.exists());
+    assert!(copied.exists());
+    assert!(!std::fs::symlink_metadata(copied.parent().unwrap())
+        .unwrap()
+        .file_type()
+        .is_symlink());
+    assert_eq!(
+        std::fs::read_to_string(copied).unwrap(),
+        std::fs::read_to_string(canonical).unwrap()
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn skills_install_copy_replaces_own_symlink_but_foreign_symlink_requires_force() {
+    let dir = tempfile::tempdir().unwrap();
+    let skill = "provenance-shaping";
+    let link = dir.path().join(".claude/skills").join(skill);
+
+    // Default install, then --copy: our own canonical symlink is replaced
+    // with a real directory without needing --force.
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .current_dir(dir.path())
+        .args(["skills", "install", "--format", "json"])
+        .assert()
+        .success();
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .current_dir(dir.path())
+        .args(["skills", "install", "--copy", "--format", "json"])
+        .assert()
+        .success();
+    let metadata = std::fs::symlink_metadata(&link).unwrap();
+    assert!(metadata.is_dir());
+    assert!(!metadata.file_type().is_symlink());
+
+    // A foreign symlink is not silently destroyed.
+    std::fs::remove_dir_all(&link).unwrap();
+    std::os::unix::fs::symlink("../../elsewhere", &link).unwrap();
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .current_dir(dir.path())
+        .args(["skills", "install", "--copy", "--format", "json"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("rerun with --force"));
+    assert_eq!(
+        std::fs::read_link(&link).unwrap(),
+        PathBuf::from("../../elsewhere")
+    );
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .current_dir(dir.path())
+        .args(["skills", "install", "--copy", "--force", "--format", "json"])
+        .assert()
+        .success();
+    assert!(std::fs::symlink_metadata(&link).unwrap().is_dir());
+}
+
+#[test]
+fn skills_install_is_idempotent_and_requires_force_for_canonical_drift() {
+    let dir = tempfile::tempdir().unwrap();
+    let installed = dir
+        .path()
+        .join(".agents/skills/provenance-fork-tournament/SKILL.md");
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .current_dir(dir.path())
+        .args(["skills", "install", "--format", "json"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .current_dir(dir.path())
+        .args(["skills", "install", "--format", "json"])
         .assert()
         .success()
         .stdout(predicate::str::contains(r#""status": "unchanged""#));
@@ -91,9 +204,7 @@ fn skills_install_claude_target_is_idempotent_and_requires_force_for_drift() {
     Command::cargo_bin("provenance")
         .unwrap()
         .current_dir(dir.path())
-        .args([
-            "skills", "install", "--target", "claude", "--format", "json",
-        ])
+        .args(["skills", "install", "--format", "json"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("exists and differs"));
@@ -101,112 +212,55 @@ fn skills_install_claude_target_is_idempotent_and_requires_force_for_drift() {
     Command::cargo_bin("provenance")
         .unwrap()
         .current_dir(dir.path())
-        .args([
-            "skills", "install", "--target", "claude", "--force", "--format", "json",
-        ])
+        .args(["skills", "install", "--force", "--format", "json"])
         .assert()
         .success()
         .stdout(predicate::str::contains(r#""status": "updated""#));
 }
 
 #[test]
-fn skills_install_opencode_target_writes_agents_skills() {
-    let dir = tempfile::tempdir().unwrap();
+fn skills_install_global_uses_home_agents_and_claude_skill_dirs() {
+    let home = tempfile::tempdir().unwrap();
+    let cwd = tempfile::tempdir().unwrap();
 
     Command::cargo_bin("provenance")
         .unwrap()
-        .current_dir(dir.path())
+        .current_dir(cwd.path())
+        .env("HOME", home.path())
         .args([
-            "skills", "install", "--target", "opencode", "--format", "json",
+            "skills", "install", "--global", "--copy", "--format", "json",
         ])
         .assert()
-        .success();
+        .success()
+        .stdout(predicate::str::contains(r#""global": true"#))
+        .stdout(predicate::str::contains(r#""link_mode": "copy""#));
 
-    assert!(dir
+    assert!(home
         .path()
-        .join(".agents/skills/fork-tournament/SKILL.md")
+        .join(".agents/skills/provenance-grounded-writing/SKILL.md")
         .exists());
-    assert!(dir
+    assert!(home
         .path()
-        .join(".agents/skills/swarm-backtrace/SKILL.md")
+        .join(".claude/skills/provenance-grounded-writing/SKILL.md")
+        .exists());
+    assert!(!cwd
+        .path()
+        .join(".agents/skills/provenance-grounded-writing/SKILL.md")
         .exists());
 }
 
 #[test]
-fn skills_install_agents_md_appends_managed_section() {
-    let dir = tempfile::tempdir().unwrap();
-    let agents = dir.path().join("AGENTS.md");
-    std::fs::write(&agents, "# Existing Instructions\n").unwrap();
-
-    Command::cargo_bin("provenance")
-        .unwrap()
-        .current_dir(dir.path())
-        .args([
-            "skills",
-            "install",
-            "--target",
-            "agents-md",
-            "--format",
-            "json",
-        ])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains(r#""target": "agents-md""#));
-
-    let installed = std::fs::read_to_string(&agents).unwrap();
-    assert!(installed.starts_with("# Existing Instructions\n"));
-    assert!(installed.contains("<!-- BEGIN PROVENANCE SKILLS -->"));
-    assert!(installed.contains(&format!(
-        "Installed by provenance {}",
-        env!("CARGO_PKG_VERSION")
-    )));
-    assert!(installed.contains("## Skill: fork-tournament"));
-    assert!(installed.contains("# Fork tournament (`prototype`)"));
-    assert!(installed.contains("## Skill: swarm-backtrace"));
-    assert!(installed.contains("# Swarm backtrace"));
-
-    Command::cargo_bin("provenance")
-        .unwrap()
-        .current_dir(dir.path())
-        .args([
-            "skills",
-            "install",
-            "--target",
-            "agents-md",
-            "--format",
-            "json",
-        ])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains(r#""status": "unchanged""#));
-}
-
-#[test]
-fn init_injects_provenance_agents_md_section() {
+fn init_does_not_write_an_agents_md_skills_section() {
     let temp = tempfile::tempdir().unwrap();
     let repo = temp.path().join("repo");
 
-    Command::cargo_bin("provenance")
-        .unwrap()
-        .args([
-            "init",
-            "--path",
-            repo.to_str().unwrap(),
-            "--scope",
-            "default",
-            "--path-prefix",
-            ".",
-        ])
-        .assert()
-        .success();
+    init_repo(&repo);
 
-    let agents = std::fs::read_to_string(repo.join("AGENTS.md")).unwrap();
-    assert!(agents.contains("<!-- BEGIN PROVENANCE SKILLS -->"));
-    assert!(agents.contains(
-        "Before shaping or backtrace work, run `provenance skills install --target agents-md` if skills are absent."
-    ));
-    assert!(agents.contains("## Skill: fork-tournament"));
-    assert!(agents.contains("## Skill: swarm-backtrace"));
+    let agents = repo.join("AGENTS.md");
+    if agents.exists() {
+        let contents = std::fs::read_to_string(agents).unwrap();
+        assert!(!contents.contains("<!-- BEGIN PROVENANCE SKILLS -->"));
+    }
 }
 
 #[test]
@@ -214,7 +268,6 @@ fn prime_reports_skill_install_status_and_install_command() {
     let temp = tempfile::tempdir().unwrap();
     let repo = temp.path().join("repo");
     init_repo(&repo);
-    std::fs::remove_file(repo.join("AGENTS.md")).unwrap();
 
     Command::cargo_bin("provenance")
         .unwrap()
@@ -231,14 +284,12 @@ fn prime_reports_skill_install_status_and_install_command() {
         .success()
         .stdout(predicate::str::contains(r#""skills""#))
         .stdout(predicate::str::contains(r#""installed": false"#))
-        .stdout(predicate::str::contains(
-            "provenance skills install --target agents-md",
-        ));
+        .stdout(predicate::str::contains("provenance skills install"));
 
     Command::cargo_bin("provenance")
         .unwrap()
         .current_dir(&repo)
-        .args(["skills", "install", "--target", "agents-md"])
+        .args(["skills", "install", "--copy"])
         .assert()
         .success();
 
@@ -259,11 +310,44 @@ fn prime_reports_skill_install_status_and_install_command() {
 }
 
 #[test]
+fn install_status_uses_canonical_agents_skill_files_as_source_of_truth() {
+    let temp = tempfile::tempdir().unwrap();
+    let repo = temp.path().join("repo");
+    init_repo(&repo);
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .current_dir(&repo)
+        .args(["skills", "install", "--copy"])
+        .assert()
+        .success();
+    std::fs::remove_file(repo.join(".agents/skills/provenance-fork-tournament/SKILL.md")).unwrap();
+    assert!(repo
+        .join(".claude/skills/provenance-fork-tournament/SKILL.md")
+        .exists());
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "prime",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(r#""installed": false"#))
+        .stdout(predicate::str::contains("provenance-fork-tournament"));
+}
+
+#[test]
 fn shaping_and_ideation_commands_emit_suppressible_skill_install_hint() {
     let temp = tempfile::tempdir().unwrap();
     let repo = temp.path().join("repo");
     init_repo(&repo);
-    std::fs::remove_file(repo.join("AGENTS.md")).unwrap();
 
     Command::cargo_bin("provenance")
         .unwrap()
@@ -280,7 +364,7 @@ fn shaping_and_ideation_commands_emit_suppressible_skill_install_hint() {
         .assert()
         .success()
         .stderr(predicate::str::contains(
-            "hint: provenance skills are not installed; run `provenance skills install --target agents-md`",
+            "hint: provenance skills are not installed; run `provenance skills install`",
         ));
 
     Command::cargo_bin("provenance")
@@ -298,7 +382,7 @@ fn shaping_and_ideation_commands_emit_suppressible_skill_install_hint() {
         .assert()
         .success()
         .stderr(predicate::str::contains(
-            "hint: provenance skills are not installed; run `provenance skills install --target agents-md`",
+            "hint: provenance skills are not installed; run `provenance skills install`",
         ));
 
     Command::cargo_bin("provenance")

@@ -18,13 +18,14 @@ provenance check --format json
 Agent-facing commands support JSON output for deterministic parsing.
 
 Skill distribution commands embed the top-level `skills/*/SKILL.md` product skills in the
-binary: `provenance skills list --format json`, `provenance skills show fork-tournament`,
-and `provenance skills install --target claude|opencode|agents-md [--global] [--force]
---format json`. Local installs write `.claude/skills/`, `.agents/skills/`, or an
-`AGENTS.md` managed section in the current directory; `provenance init` also injects the
-managed `AGENTS.md` section into a new repo. `provenance prime` reports whether those
-skills are installed and prints the repo-root install command; shaping/ideation commands
-emit a non-blocking stderr hint when skills are missing, suppressible with `--quiet`.
+binary: `provenance skills list --format json`,
+`provenance skills show provenance-fork-tournament`, and
+`provenance skills install [--global] [--copy] [--force] --format json`. Local installs
+write canonical skill files to `.agents/skills/` and link them into `.claude/skills/`;
+`--copy` writes Claude skill directories instead of symlinks. `provenance prime` reports
+whether the canonical skills are installed and prints the repo-root install command;
+shaping/ideation commands emit a non-blocking stderr hint when skills are missing,
+suppressible with `--quiet`.
 
 Graph edge commands: `edges create --type references|refines_into|depends_on|contradicts|supersedes|needs|resolves|spawns|produces --from-type source|requirement|resolution|rule --from-id <id> --to-type source|requirement|resolution|rule --to-id <id>`, `edges list`, and `edges delete --id <edge-id>`. Creation validates edge type/endpoints and requires both endpoint records to exist.
 
