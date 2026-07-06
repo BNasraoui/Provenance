@@ -123,6 +123,9 @@ Landing an answer as a bare answered-question when it implies resolutions, rules
 requirements **starves the graph**. The dialogue itself persists as a Thread on the
 requirement; candidate artifacts land as **proposals** for human promotion (see below).
 
+Every statement landed this way — resolution, rule, requirement, or source — follows the
+specificity discipline in the `provenance-grounded-writing` skill before it lands, not only at the leaf.
+
 ## Fork tournaments (`prototype`)
 
 A prototype's job is to **raise the fidelity of the discussion** — a cheap, concrete

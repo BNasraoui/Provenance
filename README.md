@@ -36,7 +36,10 @@ provenance prime
 | `provenance graph <requirement>` | Show the neighbourhood of a requirement |
 | `provenance traceability <rule>` | Walk a rule back to the decision and requirement behind it |
 | `provenance coverage scan --path .` | Match `@provenance` code annotations against rules |
-| `provenance skills install --target claude` | Install the bundled agent skills (`shaping`, `fork-tournament`, `swarm-backtrace`) |
+| `provenance skills install` | Install the bundled agent skills (`provenance-shaping`, `provenance-fork-tournament`, `provenance-swarm-backtrace`, `provenance-grounded-writing`) |
+
+The repository uses the `skills/<name>/SKILL.md` layout, so the bundled skills can also
+be installed through the skills.sh ecosystem with `npx skills add <owner/repo>`.
 
 ### Documentation
 
