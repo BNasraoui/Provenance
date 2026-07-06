@@ -130,6 +130,55 @@ fn skills_install_copy_flag_copies_claude_skills_instead_of_symlinking() {
 }
 
 #[test]
+#[cfg(unix)]
+fn skills_install_copy_replaces_own_symlink_but_foreign_symlink_requires_force() {
+    let dir = tempfile::tempdir().unwrap();
+    let skill = "provenance-shaping";
+    let link = dir.path().join(".claude/skills").join(skill);
+
+    // Default install, then --copy: our own canonical symlink is replaced
+    // with a real directory without needing --force.
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .current_dir(dir.path())
+        .args(["skills", "install", "--format", "json"])
+        .assert()
+        .success();
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .current_dir(dir.path())
+        .args(["skills", "install", "--copy", "--format", "json"])
+        .assert()
+        .success();
+    let metadata = std::fs::symlink_metadata(&link).unwrap();
+    assert!(metadata.is_dir());
+    assert!(!metadata.file_type().is_symlink());
+
+    // A foreign symlink is not silently destroyed.
+    std::fs::remove_dir_all(&link).unwrap();
+    std::os::unix::fs::symlink("../../elsewhere", &link).unwrap();
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .current_dir(dir.path())
+        .args(["skills", "install", "--copy", "--format", "json"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("rerun with --force"));
+    assert_eq!(
+        std::fs::read_link(&link).unwrap(),
+        PathBuf::from("../../elsewhere")
+    );
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .current_dir(dir.path())
+        .args(["skills", "install", "--copy", "--force", "--format", "json"])
+        .assert()
+        .success();
+    assert!(std::fs::symlink_metadata(&link).unwrap().is_dir());
+}
+
+#[test]
 fn skills_install_is_idempotent_and_requires_force_for_canonical_drift() {
     let dir = tempfile::tempdir().unwrap();
     let installed = dir

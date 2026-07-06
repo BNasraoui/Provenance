@@ -217,9 +217,11 @@ fn install_claude_symlink_or_copy(
                     "updated",
                 );
             }
+            let reason = format!("{} already exists as a directory", link_path.display());
             return Ok(ClaudeInstall::CopyFallback {
-                report: copy_skill_dir(skill, canonical_dir, claude_dir, force)?,
-                reason: format!("{} already exists as a directory", link_path.display()),
+                report: copy_skill_dir(skill, canonical_dir, claude_dir, force)
+                    .with_context(|| reason.clone())?,
+                reason,
             });
         }
 
@@ -262,6 +264,8 @@ fn create_symlink_or_copy(
     }
     match create_dir_symlink(target, link_path) {
         Ok(()) => Ok(ClaudeInstall::Symlink(file_report(link_path, status))),
+        // Callers only reach this with link_path absent or already cleared,
+        // so the copy needs no overwrite permission: force stays false.
         Err(error) => Ok(ClaudeInstall::CopyFallback {
             report: copy_skill_dir(skill, canonical_dir, claude_dir, false)
                 .with_context(|| format!("failed to copy after symlink error: {error}"))?,
@@ -290,6 +294,15 @@ fn copy_skill_dir(
     let destination = claude_dir.join(name);
     if let Ok(metadata) = std::fs::symlink_metadata(&destination) {
         if metadata.file_type().is_symlink() {
+            // Replacing our own canonical symlink with a copy keeps identical
+            // content, so it needs no --force; anything else is foreign.
+            let current_target = std::fs::read_link(&destination)?;
+            anyhow::ensure!(
+                force || current_target == relative_claude_target(name),
+                "{} is a symlink to {}; rerun with --force to replace it with a copy",
+                destination.display(),
+                current_target.display()
+            );
             std::fs::remove_file(&destination)?;
         } else if !metadata.is_dir() {
             anyhow::ensure!(
