@@ -1,5 +1,5 @@
 ---
-name: fork-tournament
+name: provenance-fork-tournament
 description: Run a fork tournament when a shaping session hits a genuine design fork — mutually exclusive directions, expensive to reverse, and the human's preference unknowable without concrete artifacts to react to. Implements the `prototype` resolution method from docs/shaping.md - spawn stance-based agents producing competing artifacts as proposals (phase 1, end session), then present them for human disposal and land the decision as a Resolution (phase 2).
 ---
 
@@ -160,7 +160,9 @@ The promotion gate, with a clock. This is a grill-shaped turn against the artifa
    ```
 
    One `--input-type/--input-reference/--input-summary` triple **per competing
-   proposal** — this is what keeps grafted ideas traceable to their origin proposal.
+   proposal** — this is what keeps grafted ideas traceable to their origin proposal. Run
+   `--position` and `--rationale` through the `provenance-grounded-writing` skill's naming test before
+   landing.
 
 4. **Dispose of every proposal** — winner accepted with the resolution as canonical
    artifact; losers rejected (rationale names the superseding resolution — see Gaps):
