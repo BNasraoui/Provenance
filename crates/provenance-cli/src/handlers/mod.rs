@@ -1,0 +1,218 @@
+use crate::cli::Command;
+
+mod boundaries;
+mod common;
+mod contributions;
+mod coverage;
+mod docs;
+mod domains;
+mod edges;
+mod export;
+mod gaps;
+mod graph;
+mod health;
+mod impact;
+mod import;
+mod materialize;
+mod merge_jsonl;
+mod orphans;
+mod prime;
+mod promotion_decisions;
+mod proposals;
+mod questions;
+mod repo;
+mod requirements;
+mod resolutions;
+mod rules;
+mod service_bindings;
+mod services;
+mod skills;
+mod sources;
+mod stale;
+mod synthesis_packets;
+mod thread;
+mod topics;
+mod traceability;
+mod wiki;
+
+#[allow(clippy::redundant_pub_crate)]
+pub(super) use export::{export_scope, ScopeExport};
+
+#[allow(clippy::too_many_lines)]
+#[allow(clippy::redundant_pub_crate)]
+pub(super) async fn dispatch(command: Command, quiet: bool) -> anyhow::Result<()> {
+    match command {
+        Command::Init {
+            path,
+            scope,
+            path_prefix,
+        } => {
+            repo::init(path, scope, path_prefix)?;
+        }
+        Command::Check { repo, format } => {
+            repo::check(repo, format)?;
+        }
+        Command::Docs { command } => {
+            docs::handle(command).await?;
+        }
+        Command::Wiki { command } => {
+            wiki::handle(command).await?;
+        }
+        Command::Materialize { repo, format } => {
+            materialize::handle(repo, format).await?;
+        }
+        Command::Sources { command } => {
+            sources::handle(command)?;
+        }
+        Command::Requirements { command } => {
+            requirements::handle(command)?;
+        }
+        Command::Edges { command } => {
+            edges::handle(command)?;
+        }
+        Command::Domains { command } => {
+            domains::handle(command)?;
+        }
+        Command::Boundaries { command } => {
+            boundaries::handle(command)?;
+        }
+        Command::Topics { command } => {
+            topics::handle(command)?;
+        }
+        Command::Questions { command } => {
+            questions::handle(command, quiet)?;
+        }
+        Command::Graph {
+            requirement_id,
+            repo,
+            scope,
+            format,
+        } => {
+            graph::handle(requirement_id, repo, scope, format)?;
+        }
+        Command::Resolutions { command } => {
+            resolutions::handle(command)?;
+        }
+        Command::Rules { command } => {
+            rules::handle(command)?;
+        }
+        Command::Services { command } => {
+            services::handle(command)?;
+        }
+        Command::ServiceBindings { command } => {
+            service_bindings::handle(command)?;
+        }
+        Command::Traceability {
+            rule_id,
+            repo,
+            scope,
+            format,
+        } => {
+            traceability::handle(rule_id, repo, scope, format)?;
+        }
+        Command::Gaps {
+            repo,
+            scope,
+            format,
+        } => {
+            gaps::handle(repo, scope, format)?;
+        }
+        Command::Thread { command } => {
+            thread::handle(command)?;
+        }
+        Command::Contributions { command } => {
+            contributions::handle(command, quiet)?;
+        }
+        Command::SynthesisPackets { command } => {
+            synthesis_packets::handle(command, quiet)?;
+        }
+        Command::Proposals { command } => {
+            proposals::handle(command, quiet)?;
+        }
+        Command::PromotionDecisions { command } => {
+            promotion_decisions::handle(command)?;
+        }
+        Command::Prime {
+            repo,
+            scope,
+            format,
+            include_threads,
+        } => {
+            prime::handle(repo, scope, format, include_threads)?;
+        }
+        Command::Impact {
+            id,
+            repo,
+            scope,
+            node_type,
+            max_hops,
+            follow_indirect,
+            format,
+        } => {
+            impact::handle(
+                id,
+                repo,
+                scope,
+                &node_type,
+                max_hops,
+                follow_indirect,
+                format,
+            )?;
+        }
+        Command::Stale {
+            repo,
+            scope,
+            format,
+            ..
+        } => {
+            stale::handle(repo, scope, format)?;
+        }
+        Command::Health {
+            repo,
+            scope,
+            format,
+        } => {
+            health::handle(repo, scope, format)?;
+        }
+        Command::Orphans {
+            repo,
+            scope,
+            format,
+        } => {
+            orphans::handle(repo, scope, format)?;
+        }
+        Command::Coverage { command } => {
+            coverage::handle(command)?;
+        }
+        Command::Skills { command } => {
+            skills::handle(command)?;
+        }
+        Command::Export {
+            repo,
+            scope,
+            format,
+            output,
+        } => {
+            export::handle(repo, scope, format, output)?;
+        }
+        Command::Import {
+            repo,
+            scope,
+            input,
+            dry_run,
+            format,
+        } => {
+            import::handle(repo, scope, input, dry_run, format)?;
+        }
+        Command::MergeJsonl {
+            base,
+            ours,
+            theirs,
+            output,
+            format,
+        } => {
+            merge_jsonl::handle(&base, &ours, &theirs, output, format)?;
+        }
+    }
+    Ok(())
+}
