@@ -1,5 +1,5 @@
 ---
-name: swarm-backtrace
+name: provenance-swarm-backtrace
 description: Reverse-engineer candidate requirements from an existing codebase with a multi-agent swarm. Use when the user wants to extract, mine, backtrace, or reverse-engineer requirements or rules from existing code, bootstrap a Provenance graph from a legacy system, or asks "what must be true for this code to be correct". Lands everything as proposals (promotion_state=proposed) against a commit-pinned source — never as active requirements.
 ---
 
@@ -90,7 +90,9 @@ invariant, in domain language, testable without reading the source:
 The same requirement arrives phrased differently from different partitions. Cluster by
 meaning, not wording. For each cluster:
 
-- Write one merged statement (the sharpest phrasing, or a new one).
+- Write one merged statement (the sharpest phrasing, or a new one). Run it through the
+  `provenance-grounded-writing` skill's climbing test first — merging partition candidates into one
+  statement is exactly where capability-list language creeps in.
 - **Keep ALL evidence sites from every duplicate — never pick one winner.** Multiple
   independent sites are the strongest signal the behavior is intentional; discarding
   them destroys exactly the information the human needs.

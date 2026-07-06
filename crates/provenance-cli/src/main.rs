@@ -1185,11 +1185,11 @@ async fn main() -> anyhow::Result<()> {
             SkillsCommand::List { format } => output::print(format, &skills::list()?)?,
             SkillsCommand::Show { name } => print!("{}", skills::show(&name)?),
             SkillsCommand::Install {
-                target,
                 global,
+                copy,
                 force,
                 format,
-            } => output::print(format, &skills::install(target, global, force)?)?,
+            } => output::print(format, &skills::install(global, force, copy)?)?,
         },
         Command::Export {
             repo,

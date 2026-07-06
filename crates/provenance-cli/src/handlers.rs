@@ -1,6 +1,5 @@
 use crate::cli::Status;
 use crate::output::{self, OutputFormat};
-use crate::skills;
 use camino::Utf8PathBuf;
 use provenance_core::{Manifest, RepoPathPrefix, ScopeId};
 use provenance_store::{layout::ProvenanceLayout, state_store::StateStore};
@@ -337,7 +336,6 @@ pub fn render_coverage(
 }
 
 pub fn init(path: Utf8PathBuf, scope: String, path_prefix: Utf8PathBuf) -> anyhow::Result<()> {
-    let agents_root = path.clone();
     let layout = ProvenanceLayout::new(path);
     std::fs::create_dir_all(layout.scopes_dir())?;
     std::fs::create_dir_all(layout.edges_dir())?;
@@ -348,7 +346,6 @@ pub fn init(path: Utf8PathBuf, scope: String, path_prefix: Utf8PathBuf) -> anyho
         layout.manifest_path(),
         format!("{}\n", serde_json::to_string_pretty(&manifest)?),
     )?;
-    skills::install_agents_md_at(agents_root.as_std_path(), false)?;
     Ok(())
 }
 
