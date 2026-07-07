@@ -18,7 +18,7 @@ use provenance_core::{
     Edge, EdgeType, Message, NodeType, Requirement, Resolution, ResolutionInput, Rule, Source,
     StableId, Thread,
 };
-use provenance_store::cache::{compute_gaps, GapGraph, GapItem, GapKind};
+use provenance_store::cache::{compute_gaps, node_type_word, GapGraph, GapItem, GapKind};
 use std::collections::BTreeSet;
 
 /// Loads the scope's state from disk and assembles the wiki corpus, using
@@ -162,11 +162,43 @@ impl<'a> Assembler<'a> {
         }
     }
 
+    fn mirrored_contradiction_notice(
+        gap: &GapItem,
+        node_type: NodeType,
+        node_id: &str,
+    ) -> GapNotice {
+        GapNotice {
+            kind: gap.kind,
+            detail: format!(
+                "{} {} -> {} {}: {}",
+                node_type_word(node_type),
+                node_id,
+                node_type_word(gap.node_type),
+                gap.node_id,
+                gap.reason
+            ),
+        }
+    }
+
     fn gaps_for(&self, node_type: NodeType, node_id: &StableId) -> Vec<GapNotice> {
         self.gaps
             .iter()
-            .filter(|gap| gap.node_type == node_type && gap.node_id == node_id.as_str())
-            .map(Self::gap_notice)
+            .filter_map(|gap| {
+                if gap.node_type == node_type && gap.node_id == node_id.as_str() {
+                    Some(Self::gap_notice(gap))
+                } else if gap.kind == GapKind::UnresolvedContradictsPair
+                    && gap.related_node_type == Some(node_type)
+                    && gap.related_node_id.as_deref() == Some(node_id.as_str())
+                {
+                    Some(Self::mirrored_contradiction_notice(
+                        gap,
+                        node_type,
+                        node_id.as_str(),
+                    ))
+                } else {
+                    None
+                }
+            })
             .collect()
     }
 
@@ -176,7 +208,11 @@ impl<'a> Assembler<'a> {
             .filter(|gap| {
                 !matches!(
                     gap.kind,
-                    GapKind::OrphanRule | GapKind::OrphanResolution | GapKind::UnreferencedSource
+                    GapKind::OrphanRule
+                        | GapKind::OrphanResolution
+                        | GapKind::UnreferencedSource
+                        | GapKind::OpenQuestion
+                        | GapKind::UnexploredTopic
                 )
             })
             .map(Self::gap_notice)
@@ -780,10 +816,11 @@ mod tests {
     use crate::wiki::model::{CorpusCounts, GapKind, PageKind};
     use camino::Utf8PathBuf;
     use provenance_core::{
-        Edge, EdgeType, Message, MessageRole, NodeType, Requirement, RequirementStatus, Resolution,
-        ResolutionInput, ResolutionInputType, ResolutionStatus, Rule, RuleModality, RuleSeverity,
-        RuleStatus, SchemaVersion, ScopeId, Source, SourceReference, SourceType, StableId, Thread,
-        ThreadParent, ThreadStatus,
+        Edge, EdgeType, Message, MessageRole, NodeType, Question, QuestionStatus, Requirement,
+        RequirementStatus, Resolution, ResolutionInput, ResolutionInputType, ResolutionMethod,
+        ResolutionStatus, Rule, RuleModality, RuleSeverity, RuleStatus, SchemaVersion, ScopeId,
+        Source, SourceReference, SourceType, StableId, Thread, ThreadParent, ThreadStatus, Topic,
+        TopicStatus,
     };
 
     fn sid(value: &str) -> StableId {
@@ -878,6 +915,43 @@ mod tests {
             superseded_by: None,
             origin_thread: None,
             origin_message: None,
+        }
+    }
+
+    fn topic(id: &str, requirement_id: &str, status: TopicStatus) -> Topic {
+        Topic {
+            schema_version: SchemaVersion(1),
+            scope_id: scope_id(),
+            id: sid(id),
+            requirement_id: sid(requirement_id),
+            title: id.to_string(),
+            status,
+            claimed_by: None,
+            claimed_at: None,
+            links: Vec::new(),
+        }
+    }
+
+    fn question(
+        id: &str,
+        topic_id: &str,
+        requirement_id: &str,
+        status: QuestionStatus,
+    ) -> Question {
+        Question {
+            schema_version: SchemaVersion(1),
+            scope_id: scope_id(),
+            id: sid(id),
+            topic_id: sid(topic_id),
+            requirement_id: sid(requirement_id),
+            question: "What remains unresolved?".to_string(),
+            resolution_method: ResolutionMethod::Grill,
+            status,
+            claimed_by: None,
+            claimed_at: None,
+            answer: None,
+            links: Vec::new(),
+            resolution_id: None,
         }
     }
 
@@ -1060,6 +1134,21 @@ mod tests {
         gaps.iter().map(|gap| gap.kind).collect()
     }
 
+    fn compute_state_gaps(state: &ScopeExport) -> Vec<GapItem> {
+        let scope = scope_id();
+        compute_gaps(&GapGraph {
+            scope: &scope,
+            sources: &state.sources,
+            requirements: &state.requirements,
+            resolutions: &state.resolutions,
+            rules: &state.rules,
+            topics: &state.topics,
+            questions: &state.questions,
+            edges: &state.edges,
+            threads: &state.threads,
+        })
+    }
+
     #[test]
     fn build_corpus_on_a_truly_empty_scope_is_honestly_empty() {
         let resolver = LinkResolver::new(None);
@@ -1144,6 +1233,37 @@ mod tests {
             orphan_ids(&corpus.index.orphans.sources),
             vec!["source_unused"]
         );
+    }
+
+    #[test]
+    fn index_filters_question_and_topic_frontier_gaps_only() {
+        let mut state = empty_state();
+        state.requirements = vec![requirement(
+            "req_frontier",
+            "Platform shall settle frontier questions",
+            RequirementStatus::Active,
+            vec![],
+        )];
+        state.topics = vec![topic("topic_open", "req_frontier", TopicStatus::Open)];
+        state.questions = vec![question(
+            "question_open",
+            "topic_open",
+            "req_frontier",
+            QuestionStatus::Open,
+        )];
+        let resolver = LinkResolver::new(None);
+        let corpus = build_corpus(&state, &resolver);
+
+        let index_kinds = gap_kinds(&corpus.index.gaps);
+        assert!(!index_kinds.contains(&GapKind::OpenQuestion));
+        assert!(!index_kinds.contains(&GapKind::UnexploredTopic));
+
+        let all_gap_kinds: Vec<GapKind> = compute_state_gaps(&state)
+            .iter()
+            .map(|gap| gap.kind)
+            .collect();
+        assert!(all_gap_kinds.contains(&GapKind::OpenQuestion));
+        assert!(all_gap_kinds.contains(&GapKind::UnexploredTopic));
     }
 
     #[test]
@@ -1310,6 +1430,58 @@ mod tests {
             page.decisions.is_empty(),
             "resolution 'dup_id' has no real Resolves edge and must not appear as a decision"
         );
+    }
+
+    #[test]
+    fn contradiction_gap_surfaces_on_both_requirement_pages_without_duplicate_frontier_item() {
+        let mut state = empty_state();
+        state.requirements = vec![
+            requirement(
+                "req_left",
+                "Platform shall prefer the left branch",
+                RequirementStatus::Active,
+                vec![],
+            ),
+            requirement(
+                "req_right",
+                "Platform shall prefer the right branch",
+                RequirementStatus::Active,
+                vec![],
+            ),
+        ];
+        state.edges = vec![edge(
+            EdgeType::Contradicts,
+            (NodeType::Requirement, "req_left"),
+            (NodeType::Requirement, "req_right"),
+        )];
+        let resolver = LinkResolver::new(None);
+        let corpus = build_corpus(&state, &resolver);
+
+        let left_page = requirement_page(&corpus, "req_left");
+        let left_contradictions: Vec<_> = left_page
+            .gaps
+            .iter()
+            .filter(|gap| gap.kind == GapKind::UnresolvedContradictsPair)
+            .collect();
+        assert_eq!(left_contradictions.len(), 1);
+        assert!(left_contradictions[0].detail.contains("req_right"));
+
+        let right_page = requirement_page(&corpus, "req_right");
+        let right_contradictions: Vec<_> = right_page
+            .gaps
+            .iter()
+            .filter(|gap| gap.kind == GapKind::UnresolvedContradictsPair)
+            .collect();
+        assert_eq!(right_contradictions.len(), 1);
+        assert!(right_contradictions[0]
+            .detail
+            .contains("requirement req_right -> requirement req_left"));
+
+        let pair_count = compute_state_gaps(&state)
+            .iter()
+            .filter(|gap| gap.kind == GapKind::UnresolvedContradictsPair)
+            .count();
+        assert_eq!(pair_count, 1);
     }
 
     fn resolution_page<'a>(

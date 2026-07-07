@@ -638,18 +638,23 @@ impl GapInspector<'_, '_> {
     }
 
     fn add_question_gaps(&self, gaps: &mut Vec<GapItem>) {
-        for question in self
-            .graph
-            .questions
-            .iter()
-            .filter(|question| question.status == QuestionStatus::Open)
-        {
+        for question in self.graph.questions.iter().filter(|question| {
+            matches!(
+                question.status,
+                QuestionStatus::Open | QuestionStatus::BlockedOnHuman
+            )
+        }) {
+            let reason = match question.status {
+                QuestionStatus::Open => "open question",
+                QuestionStatus::BlockedOnHuman => "blocked_on_human question",
+                QuestionStatus::Answered => unreachable!("answered questions are filtered out"),
+            };
             gaps.push(
                 GapItem::new(
                     GapKind::OpenQuestion,
                     NodeType::Question,
                     &question.id,
-                    "open question",
+                    reason,
                 )
                 .with_requirement(&question.requirement_id),
             );
@@ -681,5 +686,294 @@ fn ordered_pair<'a>(left: &'a StableId, right: &'a StableId) -> (&'a str, &'a st
         (left.as_str(), right.as_str())
     } else {
         (right.as_str(), left.as_str())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use provenance_core::{
+        Edge, ResolutionMethod, RuleSeverity, RuleStatus, SchemaVersion, SourceReference,
+        SourceType,
+    };
+
+    fn sid(value: &str) -> StableId {
+        StableId::new(value).unwrap()
+    }
+
+    fn scope_id() -> ScopeId {
+        ScopeId::new("default").unwrap()
+    }
+
+    fn requirement(id: &str) -> Requirement {
+        Requirement {
+            schema_version: SchemaVersion(1),
+            scope_id: scope_id(),
+            id: sid(id),
+            statement: format!("{id} statement"),
+            description: None,
+            fog: None,
+            status: RequirementStatus::Active,
+            domain_id: None,
+            source_refs: Vec::new(),
+            origin_thread: None,
+            origin_message: None,
+        }
+    }
+
+    fn resolution(id: &str) -> Resolution {
+        Resolution {
+            schema_version: SchemaVersion(1),
+            scope_id: scope_id(),
+            id: sid(id),
+            title: id.to_string(),
+            position: "Adopt the decision".to_string(),
+            rationale: "It resolves the pair".to_string(),
+            status: ResolutionStatus::Draft,
+            context: None,
+            enforcement: None,
+            confidence: None,
+            inputs: Vec::new(),
+            made_by: None,
+            approved_by: None,
+            approved_at: None,
+            superseded_by: None,
+            review_on: None,
+            review_triggers: serde_json::json!([]),
+            origin_thread: None,
+            origin_message: None,
+        }
+    }
+
+    fn rule(id: &str) -> Rule {
+        Rule {
+            schema_version: SchemaVersion(1),
+            scope_id: scope_id(),
+            id: sid(id),
+            rule_code: id.to_string(),
+            name: None,
+            description: None,
+            statement: "Rule statement".to_string(),
+            status: RuleStatus::Active,
+            severity: RuleSeverity::High,
+            rule_type: None,
+            modality: None,
+            confidence: None,
+            extraction_method: None,
+            source_document: None,
+            source_section: None,
+            origin_thread: None,
+            origin_message: None,
+            expression: serde_json::json!({}),
+            inputs: serde_json::json!([]),
+        }
+    }
+
+    fn topic(id: &str, status: TopicStatus) -> Topic {
+        Topic {
+            schema_version: SchemaVersion(1),
+            scope_id: scope_id(),
+            id: sid(id),
+            requirement_id: sid("req_topic"),
+            title: id.to_string(),
+            status,
+            claimed_by: None,
+            claimed_at: None,
+            links: Vec::new(),
+        }
+    }
+
+    fn question(id: &str, topic_id: &str, status: QuestionStatus) -> Question {
+        Question {
+            schema_version: SchemaVersion(1),
+            scope_id: scope_id(),
+            id: sid(id),
+            topic_id: sid(topic_id),
+            requirement_id: sid("req_topic"),
+            question: "What remains?".to_string(),
+            resolution_method: ResolutionMethod::Grill,
+            status,
+            claimed_by: None,
+            claimed_at: None,
+            answer: (status == QuestionStatus::Answered).then(|| "Done".to_string()),
+            links: Vec::new(),
+            resolution_id: None,
+        }
+    }
+
+    fn source(id: &str) -> Source {
+        Source {
+            schema_version: SchemaVersion(1),
+            scope_id: scope_id(),
+            id: sid(id),
+            name: id.to_string(),
+            source_type: SourceType::Policy,
+            url: None,
+            reference: None,
+            commit_pin: None,
+            effective_date: None,
+            review_date: None,
+            superseded_by: None,
+            origin_thread: None,
+            origin_message: None,
+        }
+    }
+
+    fn edge(edge_type: EdgeType, from: (NodeType, &str), to: (NodeType, &str)) -> Edge {
+        Edge {
+            schema_version: SchemaVersion(1),
+            scope_id: scope_id(),
+            id: Edge::stable_id(edge_type, from.0, &sid(from.1), to.0, &sid(to.1)).unwrap(),
+            edge_type,
+            from_type: from.0,
+            from_id: sid(from.1),
+            to_type: to.0,
+            to_id: sid(to.1),
+            label: None,
+        }
+    }
+
+    fn compute_for(
+        sources: &[Source],
+        requirements: &[Requirement],
+        resolutions: &[Resolution],
+        rules: &[Rule],
+        topics: &[Topic],
+        questions: &[Question],
+        edges: &[Edge],
+    ) -> Vec<GapItem> {
+        let scope = scope_id();
+        let threads = Vec::new();
+        compute_gaps(&GapGraph {
+            scope: &scope,
+            sources,
+            requirements,
+            resolutions,
+            rules,
+            topics,
+            questions,
+            edges,
+            threads: &threads,
+        })
+    }
+
+    fn count_kind(gaps: &[GapItem], kind: GapKind) -> usize {
+        gaps.iter().filter(|gap| gap.kind == kind).count()
+    }
+
+    #[test]
+    fn shared_resolving_resolution_suppresses_unresolved_contradiction_gap() {
+        let requirements = vec![requirement("req_left"), requirement("req_right")];
+        let resolutions = vec![resolution("res_shared")];
+        let edges = vec![
+            edge(
+                EdgeType::Contradicts,
+                (NodeType::Requirement, "req_left"),
+                (NodeType::Requirement, "req_right"),
+            ),
+            edge(
+                EdgeType::Resolves,
+                (NodeType::Resolution, "res_shared"),
+                (NodeType::Requirement, "req_left"),
+            ),
+            edge(
+                EdgeType::Resolves,
+                (NodeType::Resolution, "res_shared"),
+                (NodeType::Requirement, "req_right"),
+            ),
+        ];
+
+        let gaps = compute_for(&[], &requirements, &resolutions, &[], &[], &[], &edges);
+
+        assert_eq!(count_kind(&gaps, GapKind::UnresolvedContradictsPair), 0);
+    }
+
+    #[test]
+    fn supersedes_edge_suppresses_unresolved_contradiction_gap() {
+        let requirements = vec![requirement("req_left"), requirement("req_right")];
+        let edges = vec![
+            edge(
+                EdgeType::Contradicts,
+                (NodeType::Requirement, "req_left"),
+                (NodeType::Requirement, "req_right"),
+            ),
+            edge(
+                EdgeType::Supersedes,
+                (NodeType::Requirement, "req_right"),
+                (NodeType::Requirement, "req_left"),
+            ),
+        ];
+
+        let gaps = compute_for(&[], &requirements, &[], &[], &[], &[], &edges);
+
+        assert_eq!(count_kind(&gaps, GapKind::UnresolvedContradictsPair), 0);
+    }
+
+    #[test]
+    fn answered_questions_and_explored_topics_are_not_frontier_gaps() {
+        let requirements = vec![requirement("req_topic")];
+        let topics = vec![topic("topic_explored", TopicStatus::Explored)];
+        let questions = vec![question(
+            "question_answered",
+            "topic_explored",
+            QuestionStatus::Answered,
+        )];
+
+        let gaps = compute_for(&[], &requirements, &[], &[], &topics, &questions, &[]);
+
+        assert_eq!(count_kind(&gaps, GapKind::OpenQuestion), 0);
+        assert_eq!(count_kind(&gaps, GapKind::UnexploredTopic), 0);
+    }
+
+    #[test]
+    fn rule_produced_by_missing_resolution_is_orphaned_and_has_dangling_edge_gap() {
+        let rules = vec![rule("rule_orphaned")];
+        let edges = vec![edge(
+            EdgeType::Produces,
+            (NodeType::Resolution, "res_missing"),
+            (NodeType::Rule, "rule_orphaned"),
+        )];
+
+        let gaps = compute_for(&[], &[], &[], &rules, &[], &[], &edges);
+
+        assert!(gaps.iter().any(|gap| {
+            gap.kind == GapKind::OrphanRule
+                && gap.node_type == NodeType::Rule
+                && gap.node_id == "rule_orphaned"
+        }));
+        assert!(gaps.iter().any(|gap| {
+            gap.kind == GapKind::DanglingReference
+                && gap.node_type == NodeType::Resolution
+                && gap.node_id == "res_missing"
+                && gap.reason.contains("edge")
+        }));
+    }
+
+    #[test]
+    fn unresolved_contradiction_pair_is_reported_once_for_bidirectional_edges() {
+        let sources = vec![source("source_anchor")];
+        let mut requirements = vec![requirement("req_left"), requirement("req_right")];
+        for requirement in &mut requirements {
+            requirement.source_refs = vec![SourceReference {
+                source_id: sid("source_anchor"),
+                clause: None,
+            }];
+        }
+        let edges = vec![
+            edge(
+                EdgeType::Contradicts,
+                (NodeType::Requirement, "req_left"),
+                (NodeType::Requirement, "req_right"),
+            ),
+            edge(
+                EdgeType::Contradicts,
+                (NodeType::Requirement, "req_right"),
+                (NodeType::Requirement, "req_left"),
+            ),
+        ];
+
+        let gaps = compute_for(&sources, &requirements, &[], &[], &[], &[], &edges);
+
+        assert_eq!(count_kind(&gaps, GapKind::UnresolvedContradictsPair), 1);
     }
 }
