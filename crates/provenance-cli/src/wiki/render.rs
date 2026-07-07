@@ -229,6 +229,19 @@ pub fn render_requirement(scope: &str, page: &RequirementPage) -> String {
             resolution_status_word(&decision.status),
         );
     }
+    if !page.siblings.is_empty() {
+        push_section_open(&mut main, "sh-requirement", Some("i-git-branch"), "Related");
+        main.push_str("<div class=\"territory\">\n<div class=\"territory-card requirement\">\n");
+        writeln!(
+            main,
+            "<div class=\"card-head\">{}Related Requirements — {}</div>",
+            icon_svg("i-git-branch"),
+            page.siblings.len()
+        )
+        .expect("writing to a String should not fail");
+        main.push_str(&link_list(&page.siblings));
+        main.push_str("</div>\n</div>\n</section>\n");
+    }
 
     let mut margin = String::new();
     margin.push_str("<h3 class=\"margin-head\">Sources</h3>\n");
@@ -1546,6 +1559,7 @@ mod tests {
                 "req_gap_lines",
                 "Gap lines shall be suppressed when zero",
             )],
+            siblings: vec![],
             sources: vec![SourceCitation {
                 link: link(PageKind::Source, "source_schads", "SCHADS Award mapping"),
                 source_type: SourceType::Document,
@@ -1578,6 +1592,7 @@ mod tests {
             decisions: vec![],
             produced_rules: vec![],
             children: vec![],
+            siblings: vec![],
             sources: vec![],
             gaps: vec![
                 GapNotice {
@@ -1830,6 +1845,49 @@ mod tests {
         assert!(html.contains("on resolution res_split"));
         assert!(html.contains("1 message · active"));
         assert!(html.contains(">Agent</span>"));
+    }
+
+    #[test]
+    fn requirement_page_renders_related_sibling_requirements_after_attribution() {
+        let mut page = requirement_fixture();
+        page.siblings = vec![
+            link(
+                PageKind::Requirement,
+                "req_budget_split",
+                "Budget portions shall reconcile",
+            ),
+            link(
+                PageKind::Requirement,
+                "req_zero_suppression",
+                "Zero claim items shall be suppressed",
+            ),
+        ];
+
+        let html = render_requirement("default", &page);
+        let attribution_pos = html
+            .find("<section class=\"attribution\" aria-label=\"Attribution\">")
+            .unwrap();
+        let related_pos = html
+            .find("<h2 class=\"section-head sh-requirement\"><svg class=\"icon\"><use href=\"#i-git-branch\"/></svg>Related</h2>")
+            .expect("sibling requirements should render in a Related section");
+        assert!(related_pos > attribution_pos);
+        assert!(html.contains(
+            "<div class=\"card-head\"><svg class=\"icon\"><use href=\"#i-git-branch\"/></svg>Related Requirements — 2</div>"
+        ));
+        assert!(html.contains("<ul class=\"link-list\">"));
+        assert!(html.contains(
+            "<a href=\"/requirements/req_budget_split/\">Budget portions shall reconcile</a>"
+        ));
+        assert!(html.contains(
+            "<a href=\"/requirements/req_zero_suppression/\">Zero claim items shall be suppressed</a>"
+        ));
+    }
+
+    #[test]
+    fn requirement_page_omits_related_section_without_siblings() {
+        let html = render_requirement("default", &gappy_requirement_fixture());
+        assert!(!html.contains(">Related</h2>"));
+        assert!(!html.contains("Related Requirements"));
     }
 
     #[test]
