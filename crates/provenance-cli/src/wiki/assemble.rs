@@ -242,7 +242,6 @@ impl<'a> Assembler<'a> {
             return Vec::new();
         }
 
-        let mut seen = BTreeSet::new();
         self.state
             .requirements
             .iter()
@@ -257,7 +256,7 @@ impl<'a> Assembler<'a> {
                         && edge.to_type == NodeType::Requirement
                         && edge.to_id == candidate.id
                 });
-                if has_shared_parent && seen.insert(candidate.id.as_str()) {
+                if has_shared_parent {
                     Some(requirement_link(candidate))
                 } else {
                     None
