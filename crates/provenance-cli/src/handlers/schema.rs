@@ -132,6 +132,7 @@ pub(super) fn schema_for(artifact: IdeationArtifactKind) -> Value {
     })
 }
 
+#[allow(clippy::too_many_lines)]
 fn common_defs() -> Value {
     json!({
         "stableId": {

@@ -2,7 +2,7 @@ use crate::{
     cli::IdeationArtifactKind,
     output::{self, OutputFormat},
 };
-use camino::Utf8PathBuf;
+use camino::Utf8Path;
 use provenance_core::{Contribution, PromotionState, ProposalCard, SchemaVersion, SynthesisPacket};
 use serde::Serialize;
 
@@ -15,10 +15,10 @@ struct ValidationReport {
 
 pub(super) fn handle(
     artifact: IdeationArtifactKind,
-    input: Utf8PathBuf,
+    input: &Utf8Path,
     format: OutputFormat,
 ) -> anyhow::Result<()> {
-    validate_file(artifact, &input)?;
+    validate_file(artifact, input)?;
     output::print(
         format,
         &ValidationReport {
@@ -31,7 +31,7 @@ pub(super) fn handle(
 
 pub(super) fn validate_file(
     artifact: IdeationArtifactKind,
-    input: &Utf8PathBuf,
+    input: &Utf8Path,
 ) -> anyhow::Result<()> {
     let json = std::fs::read_to_string(input)?;
     match artifact {
