@@ -119,56 +119,74 @@ contract: demoted-but-possibly-true claims are kept and marked `unsupported` or
 
 ### 5. Land (inline, serial)
 
-Everything through the output contract shapes (docs/shaping.md, "The output contract"),
-all with `--format json`, orchestrator only:
+Everything lands through the output contract shapes (docs/shaping.md, "The output
+contract"), orchestrator only. Do not stream giant JSON through shell flags. Persist the
+durable run outputs first, validate them, then land the run directory.
 
-1. **Contributions** — one per participant slot (each extractor and each refuter):
+Run directory contract:
 
-   ```sh
-   provenance contributions create --scope <scope> \
-     --id contrib_backtrace_<slot> \
-     --target-type source --target-id source_codebase_<repo>_<short-sha> \
-     --participant-slot extract_<partition> \
-     --stance support \
-     --strongest-finding "<one line>" \
-     --evidence-json '[{"reference_id":"ev_<slug>","evidence_type":"artifact","summary":"<what this line shows>","file_path":"src/auth/session.rs","line":42}]' \
-     --claims-json '[{"claim_id":"claim_<slug>","statement":"<candidate statement>","evidence_type":"artifact","evidence_reference_ids":["ev_<slug>"]}]' \
-     --uncertainty-level low|medium|high \
-     --uncertainty-rationale "<why>"
-   ```
+- `<run-dir>/extractors/<partition>.json` — `<Contribution>` or
+  `{"contribution": <Contribution>}` for each extractor participant slot.
+- `<run-dir>/refuters/<batch>.json` — `<Contribution>` or
+  `{"contribution": <Contribution>}` for each refuter participant slot.
+- `<run-dir>/merge/merged.json` — `{"synthesis_packet": <SynthesisPacket>, "proposals":
+  [<ProposalCard>, ...]}` for the merged candidate set.
 
-   Refuter contributions use `--stance oppose|mixed|needs_more_evidence`,
-   `--challenges-json '[{"claim_id":"...","objection":"..."}]'`, and put speculation in
-   `--unsupported-recommendations-json '[{"recommendation":"...","marker":"unsupported"}]'`.
-   Code evidence is `evidence_type: "artifact"`; hunches are `"unsupported"` or
-   `"exploratory"`.
+Use the CLI schemas while assembling these files:
 
-2. **Synthesis packet** — one per run, targeting the Source. Consensus, contested
-   claims, and minority objections stay separate — never averaged. Surprises that need
-   the human go in `--required-human-decisions-json`; missing-enforcement-path cases go
-   in `--evidence-gaps-json` (set `blocking_promotion` honestly). Uncovered partitions
-   (below) go in `--open-questions-json`.
+```sh
+provenance schema show contribution --format json
+provenance schema show synthesis-packet --format json
+provenance schema show proposal --format json
+```
 
-3. **Proposals** — one per surviving merged candidate:
+`provenance validate` accepts a single full artifact record. Use it on generated records
+before wrapping them, or rely on `land` to validate the run-dir files as it reads them:
 
-   ```sh
-   provenance proposals create --scope <scope> \
-     --id prop_req_<slug> \
-     --proposal-key backtrace/<partition>/<slug> \
-     --proposal-type requirement_candidate \
-     --title "<merged statement>" \
-     --summary "<behavior, confidence 0.NN, intentional-or-accidental note>" \
-     --target-type source --target-id source_codebase_<repo>_<short-sha> \
-     --source-id source_codebase_<repo>_<short-sha> \
-     --evidence-json '[<ALL merged evidence sites>]' \
-     --supporting-claim-id claim_<slug> --supporting-claim-id claim_<other> \
-     --promotion-state proposed
-   ```
+```sh
+provenance validate contribution --input contribution.json --format json
+provenance validate synthesis-packet --input synthesis.json --format json
+provenance validate proposal --input proposal.json --format json
+```
 
-   Use `--proposal-type source_gap` for "this behavior implies a policy/award/spec we
-   don't have", and `question` for candidates that only sharpened into a question.
-   There is no numeric confidence field on proposals — put the score in `--summary` and
-   express it structurally via the contribution's uncertainty rating.
+The landing command reads extractor/refuter contributions plus merge outputs, validates
+schema version and nested IDs, and writes contributions, synthesis packets, and proposals
+serially:
+
+```sh
+provenance swarm-backtrace land --scope <scope> --run-dir <run-dir> --format json
+```
+
+Use `--replace` when intentionally re-landing a regenerated run with the same stable IDs.
+Without `--replace`, existing contribution/synthesis/proposal IDs fail fast.
+
+Contribution records:
+
+- one per participant slot (each extractor and refuter);
+- extractor stance is usually `support`;
+- refuter stance is usually `oppose`, `mixed`, or `needs_more_evidence`;
+- code evidence uses `evidence_type: "artifact"` with `file_path` and `line`;
+- hunches stay in `unsupported_recommendations` as `"unsupported"` or `"exploratory"`.
+
+Synthesis packet:
+
+- one per run, targeting the codebase Source;
+- consensus, contested claims, and minority objections stay separate — never averaged;
+- missing-enforcement-path cases go in `evidence_gaps` with `blocking_promotion` set
+  honestly;
+- uncovered partitions (below) go in `open_questions`.
+
+Proposals:
+
+- one per surviving merged candidate;
+- use `proposal_type: "requirement_candidate"` for behavioral requirements,
+  `"source_gap"` for implied missing policy/spec sources, and `"question"` for candidates
+  that only sharpened into a question;
+- set structured `confidence` on the proposal (`0.0`-`1.0`) instead of burying the score
+  in `summary`;
+- keep ALL merged evidence sites in `traceability.evidence_references`;
+- keep supporting claim links in `traceability.supporting_claim_ids`;
+- every candidate remains `promotion_state: "proposed"` unless a human later disposes it.
 
 **Completeness:** reconcile against the stage-1 partition manifest. Any partition with
 no extractor output — agent failed, context blown, code unreadable — is **logged, never
