@@ -237,6 +237,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn find_gaps_reports_the_frontier_taxonomy() {
         let (_dir, layout, scope) = seeded_layout();
         let store = StateStore::new(layout.clone());
@@ -482,5 +483,55 @@ mod tests {
         ));
         assert!(rendered.contains("- question question_frontier: open question"));
         assert!(rendered.contains("- topic topic_frontier: unexplored topic"));
+    }
+
+    #[test]
+    fn prime_renders_blocked_on_human_questions_with_status() {
+        let (_dir, layout, scope) = seeded_layout();
+        let store = StateStore::new(layout.clone());
+        create_source(&store, &scope, "source_anchor");
+        create_requirement(
+            &store,
+            &scope,
+            "req_blocked_question",
+            RequirementStatus::Active,
+        );
+        attach_source(&store, &scope, "req_blocked_question");
+        store
+            .create_topic(CreateTopicInput {
+                scope_id: scope.clone(),
+                id: sid("topic_blocked"),
+                requirement_id: sid("req_blocked_question"),
+                title: "Blocked topic".to_string(),
+                status: TopicStatus::Open,
+                links: Vec::new(),
+            })
+            .unwrap();
+        store
+            .create_question(CreateQuestionInput {
+                scope_id: scope.clone(),
+                id: sid("question_blocked"),
+                topic_id: sid("topic_blocked"),
+                question: "Which human decision is needed?".to_string(),
+                resolution_method: ResolutionMethod::Grill,
+                status: QuestionStatus::BlockedOnHuman,
+                answer: None,
+                links: Vec::new(),
+                resolution_id: None,
+            })
+            .unwrap();
+
+        let gaps = find_gaps(&layout, &scope).unwrap();
+        let blocked_question = gaps
+            .iter()
+            .find(|gap| gap.kind == GapKind::OpenQuestion && gap.node_id == "question_blocked")
+            .expect("blocked_on_human question should remain visible on the frontier");
+        assert!(blocked_question.reason.contains("blocked_on_human"));
+
+        let view = prime_context(&layout, &scope, false).unwrap();
+        let rendered = render_prime_markdown(&view);
+
+        assert!(rendered.contains("- question question_blocked:"));
+        assert!(rendered.contains("blocked_on_human"));
     }
 }
