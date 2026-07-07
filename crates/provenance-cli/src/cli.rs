@@ -410,6 +410,8 @@ pub enum ContributionsCommand {
         uncertainty_rationale: String,
         #[arg(long, default_value = "[]")]
         open_questions_json: String,
+        #[arg(long)]
+        replace: bool,
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },
@@ -455,6 +457,8 @@ pub enum SynthesisPacketsCommand {
         suggested_artifacts_json: String,
         #[arg(long, default_value = "[]")]
         required_human_decisions_json: String,
+        #[arg(long)]
+        replace: bool,
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },
@@ -504,6 +508,8 @@ pub enum ProposalsCommand {
         duplicate_of: Option<String>,
         #[arg(long)]
         superseded_by: Option<String>,
+        #[arg(long)]
+        replace: bool,
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },

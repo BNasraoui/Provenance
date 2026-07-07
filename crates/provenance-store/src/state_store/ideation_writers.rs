@@ -13,6 +13,21 @@ impl StateStore {
         &self,
         input: CreateContributionInput,
     ) -> anyhow::Result<Contribution> {
+        self.write_contribution(input, false)
+    }
+
+    pub fn upsert_contribution(
+        &self,
+        input: CreateContributionInput,
+    ) -> anyhow::Result<Contribution> {
+        self.write_contribution(input, true)
+    }
+
+    fn write_contribution(
+        &self,
+        input: CreateContributionInput,
+        replace: bool,
+    ) -> anyhow::Result<Contribution> {
         let CreateContributionInput {
             scope_id,
             id,
@@ -53,11 +68,15 @@ impl StateStore {
                 uncertainty,
                 open_questions,
             };
-            anyhow::ensure!(
-                !records.iter().any(|record| record.id == contribution.id),
-                "contribution already exists"
-            );
-            records.push(contribution.clone());
+            if let Some(index) = records
+                .iter()
+                .position(|record| record.id == contribution.id)
+            {
+                anyhow::ensure!(replace, "contribution already exists");
+                records[index] = contribution.clone();
+            } else {
+                records.push(contribution.clone());
+            }
             records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
             Ok(contribution)
         })
@@ -66,6 +85,21 @@ impl StateStore {
     pub fn create_synthesis_packet(
         &self,
         input: CreateSynthesisPacketInput,
+    ) -> anyhow::Result<SynthesisPacket> {
+        self.write_synthesis_packet(input, false)
+    }
+
+    pub fn upsert_synthesis_packet(
+        &self,
+        input: CreateSynthesisPacketInput,
+    ) -> anyhow::Result<SynthesisPacket> {
+        self.write_synthesis_packet(input, true)
+    }
+
+    fn write_synthesis_packet(
+        &self,
+        input: CreateSynthesisPacketInput,
+        replace: bool,
     ) -> anyhow::Result<SynthesisPacket> {
         let CreateSynthesisPacketInput {
             scope_id,
@@ -98,13 +132,15 @@ impl StateStore {
                 suggested_artifacts,
                 required_human_decisions,
             };
-            anyhow::ensure!(
-                !records
-                    .iter()
-                    .any(|record| record.id == synthesis_packet.id),
-                "synthesis packet already exists"
-            );
-            records.push(synthesis_packet.clone());
+            if let Some(index) = records
+                .iter()
+                .position(|record| record.id == synthesis_packet.id)
+            {
+                anyhow::ensure!(replace, "synthesis packet already exists");
+                records[index] = synthesis_packet.clone();
+            } else {
+                records.push(synthesis_packet.clone());
+            }
             records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
             Ok(synthesis_packet)
         })
@@ -113,6 +149,21 @@ impl StateStore {
     pub fn create_proposal_card(
         &self,
         input: CreateProposalCardInput,
+    ) -> anyhow::Result<ProposalCard> {
+        self.write_proposal_card(input, false)
+    }
+
+    pub fn upsert_proposal_card(
+        &self,
+        input: CreateProposalCardInput,
+    ) -> anyhow::Result<ProposalCard> {
+        self.write_proposal_card(input, true)
+    }
+
+    fn write_proposal_card(
+        &self,
+        input: CreateProposalCardInput,
+        replace: bool,
     ) -> anyhow::Result<ProposalCard> {
         let CreateProposalCardInput {
             scope_id,
@@ -162,11 +213,12 @@ impl StateStore {
                 duplicate_of,
                 superseded_by,
             };
-            anyhow::ensure!(
-                !records.iter().any(|record| record.id == proposal.id),
-                "proposal already exists"
-            );
-            records.push(proposal.clone());
+            if let Some(index) = records.iter().position(|record| record.id == proposal.id) {
+                anyhow::ensure!(replace, "proposal already exists");
+                records[index] = proposal.clone();
+            } else {
+                records.push(proposal.clone());
+            }
             records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
             Ok(proposal)
         })
