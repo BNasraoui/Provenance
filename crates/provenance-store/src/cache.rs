@@ -1,8 +1,10 @@
+mod gaps;
 mod health;
 mod impact;
 mod prime;
 mod traceability;
 
+pub use gaps::*;
 pub use health::*;
 pub use impact::*;
 pub use prime::*;
@@ -546,10 +548,14 @@ mod report_tests {
 
         let gaps = find_gaps(&layout, &scope).unwrap();
         assert!(gaps.iter().any(|gap| {
-            gap.requirement_id == "req_missing_domain" && gap.reason.contains("domain_id")
+            gap.kind == GapKind::MissingDomainId
+                && gap.requirement_id.as_deref() == Some("req_missing_domain")
+                && gap.reason.contains("domain_id")
         }));
         assert!(!gaps.iter().any(|gap| {
-            gap.requirement_id == "req_schads_overtime" && gap.reason.contains("domain_id")
+            gap.kind == GapKind::MissingDomainId
+                && gap.requirement_id.as_deref() == Some("req_schads_overtime")
+                && gap.reason.contains("domain_id")
         }));
     }
 
