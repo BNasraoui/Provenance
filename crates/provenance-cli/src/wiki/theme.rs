@@ -234,7 +234,7 @@ pub const WIKI_CSS: &str = r#"
       margin: 0 auto;
       padding: 0.55rem 1.5rem;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 1rem;
     }
 
@@ -247,8 +247,8 @@ pub const WIKI_CSS: &str = r#"
 
     .wordmark .scope { font-family: var(--pv-font-mono); font-weight: 400; font-size: 11px; color: var(--pv-muted); margin-left: 0.5rem; }
 
-    .chrome nav { display: flex; gap: 0.25rem; flex-wrap: wrap; align-items: center; color: var(--pv-muted); }
-    .chrome nav a { text-decoration: none; padding: 0.15rem 0.4rem; border-radius: 6px; }
+    .chrome nav { display: flex; flex: 1 1 auto; min-width: 0; gap: 0.25rem; flex-wrap: wrap; align-items: center; color: var(--pv-muted); }
+    .chrome nav a { text-decoration: none; padding: 0.15rem 0.4rem; border-radius: 6px; overflow-wrap: anywhere; }
     .chrome nav a:hover { background: var(--pv-thread-bg); color: var(--pv-ink); }
     .chrome nav .sep { opacity: 0.5; }
 
@@ -692,6 +692,20 @@ pub const ICON_DEFS: &str = r#"<svg width="0" height="0" style="position:absolut
 mod tests {
     use super::*;
 
+    #[track_caller]
+    fn css_rule(selector: &str) -> &'static str {
+        let prefix = format!("{selector} {{");
+        let declarations = WIKI_CSS
+            .split_once(&prefix)
+            .unwrap_or_else(|| panic!("missing CSS rule: {selector}"))
+            .1;
+
+        declarations
+            .split_once('}')
+            .unwrap_or_else(|| panic!("unterminated CSS rule: {selector}"))
+            .0
+    }
+
     #[test]
     fn css_carries_all_five_theme_token_blocks() {
         for theme in ["statesman", "piano", "latte", "mocha", "dracula"] {
@@ -831,6 +845,22 @@ mod tests {
             u8::from_str_radix(hex.get(2..4)?, 16).ok()?,
             u8::from_str_radix(hex.get(4..6)?, 16).ok()?,
         ])
+}
+
+    #[test]
+    fn css_allows_deep_breadcrumbs_to_wrap_in_chrome() {
+        assert!(
+            css_rule(".chrome-inner").contains("align-items: flex-start;"),
+            "chrome header should align cleanly when breadcrumbs wrap"
+        );
+        assert!(
+            WIKI_CSS.contains(".chrome nav { display: flex; flex: 1 1 auto; min-width: 0;"),
+            "breadcrumb nav should be shrink-safe inside the chrome flex row"
+        );
+        assert!(
+            css_rule(".chrome nav a").contains("overflow-wrap: anywhere;"),
+            "breadcrumb links should not force horizontal overflow"
+        );
     }
 
     #[test]
