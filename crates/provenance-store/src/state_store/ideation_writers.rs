@@ -1,11 +1,11 @@
 use super::{
-    CreateContributionInput, CreatePromotionDecisionInput, CreateProposalCardInput,
+    serde_name, CreateContributionInput, CreatePromotionDecisionInput, CreateProposalCardInput,
     CreateSynthesisPacketInput, StateStore,
 };
 use crate::shards;
 use provenance_core::{
     validate_optional_confidence_score, Contribution, PromotionDecisionRecord, PromotionState,
-    ProposalCard, SchemaVersion, SynthesisPacket,
+    ProposalCard, SchemaVersion, ScopeId, StableId, SynthesisPacket,
 };
 
 impl StateStore {
@@ -215,6 +215,7 @@ impl StateStore {
             };
             if let Some(index) = records.iter().position(|record| record.id == proposal.id) {
                 anyhow::ensure!(replace, "proposal already exists");
+                self.ensure_existing_proposal_card_replaceable(&scope_id, &records[index])?;
                 records[index] = proposal.clone();
             } else {
                 records.push(proposal.clone());
@@ -294,5 +295,54 @@ impl StateStore {
                 Ok(promotion_decision)
             },
         )
+    }
+
+    pub fn ensure_proposal_card_replaceable(
+        &self,
+        scope_id: &ScopeId,
+        proposal_id: &StableId,
+    ) -> anyhow::Result<()> {
+        if let Some(existing) = self
+            .list_proposal_cards(scope_id)?
+            .into_iter()
+            .find(|proposal| proposal.id.as_str() == proposal_id.as_str())
+        {
+            self.ensure_existing_proposal_card_replaceable(scope_id, &existing)?;
+        }
+        Ok(())
+    }
+
+    fn ensure_existing_proposal_card_replaceable(
+        &self,
+        scope_id: &ScopeId,
+        existing: &ProposalCard,
+    ) -> anyhow::Result<()> {
+        let decisions = self
+            .list_promotion_decisions(scope_id)?
+            .into_iter()
+            .filter(|decision| decision.proposal_id.as_str() == existing.id.as_str())
+            .collect::<Vec<_>>();
+        if existing.promotion_state == PromotionState::Proposed && decisions.is_empty() {
+            return Ok(());
+        }
+
+        let state = serde_name(&existing.promotion_state)
+            .unwrap_or_else(|_| format!("{:?}", existing.promotion_state));
+        if decisions.is_empty() {
+            anyhow::bail!(
+                "proposal {} has a human disposition and cannot be replaced; promotion_state is {state}",
+                existing.id.as_str()
+            );
+        }
+
+        let decision_ids = decisions
+            .iter()
+            .map(|decision| decision.id.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        anyhow::bail!(
+            "proposal {} has a human disposition and cannot be replaced; promotion_state is {state}; promotion decision(s): {decision_ids}",
+            existing.id.as_str()
+        );
     }
 }
