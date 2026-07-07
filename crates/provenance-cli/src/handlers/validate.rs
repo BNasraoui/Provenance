@@ -37,19 +37,28 @@ pub(super) fn validate_file(
     match artifact {
         IdeationArtifactKind::Contribution => {
             let contribution: Contribution = serde_json::from_str(&json)?;
-            ensure_schema_version(contribution.schema_version)?;
+            validate_contribution_record(&contribution)?;
         }
         IdeationArtifactKind::SynthesisPacket => {
             let synthesis_packet: SynthesisPacket = serde_json::from_str(&json)?;
-            ensure_schema_version(synthesis_packet.schema_version)?;
+            validate_synthesis_packet_record(&synthesis_packet)?;
         }
         IdeationArtifactKind::Proposal => {
             let proposal: ProposalCard = serde_json::from_str(&json)?;
-            ensure_schema_version(proposal.schema_version)?;
-            validate_proposal_card(&proposal)?;
+            validate_proposal_card_record(&proposal)?;
         }
     }
     Ok(())
+}
+
+pub(super) fn validate_contribution_record(contribution: &Contribution) -> anyhow::Result<()> {
+    ensure_schema_version(contribution.schema_version)
+}
+
+pub(super) fn validate_synthesis_packet_record(
+    synthesis_packet: &SynthesisPacket,
+) -> anyhow::Result<()> {
+    ensure_schema_version(synthesis_packet.schema_version)
 }
 
 fn ensure_schema_version(schema_version: SchemaVersion) -> anyhow::Result<()> {
@@ -60,7 +69,8 @@ fn ensure_schema_version(schema_version: SchemaVersion) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub(super) fn validate_proposal_card(proposal: &ProposalCard) -> anyhow::Result<()> {
+pub(super) fn validate_proposal_card_record(proposal: &ProposalCard) -> anyhow::Result<()> {
+    ensure_schema_version(proposal.schema_version)?;
     match proposal.promotion_state {
         PromotionState::Duplicate => {
             anyhow::ensure!(
