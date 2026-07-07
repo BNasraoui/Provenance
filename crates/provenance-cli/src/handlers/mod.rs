@@ -201,7 +201,7 @@ pub(super) async fn dispatch(command: Command, quiet: bool) -> anyhow::Result<()
             input,
             format,
         } => {
-            validate::handle(artifact, input, format)?;
+            validate::handle(artifact, &input, format)?;
         }
         Command::Export {
             repo,

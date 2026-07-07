@@ -24,7 +24,7 @@ pub(super) fn handle(command: SwarmBacktraceCommand) -> anyhow::Result<()> {
             run_dir,
             replace,
             format,
-        } => land(repo, scope, run_dir, replace, format),
+        } => land(repo, scope, &run_dir, replace, format),
     }
 }
 
@@ -49,9 +49,8 @@ enum ContributionFile {
 impl ContributionFile {
     fn into_records(self) -> Vec<Contribution> {
         match self {
-            Self::Wrapped { contribution } => vec![contribution],
+            Self::Wrapped { contribution } | Self::Direct(contribution) => vec![contribution],
             Self::Many { contributions } | Self::DirectMany(contributions) => contributions,
-            Self::Direct(contribution) => vec![contribution],
         }
     }
 }
@@ -69,14 +68,14 @@ struct MergeOutput {
 fn land(
     repo: Utf8PathBuf,
     scope: String,
-    run_dir: Utf8PathBuf,
+    run_dir: &Utf8Path,
     replace: bool,
     format: OutputFormat,
 ) -> anyhow::Result<()> {
     anyhow::ensure!(run_dir.is_dir(), "--run-dir must be an existing directory");
     let scope_id = ScopeId::new(scope)?;
-    let mut contributions = read_contributions(&run_dir)?;
-    let (mut synthesis_packets, mut proposals) = read_merge_outputs(&run_dir)?;
+    let contributions = read_contributions(run_dir)?;
+    let (synthesis_packets, proposals) = read_merge_outputs(run_dir)?;
 
     anyhow::ensure!(
         !contributions.is_empty(),
@@ -115,7 +114,7 @@ fn land(
     let proposal_count = proposals.len();
     let store = StateStore::new(ProvenanceLayout::new(repo));
 
-    for contribution in contributions.drain(..) {
+    for contribution in contributions {
         let input = contribution_input(&scope_id, contribution);
         if replace {
             store.upsert_contribution(input)?;
@@ -123,7 +122,7 @@ fn land(
             store.create_contribution(input)?;
         }
     }
-    for synthesis_packet in synthesis_packets.drain(..) {
+    for synthesis_packet in synthesis_packets {
         let input = synthesis_packet_input(&scope_id, synthesis_packet);
         if replace {
             store.upsert_synthesis_packet(input)?;
@@ -131,7 +130,7 @@ fn land(
             store.create_synthesis_packet(input)?;
         }
     }
-    for proposal in proposals.drain(..) {
+    for proposal in proposals {
         let input = proposal_input(&scope_id, proposal);
         if replace {
             store.upsert_proposal_card(input)?;
