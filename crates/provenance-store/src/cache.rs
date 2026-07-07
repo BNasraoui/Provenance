@@ -1,8 +1,10 @@
+mod gaps;
 mod health;
 mod impact;
 mod prime;
 mod traceability;
 
+pub use gaps::*;
 pub use health::*;
 pub use impact::*;
 pub use prime::*;
