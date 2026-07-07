@@ -2,6 +2,8 @@ use crate::{
     cli::{IdeationArtifactKind, SchemaCommand},
     output,
 };
+use provenance_core::{ArtifactChangeType, IdeationEvidenceType, IdeationTargetType, ProposalType};
+use serde::Serialize;
 use serde_json::{json, Value};
 
 pub(super) fn handle(command: SchemaCommand) -> anyhow::Result<()> {
@@ -112,7 +114,7 @@ pub(super) fn schema_for(artifact: IdeationArtifactKind) -> Value {
                 "scope_id": {"$ref": "#/$defs/scopeId"},
                 "id": {"$ref": "#/$defs/stableId"},
                 "proposal_key": {"type": "string", "minLength": 1},
-                "proposal_type": {"enum": ["requirement_candidate", "rule_candidate", "resolution_candidate", "source_gap", "question"]},
+                "proposal_type": {"enum": enum_names(&PROPOSAL_TYPES)},
                 "title": {"type": "string"},
                 "summary": {"type": "string"},
                 "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
@@ -154,7 +156,7 @@ fn common_defs() -> Value {
             "additionalProperties": false,
             "required": ["artifact_type", "artifact_id"],
             "properties": {
-                "artifact_type": {"enum": ["source", "requirement", "resolution", "rule", "question"]},
+                "artifact_type": {"enum": enum_names(&IDEATION_TARGET_TYPES)},
                 "artifact_id": {"$ref": "#/$defs/stableId"}
             }
         },
@@ -164,7 +166,7 @@ fn common_defs() -> Value {
             "required": ["reference_id", "evidence_type", "summary"],
             "properties": {
                 "reference_id": {"$ref": "#/$defs/stableId"},
-                "evidence_type": {"enum": ["source", "artifact", "unsupported", "exploratory"]},
+                "evidence_type": {"enum": enum_names(&IDEATION_EVIDENCE_TYPES)},
                 "summary": {"type": "string"},
                 "file_path": {"type": "string"},
                 "line": {"type": "integer", "minimum": 1}
@@ -177,7 +179,7 @@ fn common_defs() -> Value {
             "properties": {
                 "claim_id": {"$ref": "#/$defs/stableId"},
                 "statement": {"type": "string"},
-                "evidence_type": {"enum": ["source", "artifact", "unsupported", "exploratory"]},
+                "evidence_type": {"enum": enum_names(&IDEATION_EVIDENCE_TYPES)},
                 "evidence_reference_ids": {"$ref": "#/$defs/stableIdArray"},
                 "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0}
             }
@@ -196,9 +198,9 @@ fn common_defs() -> Value {
             "additionalProperties": false,
             "required": ["artifact_type", "change_type", "supporting_claim_ids", "summary"],
             "properties": {
-                "artifact_type": {"enum": ["source", "requirement", "resolution", "rule", "question"]},
+                "artifact_type": {"enum": enum_names(&IDEATION_TARGET_TYPES)},
                 "artifact_id": {"$ref": "#/$defs/stableId"},
-                "change_type": {"enum": ["create", "update", "supersede", "link"]},
+                "change_type": {"enum": enum_names(&ARTIFACT_CHANGE_TYPES)},
                 "supporting_claim_ids": {"$ref": "#/$defs/stableIdArray"},
                 "summary": {"type": "string"}
             }
@@ -259,7 +261,7 @@ fn common_defs() -> Value {
             "required": ["question", "needed_evidence_type", "blocking_promotion"],
             "properties": {
                 "question": {"type": "string"},
-                "needed_evidence_type": {"enum": ["source", "artifact", "unsupported", "exploratory"]},
+                "needed_evidence_type": {"enum": enum_names(&IDEATION_EVIDENCE_TYPES)},
                 "blocking_promotion": {"type": "boolean"}
             }
         },
@@ -279,7 +281,7 @@ fn common_defs() -> Value {
             "required": ["proposal_key", "proposal_type", "summary", "origin_participant_slots"],
             "properties": {
                 "proposal_key": {"type": "string", "minLength": 1},
-                "proposal_type": {"enum": ["requirement_candidate", "rule_candidate", "resolution_candidate", "source_gap", "question"]},
+                "proposal_type": {"enum": enum_names(&PROPOSAL_TYPES)},
                 "summary": {"type": "string"},
                 "origin_participant_slots": {"type": "array", "items": {"type": "string"}}
             }
@@ -306,4 +308,153 @@ fn common_defs() -> Value {
             }
         }
     })
+}
+
+const IDEATION_TARGET_TYPES: [IdeationTargetType; 7] = [
+    IdeationTargetType::Source,
+    IdeationTargetType::Requirement,
+    IdeationTargetType::Resolution,
+    IdeationTargetType::Rule,
+    IdeationTargetType::Topic,
+    IdeationTargetType::Question,
+    IdeationTargetType::Domain,
+];
+
+const IDEATION_EVIDENCE_TYPES: [IdeationEvidenceType; 6] = [
+    IdeationEvidenceType::Source,
+    IdeationEvidenceType::Artifact,
+    IdeationEvidenceType::ThreadMessage,
+    IdeationEvidenceType::DomainKnowledge,
+    IdeationEvidenceType::Unsupported,
+    IdeationEvidenceType::Exploratory,
+];
+
+const ARTIFACT_CHANGE_TYPES: [ArtifactChangeType; 4] = [
+    ArtifactChangeType::Create,
+    ArtifactChangeType::Update,
+    ArtifactChangeType::Remove,
+    ArtifactChangeType::None,
+];
+
+const PROPOSAL_TYPES: [ProposalType; 6] = [
+    ProposalType::RequirementCandidate,
+    ProposalType::ResolutionCandidate,
+    ProposalType::RuleCandidate,
+    ProposalType::SourceGap,
+    ProposalType::Question,
+    ProposalType::NoAction,
+];
+
+fn enum_names<T: Serialize>(variants: &[T]) -> Vec<String> {
+    variants
+        .iter()
+        .map(|variant| {
+            serde_json::to_value(variant)
+                .expect("schema enum variant should serialize")
+                .as_str()
+                .expect("schema enum variant should serialize as a string")
+                .to_string()
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn enum_values_at(schema: &Value, pointer: &str) -> Vec<String> {
+        schema
+            .pointer(pointer)
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_str().unwrap().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn schema_show_enum_values_match_model_serialization() {
+        let contribution = schema_for(IdeationArtifactKind::Contribution);
+        let synthesis = schema_for(IdeationArtifactKind::SynthesisPacket);
+        let proposal = schema_for(IdeationArtifactKind::Proposal);
+        let target_types = enum_names(&[
+            IdeationTargetType::Source,
+            IdeationTargetType::Requirement,
+            IdeationTargetType::Resolution,
+            IdeationTargetType::Rule,
+            IdeationTargetType::Topic,
+            IdeationTargetType::Question,
+            IdeationTargetType::Domain,
+        ]);
+        let evidence_types = enum_names(&[
+            IdeationEvidenceType::Source,
+            IdeationEvidenceType::Artifact,
+            IdeationEvidenceType::ThreadMessage,
+            IdeationEvidenceType::DomainKnowledge,
+            IdeationEvidenceType::Unsupported,
+            IdeationEvidenceType::Exploratory,
+        ]);
+        let change_types = enum_names(&[
+            ArtifactChangeType::Create,
+            ArtifactChangeType::Update,
+            ArtifactChangeType::Remove,
+            ArtifactChangeType::None,
+        ]);
+        let proposal_types = enum_names(&[
+            ProposalType::RequirementCandidate,
+            ProposalType::ResolutionCandidate,
+            ProposalType::RuleCandidate,
+            ProposalType::SourceGap,
+            ProposalType::Question,
+            ProposalType::NoAction,
+        ]);
+
+        assert_eq!(
+            enum_values_at(
+                &contribution,
+                "/$defs/ideationTarget/properties/artifact_type/enum"
+            ),
+            target_types
+        );
+        assert_eq!(
+            enum_values_at(
+                &contribution,
+                "/$defs/evidenceReference/properties/evidence_type/enum"
+            ),
+            evidence_types
+        );
+        assert_eq!(
+            enum_values_at(
+                &contribution,
+                "/$defs/materialClaim/properties/evidence_type/enum"
+            ),
+            evidence_types
+        );
+        assert_eq!(
+            enum_values_at(
+                &contribution,
+                "/$defs/suggestedArtifactChange/properties/change_type/enum"
+            ),
+            change_types
+        );
+        assert_eq!(
+            enum_values_at(
+                &synthesis,
+                "/$defs/evidenceGap/properties/needed_evidence_type/enum"
+            ),
+            evidence_types
+        );
+        assert_eq!(
+            enum_values_at(
+                &synthesis,
+                "/$defs/suggestedArtifact/properties/proposal_type/enum"
+            ),
+            proposal_types
+        );
+        assert_eq!(
+            enum_values_at(&proposal, "/schema/properties/proposal_type/enum"),
+            proposal_types
+        );
+    }
 }

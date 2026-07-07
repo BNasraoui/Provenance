@@ -15,6 +15,8 @@ use provenance_store::{
     },
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::BTreeSet;
 
 pub(super) fn handle(command: SwarmBacktraceCommand) -> anyhow::Result<()> {
     match command {
@@ -35,24 +37,6 @@ struct LandReport {
     synthesis_packets: usize,
     proposals: usize,
     replace: bool,
-}
-
-#[derive(Deserialize)]
-#[serde(untagged)]
-enum ContributionFile {
-    Wrapped { contribution: Contribution },
-    Many { contributions: Vec<Contribution> },
-    Direct(Contribution),
-    DirectMany(Vec<Contribution>),
-}
-
-impl ContributionFile {
-    fn into_records(self) -> Vec<Contribution> {
-        match self {
-            Self::Wrapped { contribution } | Self::Direct(contribution) => vec![contribution],
-            Self::Many { contributions } | Self::DirectMany(contributions) => contributions,
-        }
-    }
 }
 
 #[derive(Deserialize)]
@@ -113,6 +97,14 @@ fn land(
     let synthesis_count = synthesis_packets.len();
     let proposal_count = proposals.len();
     let store = StateStore::new(ProvenanceLayout::new(repo));
+    preflight_land(
+        &store,
+        &scope_id,
+        &contributions,
+        &synthesis_packets,
+        &proposals,
+        replace,
+    )?;
 
     for contribution in contributions {
         let input = contribution_input(&scope_id, contribution);
@@ -155,11 +147,25 @@ fn read_contributions(run_dir: &Utf8Path) -> anyhow::Result<Vec<Contribution>> {
     let mut contributions = Vec::new();
     for directory in ["extractors", "refuters", "contributions"] {
         for path in json_files(&run_dir.join(directory))? {
-            let file: ContributionFile = read_json(&path)?;
-            contributions.extend(file.into_records());
+            contributions.extend(read_contribution_file(&path)?);
         }
     }
     Ok(contributions)
+}
+
+fn read_contribution_file(path: &Utf8Path) -> anyhow::Result<Vec<Contribution>> {
+    let value: Value = read_json(path)?;
+    if let Some(contribution) = value.get("contribution") {
+        return deserialize_landing_value(path, "contribution", contribution.clone())
+            .map(|contribution| vec![contribution]);
+    }
+    if let Some(contributions) = value.get("contributions") {
+        return deserialize_landing_value(path, "contributions", contributions.clone());
+    }
+    if value.is_array() {
+        return deserialize_landing_value(path, "contributions", value);
+    }
+    deserialize_landing_value(path, "contribution", value).map(|contribution| vec![contribution])
 }
 
 fn read_merge_outputs(
@@ -208,6 +214,94 @@ fn json_files(directory: &Utf8Path) -> anyhow::Result<Vec<Utf8PathBuf>> {
 fn read_json<T: DeserializeOwned>(path: &Utf8Path) -> anyhow::Result<T> {
     let json = std::fs::read_to_string(path).with_context(|| format!("failed to read {path}"))?;
     serde_json::from_str(&json).with_context(|| format!("{path} must be valid landing JSON"))
+}
+
+fn deserialize_landing_value<T: DeserializeOwned>(
+    path: &Utf8Path,
+    field: &str,
+    value: Value,
+) -> anyhow::Result<T> {
+    serde_json::from_value(value)
+        .with_context(|| format!("{path} {field} must be valid landing JSON"))
+}
+
+fn preflight_land(
+    store: &StateStore,
+    scope_id: &ScopeId,
+    contributions: &[Contribution],
+    synthesis_packets: &[SynthesisPacket],
+    proposals: &[ProposalCard],
+    replace: bool,
+) -> anyhow::Result<()> {
+    ensure_unique_run_ids(
+        "contribution",
+        contributions.iter().map(|record| &record.id),
+    )?;
+    ensure_unique_run_ids(
+        "synthesis packet",
+        synthesis_packets.iter().map(|record| &record.id),
+    )?;
+    ensure_unique_run_ids("proposal", proposals.iter().map(|record| &record.id))?;
+
+    if replace {
+        for proposal in proposals {
+            store.ensure_proposal_card_replaceable(scope_id, &proposal.id)?;
+        }
+        return Ok(());
+    }
+
+    let existing_contributions = store.list_contributions(scope_id)?;
+    ensure_no_existing_ids(
+        "contribution",
+        existing_contributions.iter().map(|record| &record.id),
+        contributions.iter().map(|record| &record.id),
+    )?;
+    let existing_synthesis_packets = store.list_synthesis_packets(scope_id)?;
+    ensure_no_existing_ids(
+        "synthesis packet",
+        existing_synthesis_packets.iter().map(|record| &record.id),
+        synthesis_packets.iter().map(|record| &record.id),
+    )?;
+    let existing_proposals = store.list_proposal_cards(scope_id)?;
+    ensure_no_existing_ids(
+        "proposal",
+        existing_proposals.iter().map(|record| &record.id),
+        proposals.iter().map(|record| &record.id),
+    )
+}
+
+fn ensure_unique_run_ids<'a>(
+    artifact: &str,
+    ids: impl IntoIterator<Item = &'a StableId>,
+) -> anyhow::Result<()> {
+    let mut seen = BTreeSet::new();
+    for id in ids {
+        anyhow::ensure!(
+            seen.insert(id.as_str().to_string()),
+            "duplicate {artifact} id {} in run",
+            id.as_str()
+        );
+    }
+    Ok(())
+}
+
+fn ensure_no_existing_ids<'existing, 'incoming>(
+    artifact: &str,
+    existing_ids: impl IntoIterator<Item = &'existing StableId>,
+    incoming_ids: impl IntoIterator<Item = &'incoming StableId>,
+) -> anyhow::Result<()> {
+    let existing_ids = existing_ids
+        .into_iter()
+        .map(|id| id.as_str().to_string())
+        .collect::<BTreeSet<_>>();
+    for id in incoming_ids {
+        anyhow::ensure!(
+            !existing_ids.contains(id.as_str()),
+            "{artifact} {} already exists; rerun with --replace to replace generated records",
+            id.as_str()
+        );
+    }
+    Ok(())
 }
 
 fn utf8_path(path: std::path::PathBuf) -> anyhow::Result<Utf8PathBuf> {

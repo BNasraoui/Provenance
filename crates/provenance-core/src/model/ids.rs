@@ -32,7 +32,11 @@ impl<'de> Deserialize<'de> for ScopeId {
         D: Deserializer<'de>,
     {
         let value = String::deserialize(deserializer)?;
-        Self::new(value).map_err(D::Error::custom)
+        Self::new(value.clone()).map_err(|err| {
+            D::Error::custom(format!(
+                "scope id '{value}' is invalid: {err}; repair hint: manually correct the shard file containing this value"
+            ))
+        })
     }
 }
 
@@ -64,6 +68,35 @@ impl<'de> Deserialize<'de> for StableId {
         D: Deserializer<'de>,
     {
         let value = String::deserialize(deserializer)?;
-        Self::new(value).map_err(D::Error::custom)
+        Self::new(value.clone()).map_err(|err| {
+            D::Error::custom(format!(
+                "stable id '{value}' is invalid: {err}; repair hint: manually correct the shard file containing this value"
+            ))
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stable_id_deserialize_error_names_invalid_value_and_repair_hint() {
+        let err = serde_json::from_str::<StableId>(r#""source/codebase""#).unwrap_err();
+        let message = err.to_string();
+
+        assert!(message.contains("source/codebase"));
+        assert!(message.contains("stable id"));
+        assert!(message.contains("manually correct the shard file"));
+    }
+
+    #[test]
+    fn scope_id_deserialize_error_names_invalid_value_and_repair_hint() {
+        let err = serde_json::from_str::<ScopeId>(r#""Default""#).unwrap_err();
+        let message = err.to_string();
+
+        assert!(message.contains("Default"));
+        assert!(message.contains("scope id"));
+        assert!(message.contains("manually correct the shard file"));
     }
 }
