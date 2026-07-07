@@ -469,6 +469,12 @@ impl<'a> Assembler<'a> {
             .map(|rule| self.rule_card(rule))
             .collect();
         let (sources, mut gaps) = self.requirement_sources(requirement);
+        if requirement.domain_id.is_none() {
+            gaps.push(GapNotice {
+                kind: GapKind::MissingDomainId,
+                detail: "requirement has no domain_id".to_string(),
+            });
+        }
         if sources.is_empty() {
             gaps.push(GapNotice {
                 kind: GapKind::MissingSourceRefs,
@@ -809,6 +815,12 @@ impl<'a> Assembler<'a> {
         for requirement in &self.state.requirements {
             let resolved = requirement.status == RequirementStatus::Resolved;
             let decisions = self.resolving_resolutions(&requirement.id).len();
+            if requirement.domain_id.is_none() {
+                gaps.push(GapNotice {
+                    kind: GapKind::MissingDomainId,
+                    detail: format!("requirement {} has no domain_id", requirement.id.as_str()),
+                });
+            }
             if resolved && decisions == 0 {
                 gaps.push(GapNotice {
                     kind: GapKind::NoResolvingDecision,
@@ -949,7 +961,7 @@ mod tests {
             description: None,
             fog: None,
             status,
-            domain_id: None,
+            domain_id: Some(sid("domain_default")),
             source_refs,
             origin_thread: None,
             origin_message: None,
@@ -1469,6 +1481,47 @@ mod tests {
                 "req_sibling_only_b"
             ]
         );
+    }
+
+    #[test]
+    fn requirement_and_index_pages_flag_requirements_without_domain_id_only() {
+        let mut state = empty_state();
+        let mut missing_domain = requirement(
+            "req_missing_domain",
+            "Rostering shall be assigned to a domain",
+            RequirementStatus::Active,
+            vec![],
+        );
+        missing_domain.domain_id = None;
+        state.requirements = vec![
+            missing_domain,
+            requirement(
+                "req_with_domain",
+                "Payroll shall keep its domain assignment",
+                RequirementStatus::Active,
+                vec![],
+            ),
+        ];
+
+        let resolver = LinkResolver::new(None);
+        let corpus = build_corpus(&state, &resolver);
+        let missing_page = requirement_page(&corpus, "req_missing_domain");
+        let with_domain_page = requirement_page(&corpus, "req_with_domain");
+
+        assert!(missing_page
+            .gaps
+            .iter()
+            .any(|gap| gap.detail.contains("domain_id")));
+        assert!(!with_domain_page
+            .gaps
+            .iter()
+            .any(|gap| gap.detail.contains("domain_id")));
+        assert!(corpus.index.gaps.iter().any(|gap| {
+            gap.detail.contains("req_missing_domain") && gap.detail.contains("domain_id")
+        }));
+        assert!(!corpus.index.gaps.iter().any(|gap| {
+            gap.detail.contains("req_with_domain") && gap.detail.contains("domain_id")
+        }));
     }
 
     #[test]
