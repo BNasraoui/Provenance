@@ -244,6 +244,7 @@ pub struct RequirementPage {
     pub decisions: Vec<DecisionSection>,
     pub produced_rules: Vec<RuleCard>,
     pub children: Vec<PageLink>,
+    pub siblings: Vec<PageLink>,
     pub sources: Vec<SourceCitation>,
     pub gaps: Vec<GapNotice>,
     pub threads: Vec<EvidenceThread>,
