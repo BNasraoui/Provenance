@@ -162,7 +162,7 @@ impl<'a> Assembler<'a> {
         }
     }
 
-    fn parent_of(&self, requirement_id: &StableId) -> Option<&'a Requirement> {
+    fn parent_ids_of(&self, requirement_id: &StableId) -> Vec<&'a StableId> {
         let mut parent_ids: Vec<&StableId> = self
             .edges()
             .filter(|edge| {
@@ -174,6 +174,11 @@ impl<'a> Assembler<'a> {
             .map(|edge| &edge.from_id)
             .collect();
         parent_ids.sort_by_key(|id| id.as_str());
+        parent_ids
+    }
+
+    fn parent_of(&self, requirement_id: &StableId) -> Option<&'a Requirement> {
+        let parent_ids = self.parent_ids_of(requirement_id);
         parent_ids
             .into_iter()
             .find_map(|id| self.find_requirement(id))
@@ -223,6 +228,39 @@ impl<'a> Assembler<'a> {
                             || (edge.from_type == NodeType::Resolution
                                 && resolution_ids.contains(edge.from_id.as_str())))
                 })
+            })
+            .collect()
+    }
+
+    fn sibling_requirements(&self, requirement_id: &StableId) -> Vec<PageLink> {
+        let parent_ids: BTreeSet<&str> = self
+            .parent_ids_of(requirement_id)
+            .into_iter()
+            .map(StableId::as_str)
+            .collect();
+        if parent_ids.is_empty() {
+            return Vec::new();
+        }
+
+        self.state
+            .requirements
+            .iter()
+            .filter_map(|candidate| {
+                if candidate.id == *requirement_id {
+                    return None;
+                }
+                let has_shared_parent = self.edges().any(|edge| {
+                    edge.edge_type == EdgeType::RefinesInto
+                        && edge.from_type == NodeType::Requirement
+                        && parent_ids.contains(edge.from_id.as_str())
+                        && edge.to_type == NodeType::Requirement
+                        && edge.to_id == candidate.id
+                });
+                if has_shared_parent {
+                    Some(requirement_link(candidate))
+                } else {
+                    None
+                }
             })
             .collect()
     }
@@ -484,6 +522,7 @@ impl<'a> Assembler<'a> {
                 })
                 .map(requirement_link)
                 .collect(),
+            siblings: self.sibling_requirements(&requirement.id),
             sources,
             gaps,
             threads,
@@ -1343,6 +1382,93 @@ mod tests {
             .map(|link| link.target.record_id.as_str())
             .collect();
         assert_eq!(children, vec!["req_child"]);
+    }
+
+    #[test]
+    fn requirement_page_lists_siblings_from_all_parents_without_self_or_duplicates() {
+        let mut state = empty_state();
+        state.requirements = vec![
+            requirement(
+                "req_parent_a",
+                "Parent A",
+                RequirementStatus::Active,
+                vec![],
+            ),
+            requirement(
+                "req_parent_b",
+                "Parent B",
+                RequirementStatus::Active,
+                vec![],
+            ),
+            requirement(
+                "req_sibling_beta",
+                "Sibling Beta",
+                RequirementStatus::Active,
+                vec![],
+            ),
+            requirement("req_child", "Child", RequirementStatus::Active, vec![]),
+            requirement(
+                "req_sibling_alpha",
+                "Sibling Alpha",
+                RequirementStatus::Active,
+                vec![],
+            ),
+            requirement(
+                "req_sibling_only_b",
+                "Sibling Only B",
+                RequirementStatus::Active,
+                vec![],
+            ),
+        ];
+        state.edges = vec![
+            edge(
+                EdgeType::RefinesInto,
+                (NodeType::Requirement, "req_parent_a"),
+                (NodeType::Requirement, "req_child"),
+            ),
+            edge(
+                EdgeType::RefinesInto,
+                (NodeType::Requirement, "req_parent_a"),
+                (NodeType::Requirement, "req_sibling_beta"),
+            ),
+            edge(
+                EdgeType::RefinesInto,
+                (NodeType::Requirement, "req_parent_a"),
+                (NodeType::Requirement, "req_sibling_alpha"),
+            ),
+            edge(
+                EdgeType::RefinesInto,
+                (NodeType::Requirement, "req_parent_b"),
+                (NodeType::Requirement, "req_child"),
+            ),
+            edge(
+                EdgeType::RefinesInto,
+                (NodeType::Requirement, "req_parent_b"),
+                (NodeType::Requirement, "req_sibling_alpha"),
+            ),
+            edge(
+                EdgeType::RefinesInto,
+                (NodeType::Requirement, "req_parent_b"),
+                (NodeType::Requirement, "req_sibling_only_b"),
+            ),
+        ];
+        let resolver = LinkResolver::new(None);
+        let corpus = build_corpus(&state, &resolver);
+        let page = requirement_page(&corpus, "req_child");
+
+        let sibling_ids: Vec<&str> = page
+            .siblings
+            .iter()
+            .map(|link| link.target.record_id.as_str())
+            .collect();
+        assert_eq!(
+            sibling_ids,
+            vec![
+                "req_sibling_beta",
+                "req_sibling_alpha",
+                "req_sibling_only_b"
+            ]
+        );
     }
 
     #[test]
