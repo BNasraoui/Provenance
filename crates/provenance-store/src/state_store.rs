@@ -6,6 +6,7 @@ mod thread_writers;
 mod writers;
 
 use crate::{layout::ProvenanceLayout, shards};
+use anyhow::Context;
 use camino::Utf8Path;
 use provenance_core::{
     ArtifactLink, Boundary, CanonicalArtifact, ClaimChallenge, ConsensusFinding, ContestedClaim,
@@ -275,7 +276,7 @@ impl StateStore {
         read_jsonl(&shards::questions_path(&self.layout, scope))
     }
     pub fn list_edges(&self) -> anyhow::Result<Vec<Edge>> {
-        read_jsonl(&shards::edges_path(&self.layout))
+        read_edge_shards(&self.layout)
     }
     pub fn list_resolutions(&self, scope: &ScopeId) -> anyhow::Result<Vec<Resolution>> {
         read_jsonl(&shards::resolutions_path(&self.layout, scope))
@@ -339,6 +340,40 @@ fn read_jsonl<T: DeserializeOwned>(path: &camino::Utf8Path) -> anyhow::Result<Ve
         .lines()
         .map(|line| Ok(serde_json::from_str(line)?))
         .collect()
+}
+
+fn read_edge_shards(layout: &ProvenanceLayout) -> anyhow::Result<Vec<Edge>> {
+    let edges_dir = layout.edges_dir();
+    if !edges_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut shard_paths = Vec::new();
+    for entry in std::fs::read_dir(&edges_dir)? {
+        let entry = entry?;
+        if entry.file_type()?.is_file()
+            && entry.path().extension().and_then(|ext| ext.to_str()) == Some("jsonl")
+        {
+            shard_paths.push(entry.path());
+        }
+    }
+    shard_paths.sort();
+
+    let mut edges = Vec::new();
+    for path in shard_paths {
+        let contents = std::fs::read_to_string(&path)
+            .with_context(|| format!("failed to read edge shard {}", path.display()))?;
+        for (index, line) in contents.lines().enumerate() {
+            edges.push(serde_json::from_str(line).with_context(|| {
+                format!(
+                    "failed to parse edge shard {} line {}",
+                    path.display(),
+                    index + 1
+                )
+            })?);
+        }
+    }
+    Ok(edges)
 }
 
 #[cfg(test)]
@@ -581,6 +616,56 @@ mod tests {
         let deleted = store.delete_edge(&scope, &edge.id).unwrap();
         assert_eq!(deleted.id, edge.id);
         assert!(store.list_edges().unwrap().is_empty());
+    }
+
+    #[test]
+    fn list_edges_reads_all_edge_shards() {
+        let (_dir, store, scope) = seeded_source_requirement_store();
+        store
+            .create_requirement(CreateRequirementInput {
+                scope_id: scope.clone(),
+                id: StableId::new("req_leave").unwrap(),
+                statement: "Leave".into(),
+                description: None,
+                status: RequirementStatus::Active,
+                domain_id: None,
+                origin_thread: None,
+                origin_message: None,
+            })
+            .unwrap();
+        let first_edge = store
+            .create_edge(CreateEdgeInput {
+                scope_id: scope.clone(),
+                edge_type: EdgeType::RefinesInto,
+                from_type: NodeType::Requirement,
+                from_id: StableId::new("req_overtime").unwrap(),
+                to_type: NodeType::Requirement,
+                to_id: StableId::new("req_leave").unwrap(),
+            })
+            .unwrap();
+        let second_edge = Edge {
+            schema_version: provenance_core::SchemaVersion(1),
+            scope_id: scope,
+            id: StableId::new("edge_second_shard").unwrap(),
+            edge_type: EdgeType::DependsOn,
+            from_type: NodeType::Requirement,
+            from_id: StableId::new("req_leave").unwrap(),
+            to_type: NodeType::Requirement,
+            to_id: StableId::new("req_overtime").unwrap(),
+            label: None,
+        };
+        let second_shard = store.layout.edges_dir().join("edges-01.jsonl");
+        std::fs::create_dir_all(second_shard.parent().unwrap()).unwrap();
+        std::fs::write(
+            second_shard,
+            format!("{}\n", serde_json::to_string(&second_edge).unwrap()),
+        )
+        .unwrap();
+
+        let edges = store.list_edges().unwrap();
+        assert_eq!(edges.len(), 2);
+        assert!(edges.iter().any(|edge| edge.id == first_edge.id));
+        assert!(edges.iter().any(|edge| edge.id == second_edge.id));
     }
 
     #[test]
