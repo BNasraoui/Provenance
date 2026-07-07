@@ -518,7 +518,7 @@ pub const WIKI_CSS: &str = r#"
     }
     .lineage li.current { font-weight: 600; }
     .lineage li.current::before { opacity: 1; }
-    .lineage a { color: var(--pv-ink); opacity: 0.75; text-decoration: none; }
+    .lineage a { color: var(--pv-requirement); opacity: 0.85; text-decoration: none; }
     .lineage a:hover { opacity: 1; text-decoration: underline; }
 
     /* ---- field notes band (full-width) ---- */
@@ -609,23 +609,29 @@ pub const WIKI_CSS: &str = r#"
     .sh-source { --sh: var(--pv-source); }
     .sh-thread { --sh: var(--pv-thread); }
 
+    section:has(> .sh-requirement) { --pv-link-color: var(--pv-requirement); }
+    section:has(> .sh-resolution) { --pv-link-color: var(--pv-resolution); }
+    section:has(> .sh-rule) { --pv-link-color: var(--pv-rule); }
+    section:has(> .sh-source) { --pv-link-color: var(--pv-source); }
+
     .link-list { list-style: none; margin: 0; padding: 0; }
     .link-list li { padding: 0.35rem 0; border-top: 1px solid color-mix(in srgb, var(--pv-card-border) 60%, transparent); font-size: 13px; }
     .link-list li:first-child { border-top: 0; padding-top: 0; }
-    .link-list a { text-decoration: none; }
-    .link-list a:hover { text-decoration: underline; }
+    .link-list a { color: var(--pv-link-color, var(--pv-resolution)); text-decoration: none; }
+    .link-list a:hover, .link-list a:focus-visible { text-decoration: underline; }
 
     .index-list { list-style: none; margin: 0; padding: 0; }
     .index-list li { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; padding: 0.55rem 0; border-top: 1px solid var(--pv-card-border); }
     .index-list li:first-child { border-top: 0; padding-top: 0; }
-    .index-list .entry-title { font-family: var(--pv-font-display); font-weight: 600; text-decoration: none; }
-    .index-list .entry-title:hover { text-decoration: underline; }
+    .index-list .entry-title { color: var(--pv-requirement); font-family: var(--pv-font-display); font-weight: 600; text-decoration: none; }
+    .index-list .entry-title:hover, .index-list .entry-title:focus-visible { text-decoration: underline; }
     .index-list .entry-counts { font-family: var(--pv-font-mono); font-size: 10px; color: var(--pv-muted); margin-left: auto; white-space: nowrap; }
 
     .evidence-list { list-style: none; margin: 0; padding: 0; }
     .evidence-list li { font-family: var(--pv-font-mono); font-size: 12px; padding: 0.25rem 0; color: var(--pv-rule); }
 
     .orphan-card {
+      --pv-link-color: color-mix(in srgb, var(--pv-status-discovery) 85%, var(--pv-ink));
       border: 1px dashed color-mix(in srgb, var(--pv-status-discovery) 55%, transparent);
       background: color-mix(in srgb, var(--pv-status-discovery) 8%, transparent);
       border-radius: 8px;
@@ -723,6 +729,22 @@ mod tests {
             ".lineage",
         ] {
             assert!(WIKI_CSS.contains(selector), "missing selector: {selector}");
+        }
+    }
+
+    #[test]
+    fn css_colors_traversal_links_with_theme_tokens() {
+        for rule in [
+            "section:has(> .sh-requirement) { --pv-link-color: var(--pv-requirement); }",
+            "section:has(> .sh-resolution) { --pv-link-color: var(--pv-resolution); }",
+            "section:has(> .sh-rule) { --pv-link-color: var(--pv-rule); }",
+            "section:has(> .sh-source) { --pv-link-color: var(--pv-source); }",
+            ".link-list a { color: var(--pv-link-color, var(--pv-resolution)); text-decoration: none; }",
+            ".index-list .entry-title { color: var(--pv-requirement); font-family: var(--pv-font-display); font-weight: 600; text-decoration: none; }",
+            ".lineage a { color: var(--pv-requirement); opacity: 0.85; text-decoration: none; }",
+            "--pv-link-color: color-mix(in srgb, var(--pv-status-discovery) 85%, var(--pv-ink));",
+        ] {
+            assert!(WIKI_CSS.contains(rule), "missing link color rule: {rule}");
         }
     }
 
