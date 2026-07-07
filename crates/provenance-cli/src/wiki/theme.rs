@@ -29,13 +29,13 @@ pub const WIKI_CSS: &str = r#"
       --pv-ink: #2c2418;
       --pv-muted: #8a8278;
 
-      --pv-source: #d4a574;
+      --pv-source: #9c6730;
       --pv-source-bg: #fdf3e8;
-      --pv-requirement: #6b9e7a;
+      --pv-requirement: #517c5e;
       --pv-requirement-bg: #ecf5ef;
-      --pv-resolution: #8b7bb5;
+      --pv-resolution: #7a68aa;
       --pv-resolution-bg: #f0ecf7;
-      --pv-rule: #5a8f9e;
+      --pv-rule: #4c7986;
       --pv-rule-bg: #e8f2f5;
       --pv-thread: #8a8578;
       --pv-thread-bg: #f5f3ef;
@@ -99,13 +99,13 @@ pub const WIKI_CSS: &str = r#"
       --pv-ink: #4c4f69;
       --pv-muted: #8c8fa1;
 
-      --pv-source: #df8e1d;
+      --pv-source: #996214;
       --pv-source-bg: #f9efdd;
-      --pv-requirement: #40a02b;
+      --pv-requirement: #327d22;
       --pv-requirement-bg: #e8f3e4;
       --pv-resolution: #8839ef;
       --pv-resolution-bg: #f0e6fd;
-      --pv-rule: #179299;
+      --pv-rule: #137a80;
       --pv-rule-bg: #e0f1f2;
       --pv-thread: #7c7f93;
       --pv-thread-bg: #e6e9ef;
@@ -518,7 +518,7 @@ pub const WIKI_CSS: &str = r#"
     }
     .lineage li.current { font-weight: 600; }
     .lineage li.current::before { opacity: 1; }
-    .lineage a { color: var(--pv-ink); opacity: 0.75; text-decoration: none; }
+    .lineage a { color: var(--pv-requirement); opacity: 0.85; text-decoration: none; }
     .lineage a:hover { opacity: 1; text-decoration: underline; }
 
     /* ---- field notes band (full-width) ---- */
@@ -609,23 +609,29 @@ pub const WIKI_CSS: &str = r#"
     .sh-source { --sh: var(--pv-source); }
     .sh-thread { --sh: var(--pv-thread); }
 
+    section:has(> .sh-requirement) { --pv-link-color: var(--pv-requirement); }
+    section:has(> .sh-resolution) { --pv-link-color: var(--pv-resolution); }
+    section:has(> .sh-rule) { --pv-link-color: var(--pv-rule); }
+    section:has(> .sh-source) { --pv-link-color: var(--pv-source); }
+
     .link-list { list-style: none; margin: 0; padding: 0; }
     .link-list li { padding: 0.35rem 0; border-top: 1px solid color-mix(in srgb, var(--pv-card-border) 60%, transparent); font-size: 13px; }
     .link-list li:first-child { border-top: 0; padding-top: 0; }
-    .link-list a { text-decoration: none; }
-    .link-list a:hover { text-decoration: underline; }
+    .link-list a { color: var(--pv-link-color, var(--pv-resolution)); text-decoration: none; }
+    .link-list a:hover, .link-list a:focus-visible { text-decoration: underline; }
 
     .index-list { list-style: none; margin: 0; padding: 0; }
     .index-list li { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; padding: 0.55rem 0; border-top: 1px solid var(--pv-card-border); }
     .index-list li:first-child { border-top: 0; padding-top: 0; }
-    .index-list .entry-title { font-family: var(--pv-font-display); font-weight: 600; text-decoration: none; }
-    .index-list .entry-title:hover { text-decoration: underline; }
+    .index-list .entry-title { color: var(--pv-requirement); font-family: var(--pv-font-display); font-weight: 600; text-decoration: none; }
+    .index-list .entry-title:hover, .index-list .entry-title:focus-visible { text-decoration: underline; }
     .index-list .entry-counts { font-family: var(--pv-font-mono); font-size: 10px; color: var(--pv-muted); margin-left: auto; white-space: nowrap; }
 
     .evidence-list { list-style: none; margin: 0; padding: 0; }
     .evidence-list li { font-family: var(--pv-font-mono); font-size: 12px; padding: 0.25rem 0; color: var(--pv-rule); }
 
     .orphan-card {
+      --pv-link-color: color-mix(in srgb, var(--pv-status-discovery) 85%, var(--pv-ink));
       border: 1px dashed color-mix(in srgb, var(--pv-status-discovery) 55%, transparent);
       background: color-mix(in srgb, var(--pv-status-discovery) 8%, transparent);
       border-radius: 8px;
@@ -724,6 +730,107 @@ mod tests {
         ] {
             assert!(WIKI_CSS.contains(selector), "missing selector: {selector}");
         }
+    }
+
+    #[test]
+    fn css_colors_traversal_links_with_theme_tokens() {
+        let link_color = declaration_value(WIKI_CSS, ".link-list a", "color")
+            .expect(".link-list a should declare its link color");
+        assert!(
+            link_color.contains("var(--pv-"),
+            ".link-list a should use a --pv custom property for color, got {link_color}"
+        );
+
+        for (section_class, token) in [
+            ("sh-requirement", "--pv-requirement"),
+            ("sh-resolution", "--pv-resolution"),
+            ("sh-rule", "--pv-rule"),
+            ("sh-source", "--pv-source"),
+        ] {
+            let selector = format!("section:has(> .{section_class})");
+            let link_color_override = declaration_value(WIKI_CSS, &selector, "--pv-link-color")
+                .unwrap_or_else(|| panic!("{selector} should override --pv-link-color"));
+            assert_eq!(link_color_override, format!("var({token})"));
+        }
+    }
+
+    #[test]
+    fn light_theme_link_tokens_meet_body_text_contrast() {
+        for (theme, selector) in [
+            ("statesman", r#":root, :root[data-theme="statesman"]"#),
+            ("piano", r#":root[data-theme="piano"]"#),
+            ("latte", r#":root[data-theme="latte"]"#),
+        ] {
+            let background = declaration_value(WIKI_CSS, selector, "--pv-canvas-bg")
+                .unwrap_or_else(|| panic!("{theme} should declare --pv-canvas-bg"));
+            for token in [
+                "--pv-source",
+                "--pv-requirement",
+                "--pv-resolution",
+                "--pv-rule",
+            ] {
+                let foreground = declaration_value(WIKI_CSS, selector, token)
+                    .unwrap_or_else(|| panic!("{theme} should declare {token}"));
+                let contrast = contrast_ratio(foreground, background)
+                    .expect("light theme link tokens should be hex colors");
+                assert!(
+                    contrast >= 4.5,
+                    "{theme} {token} contrast against {background} is {contrast:.2}:1"
+                );
+            }
+        }
+    }
+
+    fn declaration_value<'a>(css: &'a str, selector: &str, property: &str) -> Option<&'a str> {
+        let selector_start = css.find(selector)?;
+        let after_selector = &css[selector_start + selector.len()..];
+        let block_start = after_selector.find('{')?;
+        let block = &after_selector[block_start + 1..];
+        let block_end = block.find('}')?;
+
+        block[..block_end].split(';').find_map(|declaration| {
+            let (name, value) = declaration.split_once(':')?;
+            (name.trim() == property).then_some(value.trim())
+        })
+    }
+
+    fn contrast_ratio(foreground: &str, background: &str) -> Option<f64> {
+        let foreground_luminance = relative_luminance(hex_rgb(foreground)?);
+        let background_luminance = relative_luminance(hex_rgb(background)?);
+        let lighter = foreground_luminance.max(background_luminance);
+        let darker = foreground_luminance.min(background_luminance);
+
+        Some((lighter + 0.05) / (darker + 0.05))
+    }
+
+    fn relative_luminance([red, green, blue]: [u8; 3]) -> f64 {
+        let red = linearized_srgb(red);
+        let green = linearized_srgb(green);
+        let blue = linearized_srgb(blue);
+
+        0.0722_f64.mul_add(blue, 0.2126_f64.mul_add(red, 0.7152 * green))
+    }
+
+    fn linearized_srgb(channel: u8) -> f64 {
+        let normalized = f64::from(channel) / 255.0;
+        if normalized <= 0.040_45 {
+            normalized / 12.92
+        } else {
+            ((normalized + 0.055) / 1.055).powf(2.4)
+        }
+    }
+
+    fn hex_rgb(hex: &str) -> Option<[u8; 3]> {
+        let hex = hex.strip_prefix('#')?;
+        if hex.len() != 6 {
+            return None;
+        }
+
+        Some([
+            u8::from_str_radix(hex.get(0..2)?, 16).ok()?,
+            u8::from_str_radix(hex.get(2..4)?, 16).ok()?,
+            u8::from_str_radix(hex.get(4..6)?, 16).ok()?,
+        ])
     }
 
     #[test]
