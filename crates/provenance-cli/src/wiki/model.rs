@@ -64,6 +64,8 @@ pub struct PageLink {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GapKind {
+    /// A requirement has no domain assignment.
+    MissingDomainId,
     /// A requirement has no source refs and no `references` edge.
     MissingSourceRefs,
     /// A resolved requirement has no `resolves` edge pointing at it.

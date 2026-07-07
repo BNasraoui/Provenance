@@ -96,29 +96,37 @@ pub fn find_gaps(
     scope: &provenance_core::ScopeId,
 ) -> anyhow::Result<Vec<GapItem>> {
     let store = StateStore::new(layout.clone());
-    let edges = store.list_edges()?;
-    Ok(store
-        .list_requirements(scope)?
+    let edges: Vec<_> = store
+        .list_edges()?
         .into_iter()
-        .filter(|requirement| {
-            (requirement.status == RequirementStatus::Resolved
-                || edges.iter().any(|edge| {
-                    edge.scope_id == *scope
-                        && edge.edge_type == EdgeType::Resolves
-                        && edge.to_type == NodeType::Requirement
-                        && edge.to_id == requirement.id
-                }))
-                && !edges.iter().any(|edge| {
-                    edge.scope_id == *scope
-                        && edge.edge_type == EdgeType::Produces
-                        && edge.from_type == NodeType::Requirement
-                        && edge.from_id == requirement.id
-                        && edge.to_type == NodeType::Rule
-                })
-        })
-        .map(|requirement| GapItem {
-            requirement_id: requirement.id.as_str().to_string(),
-            reason: "resolved requirement has no downstream rule".to_string(),
-        })
-        .collect())
+        .filter(|edge| edge.scope_id == *scope)
+        .collect();
+    let mut gaps = Vec::new();
+    for requirement in store.list_requirements(scope)? {
+        if requirement.domain_id.is_none() {
+            gaps.push(GapItem {
+                requirement_id: requirement.id.as_str().to_string(),
+                reason: "requirement has no domain_id".to_string(),
+            });
+        }
+        if (requirement.status == RequirementStatus::Resolved
+            || edges.iter().any(|edge| {
+                edge.edge_type == EdgeType::Resolves
+                    && edge.to_type == NodeType::Requirement
+                    && edge.to_id == requirement.id
+            }))
+            && !edges.iter().any(|edge| {
+                edge.edge_type == EdgeType::Produces
+                    && edge.from_type == NodeType::Requirement
+                    && edge.from_id == requirement.id
+                    && edge.to_type == NodeType::Rule
+            })
+        {
+            gaps.push(GapItem {
+                requirement_id: requirement.id.as_str().to_string(),
+                reason: "resolved requirement has no downstream rule".to_string(),
+            });
+        }
+    }
+    Ok(gaps)
 }
