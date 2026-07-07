@@ -9,8 +9,5 @@ mod code_ref;
 mod evidence;
 mod remote;
 
-#[allow(unused_imports)]
-pub use code_ref::{parse_code_ref, CodeRef, LineRange};
 pub use evidence::{EvidenceRef, InlineRef, LinkResolver};
-#[allow(unused_imports)]
-pub use remote::{blob_url, detect_remote_url, parse_git_remote, GitHost, GitRemote};
+pub use remote::detect_remote_url;
