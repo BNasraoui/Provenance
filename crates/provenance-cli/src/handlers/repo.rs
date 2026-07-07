@@ -1,10 +1,9 @@
 use crate::cli::Status;
 use crate::output::{self, OutputFormat};
-use anyhow::Context;
 use camino::Utf8PathBuf;
 use provenance_core::{
-    edge_validation::validate_edge_endpoint, ArtifactLink, ArtifactLinkTargetType, Edge, Manifest,
-    NodeType, RepoPathPrefix, ScopeId, StableId,
+    edge_validation::validate_edge_endpoint, ArtifactLink, ArtifactLinkTargetType, IdeationTarget,
+    IdeationTargetType, Manifest, NodeType, RepoPathPrefix, ScopeId, StableId,
 };
 use provenance_store::{layout::ProvenanceLayout, state_store::StateStore};
 use std::collections::BTreeSet;
@@ -29,8 +28,7 @@ pub(super) fn init(
 
 #[allow(clippy::too_many_lines)]
 pub(super) fn check(repo: Utf8PathBuf, format: OutputFormat) -> anyhow::Result<()> {
-    let layout = ProvenanceLayout::new(repo);
-    let store = StateStore::new(layout.clone());
+    let store = StateStore::new(ProvenanceLayout::new(repo));
     let manifest = store.manifest()?;
     anyhow::ensure!(
         !manifest.scopes.is_empty(),
@@ -58,6 +56,10 @@ pub(super) fn check(repo: Utf8PathBuf, format: OutputFormat) -> anyhow::Result<(
         let service_bindings = store.list_service_bindings(scope_id)?;
         let threads = store.list_threads(scope_id)?;
         let messages = store.list_messages(scope_id)?;
+        let contributions = store.list_contributions(scope_id)?;
+        let synthesis_packets = store.list_synthesis_packets(scope_id)?;
+        let proposal_cards = store.list_proposal_cards(scope_id)?;
+        let promotion_decisions = store.list_promotion_decisions(scope_id)?;
 
         for source in &sources {
             index.add_node(&source.scope_id, "source", &source.id);
@@ -91,6 +93,9 @@ pub(super) fn check(repo: Utf8PathBuf, format: OutputFormat) -> anyhow::Result<(
         }
         for message in &messages {
             index.add_node(&message.scope_id, "message", &message.id);
+        }
+        for proposal in &proposal_cards {
+            index.add_node(&proposal.scope_id, "proposal", &proposal.id);
         }
 
         for source in &sources {
@@ -297,9 +302,80 @@ pub(super) fn check(repo: Utf8PathBuf, format: OutputFormat) -> anyhow::Result<(
                 &message.thread_id,
             );
         }
+        for contribution in &contributions {
+            check_ideation_target(
+                &index,
+                &mut dangling,
+                scope_id,
+                &format!("contribution {}", contribution.id.as_str()),
+                &contribution.target,
+            );
+        }
+        for synthesis_packet in &synthesis_packets {
+            check_ideation_target(
+                &index,
+                &mut dangling,
+                scope_id,
+                &format!("synthesis packet {}", synthesis_packet.id.as_str()),
+                &synthesis_packet.target,
+            );
+        }
+        for proposal in &proposal_cards {
+            check_ideation_target(
+                &index,
+                &mut dangling,
+                scope_id,
+                &format!("proposal {}", proposal.id.as_str()),
+                &proposal.traceability.target,
+            );
+            for source_id in &proposal.traceability.source_ids {
+                check_scoped_reference(
+                    &index,
+                    &mut dangling,
+                    scope_id,
+                    &format!("proposal {}", proposal.id.as_str()),
+                    "source_id",
+                    "source",
+                    source_id,
+                );
+            }
+            if let Some(duplicate_of) = &proposal.duplicate_of {
+                check_scoped_reference(
+                    &index,
+                    &mut dangling,
+                    scope_id,
+                    &format!("proposal {}", proposal.id.as_str()),
+                    "duplicate_of",
+                    "proposal",
+                    duplicate_of,
+                );
+            }
+            if let Some(superseded_by) = &proposal.superseded_by {
+                check_scoped_reference(
+                    &index,
+                    &mut dangling,
+                    scope_id,
+                    &format!("proposal {}", proposal.id.as_str()),
+                    "superseded_by",
+                    "proposal",
+                    superseded_by,
+                );
+            }
+        }
+        for promotion_decision in &promotion_decisions {
+            check_scoped_reference(
+                &index,
+                &mut dangling,
+                scope_id,
+                &format!("promotion decision {}", promotion_decision.id.as_str()),
+                "proposal",
+                "proposal",
+                &promotion_decision.proposal_id,
+            );
+        }
     }
 
-    for edge in load_edge_shards(&layout)? {
+    for edge in store.list_edges()? {
         if !manifest_scopes.contains(edge.scope_id.as_str()) {
             dangling.push(format!(
                 "edge {} is in unknown scope {}",
@@ -307,7 +383,12 @@ pub(super) fn check(repo: Utf8PathBuf, format: OutputFormat) -> anyhow::Result<(
                 edge.scope_id.as_str()
             ));
         }
-        validate_edge_endpoint(edge.edge_type, edge.from_type, edge.to_type)?;
+        if let Err(error) = validate_edge_endpoint(edge.edge_type, edge.from_type, edge.to_type) {
+            dangling.push(format!(
+                "edge {} has invalid endpoint: {error}",
+                edge.id.as_str()
+            ));
+        }
         if !index.has_global_node(edge.from_type, &edge.from_id) {
             dangling.push(format!(
                 "edge {} has dangling reference: from {} {}",
@@ -418,6 +499,25 @@ fn check_artifact_links(
     }
 }
 
+fn check_ideation_target(
+    index: &CheckIndex,
+    dangling: &mut Vec<String>,
+    scope_id: &ScopeId,
+    owner: &str,
+    target: &IdeationTarget,
+) {
+    let node_type = ideation_target_type_name(target.artifact_type);
+    check_scoped_reference(
+        index,
+        dangling,
+        scope_id,
+        owner,
+        "target",
+        node_type,
+        &target.artifact_id,
+    );
+}
+
 fn check_scoped_reference(
     index: &CheckIndex,
     dangling: &mut Vec<String>,
@@ -433,40 +533,6 @@ fn check_scoped_reference(
             target_id.as_str()
         ));
     }
-}
-
-fn load_edge_shards(layout: &ProvenanceLayout) -> anyhow::Result<Vec<Edge>> {
-    let edges_dir = layout.edges_dir();
-    if !edges_dir.exists() {
-        return Ok(Vec::new());
-    }
-
-    let mut shard_paths = Vec::new();
-    for entry in std::fs::read_dir(&edges_dir)? {
-        let entry = entry?;
-        if entry.file_type()?.is_file()
-            && entry.path().extension().and_then(|ext| ext.to_str()) == Some("jsonl")
-        {
-            shard_paths.push(entry.path());
-        }
-    }
-    shard_paths.sort();
-
-    let mut edges = Vec::new();
-    for path in shard_paths {
-        let contents = std::fs::read_to_string(&path)
-            .with_context(|| format!("failed to read edge shard {}", path.display()))?;
-        for (index, line) in contents.lines().enumerate() {
-            edges.push(serde_json::from_str(line).with_context(|| {
-                format!(
-                    "failed to parse edge shard {} line {}",
-                    path.display(),
-                    index + 1
-                )
-            })?);
-        }
-    }
-    Ok(edges)
 }
 
 const fn node_type_name(node_type: NodeType) -> &'static str {
@@ -486,5 +552,17 @@ const fn artifact_link_target_name(target_type: ArtifactLinkTargetType) -> &'sta
         ArtifactLinkTargetType::Requirement => "requirement",
         ArtifactLinkTargetType::Resolution => "resolution",
         ArtifactLinkTargetType::Rule => "rule",
+    }
+}
+
+const fn ideation_target_type_name(target_type: IdeationTargetType) -> &'static str {
+    match target_type {
+        IdeationTargetType::Source => "source",
+        IdeationTargetType::Requirement => "requirement",
+        IdeationTargetType::Resolution => "resolution",
+        IdeationTargetType::Rule => "rule",
+        IdeationTargetType::Topic => "topic",
+        IdeationTargetType::Question => "question",
+        IdeationTargetType::Domain => "domain",
     }
 }

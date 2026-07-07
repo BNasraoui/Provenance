@@ -72,6 +72,78 @@ fn check_accepts_edges_whose_endpoints_exist_in_different_scopes() {
         .stdout(contains(r#""status": "ok""#));
 }
 
+#[test]
+fn check_rejects_dangling_promotion_decision_proposal_id() {
+    let dir = tempfile::tempdir().unwrap();
+    init(dir.path());
+    let state = dir.path().join(".provenance/state");
+    write_jsonl(
+        &state.join("scopes/default/ideation/promotion_decisions.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","promotionDecisionId":"decision_missing_proposal","proposalId":"proposal_missing","decision":"accepted","rationale":"Looks good.","decidedBy":{"identity_type":"human","id":"ben"}}"#,
+    );
+
+    provenance(dir.path())
+        .failure()
+        .stderr(contains("dangling reference"))
+        .stderr(contains("promotion decision decision_missing_proposal"))
+        .stderr(contains("proposal proposal_missing"));
+}
+
+#[test]
+fn check_preserves_edge_shard_parse_context() {
+    let dir = tempfile::tempdir().unwrap();
+    init(dir.path());
+    let state = dir.path().join(".provenance/state");
+    write_jsonl(
+        &state.join("edges/edges-01.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","id":"edge_valid","edge_type":"refines_into","from_type":"requirement","from_id":"req_a","to_type":"requirement","to_id":"req_b"}
+{"schema_version":1,"scope_id":"default","id":"edge_broken""#,
+    );
+
+    provenance(dir.path())
+        .failure()
+        .stderr(contains("failed to parse edge shard"))
+        .stderr(contains("edges-01.jsonl line 2"));
+}
+
+#[test]
+fn check_rejects_dangling_origin_thread_and_message_references() {
+    let dir = tempfile::tempdir().unwrap();
+    init(dir.path());
+    let state = dir.path().join(".provenance/state");
+    write_jsonl(
+        &state.join("scopes/default/sources/source.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","id":"source_policy","name":"Policy","source_type":"policy","origin_thread":"thread_missing","origin_message":"message_missing"}"#,
+    );
+
+    provenance(dir.path())
+        .failure()
+        .stderr(contains("source source_policy"))
+        .stderr(contains("origin_thread thread thread_missing"))
+        .stderr(contains("origin_message message message_missing"));
+}
+
+#[test]
+fn check_reports_invalid_edge_endpoints_without_masking_dangling_references() {
+    let dir = tempfile::tempdir().unwrap();
+    init(dir.path());
+    let state = dir.path().join(".provenance/state");
+    write_jsonl(
+        &state.join("scopes/default/sources/source.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","id":"source_policy","name":"Policy","source_type":"policy"}"#,
+    );
+    write_jsonl(
+        &state.join("edges/edges-00.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","id":"edge_bad_endpoint","edge_type":"references","from_type":"source","from_id":"source_policy","to_type":"rule","to_id":"rule_missing"}"#,
+    );
+
+    provenance(dir.path())
+        .failure()
+        .stderr(contains("edge edge_bad_endpoint"))
+        .stderr(contains("invalid"))
+        .stderr(contains("to rule rule_missing"));
+}
+
 fn init(repo: &Path) {
     Command::cargo_bin("provenance")
         .unwrap()
