@@ -1,6 +1,6 @@
 use crate::output::OutputFormat;
 use camino::Utf8PathBuf;
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde::Serialize;
 
 #[derive(Parser)]
@@ -194,6 +194,17 @@ pub enum Command {
         #[command(subcommand)]
         command: SkillsCommand,
     },
+    Schema {
+        #[command(subcommand)]
+        command: SchemaCommand,
+    },
+    Validate {
+        artifact: IdeationArtifactKind,
+        #[arg(long)]
+        input: Utf8PathBuf,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
+        format: OutputFormat,
+    },
     Export {
         #[arg(long, default_value = ".")]
         repo: Utf8PathBuf,
@@ -222,6 +233,32 @@ pub enum Command {
         theirs: Utf8PathBuf,
         #[arg(long)]
         output: Option<Utf8PathBuf>,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
+        format: OutputFormat,
+    },
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum IdeationArtifactKind {
+    Contribution,
+    SynthesisPacket,
+    Proposal,
+}
+
+impl IdeationArtifactKind {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Contribution => "contribution",
+            Self::SynthesisPacket => "synthesis-packet",
+            Self::Proposal => "proposal",
+        }
+    }
+}
+
+#[derive(Subcommand)]
+pub enum SchemaCommand {
+    Show {
+        artifact: IdeationArtifactKind,
         #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
         format: OutputFormat,
     },
