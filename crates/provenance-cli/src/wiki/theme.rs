@@ -686,6 +686,20 @@ pub const ICON_DEFS: &str = r#"<svg width="0" height="0" style="position:absolut
 mod tests {
     use super::*;
 
+    #[track_caller]
+    fn css_rule(selector: &str) -> &'static str {
+        let prefix = format!("{selector} {{");
+        let declarations = WIKI_CSS
+            .split_once(&prefix)
+            .unwrap_or_else(|| panic!("missing CSS rule: {selector}"))
+            .1;
+
+        declarations
+            .split_once('}')
+            .unwrap_or_else(|| panic!("unterminated CSS rule: {selector}"))
+            .0
+    }
+
     #[test]
     fn css_carries_all_five_theme_token_blocks() {
         for theme in ["statesman", "piano", "latte", "mocha", "dracula"] {
@@ -729,9 +743,7 @@ mod tests {
     #[test]
     fn css_allows_deep_breadcrumbs_to_wrap_in_chrome() {
         assert!(
-            WIKI_CSS.contains(
-                ".chrome-inner {\n      max-width: 1040px;\n      margin: 0 auto;\n      padding: 0.55rem 1.5rem;\n      display: flex;\n      align-items: flex-start;\n      gap: 1rem;\n    }"
-            ),
+            css_rule(".chrome-inner").contains("align-items: flex-start;"),
             "chrome header should align cleanly when breadcrumbs wrap"
         );
         assert!(
@@ -739,7 +751,7 @@ mod tests {
             "breadcrumb nav should be shrink-safe inside the chrome flex row"
         );
         assert!(
-            WIKI_CSS.contains("overflow-wrap: anywhere;"),
+            css_rule(".chrome nav a").contains("overflow-wrap: anywhere;"),
             "breadcrumb links should not force horizontal overflow"
         );
     }
