@@ -6,9 +6,18 @@ use provenance_core::{
     ResolutionInputType, SourceReference, StableId,
 };
 use serde::de::DeserializeOwned;
+use std::borrow::Cow;
 
 pub(super) fn parse_json_arg<T: DeserializeOwned>(flag: &str, value: &str) -> anyhow::Result<T> {
-    serde_json::from_str(value).with_context(|| format!("--{flag} must be valid JSON"))
+    let json = if let Some(path) = value.strip_prefix('@') {
+        Cow::Owned(
+            std::fs::read_to_string(path)
+                .with_context(|| format!("failed to read --{flag} JSON file {path}"))?,
+        )
+    } else {
+        Cow::Borrowed(value)
+    };
+    serde_json::from_str(&json).with_context(|| format!("--{flag} must be valid JSON"))
 }
 
 pub(super) fn stable_ids(values: Vec<String>) -> anyhow::Result<Vec<StableId>> {
