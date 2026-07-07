@@ -24,6 +24,7 @@ mod repo;
 mod requirements;
 mod resolutions;
 mod rules;
+mod schema;
 mod service_bindings;
 mod services;
 mod skills;
@@ -33,6 +34,7 @@ mod synthesis_packets;
 mod thread;
 mod topics;
 mod traceability;
+mod validate;
 mod wiki;
 
 #[allow(clippy::redundant_pub_crate)]
@@ -186,6 +188,16 @@ pub(super) async fn dispatch(command: Command, quiet: bool) -> anyhow::Result<()
         }
         Command::Skills { command } => {
             skills::handle(command)?;
+        }
+        Command::Schema { command } => {
+            schema::handle(command)?;
+        }
+        Command::Validate {
+            artifact,
+            input,
+            format,
+        } => {
+            validate::handle(artifact, input, format)?;
         }
         Command::Export {
             repo,
