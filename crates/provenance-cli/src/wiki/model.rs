@@ -10,6 +10,7 @@ use provenance_core::{
     MessageRole, NodeType, RequirementStatus, ResolutionInputType, ResolutionStatus, RuleModality,
     RuleSeverity, RuleStatus, RuleType, SourceType, ThreadStatus,
 };
+pub use provenance_store::cache::GapKind;
 use serde::Serialize;
 
 /// The kind of page an id refers to.
@@ -58,26 +59,6 @@ impl PageId {
 pub struct PageLink {
     pub target: PageId,
     pub title: String,
-}
-
-/// Why a page carries a gap notice.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum GapKind {
-    /// A requirement has no source refs and no `references` edge.
-    MissingSourceRefs,
-    /// A resolved requirement has no `resolves` edge pointing at it.
-    NoResolvingDecision,
-    /// A resolved requirement or approved resolution produced no rule.
-    NoProducedRules,
-    /// A rule no `produces` edge points at.
-    OrphanRule,
-    /// A resolution that resolves no requirement.
-    OrphanResolution,
-    /// A source nothing references.
-    UnreferencedSource,
-    /// A reference to a record that does not exist in the scope.
-    DanglingReference,
 }
 
 /// An honest hole in the graph, rendered as a first-class notice.
