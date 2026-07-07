@@ -275,7 +275,7 @@ impl IdeationArtifactKind {
     }
 }
 
-#[derive(Subcommand)]
+#[derive(Clone, Copy, Subcommand)]
 pub enum SchemaCommand {
     Show {
         artifact: IdeationArtifactKind,
