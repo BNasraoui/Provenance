@@ -190,6 +190,10 @@ pub enum Command {
         #[command(subcommand)]
         command: CoverageCommand,
     },
+    SwarmBacktrace {
+        #[command(subcommand)]
+        command: SwarmBacktraceCommand,
+    },
     Skills {
         #[command(subcommand)]
         command: SkillsCommand,
@@ -233,6 +237,22 @@ pub enum Command {
         theirs: Utf8PathBuf,
         #[arg(long)]
         output: Option<Utf8PathBuf>,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
+        format: OutputFormat,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum SwarmBacktraceCommand {
+    Land {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long, default_value = "default")]
+        scope: String,
+        #[arg(long)]
+        run_dir: Utf8PathBuf,
+        #[arg(long)]
+        replace: bool,
         #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
         format: OutputFormat,
     },

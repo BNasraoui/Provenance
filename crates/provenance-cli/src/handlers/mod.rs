@@ -30,6 +30,7 @@ mod services;
 mod skills;
 mod sources;
 mod stale;
+mod swarm_backtrace;
 mod synthesis_packets;
 mod thread;
 mod topics;
@@ -185,6 +186,9 @@ pub(super) async fn dispatch(command: Command, quiet: bool) -> anyhow::Result<()
         }
         Command::Coverage { command } => {
             coverage::handle(command)?;
+        }
+        Command::SwarmBacktrace { command } => {
+            swarm_backtrace::handle(command)?;
         }
         Command::Skills { command } => {
             skills::handle(command)?;
