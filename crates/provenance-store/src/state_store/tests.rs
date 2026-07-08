@@ -239,6 +239,102 @@ fn generic_edges_validate_endpoints_and_delete() {
 }
 
 #[test]
+fn list_edges_reads_all_edge_shards() {
+    let (_dir, store, scope) = seeded_source_requirement_store();
+    store
+        .create_requirement(CreateRequirementInput {
+            scope_id: scope.clone(),
+            id: StableId::new("req_leave").unwrap(),
+            statement: "Leave".into(),
+            description: None,
+            status: RequirementStatus::Active,
+            domain_id: None,
+            origin_thread: None,
+            origin_message: None,
+        })
+        .unwrap();
+    let first_edge = store
+        .create_edge(CreateEdgeInput {
+            scope_id: scope.clone(),
+            edge_type: EdgeType::RefinesInto,
+            from_type: NodeType::Requirement,
+            from_id: StableId::new("req_overtime").unwrap(),
+            to_type: NodeType::Requirement,
+            to_id: StableId::new("req_leave").unwrap(),
+        })
+        .unwrap();
+    let second_edge = Edge {
+        schema_version: provenance_core::SchemaVersion(1),
+        scope_id: scope,
+        id: StableId::new("edge_second_shard").unwrap(),
+        edge_type: EdgeType::DependsOn,
+        from_type: NodeType::Requirement,
+        from_id: StableId::new("req_leave").unwrap(),
+        to_type: NodeType::Requirement,
+        to_id: StableId::new("req_overtime").unwrap(),
+        label: None,
+    };
+    let second_shard = store.layout.edges_dir().join("edges-01.jsonl");
+    std::fs::create_dir_all(second_shard.parent().unwrap()).unwrap();
+    std::fs::write(
+        second_shard,
+        format!("{}\n", serde_json::to_string(&second_edge).unwrap()),
+    )
+    .unwrap();
+
+    let edges = store.list_edges().unwrap();
+    assert_eq!(edges.len(), 2);
+    assert!(edges.iter().any(|edge| edge.id == first_edge.id));
+    assert!(edges.iter().any(|edge| edge.id == second_edge.id));
+}
+
+#[test]
+fn list_messages_reads_all_month_shards() {
+    let (_dir, store, scope) = seeded_source_requirement_store();
+    let first_message = Message {
+        schema_version: provenance_core::SchemaVersion(1),
+        scope_id: scope.clone(),
+        id: StableId::new("msg_july").unwrap(),
+        thread_id: StableId::new("thread_source_source_schads").unwrap(),
+        role: MessageRole::User,
+        body: "July message".into(),
+        created_at: 1,
+        ai_metadata: None,
+    };
+    let second_message = Message {
+        schema_version: provenance_core::SchemaVersion(1),
+        scope_id: scope.clone(),
+        id: StableId::new("msg_august").unwrap(),
+        thread_id: StableId::new("thread_source_source_schads").unwrap(),
+        role: MessageRole::Assistant,
+        body: "August message".into(),
+        created_at: 2,
+        ai_metadata: None,
+    };
+    let threads_dir = store
+        .layout
+        .scopes_dir()
+        .join(scope.as_str())
+        .join("threads");
+    std::fs::create_dir_all(&threads_dir).unwrap();
+    std::fs::write(
+        threads_dir.join("2026-07.jsonl"),
+        format!("{}\n", serde_json::to_string(&first_message).unwrap()),
+    )
+    .unwrap();
+    std::fs::write(
+        threads_dir.join("2026-08.jsonl"),
+        format!("{}\n", serde_json::to_string(&second_message).unwrap()),
+    )
+    .unwrap();
+
+    let messages = store.list_messages(&scope).unwrap();
+    assert_eq!(messages.len(), 2);
+    assert_eq!(messages[0].id, first_message.id);
+    assert_eq!(messages[1].id, second_message.id);
+}
+
+#[test]
 fn shaping_records_are_written_deterministically_and_validate_relationships() {
     let (_dir, store, scope) = seeded_source_requirement_store();
 

@@ -1,0 +1,202 @@
+use assert_cmd::Command;
+use predicates::str::contains;
+use std::path::Path;
+
+#[test]
+fn check_rejects_dangling_edge_endpoint_in_any_edge_shard() {
+    let dir = tempfile::tempdir().unwrap();
+    init(dir.path());
+    let state = dir.path().join(".provenance/state");
+    write_jsonl(
+        &state.join("scopes/default/requirements/req.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","id":"req_existing","statement":"Existing requirement","status":"active"}"#,
+    );
+    write_jsonl(
+        &state.join("edges/edges-01.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","id":"edge_missing_target","edge_type":"refines_into","from_type":"requirement","from_id":"req_existing","to_type":"requirement","to_id":"req_missing"}"#,
+    );
+
+    provenance(dir.path())
+        .failure()
+        .stderr(contains("dangling reference"))
+        .stderr(contains("edge edge_missing_target"))
+        .stderr(contains("to requirement req_missing"));
+}
+
+#[test]
+fn check_rejects_dangling_artifact_links() {
+    let dir = tempfile::tempdir().unwrap();
+    init(dir.path());
+    let state = dir.path().join(".provenance/state");
+    write_jsonl(
+        &state.join("scopes/default/requirements/req.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","id":"req_existing","statement":"Existing requirement","status":"active"}"#,
+    );
+    write_jsonl(
+        &state.join("scopes/default/topics/topic.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","id":"topic_existing","requirement_id":"req_existing","title":"Existing topic","status":"open","links":[{"target_type":"rule","target_id":"rule_missing"}]}"#,
+    );
+
+    provenance(dir.path())
+        .failure()
+        .stderr(contains("dangling reference"))
+        .stderr(contains("topic topic_existing"))
+        .stderr(contains("link rule rule_missing"));
+}
+
+#[test]
+fn check_accepts_edges_whose_endpoints_exist_in_different_scopes() {
+    let dir = tempfile::tempdir().unwrap();
+    init(dir.path());
+    let state = dir.path().join(".provenance/state");
+    std::fs::write(
+        state.join("manifest.json"),
+        r#"{"schema_version":1,"scopes":[{"id":"frontend","path_prefix":"."},{"id":"platform","path_prefix":"services/platform"}]}"#,
+    )
+    .unwrap();
+    write_jsonl(
+        &state.join("scopes/frontend/requirements/req.jsonl"),
+        r#"{"schema_version":1,"scope_id":"frontend","id":"req_frontend","statement":"Frontend requirement","status":"active"}"#,
+    );
+    write_jsonl(
+        &state.join("scopes/platform/requirements/req.jsonl"),
+        r#"{"schema_version":1,"scope_id":"platform","id":"req_platform","statement":"Platform requirement","status":"active"}"#,
+    );
+    write_jsonl(
+        &state.join("edges/edges-00.jsonl"),
+        r#"{"schema_version":1,"scope_id":"frontend","id":"edge_cross_scope","edge_type":"depends_on","from_type":"requirement","from_id":"req_frontend","to_type":"requirement","to_id":"req_platform"}"#,
+    );
+
+    provenance(dir.path())
+        .success()
+        .stdout(contains(r#""status": "ok""#));
+}
+
+#[test]
+fn check_rejects_dangling_promotion_decision_proposal_id() {
+    let dir = tempfile::tempdir().unwrap();
+    init(dir.path());
+    let state = dir.path().join(".provenance/state");
+    write_jsonl(
+        &state.join("scopes/default/ideation/promotion_decisions.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","promotionDecisionId":"decision_missing_proposal","proposalId":"proposal_missing","decision":"accepted","rationale":"Looks good.","decidedBy":{"identity_type":"human","id":"ben"}}"#,
+    );
+
+    provenance(dir.path())
+        .failure()
+        .stderr(contains("dangling reference"))
+        .stderr(contains("promotion decision decision_missing_proposal"))
+        .stderr(contains("proposal proposal_missing"));
+}
+
+#[test]
+fn check_preserves_edge_shard_parse_context() {
+    let dir = tempfile::tempdir().unwrap();
+    init(dir.path());
+    let state = dir.path().join(".provenance/state");
+    write_jsonl(
+        &state.join("edges/edges-01.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","id":"edge_valid","edge_type":"refines_into","from_type":"requirement","from_id":"req_a","to_type":"requirement","to_id":"req_b"}
+{"schema_version":1,"scope_id":"default","id":"edge_broken""#,
+    );
+
+    provenance(dir.path())
+        .failure()
+        .stderr(contains("failed to parse edge shard"))
+        .stderr(contains("edges-01.jsonl line 2"));
+}
+
+#[test]
+fn check_rejects_dangling_origin_thread_and_message_references() {
+    let dir = tempfile::tempdir().unwrap();
+    init(dir.path());
+    let state = dir.path().join(".provenance/state");
+    write_jsonl(
+        &state.join("scopes/default/sources/source.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","id":"source_policy","name":"Policy","source_type":"policy","origin_thread":"thread_missing","origin_message":"message_missing"}"#,
+    );
+
+    provenance(dir.path())
+        .failure()
+        .stderr(contains("source source_policy"))
+        .stderr(contains("origin_thread thread thread_missing"))
+        .stderr(contains("origin_message message message_missing"));
+}
+
+#[test]
+fn check_accepts_origin_message_in_non_default_month_shard() {
+    let dir = tempfile::tempdir().unwrap();
+    init(dir.path());
+    let state = dir.path().join(".provenance/state");
+    write_jsonl(
+        &state.join("scopes/default/sources/source.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","id":"source_policy","name":"Policy","source_type":"policy","origin_thread":"thread_source_policy","origin_message":"msg_august"}"#,
+    );
+    write_jsonl(
+        &state.join("scopes/default/threads/threads.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","id":"thread_source_policy","parent":{"node_type":"source","node_id":"source_policy"},"status":"active","created_at":1}"#,
+    );
+    write_jsonl(
+        &state.join("scopes/default/threads/2026-08.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","id":"msg_august","thread_id":"thread_source_policy","role":"user","body":"Policy discussion","created_at":1}"#,
+    );
+
+    provenance(dir.path())
+        .success()
+        .stdout(contains(r#""status": "ok""#));
+}
+
+#[test]
+fn check_reports_invalid_edge_endpoints_without_masking_dangling_references() {
+    let dir = tempfile::tempdir().unwrap();
+    init(dir.path());
+    let state = dir.path().join(".provenance/state");
+    write_jsonl(
+        &state.join("scopes/default/sources/source.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","id":"source_policy","name":"Policy","source_type":"policy"}"#,
+    );
+    write_jsonl(
+        &state.join("edges/edges-00.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","id":"edge_bad_endpoint","edge_type":"references","from_type":"source","from_id":"source_policy","to_type":"rule","to_id":"rule_missing"}"#,
+    );
+
+    provenance(dir.path())
+        .failure()
+        .stderr(contains("edge edge_bad_endpoint"))
+        .stderr(contains("invalid"))
+        .stderr(contains("to rule rule_missing"));
+}
+
+fn init(repo: &Path) {
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "init",
+            "--path",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--path-prefix",
+            ".",
+        ])
+        .assert()
+        .success();
+}
+
+fn provenance(repo: &Path) -> assert_cmd::assert::Assert {
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "check",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--format",
+            "json",
+        ])
+        .assert()
+}
+
+fn write_jsonl(path: &Path, record: &str) {
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(path, format!("{record}\n")).unwrap();
+}
