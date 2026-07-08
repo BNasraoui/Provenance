@@ -124,6 +124,29 @@ fn check_rejects_dangling_origin_thread_and_message_references() {
 }
 
 #[test]
+fn check_accepts_origin_message_in_non_default_month_shard() {
+    let dir = tempfile::tempdir().unwrap();
+    init(dir.path());
+    let state = dir.path().join(".provenance/state");
+    write_jsonl(
+        &state.join("scopes/default/sources/source.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","id":"source_policy","name":"Policy","source_type":"policy","origin_thread":"thread_source_policy","origin_message":"msg_august"}"#,
+    );
+    write_jsonl(
+        &state.join("scopes/default/threads/threads.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","id":"thread_source_policy","parent":{"node_type":"source","node_id":"source_policy"},"status":"active","created_at":1}"#,
+    );
+    write_jsonl(
+        &state.join("scopes/default/threads/2026-08.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","id":"msg_august","thread_id":"thread_source_policy","role":"user","body":"Policy discussion","created_at":1}"#,
+    );
+
+    provenance(dir.path())
+        .success()
+        .stdout(contains(r#""status": "ok""#));
+}
+
+#[test]
 fn check_reports_invalid_edge_endpoints_without_masking_dangling_references() {
     let dir = tempfile::tempdir().unwrap();
     init(dir.path());
