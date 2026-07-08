@@ -40,6 +40,7 @@ struct LandReport {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct MergeOutput {
     #[serde(default)]
     synthesis_packet: Option<SynthesisPacket>,
