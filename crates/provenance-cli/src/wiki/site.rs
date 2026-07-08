@@ -95,7 +95,7 @@ pub fn build(
         .with_context(|| format!("stylesheet path {stylesheet_path} has no parent directory"))?;
     std::fs::create_dir_all(stylesheet_dir)
         .with_context(|| format!("failed to create wiki output directory {stylesheet_dir}"))?;
-    std::fs::write(&stylesheet_path, theme::WIKI_CSS)
+    std::fs::write(&stylesheet_path, theme::wiki_css())
         .with_context(|| format!("failed to write wiki stylesheet {stylesheet_path}"))?;
 
     let page_count = pages.len();
@@ -213,7 +213,7 @@ fn router(site: WikiSite) -> Router {
 async fn stylesheet() -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
-        theme::WIKI_CSS,
+        theme::wiki_css(),
     )
 }
 
