@@ -34,7 +34,7 @@ impl<'de> Deserialize<'de> for ScopeId {
         let value = String::deserialize(deserializer)?;
         Self::new(value.clone()).map_err(|err| {
             D::Error::custom(format!(
-                "scope id '{value}' is invalid: {err}; repair hint: manually correct the shard file containing this value"
+                "scope id '{value}' is invalid: {err}; repair hint: correct this value where it is stored (state shard or input JSON)"
             ))
         })
     }
@@ -70,7 +70,7 @@ impl<'de> Deserialize<'de> for StableId {
         let value = String::deserialize(deserializer)?;
         Self::new(value.clone()).map_err(|err| {
             D::Error::custom(format!(
-                "stable id '{value}' is invalid: {err}; repair hint: manually correct the shard file containing this value"
+                "stable id '{value}' is invalid: {err}; repair hint: correct this value where it is stored (state shard or input JSON)"
             ))
         })
     }
@@ -87,7 +87,8 @@ mod tests {
 
         assert!(message.contains("source/codebase"));
         assert!(message.contains("stable id"));
-        assert!(message.contains("manually correct the shard file"));
+        assert!(message.contains("correct this value where it is stored"));
+        assert!(message.contains("state shard or input JSON"));
     }
 
     #[test]
@@ -97,6 +98,7 @@ mod tests {
 
         assert!(message.contains("Default"));
         assert!(message.contains("scope id"));
-        assert!(message.contains("manually correct the shard file"));
+        assert!(message.contains("correct this value where it is stored"));
+        assert!(message.contains("state shard or input JSON"));
     }
 }
