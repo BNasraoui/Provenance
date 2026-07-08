@@ -1,6 +1,6 @@
 use crate::output::OutputFormat;
 use camino::Utf8PathBuf;
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde::Serialize;
 
 #[derive(Parser)]
@@ -190,9 +190,24 @@ pub enum Command {
         #[command(subcommand)]
         command: CoverageCommand,
     },
+    SwarmBacktrace {
+        #[command(subcommand)]
+        command: SwarmBacktraceCommand,
+    },
     Skills {
         #[command(subcommand)]
         command: SkillsCommand,
+    },
+    Schema {
+        #[command(subcommand)]
+        command: SchemaCommand,
+    },
+    Validate {
+        artifact: IdeationArtifactKind,
+        #[arg(long)]
+        input: Utf8PathBuf,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
+        format: OutputFormat,
     },
     Export {
         #[arg(long, default_value = ".")]
@@ -222,6 +237,48 @@ pub enum Command {
         theirs: Utf8PathBuf,
         #[arg(long)]
         output: Option<Utf8PathBuf>,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
+        format: OutputFormat,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum SwarmBacktraceCommand {
+    Land {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long, default_value = "default")]
+        scope: String,
+        #[arg(long)]
+        run_dir: Utf8PathBuf,
+        #[arg(long)]
+        replace: bool,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
+        format: OutputFormat,
+    },
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum IdeationArtifactKind {
+    Contribution,
+    SynthesisPacket,
+    Proposal,
+}
+
+impl IdeationArtifactKind {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Contribution => "contribution",
+            Self::SynthesisPacket => "synthesis-packet",
+            Self::Proposal => "proposal",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Subcommand)]
+pub enum SchemaCommand {
+    Show {
+        artifact: IdeationArtifactKind,
         #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
         format: OutputFormat,
     },
@@ -373,6 +430,8 @@ pub enum ContributionsCommand {
         uncertainty_rationale: String,
         #[arg(long, default_value = "[]")]
         open_questions_json: String,
+        #[arg(long)]
+        replace: bool,
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },
@@ -418,6 +477,8 @@ pub enum SynthesisPacketsCommand {
         suggested_artifacts_json: String,
         #[arg(long, default_value = "[]")]
         required_human_decisions_json: String,
+        #[arg(long)]
+        replace: bool,
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },
@@ -467,6 +528,8 @@ pub enum ProposalsCommand {
         duplicate_of: Option<String>,
         #[arg(long)]
         superseded_by: Option<String>,
+        #[arg(long)]
+        replace: bool,
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },

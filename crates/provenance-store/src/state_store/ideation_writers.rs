@@ -1,17 +1,32 @@
 use super::{
-    CreateContributionInput, CreatePromotionDecisionInput, CreateProposalCardInput,
+    serde_name, CreateContributionInput, CreatePromotionDecisionInput, CreateProposalCardInput,
     CreateSynthesisPacketInput, StateStore,
 };
 use crate::shards;
 use provenance_core::{
     validate_optional_confidence_score, Contribution, PromotionDecisionRecord, PromotionState,
-    ProposalCard, SchemaVersion, SynthesisPacket,
+    ProposalCard, SchemaVersion, ScopeId, StableId, SynthesisPacket,
 };
 
 impl StateStore {
     pub fn create_contribution(
         &self,
         input: CreateContributionInput,
+    ) -> anyhow::Result<Contribution> {
+        self.write_contribution(input, false)
+    }
+
+    pub fn upsert_contribution(
+        &self,
+        input: CreateContributionInput,
+    ) -> anyhow::Result<Contribution> {
+        self.write_contribution(input, true)
+    }
+
+    fn write_contribution(
+        &self,
+        input: CreateContributionInput,
+        replace: bool,
     ) -> anyhow::Result<Contribution> {
         let CreateContributionInput {
             scope_id,
@@ -53,11 +68,15 @@ impl StateStore {
                 uncertainty,
                 open_questions,
             };
-            anyhow::ensure!(
-                !records.iter().any(|record| record.id == contribution.id),
-                "contribution already exists"
-            );
-            records.push(contribution.clone());
+            if let Some(index) = records
+                .iter()
+                .position(|record| record.id == contribution.id)
+            {
+                anyhow::ensure!(replace, "contribution already exists");
+                records[index] = contribution.clone();
+            } else {
+                records.push(contribution.clone());
+            }
             records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
             Ok(contribution)
         })
@@ -66,6 +85,21 @@ impl StateStore {
     pub fn create_synthesis_packet(
         &self,
         input: CreateSynthesisPacketInput,
+    ) -> anyhow::Result<SynthesisPacket> {
+        self.write_synthesis_packet(input, false)
+    }
+
+    pub fn upsert_synthesis_packet(
+        &self,
+        input: CreateSynthesisPacketInput,
+    ) -> anyhow::Result<SynthesisPacket> {
+        self.write_synthesis_packet(input, true)
+    }
+
+    fn write_synthesis_packet(
+        &self,
+        input: CreateSynthesisPacketInput,
+        replace: bool,
     ) -> anyhow::Result<SynthesisPacket> {
         let CreateSynthesisPacketInput {
             scope_id,
@@ -98,13 +132,15 @@ impl StateStore {
                 suggested_artifacts,
                 required_human_decisions,
             };
-            anyhow::ensure!(
-                !records
-                    .iter()
-                    .any(|record| record.id == synthesis_packet.id),
-                "synthesis packet already exists"
-            );
-            records.push(synthesis_packet.clone());
+            if let Some(index) = records
+                .iter()
+                .position(|record| record.id == synthesis_packet.id)
+            {
+                anyhow::ensure!(replace, "synthesis packet already exists");
+                records[index] = synthesis_packet.clone();
+            } else {
+                records.push(synthesis_packet.clone());
+            }
             records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
             Ok(synthesis_packet)
         })
@@ -113,6 +149,21 @@ impl StateStore {
     pub fn create_proposal_card(
         &self,
         input: CreateProposalCardInput,
+    ) -> anyhow::Result<ProposalCard> {
+        self.write_proposal_card(input, false)
+    }
+
+    pub fn upsert_proposal_card(
+        &self,
+        input: CreateProposalCardInput,
+    ) -> anyhow::Result<ProposalCard> {
+        self.write_proposal_card(input, true)
+    }
+
+    fn write_proposal_card(
+        &self,
+        input: CreateProposalCardInput,
+        replace: bool,
     ) -> anyhow::Result<ProposalCard> {
         let CreateProposalCardInput {
             scope_id,
@@ -162,11 +213,13 @@ impl StateStore {
                 duplicate_of,
                 superseded_by,
             };
-            anyhow::ensure!(
-                !records.iter().any(|record| record.id == proposal.id),
-                "proposal already exists"
-            );
-            records.push(proposal.clone());
+            if let Some(index) = records.iter().position(|record| record.id == proposal.id) {
+                anyhow::ensure!(replace, "proposal already exists");
+                self.ensure_existing_proposal_card_replaceable(&scope_id, &records[index])?;
+                records[index] = proposal.clone();
+            } else {
+                records.push(proposal.clone());
+            }
             records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
             Ok(proposal)
         })
@@ -242,5 +295,54 @@ impl StateStore {
                 Ok(promotion_decision)
             },
         )
+    }
+
+    pub fn ensure_proposal_card_replaceable(
+        &self,
+        scope_id: &ScopeId,
+        proposal_id: &StableId,
+    ) -> anyhow::Result<()> {
+        if let Some(existing) = self
+            .list_proposal_cards(scope_id)?
+            .into_iter()
+            .find(|proposal| proposal.id.as_str() == proposal_id.as_str())
+        {
+            self.ensure_existing_proposal_card_replaceable(scope_id, &existing)?;
+        }
+        Ok(())
+    }
+
+    fn ensure_existing_proposal_card_replaceable(
+        &self,
+        scope_id: &ScopeId,
+        existing: &ProposalCard,
+    ) -> anyhow::Result<()> {
+        let decisions = self
+            .list_promotion_decisions(scope_id)?
+            .into_iter()
+            .filter(|decision| decision.proposal_id.as_str() == existing.id.as_str())
+            .collect::<Vec<_>>();
+        if existing.promotion_state == PromotionState::Proposed && decisions.is_empty() {
+            return Ok(());
+        }
+
+        let state = serde_name(&existing.promotion_state)
+            .unwrap_or_else(|_| format!("{:?}", existing.promotion_state));
+        if decisions.is_empty() {
+            anyhow::bail!(
+                "proposal {} has a human disposition and cannot be replaced; promotion_state is {state}",
+                existing.id.as_str()
+            );
+        }
+
+        let decision_ids = decisions
+            .iter()
+            .map(|decision| decision.id.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        anyhow::bail!(
+            "proposal {} has a human disposition and cannot be replaced; promotion_state is {state}; promotion decision(s): {decision_ids}",
+            existing.id.as_str()
+        );
     }
 }
