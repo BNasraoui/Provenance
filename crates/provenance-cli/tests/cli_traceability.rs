@@ -38,6 +38,22 @@ fn cli_traceability_chain_reports_rule_upstream_nodes_and_gaps() {
     Command::cargo_bin("provenance")
         .unwrap()
         .args([
+            "domains",
+            "create",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--id",
+            "domain_payroll",
+            "--name",
+            "Payroll",
+        ])
+        .assert()
+        .success();
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
             "requirements",
             "create",
             "--repo",
@@ -48,6 +64,8 @@ fn cli_traceability_chain_reports_rule_upstream_nodes_and_gaps() {
             "req_schads_overtime",
             "--statement",
             "Overtime must follow SCHADS thresholds",
+            "--domain-id",
+            "domain_payroll",
         ])
         .assert()
         .success();

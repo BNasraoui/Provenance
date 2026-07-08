@@ -71,7 +71,7 @@ pub fn render_prime_markdown(view: &PrimeContextView) -> String {
         out.push_str("- none\n");
     }
     for gap in &view.gaps {
-        let _ = writeln!(out, "- {}: {}", gap.requirement_id, gap.reason);
+        let _ = writeln!(out, "- {}: {}", gap.subject(), gap.reason);
     }
     out.push_str("\n## Threads\n");
     for item in &view.threads {
