@@ -1,8 +1,10 @@
+mod gaps;
 mod health;
 mod impact;
 mod prime;
 mod traceability;
 
+pub use gaps::*;
 pub use health::*;
 pub use impact::*;
 pub use prime::*;
@@ -372,8 +374,8 @@ pub(crate) fn serde_name<T: serde::Serialize>(value: &T) -> anyhow::Result<Strin
 mod report_tests {
     use super::*;
     use crate::state_store::{
-        AddSourceReferenceInput, CreateRequirementInput, CreateResolutionInput, CreateRuleInput,
-        CreateSourceInput,
+        AddSourceReferenceInput, CreateDomainInput, CreateRequirementInput, CreateResolutionInput,
+        CreateRuleInput, CreateSourceInput,
     };
     use provenance_core::{
         Manifest, NodeType, RepoPathPrefix, RequirementStatus, ResolutionInput,
@@ -381,6 +383,7 @@ mod report_tests {
         StableId,
     };
 
+    #[allow(clippy::too_many_lines)]
     fn seeded_layout() -> (tempfile::TempDir, ProvenanceLayout, ScopeId) {
         let dir = tempfile::tempdir().unwrap();
         let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
@@ -397,6 +400,15 @@ mod report_tests {
         )
         .unwrap();
         let store = StateStore::new(layout.clone());
+        store
+            .create_domain(CreateDomainInput {
+                scope_id: scope.clone(),
+                id: StableId::new("domain_payroll").unwrap(),
+                name: "Payroll".into(),
+                description: None,
+                color: None,
+            })
+            .unwrap();
         store
             .create_source(CreateSourceInput {
                 scope_id: scope.clone(),
@@ -420,7 +432,7 @@ mod report_tests {
                 statement: "Overtime".into(),
                 description: None,
                 status: RequirementStatus::Active,
-                domain_id: None,
+                domain_id: Some(StableId::new("domain_payroll").unwrap()),
                 origin_thread: None,
                 origin_message: None,
             })
@@ -515,6 +527,36 @@ mod report_tests {
         assert_eq!(health.rules.total, 1);
         assert_eq!(health.rules.with_complete_traceability, 1);
         assert_eq!(health.gaps.total, 0);
+    }
+
+    #[test]
+    fn gaps_flag_requirements_without_domain_id_but_not_requirements_with_one() {
+        let (_dir, layout, scope) = seeded_layout();
+        let store = StateStore::new(layout.clone());
+        store
+            .create_requirement(CreateRequirementInput {
+                scope_id: scope.clone(),
+                id: StableId::new("req_missing_domain").unwrap(),
+                statement: "Rostering rules need a domain".into(),
+                description: None,
+                status: RequirementStatus::Active,
+                domain_id: None,
+                origin_thread: None,
+                origin_message: None,
+            })
+            .unwrap();
+
+        let gaps = find_gaps(&layout, &scope).unwrap();
+        assert!(gaps.iter().any(|gap| {
+            gap.kind == GapKind::MissingDomainId
+                && gap.requirement_id.as_deref() == Some("req_missing_domain")
+                && gap.reason.contains("domain_id")
+        }));
+        assert!(!gaps.iter().any(|gap| {
+            gap.kind == GapKind::MissingDomainId
+                && gap.requirement_id.as_deref() == Some("req_schads_overtime")
+                && gap.reason.contains("domain_id")
+        }));
     }
 
     #[tokio::test]
