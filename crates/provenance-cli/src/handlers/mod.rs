@@ -1,6 +1,7 @@
 use crate::cli::Command;
 
 mod boundaries;
+mod check;
 mod common;
 mod contributions;
 mod coverage;
@@ -50,7 +51,7 @@ pub(super) async fn dispatch(command: Command, quiet: bool) -> anyhow::Result<()
             repo::init(path, scope, path_prefix)?;
         }
         Command::Check { repo, format } => {
-            repo::check(repo, format)?;
+            check::check(repo, format)?;
         }
         Command::Docs { command } => {
             docs::handle(command).await?;
