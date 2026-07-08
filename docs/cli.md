@@ -27,6 +27,15 @@ whether the canonical skills are installed and prints the repo-root install comm
 shaping/ideation commands emit a non-blocking stderr hint when skills are missing,
 suppressible with `--quiet`.
 
+Ideation JSON flags accept inline JSON or `@path/to/payload.json`. Artifact helpers:
+`provenance schema show contribution|synthesis-packet|proposal --format json` prints
+canonical record schemas, and `provenance validate contribution|synthesis-packet|proposal
+--input artifact.json --format json` validates full records, including nested stable IDs.
+`contributions create`, `synthesis-packets create`, and `proposals create` keep duplicate
+protection by default; pass `--replace` to intentionally upsert the same stable ID.
+Swarm backtrace runs can land durable run outputs with
+`provenance swarm-backtrace land --scope <scope> --run-dir <run-dir> --format json`.
+
 Graph edge commands: `edges create --type references|refines_into|depends_on|contradicts|supersedes|needs|resolves|spawns|produces --from-type source|requirement|resolution|rule --from-id <id> --to-type source|requirement|resolution|rule --to-id <id>`, `edges list`, and `edges delete --id <edge-id>`. Creation validates edge type/endpoints and requires both endpoint records to exist.
 
 Shaping turn-state commands: `questions create` requires `--method` (grill, prototype, research, verify, or task); `topics claim/release/close` and `questions claim/release/answer` manage claim state (claiming an already-claimed item fails and reports the holder; closing a topic or answering a question clears its claim); `requirements fog set/show/clear` manages the deliberately unstructured fog text on an anchor requirement.
