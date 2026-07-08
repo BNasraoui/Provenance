@@ -2,7 +2,10 @@ use crate::{
     cli::{IdeationArtifactKind, SchemaCommand},
     output,
 };
-use provenance_core::{ArtifactChangeType, IdeationEvidenceType, IdeationTargetType, ProposalType};
+use provenance_core::{
+    ArtifactChangeType, ContributionStance, EvidenceQuality, IdeationEvidenceType,
+    IdeationTargetType, PromotionState, ProposalType, SpeculationMarker, UncertaintyLevel,
+};
 use serde::Serialize;
 use serde_json::{json, Value};
 
@@ -46,7 +49,7 @@ pub(super) fn schema_for(artifact: IdeationArtifactKind) -> Value {
                 "id": {"$ref": "#/$defs/stableId"},
                 "target": {"$ref": "#/$defs/ideationTarget"},
                 "participant_slot": {"type": "string", "minLength": 1},
-                "stance": {"enum": ["support", "oppose", "mixed", "needs_more_evidence"]},
+                "stance": {"enum": enum_names(&CONTRIBUTION_STANCES)},
                 "strongest_finding": {"type": "string"},
                 "evidence_references": {"type": "array", "items": {"$ref": "#/$defs/evidenceReference"}},
                 "material_claims": {"type": "array", "items": {"$ref": "#/$defs/materialClaim"}},
@@ -119,7 +122,7 @@ pub(super) fn schema_for(artifact: IdeationArtifactKind) -> Value {
                 "summary": {"type": "string"},
                 "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
                 "traceability": {"$ref": "#/$defs/proposalTraceability"},
-                "promotion_state": {"enum": ["proposed", "accepted", "rejected", "deferred", "duplicate", "superseded"]},
+                "promotion_state": {"enum": enum_names(&PROMOTION_STATES)},
                 "duplicate_of": {"$ref": "#/$defs/stableId"},
                 "superseded_by": {"$ref": "#/$defs/stableId"}
             }
@@ -211,7 +214,7 @@ fn common_defs() -> Value {
             "required": ["recommendation", "marker"],
             "properties": {
                 "recommendation": {"type": "string"},
-                "marker": {"enum": ["unsupported", "exploratory"]}
+                "marker": {"enum": enum_names(&SPECULATION_MARKERS)}
             }
         },
         "uncertainty": {
@@ -219,7 +222,7 @@ fn common_defs() -> Value {
             "additionalProperties": false,
             "required": ["level", "rationale"],
             "properties": {
-                "level": {"enum": ["low", "medium", "high"]},
+                "level": {"enum": enum_names(&UNCERTAINTY_LEVELS)},
                 "rationale": {"type": "string"}
             }
         },
@@ -242,7 +245,7 @@ fn common_defs() -> Value {
                 "statement": {"type": "string"},
                 "supporting_participant_slots": {"type": "array", "items": {"type": "string"}},
                 "opposing_participant_slots": {"type": "array", "items": {"type": "string"}},
-                "evidence_quality": {"enum": ["strong", "mixed", "weak", "unsupported"]}
+                "evidence_quality": {"enum": enum_names(&EVIDENCE_QUALITIES)}
             }
         },
         "minorityObjection": {
@@ -272,7 +275,7 @@ fn common_defs() -> Value {
             "properties": {
                 "statement": {"type": "string"},
                 "originating_participant_slots": {"type": "array", "items": {"type": "string"}},
-                "marker": {"enum": ["unsupported", "exploratory"]}
+                "marker": {"enum": enum_names(&SPECULATION_MARKERS)}
             }
         },
         "suggestedArtifact": {
@@ -336,6 +339,31 @@ const ARTIFACT_CHANGE_TYPES: [ArtifactChangeType; 4] = [
     ArtifactChangeType::None,
 ];
 
+const CONTRIBUTION_STANCES: [ContributionStance; 4] = [
+    ContributionStance::Support,
+    ContributionStance::Oppose,
+    ContributionStance::Mixed,
+    ContributionStance::NeedsMoreEvidence,
+];
+
+const SPECULATION_MARKERS: [SpeculationMarker; 2] = [
+    SpeculationMarker::Unsupported,
+    SpeculationMarker::Exploratory,
+];
+
+const UNCERTAINTY_LEVELS: [UncertaintyLevel; 3] = [
+    UncertaintyLevel::Low,
+    UncertaintyLevel::Medium,
+    UncertaintyLevel::High,
+];
+
+const EVIDENCE_QUALITIES: [EvidenceQuality; 4] = [
+    EvidenceQuality::Strong,
+    EvidenceQuality::Mixed,
+    EvidenceQuality::Weak,
+    EvidenceQuality::Unsupported,
+];
+
 const PROPOSAL_TYPES: [ProposalType; 6] = [
     ProposalType::RequirementCandidate,
     ProposalType::ResolutionCandidate,
@@ -343,6 +371,15 @@ const PROPOSAL_TYPES: [ProposalType; 6] = [
     ProposalType::SourceGap,
     ProposalType::Question,
     ProposalType::NoAction,
+];
+
+const PROMOTION_STATES: [PromotionState; 6] = [
+    PromotionState::Proposed,
+    PromotionState::Accepted,
+    PromotionState::Rejected,
+    PromotionState::Deferred,
+    PromotionState::Duplicate,
+    PromotionState::Superseded,
 ];
 
 fn enum_names<T: Serialize>(variants: &[T]) -> Vec<String> {
@@ -373,42 +410,135 @@ mod tests {
             .collect()
     }
 
+    fn assert_ideation_target_type_array_is_exhaustive(value: IdeationTargetType) {
+        match value {
+            IdeationTargetType::Source
+            | IdeationTargetType::Requirement
+            | IdeationTargetType::Resolution
+            | IdeationTargetType::Rule
+            | IdeationTargetType::Topic
+            | IdeationTargetType::Question
+            | IdeationTargetType::Domain => {}
+        }
+    }
+
+    fn assert_ideation_evidence_type_array_is_exhaustive(value: IdeationEvidenceType) {
+        match value {
+            IdeationEvidenceType::Source
+            | IdeationEvidenceType::Artifact
+            | IdeationEvidenceType::ThreadMessage
+            | IdeationEvidenceType::DomainKnowledge
+            | IdeationEvidenceType::Unsupported
+            | IdeationEvidenceType::Exploratory => {}
+        }
+    }
+
+    fn assert_artifact_change_type_array_is_exhaustive(value: ArtifactChangeType) {
+        match value {
+            ArtifactChangeType::Create
+            | ArtifactChangeType::Update
+            | ArtifactChangeType::Remove
+            | ArtifactChangeType::None => {}
+        }
+    }
+
+    fn assert_contribution_stance_array_is_exhaustive(value: ContributionStance) {
+        match value {
+            ContributionStance::Support
+            | ContributionStance::Oppose
+            | ContributionStance::Mixed
+            | ContributionStance::NeedsMoreEvidence => {}
+        }
+    }
+
+    fn assert_speculation_marker_array_is_exhaustive(value: SpeculationMarker) {
+        match value {
+            SpeculationMarker::Unsupported | SpeculationMarker::Exploratory => {}
+        }
+    }
+
+    fn assert_uncertainty_level_array_is_exhaustive(value: UncertaintyLevel) {
+        match value {
+            UncertaintyLevel::Low | UncertaintyLevel::Medium | UncertaintyLevel::High => {}
+        }
+    }
+
+    fn assert_evidence_quality_array_is_exhaustive(value: EvidenceQuality) {
+        match value {
+            EvidenceQuality::Strong
+            | EvidenceQuality::Mixed
+            | EvidenceQuality::Weak
+            | EvidenceQuality::Unsupported => {}
+        }
+    }
+
+    fn assert_proposal_type_array_is_exhaustive(value: ProposalType) {
+        match value {
+            ProposalType::RequirementCandidate
+            | ProposalType::ResolutionCandidate
+            | ProposalType::RuleCandidate
+            | ProposalType::SourceGap
+            | ProposalType::Question
+            | ProposalType::NoAction => {}
+        }
+    }
+
+    fn assert_promotion_state_array_is_exhaustive(value: PromotionState) {
+        match value {
+            PromotionState::Proposed
+            | PromotionState::Accepted
+            | PromotionState::Rejected
+            | PromotionState::Deferred
+            | PromotionState::Duplicate
+            | PromotionState::Superseded => {}
+        }
+    }
+
+    #[test]
+    fn schema_enum_variant_arrays_are_exhaustive() {
+        for variant in IDEATION_TARGET_TYPES {
+            assert_ideation_target_type_array_is_exhaustive(variant);
+        }
+        for variant in IDEATION_EVIDENCE_TYPES {
+            assert_ideation_evidence_type_array_is_exhaustive(variant);
+        }
+        for variant in ARTIFACT_CHANGE_TYPES {
+            assert_artifact_change_type_array_is_exhaustive(variant);
+        }
+        for variant in CONTRIBUTION_STANCES {
+            assert_contribution_stance_array_is_exhaustive(variant);
+        }
+        for variant in SPECULATION_MARKERS {
+            assert_speculation_marker_array_is_exhaustive(variant);
+        }
+        for variant in UNCERTAINTY_LEVELS {
+            assert_uncertainty_level_array_is_exhaustive(variant);
+        }
+        for variant in EVIDENCE_QUALITIES {
+            assert_evidence_quality_array_is_exhaustive(variant);
+        }
+        for variant in PROPOSAL_TYPES {
+            assert_proposal_type_array_is_exhaustive(variant);
+        }
+        for variant in PROMOTION_STATES {
+            assert_promotion_state_array_is_exhaustive(variant);
+        }
+    }
+
     #[test]
     fn schema_show_enum_values_match_model_serialization() {
         let contribution = schema_for(IdeationArtifactKind::Contribution);
         let synthesis = schema_for(IdeationArtifactKind::SynthesisPacket);
         let proposal = schema_for(IdeationArtifactKind::Proposal);
-        let target_types = enum_names(&[
-            IdeationTargetType::Source,
-            IdeationTargetType::Requirement,
-            IdeationTargetType::Resolution,
-            IdeationTargetType::Rule,
-            IdeationTargetType::Topic,
-            IdeationTargetType::Question,
-            IdeationTargetType::Domain,
-        ]);
-        let evidence_types = enum_names(&[
-            IdeationEvidenceType::Source,
-            IdeationEvidenceType::Artifact,
-            IdeationEvidenceType::ThreadMessage,
-            IdeationEvidenceType::DomainKnowledge,
-            IdeationEvidenceType::Unsupported,
-            IdeationEvidenceType::Exploratory,
-        ]);
-        let change_types = enum_names(&[
-            ArtifactChangeType::Create,
-            ArtifactChangeType::Update,
-            ArtifactChangeType::Remove,
-            ArtifactChangeType::None,
-        ]);
-        let proposal_types = enum_names(&[
-            ProposalType::RequirementCandidate,
-            ProposalType::ResolutionCandidate,
-            ProposalType::RuleCandidate,
-            ProposalType::SourceGap,
-            ProposalType::Question,
-            ProposalType::NoAction,
-        ]);
+        let target_types = enum_names(&IDEATION_TARGET_TYPES);
+        let evidence_types = enum_names(&IDEATION_EVIDENCE_TYPES);
+        let change_types = enum_names(&ARTIFACT_CHANGE_TYPES);
+        let contribution_stances = enum_names(&CONTRIBUTION_STANCES);
+        let speculation_markers = enum_names(&SPECULATION_MARKERS);
+        let uncertainty_levels = enum_names(&UNCERTAINTY_LEVELS);
+        let evidence_qualities = enum_names(&EVIDENCE_QUALITIES);
+        let proposal_types = enum_names(&PROPOSAL_TYPES);
+        let promotion_states = enum_names(&PROMOTION_STATES);
 
         assert_eq!(
             enum_values_at(
@@ -439,11 +569,40 @@ mod tests {
             change_types
         );
         assert_eq!(
+            enum_values_at(&contribution, "/schema/properties/stance/enum"),
+            contribution_stances
+        );
+        assert_eq!(
+            enum_values_at(
+                &contribution,
+                "/$defs/unsupportedRecommendation/properties/marker/enum"
+            ),
+            speculation_markers
+        );
+        assert_eq!(
+            enum_values_at(&contribution, "/$defs/uncertainty/properties/level/enum"),
+            uncertainty_levels
+        );
+        assert_eq!(
             enum_values_at(
                 &synthesis,
                 "/$defs/evidenceGap/properties/needed_evidence_type/enum"
             ),
             evidence_types
+        );
+        assert_eq!(
+            enum_values_at(
+                &synthesis,
+                "/$defs/contestedClaim/properties/evidence_quality/enum"
+            ),
+            evidence_qualities
+        );
+        assert_eq!(
+            enum_values_at(
+                &synthesis,
+                "/$defs/unsupportedSpeculation/properties/marker/enum"
+            ),
+            speculation_markers
         );
         assert_eq!(
             enum_values_at(
@@ -455,6 +614,10 @@ mod tests {
         assert_eq!(
             enum_values_at(&proposal, "/schema/properties/proposal_type/enum"),
             proposal_types
+        );
+        assert_eq!(
+            enum_values_at(&proposal, "/schema/properties/promotion_state/enum"),
+            promotion_states
         );
     }
 }
