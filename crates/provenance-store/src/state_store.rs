@@ -6,7 +6,8 @@ mod thread_writers;
 mod writers;
 
 use crate::{layout::ProvenanceLayout, shards};
-use camino::Utf8Path;
+use anyhow::Context;
+use camino::{Utf8Path, Utf8PathBuf};
 use provenance_core::{
     ArtifactLink, Boundary, CanonicalArtifact, ClaimChallenge, ConsensusFinding, ContestedClaim,
     Contribution, ContributionStance, Domain, Edge, EdgeType, EvidenceGap,
@@ -275,7 +276,7 @@ impl StateStore {
         read_jsonl(&shards::questions_path(&self.layout, scope))
     }
     pub fn list_edges(&self) -> anyhow::Result<Vec<Edge>> {
-        read_jsonl(&shards::edges_path(&self.layout))
+        read_edge_shards(&self.layout)
     }
     pub fn list_resolutions(&self, scope: &ScopeId) -> anyhow::Result<Vec<Resolution>> {
         read_jsonl(&shards::resolutions_path(&self.layout, scope))
@@ -293,7 +294,7 @@ impl StateStore {
         read_jsonl(&shards::threads_path(&self.layout, scope))
     }
     pub fn list_messages(&self, scope: &ScopeId) -> anyhow::Result<Vec<Message>> {
-        read_jsonl(&shards::messages_path(&self.layout, scope))
+        read_message_shards(&self.layout, scope)
     }
     pub fn list_contributions(&self, scope: &ScopeId) -> anyhow::Result<Vec<Contribution>> {
         read_jsonl(&shards::contributions_path(&self.layout, scope))
@@ -339,6 +340,86 @@ fn read_jsonl<T: DeserializeOwned>(path: &camino::Utf8Path) -> anyhow::Result<Ve
         .lines()
         .map(|line| Ok(serde_json::from_str(line)?))
         .collect()
+}
+
+fn read_jsonl_shards<T: DeserializeOwned>(
+    shard_paths: Vec<Utf8PathBuf>,
+    shard_kind: &str,
+) -> anyhow::Result<Vec<T>> {
+    let mut records = Vec::new();
+    for path in shard_paths {
+        let contents = std::fs::read_to_string(&path)
+            .with_context(|| format!("failed to read {shard_kind} shard {}", path.as_str()))?;
+        for (index, line) in contents.lines().enumerate() {
+            records.push(serde_json::from_str(line).with_context(|| {
+                format!(
+                    "failed to parse {shard_kind} shard {} line {}",
+                    path.as_str(),
+                    index + 1
+                )
+            })?);
+        }
+    }
+    Ok(records)
+}
+
+fn read_message_shards(layout: &ProvenanceLayout, scope: &ScopeId) -> anyhow::Result<Vec<Message>> {
+    let threads_dir = shards::threads_path(layout, scope)
+        .parent()
+        .expect("threads path must have a parent")
+        .to_path_buf();
+    if !threads_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut shard_paths = Vec::new();
+    for entry in std::fs::read_dir(&threads_dir)? {
+        let entry = entry?;
+        if entry.file_type()?.is_file() {
+            let path = Utf8PathBuf::from_path_buf(entry.path()).map_err(|path| {
+                anyhow::anyhow!("non-UTF-8 message shard path: {}", path.display())
+            })?;
+            if is_message_month_shard(&path) {
+                shard_paths.push(path);
+            }
+        }
+    }
+    shard_paths.sort();
+    read_jsonl_shards(shard_paths, "message")
+}
+
+fn is_message_month_shard(path: &Utf8Path) -> bool {
+    let Some(file_name) = path.file_name() else {
+        return false;
+    };
+    let bytes = file_name.as_bytes();
+    bytes.len() == "2026-07.jsonl".len()
+        && bytes[0..4].iter().all(u8::is_ascii_digit)
+        && bytes[4] == b'-'
+        && bytes[5..7].iter().all(u8::is_ascii_digit)
+        && &bytes[7..] == b".jsonl"
+}
+
+fn read_edge_shards(layout: &ProvenanceLayout) -> anyhow::Result<Vec<Edge>> {
+    let edges_dir = layout.edges_dir();
+    if !edges_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut shard_paths = Vec::new();
+    for entry in std::fs::read_dir(&edges_dir)? {
+        let entry = entry?;
+        if entry.file_type()?.is_file() {
+            let path = Utf8PathBuf::from_path_buf(entry.path())
+                .map_err(|path| anyhow::anyhow!("non-UTF-8 edge shard path: {}", path.display()))?;
+            if path.extension() == Some("jsonl") {
+                shard_paths.push(path);
+            }
+        }
+    }
+    shard_paths.sort();
+
+    read_jsonl_shards(shard_paths, "edge")
 }
 
 #[cfg(test)]
