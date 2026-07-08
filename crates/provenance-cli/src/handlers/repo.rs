@@ -1,5 +1,3 @@
-use crate::cli::Status;
-use crate::output::{self, OutputFormat};
 use camino::Utf8PathBuf;
 use provenance_core::{Manifest, RepoPathPrefix, ScopeId};
 use provenance_store::layout::ProvenanceLayout;
@@ -20,14 +18,4 @@ pub(super) fn init(
         format!("{}\n", serde_json::to_string_pretty(&manifest)?),
     )?;
     Ok(())
-}
-
-pub(super) fn check(repo: Utf8PathBuf, format: OutputFormat) -> anyhow::Result<()> {
-    let manifest_path = ProvenanceLayout::new(repo).manifest_path();
-    let manifest: Manifest = serde_json::from_str(&std::fs::read_to_string(manifest_path)?)?;
-    anyhow::ensure!(
-        !manifest.scopes.is_empty(),
-        "manifest must contain at least one scope"
-    );
-    output::print(format, &Status { status: "ok" })
 }
