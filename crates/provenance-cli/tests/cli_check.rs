@@ -74,6 +74,30 @@ fn check_accepts_edges_whose_endpoints_exist_in_different_scopes() {
 }
 
 #[test]
+fn check_registers_every_scope_record_before_validating_references() {
+    let dir = tempfile::tempdir().unwrap();
+    init(dir.path());
+    let state = dir.path().join(".provenance/state");
+    std::fs::write(
+        state.join("manifest.json"),
+        r#"{"schema_version":1,"scopes":[{"id":"frontend","path_prefix":"."},{"id":"platform","path_prefix":"services/platform"}]}"#,
+    )
+    .unwrap();
+    write_jsonl(
+        &state.join("scopes/frontend/requirements/req.jsonl"),
+        r#"{"schema_version":1,"scope_id":"frontend","id":"req_frontend","domain_id":"domain_shared","statement":"Frontend requirement","status":"active"}"#,
+    );
+    write_jsonl(
+        &state.join("scopes/platform/domains/domain.jsonl"),
+        r#"{"schema_version":1,"scope_id":"frontend","id":"domain_shared","name":"Shared domain"}"#,
+    );
+
+    provenance(dir.path())
+        .success()
+        .stdout(contains(r#""status": "ok""#));
+}
+
+#[test]
 fn check_rejects_dangling_promotion_decision_proposal_id() {
     let dir = tempfile::tempdir().unwrap();
     init(dir.path());

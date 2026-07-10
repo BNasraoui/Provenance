@@ -1,12 +1,78 @@
-use super::ScopeRecords;
 use crate::handlers::check::index::CheckIndex;
 use crate::handlers::check::references::{
     check_artifact_links, check_origin_references, check_scoped_reference,
 };
-use provenance_core::ScopeId;
+use provenance_core::{
+    Boundary, Domain, Question, Requirement, Resolution, Rule, ScopeId, Source, Topic,
+};
+use provenance_store::state_store::StateStore;
 
-pub(in crate::handlers::check) fn validate_sources_and_requirements(
-    records: &ScopeRecords,
+pub(super) struct Records {
+    sources: Vec<Source>,
+    domains: Vec<Domain>,
+    requirements: Vec<Requirement>,
+    boundaries: Vec<Boundary>,
+    topics: Vec<Topic>,
+    questions: Vec<Question>,
+    resolutions: Vec<Resolution>,
+    rules: Vec<Rule>,
+}
+
+impl Records {
+    pub(super) fn load(store: &StateStore, scope_id: &ScopeId) -> anyhow::Result<Self> {
+        Ok(Self {
+            sources: store.list_sources(scope_id)?,
+            domains: store.list_domains(scope_id)?,
+            requirements: store.list_requirements(scope_id)?,
+            boundaries: store.list_boundaries(scope_id)?,
+            topics: store.list_topics(scope_id)?,
+            questions: store.list_questions(scope_id)?,
+            resolutions: store.list_resolutions(scope_id)?,
+            rules: store.list_rules(scope_id)?,
+        })
+    }
+
+    pub(super) fn add_to(&self, index: &mut CheckIndex) {
+        for source in &self.sources {
+            index.add_node(&source.scope_id, "source", &source.id);
+        }
+        for domain in &self.domains {
+            index.add_node(&domain.scope_id, "domain", &domain.id);
+        }
+        for requirement in &self.requirements {
+            index.add_node(&requirement.scope_id, "requirement", &requirement.id);
+        }
+        for boundary in &self.boundaries {
+            index.add_node(&boundary.scope_id, "boundary", &boundary.id);
+        }
+        for topic in &self.topics {
+            index.add_node(&topic.scope_id, "topic", &topic.id);
+        }
+        for question in &self.questions {
+            index.add_node(&question.scope_id, "question", &question.id);
+        }
+        for resolution in &self.resolutions {
+            index.add_node(&resolution.scope_id, "resolution", &resolution.id);
+        }
+        for rule in &self.rules {
+            index.add_node(&rule.scope_id, "rule", &rule.id);
+        }
+    }
+
+    pub(super) fn validate(
+        &self,
+        index: &CheckIndex,
+        scope_id: &ScopeId,
+        dangling: &mut Vec<String>,
+    ) {
+        validate_sources_and_requirements(self, index, scope_id, dangling);
+        validate_shaping(self, index, scope_id, dangling);
+        validate_decisions(self, index, scope_id, dangling);
+    }
+}
+
+fn validate_sources_and_requirements(
+    records: &Records,
     index: &CheckIndex,
     scope_id: &ScopeId,
     dangling: &mut Vec<String>,
@@ -62,8 +128,8 @@ pub(in crate::handlers::check) fn validate_sources_and_requirements(
     }
 }
 
-pub(in crate::handlers::check) fn validate_shaping(
-    records: &ScopeRecords,
+fn validate_shaping(
+    records: &Records,
     index: &CheckIndex,
     scope_id: &ScopeId,
     dangling: &mut Vec<String>,
@@ -139,8 +205,8 @@ pub(in crate::handlers::check) fn validate_shaping(
     }
 }
 
-pub(in crate::handlers::check) fn validate_decisions(
-    records: &ScopeRecords,
+fn validate_decisions(
+    records: &Records,
     index: &CheckIndex,
     scope_id: &ScopeId,
     dangling: &mut Vec<String>,
