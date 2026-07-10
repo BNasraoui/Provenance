@@ -32,6 +32,35 @@ impl Records {
         })
     }
 
+    pub(super) fn validate_scope_ownership(
+        &self,
+        loaded_scope_id: &ScopeId,
+        findings: &mut Vec<String>,
+    ) {
+        macro_rules! check_records {
+            ($records:expr, $record_type:literal) => {
+                for record in $records {
+                    super::check_scope_ownership(
+                        loaded_scope_id,
+                        &record.scope_id,
+                        $record_type,
+                        &record.id,
+                        findings,
+                    );
+                }
+            };
+        }
+
+        check_records!(&self.sources, "source");
+        check_records!(&self.domains, "domain");
+        check_records!(&self.requirements, "requirement");
+        check_records!(&self.boundaries, "boundary");
+        check_records!(&self.topics, "topic");
+        check_records!(&self.questions, "question");
+        check_records!(&self.resolutions, "resolution");
+        check_records!(&self.rules, "rule");
+    }
+
     pub(super) fn add_to(&self, index: &mut CheckIndex) {
         for source in &self.sources {
             index.add_node(&source.scope_id, "source", &source.id);

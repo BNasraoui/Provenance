@@ -1,5 +1,5 @@
 use super::index::CheckIndex;
-use provenance_core::{Scope, ScopeId};
+use provenance_core::{Scope, ScopeId, StableId};
 use provenance_store::state_store::StateStore;
 
 mod collaboration;
@@ -22,6 +22,31 @@ impl ScopeRecords {
             ideation: ideation::Records::load(store, scope_id)?,
         })
     }
+
+    fn validate_scope_ownership(&self, findings: &mut Vec<String>) {
+        self.core.validate_scope_ownership(&self.scope_id, findings);
+        self.collaboration
+            .validate_scope_ownership(&self.scope_id, findings);
+        self.ideation
+            .validate_scope_ownership(&self.scope_id, findings);
+    }
+}
+
+fn check_scope_ownership(
+    loaded_scope_id: &ScopeId,
+    embedded_scope_id: &ScopeId,
+    record_type: &str,
+    record_id: &StableId,
+    findings: &mut Vec<String>,
+) {
+    if loaded_scope_id != embedded_scope_id {
+        findings.push(format!(
+            "{record_type} {} loaded from scope {} has embedded scope_id {}",
+            record_id.as_str(),
+            loaded_scope_id.as_str(),
+            embedded_scope_id.as_str()
+        ));
+    }
 }
 
 pub(super) fn validate(
@@ -34,6 +59,16 @@ pub(super) fn validate(
         .iter()
         .map(|scope| ScopeRecords::load(store, &scope.id))
         .collect::<anyhow::Result<Vec<_>>>()?;
+
+    let mut ownership_findings = Vec::new();
+    for scope in &records {
+        scope.validate_scope_ownership(&mut ownership_findings);
+    }
+    anyhow::ensure!(
+        ownership_findings.is_empty(),
+        "scope ownership finding(s):\n- {}",
+        ownership_findings.join("\n- ")
+    );
 
     for scope in &records {
         scope.core.add_to(index);
