@@ -125,3 +125,12 @@ fn gappy_page_keeps_the_fog_visible() {
     let html = render_requirement("default", &gappy_requirement_fixture());
     assert!(html.contains("Which award clauses apply is still unclear."));
 }
+
+#[test]
+fn resolved_requirement_without_decisions_or_rules_is_marked_unbacked() {
+    let html = render_requirement("default", &gappy_requirement_fixture());
+
+    assert!(html.contains("status-badge resolved-unbacked"));
+    assert!(html.contains("Resolved (unbacked)"));
+    assert!(!html.contains("status-badge resolved\""));
+}
