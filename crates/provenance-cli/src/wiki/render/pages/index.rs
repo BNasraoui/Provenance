@@ -5,7 +5,7 @@ use super::super::chrome::{container_html, page_shell, title_row};
 use super::super::citations::push_gap_citations;
 use super::super::fragments::{push_classification_row, push_orphan_group, push_section_open};
 use super::super::html::{escape_attr, escape_html};
-use super::super::labels::{counted, requirement_status_word, status_badge};
+use super::super::labels::{counted, requirement_status_badge};
 
 /// Renders the scope index page.
 pub fn render_index(scope: &str, page: &ScopeIndexPage) -> String {
@@ -29,7 +29,11 @@ pub fn render_index(scope: &str, page: &ScopeIndexPage) -> String {
                 escape_html(&entry.link.title)
             )
             .expect("writing to a String should not fail");
-            main.push_str(&status_badge(requirement_status_word(&entry.status)));
+            main.push_str(&requirement_status_badge(
+                &entry.status,
+                entry.resolutions,
+                entry.rules,
+            ));
             writeln!(
                 main,
                 "<span class=\"entry-counts\">{} · {} · {}</span>",
