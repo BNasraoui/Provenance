@@ -1,6 +1,6 @@
 use assert_cmd::Command;
 
-pub fn init_repo(repo: &str) {
+pub(super) fn init_repo(repo: &str) {
     Command::cargo_bin("provenance")
         .unwrap()
         .args([
@@ -16,7 +16,7 @@ pub fn init_repo(repo: &str) {
         .success();
 }
 
-pub fn create_source(repo: &str) {
+pub(super) fn create_source(repo: &str) {
     Command::cargo_bin("provenance")
         .unwrap()
         .args([
@@ -43,7 +43,7 @@ pub fn create_source(repo: &str) {
         .success();
 }
 
-pub fn write_run_dir(root: &std::path::Path, strongest_finding: &str) {
+pub(super) fn write_run_dir(root: &std::path::Path, strongest_finding: &str) {
     let extractors = root.join("extractors");
     let refuters = root.join("refuters");
     let merge = root.join("merge");
@@ -137,110 +137,6 @@ pub fn write_run_dir(root: &std::path::Path, strongest_finding: &str) {
             "promotion_state": "proposed"
           }]
         }"#,
-    )
-    .unwrap();
-}
-
-pub fn write_duplicate_contribution(root: &std::path::Path) {
-    let contributions = root.join("contributions");
-    std::fs::create_dir_all(&contributions).unwrap();
-    std::fs::write(
-        contributions.join("duplicate.json"),
-        r#"{
-          "contribution": {
-            "schema_version": 1,
-            "scope_id": "default",
-            "id": "contrib_backtrace_extract_auth",
-            "target": {"artifact_type": "source", "artifact_id": "source_codebase"},
-            "participant_slot": "duplicate_extract_auth",
-            "stance": "support",
-            "strongest_finding": "Duplicate contribution id in the same run.",
-            "evidence_references": [],
-            "material_claims": [],
-            "risks": [],
-            "objections": [],
-            "challenges": [],
-            "suggested_artifact_changes": [],
-            "unsupported_recommendations": [],
-            "uncertainty": {"level":"low","rationale":"Duplicate id fixture."},
-            "open_questions": []
-          }
-        }"#,
-    )
-    .unwrap();
-}
-
-pub fn write_bad_nested_stable_id(root: &std::path::Path) {
-    let extractors = root.join("extractors");
-    let merge = root.join("merge");
-    std::fs::create_dir_all(&extractors).unwrap();
-    std::fs::create_dir_all(&merge).unwrap();
-    std::fs::write(
-        extractors.join("bad.json"),
-        r#"{
-          "contribution": {
-            "schema_version": 1,
-            "scope_id": "default",
-            "id": "contrib_backtrace_extract_auth",
-            "target": {"artifact_type": "source", "artifact_id": "source_codebase"},
-            "participant_slot": "extract_auth",
-            "stance": "support",
-            "strongest_finding": "Publishing is guarded by worker assignment.",
-            "evidence_references": [{"reference_id":"evidence/auth","evidence_type":"artifact","summary":"Bad nested id"}],
-            "material_claims": [],
-            "risks": [],
-            "objections": [],
-            "challenges": [],
-            "suggested_artifact_changes": [],
-            "unsupported_recommendations": [],
-            "uncertainty": {"level":"low","rationale":"Direct guard evidence."},
-            "open_questions": []
-          }
-        }"#,
-    )
-    .unwrap();
-    std::fs::write(
-        merge.join("merged.json"),
-        r#"{
-          "synthesis_packet": {
-            "schema_version": 1,
-            "scope_id": "default",
-            "id": "synth_backtrace_auth",
-            "target": {"artifact_type": "source", "artifact_id": "source_codebase"},
-            "summary": "Extractor found a guard.",
-            "consensus": [],
-            "contested_claims": [],
-            "minority_objections": [],
-            "evidence_gaps": [],
-            "unsupported_speculation": [],
-            "open_questions": [],
-            "suggested_artifacts": [],
-            "required_human_decisions": []
-          },
-          "proposals": []
-        }"#,
-    )
-    .unwrap();
-}
-
-pub fn write_bad_proposal_confidence(root: &std::path::Path) {
-    write_run_dir(root, "Publishing is guarded by worker assignment.");
-    let merge_path = root.join("merge").join("merged.json");
-    let merge_json = std::fs::read_to_string(&merge_path).unwrap();
-    std::fs::write(
-        &merge_path,
-        merge_json.replace(r#""confidence": 0.91"#, r#""confidence": 1.5"#),
-    )
-    .unwrap();
-}
-
-pub fn write_merge_output_with_unknown_key(root: &std::path::Path) {
-    write_run_dir(root, "Publishing is guarded by worker assignment.");
-    let merge_path = root.join("merge").join("merged.json");
-    let merge_json = std::fs::read_to_string(&merge_path).unwrap();
-    std::fs::write(
-        &merge_path,
-        merge_json.replace(r#""proposals": ["#, r#""proposal": ["#),
     )
     .unwrap();
 }
