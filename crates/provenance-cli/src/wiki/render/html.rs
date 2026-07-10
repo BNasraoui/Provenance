@@ -1,7 +1,9 @@
 use crate::wiki::links::{EvidenceRef, InlineRef};
-use crate::wiki::model::{PageId, PageKind, PageLink};
+use crate::wiki::model::{PageId, PageLink};
 use std::collections::HashMap;
 use std::fmt::Write as _;
+
+use super::labels::kind_label;
 
 pub(in crate::wiki::render) fn escape_html(text: &str) -> String {
     text.replace('&', "&amp;")
@@ -42,19 +44,20 @@ impl PageLinksRenderer {
         let class = class.map_or_else(String::new, |class| {
             format!(" class=\"{}\"", escape_attr(class))
         });
-        let html = format!(
-            "<a{class} href=\"{}\">{}</a>",
+        format!(
+            "<a{class} href=\"{}\">{}{}</a>",
             escape_attr(&link.target.route()),
-            escape_html(&link.title)
-        );
-        self.with_collision_chip(html, link)
+            escape_html(&link.title),
+            self.collision_chip(link)
+        )
     }
 
     pub(in crate::wiki::render) fn text(&self, link: &PageLink) -> String {
-        self.with_collision_chip(escape_html(&link.title), link)
+        format!("{}{}", escape_html(&link.title), self.collision_chip(link))
     }
 
-    fn with_collision_chip(&self, mut html: String, link: &PageLink) -> String {
+    fn collision_chip(&self, link: &PageLink) -> String {
+        let mut html = String::new();
         if let Some(targets) = self.targets_by_title.get(&link.title) {
             let suffix = shortest_distinct_suffix(&link.target, targets);
             let kind = targets.iter().any(|other| {
@@ -64,7 +67,7 @@ impl PageLinksRenderer {
                 html,
                 " <span class=\"id-chip\">{}{}{}{}</span>",
                 if kind {
-                    page_kind_label(link.target.kind)
+                    kind_label(link.target.kind)
                 } else {
                     ""
                 },
@@ -110,16 +113,6 @@ fn shortest_distinct_suffix<'a>(target: &'a PageId, colliding_targets: &[PageId]
         }
     }
     id
-}
-
-const fn page_kind_label(kind: PageKind) -> &'static str {
-    match kind {
-        PageKind::ScopeIndex => "scope",
-        PageKind::Requirement => "requirement",
-        PageKind::Resolution => "resolution",
-        PageKind::Rule => "rule",
-        PageKind::Source => "source",
-    }
 }
 
 pub(in crate::wiki::render) fn evidence_html(evidence: &EvidenceRef) -> String {

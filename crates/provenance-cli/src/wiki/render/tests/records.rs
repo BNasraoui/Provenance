@@ -51,8 +51,8 @@ fn rule_page_disambiguates_mixed_kind_producers_with_the_same_id() {
 
     let html = render_rule("default", &page);
     assert!(html.contains("Produced By"));
-    assert!(html.contains("<span class=\"id-chip\">resolution · shared_id</span>"));
-    assert!(html.contains("<span class=\"id-chip\">requirement · shared_id</span>"));
+    assert!(html.contains("<span class=\"id-chip\">Resolution · shared_id</span>"));
+    assert!(html.contains("<span class=\"id-chip\">Requirement · shared_id</span>"));
 }
 
 #[test]
