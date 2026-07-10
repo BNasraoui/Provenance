@@ -33,15 +33,7 @@ pub(super) fn check(repo: Utf8PathBuf, format: OutputFormat) -> anyhow::Result<(
 
     let mut index = CheckIndex::default();
     let mut dangling = Vec::new();
-    for scope in &manifest.scopes {
-        let records = scope::ScopeRecords::load(&store, &scope.id)?;
-        records.add_to(&mut index);
-        scope::core::validate_sources_and_requirements(&records, &index, &scope.id, &mut dangling);
-        scope::core::validate_shaping(&records, &index, &scope.id, &mut dangling);
-        scope::core::validate_decisions(&records, &index, &scope.id, &mut dangling);
-        scope::collaboration::validate(&records, &index, &scope.id, &mut dangling);
-        scope::ideation::validate(&records, &index, &scope.id, &mut dangling);
-    }
+    scope::validate(&store, &manifest.scopes, &mut index, &mut dangling)?;
     edges::validate(&store, &manifest_scopes, &index, &mut dangling)?;
 
     anyhow::ensure!(
