@@ -1,4 +1,5 @@
 use assert_cmd::Command;
+use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
 use std::path::Path;
 
@@ -164,7 +165,9 @@ fn check_reports_scope_directory_absent_from_manifest() {
 
     provenance(dir.path())
         .failure()
-        .stderr(contains("scope directory unlisted is absent from manifest"));
+        .stderr(contains("scope directory finding(s):"))
+        .stderr(contains("scope directory unlisted is absent from manifest"))
+        .stderr(predicates::str::contains("dangling reference(s):").not());
 }
 
 #[test]
