@@ -5,6 +5,17 @@ use std::path::{Path, PathBuf};
 
 pub const INSTALL_COMMAND: &str = "provenance skills install";
 
+const LEGACY_SKILL_DIRECTORIES: &[&str] = &[
+    "shaping",
+    "fork-tournament",
+    "swarm-backtrace",
+    "grounded-writing",
+];
+const LEGACY_AGENTS_BEGIN_MARKER: &[u8] = b"<!-- BEGIN PROVENANCE SKILLS -->";
+const LEGACY_AGENTS_END_MARKER: &[u8] = b"<!-- END PROVENANCE SKILLS -->";
+const PROVENANCE_HEADER_PREFIX: &str = "<!-- Installed by provenance ";
+const PROVENANCE_HASH_PREFIX: &str = "; content hash fnv1a64:";
+
 struct EmbeddedSkill {
     directory: &'static str,
     content: &'static str,
@@ -128,6 +139,7 @@ pub fn render_status_markdown(status: &SkillInstallStatus) -> String {
 fn install_at(base: &Path, global: bool, force: bool, copy: bool) -> anyhow::Result<InstallReport> {
     let canonical_dir = base.join(".agents/skills");
     let claude_dir = base.join(".claude/skills");
+    cleanup_legacy_install(base, global, &claude_dir)?;
     let mut files = install_canonical_skill_files(&canonical_dir, force)?;
     let mut link_mode = if copy { "copy" } else { "symlink" };
     let mut fallback_reason = None;
@@ -157,6 +169,78 @@ fn install_at(base: &Path, global: bool, force: bool, copy: bool) -> anyhow::Res
         fallback_reason,
         files,
     })
+}
+
+fn cleanup_legacy_install(base: &Path, global: bool, claude_dir: &Path) -> anyhow::Result<()> {
+    for directory in LEGACY_SKILL_DIRECTORIES {
+        let path = claude_dir.join(directory);
+        let Ok(metadata) = std::fs::symlink_metadata(&path) else {
+            continue;
+        };
+        if metadata.is_dir() && !metadata.file_type().is_symlink() {
+            let skill_file = path.join("SKILL.md");
+            if std::fs::read_to_string(&skill_file)
+                .is_ok_and(|contents| contents.lines().any(is_provenance_content_hash_header))
+            {
+                std::fs::remove_dir_all(&path).with_context(|| {
+                    format!("failed to remove legacy skill directory {}", path.display())
+                })?;
+            }
+        }
+    }
+
+    let agents_path = if global {
+        base.join(".agents/AGENTS.md")
+    } else {
+        base.join("AGENTS.md")
+    };
+    strip_legacy_agents_section(&agents_path)
+}
+
+fn is_provenance_content_hash_header(line: &str) -> bool {
+    let Some(header) = line.strip_prefix(PROVENANCE_HEADER_PREFIX) else {
+        return false;
+    };
+    let Some((version, hash)) = header.split_once(PROVENANCE_HASH_PREFIX) else {
+        return false;
+    };
+    let Some(hash) = hash.strip_suffix(" -->") else {
+        return false;
+    };
+    !version.is_empty() && hash.len() == 16 && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn strip_legacy_agents_section(path: &Path) -> anyhow::Result<()> {
+    let Ok(contents) = std::fs::read(path) else {
+        return Ok(());
+    };
+    let Some(start) = find_bytes(&contents, LEGACY_AGENTS_BEGIN_MARKER, 0) else {
+        return Ok(());
+    };
+    let Some(end_marker_start) = find_bytes(&contents, LEGACY_AGENTS_END_MARKER, start) else {
+        return Ok(());
+    };
+    let mut end = end_marker_start + LEGACY_AGENTS_END_MARKER.len();
+    if contents.get(end) == Some(&b'\n') {
+        end += 1;
+    }
+
+    let mut updated = Vec::with_capacity(contents.len() - (end - start));
+    updated.extend_from_slice(&contents[..start]);
+    updated.extend_from_slice(&contents[end..]);
+    std::fs::write(path, updated).with_context(|| {
+        format!(
+            "failed to remove legacy skill section from {}",
+            path.display()
+        )
+    })
+}
+
+fn find_bytes(contents: &[u8], needle: &[u8], from: usize) -> Option<usize> {
+    contents[from..]
+        .windows(needle.len())
+        .position(|window| window == needle)
+        .map(|position| from + position)
 }
 
 fn install_canonical_skill_files(
