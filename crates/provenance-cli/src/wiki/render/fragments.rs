@@ -1,7 +1,9 @@
 use crate::wiki::model::{DecisionSection, LineageEntry, PageLink, RuleCard};
 use std::fmt::Write as _;
 
-use super::html::{escape_attr, escape_html, evidence_html, icon_svg, link_html, link_list};
+use super::html::{
+    escape_attr, escape_html, evidence_html, icon_svg, link_html, link_list, PageLinksRenderer,
+};
 use super::labels::{capitalize, format_date_ms, modality_word, sev_chip, severity_word};
 
 pub(in crate::wiki::render) fn push_section_open(
@@ -201,16 +203,17 @@ pub(in crate::wiki::render) fn push_lineage(html: &mut String, lineage: &[Lineag
         return;
     }
     html.push_str("<div class=\"lineage\">\n<h3 class=\"margin-head\">Lineage</h3>\n<ol>\n");
+    let renderer = PageLinksRenderer::new(lineage.iter().map(|entry| &entry.link));
     for entry in lineage {
         if entry.is_current {
             writeln!(
                 html,
                 "<li class=\"current\">{}</li>",
-                escape_html(&entry.link.title)
+                renderer.text(&entry.link)
             )
             .expect("writing to a String should not fail");
         } else {
-            writeln!(html, "<li>{}</li>", link_html(&entry.link))
+            writeln!(html, "<li>{}</li>", renderer.link(&entry.link, None))
                 .expect("writing to a String should not fail");
         }
     }
