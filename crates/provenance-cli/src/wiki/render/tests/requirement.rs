@@ -56,8 +56,12 @@ fn requirement_page_disambiguates_colliding_refined_into_links() {
 
     let html = render_requirement("default", &page);
     assert!(html.contains(">Refined Into</h2>"));
-    assert!(html.contains("…hall_pro</span>"));
-    assert!(html.contains("…ll_pro_2</span>"));
+    assert!(html.contains(
+        "<a href=\"/requirements/req_sah_participant_budget_summary_shall_pro/\">Participant budget summary shall pro-rate services <span class=\"id-chip\">…hall_pro</span></a>"
+    ));
+    assert!(html.contains(
+        "<a href=\"/requirements/req_sah_participant_budget_summary_shall_pro_2/\">Participant budget summary shall pro-rate services <span class=\"id-chip\">…ll_pro_2</span></a>"
+    ));
 }
 
 #[test]
@@ -87,13 +91,13 @@ fn lineage_and_breadcrumb_disambiguate_collisions_including_current_text() {
 
     let html = render_requirement("default", &page);
     assert!(html.contains(
-        "<li><a href=\"/requirements/req_shared_parent/\">Shared title</a> <span class=\"id-chip\">…d_parent</span></li>"
+        "<li><a href=\"/requirements/req_shared_parent/\">Shared title <span class=\"id-chip\">…d_parent</span></a></li>"
     ));
     assert!(html.contains(
         "<li class=\"current\">Shared title <span class=\"id-chip\">…ed_child</span></li>"
     ));
     assert!(html.contains(
-        "<nav aria-label=\"Breadcrumb\"><a href=\"/requirements/req_shared_parent/\">Shared title</a> <span class=\"id-chip\">…d_parent</span></nav>"
+        "<nav aria-label=\"Breadcrumb\"><a href=\"/requirements/req_shared_parent/\">Shared title <span class=\"id-chip\">…d_parent</span></a></nav>"
     ));
 }
 

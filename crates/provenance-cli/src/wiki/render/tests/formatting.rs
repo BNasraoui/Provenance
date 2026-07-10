@@ -59,10 +59,10 @@ fn link_list_disambiguates_identical_titles_with_stable_id_chips() {
     let html = link_list(&colliding_requirement_links());
 
     assert!(html.contains(
-        "Participant budget summary shall pro-rate services</a> <span class=\"id-chip\">…hall_pro</span>"
+        "Participant budget summary shall pro-rate services <span class=\"id-chip\">…hall_pro</span></a>"
     ));
     assert!(html.contains(
-        "Participant budget summary shall pro-rate services</a> <span class=\"id-chip\">…ll_pro_2</span>"
+        "Participant budget summary shall pro-rate services <span class=\"id-chip\">…ll_pro_2</span></a>"
     ));
 }
 
@@ -105,9 +105,9 @@ fn link_list_disambiguates_same_id_across_page_kinds() {
     ];
 
     let html = link_list(&links);
-    assert!(html.contains("<span class=\"id-chip\">requirement · shared_id</span>"));
-    assert!(html.contains("<span class=\"id-chip\">resolution · shared_id</span>"));
-    assert!(html.contains("<span class=\"id-chip\">source · shared_id</span>"));
+    assert!(html.contains("<span class=\"id-chip\">Requirement · shared_id</span>"));
+    assert!(html.contains("<span class=\"id-chip\">Resolution · shared_id</span>"));
+    assert!(html.contains("<span class=\"id-chip\">Source · shared_id</span>"));
 }
 
 #[test]
