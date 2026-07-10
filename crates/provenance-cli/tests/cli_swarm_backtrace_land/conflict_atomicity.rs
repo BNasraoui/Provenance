@@ -1,6 +1,35 @@
-use super::support::{create_source, init_repo, write_duplicate_contribution, write_run_dir};
+use super::support::{create_source, init_repo, write_run_dir};
 use assert_cmd::Command;
 use predicates::prelude::PredicateBooleanExt;
+
+fn write_duplicate_contribution(root: &std::path::Path) {
+    let contributions = root.join("contributions");
+    std::fs::create_dir_all(&contributions).unwrap();
+    std::fs::write(
+        contributions.join("duplicate.json"),
+        r#"{
+          "contribution": {
+            "schema_version": 1,
+            "scope_id": "default",
+            "id": "contrib_backtrace_extract_auth",
+            "target": {"artifact_type": "source", "artifact_id": "source_codebase"},
+            "participant_slot": "duplicate_extract_auth",
+            "stance": "support",
+            "strongest_finding": "Duplicate contribution id in the same run.",
+            "evidence_references": [],
+            "material_claims": [],
+            "risks": [],
+            "objections": [],
+            "challenges": [],
+            "suggested_artifact_changes": [],
+            "unsupported_recommendations": [],
+            "uncertainty": {"level":"low","rationale":"Duplicate id fixture."},
+            "open_questions": []
+          }
+        }"#,
+    )
+    .unwrap();
+}
 
 #[test]
 fn swarm_backtrace_land_rejects_duplicate_run_ids_before_writing() {
