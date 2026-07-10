@@ -131,6 +131,6 @@ fn resolved_requirement_without_decisions_or_rules_is_marked_unbacked() {
     let html = render_requirement("default", &gappy_requirement_fixture());
 
     assert!(html.contains("status-badge resolved-unbacked"));
-    assert!(html.contains("Resolved (unbacked)"));
+    assert!(html.contains("Resolved (no decisions or rules)"));
     assert!(!html.contains("status-badge resolved\""));
 }

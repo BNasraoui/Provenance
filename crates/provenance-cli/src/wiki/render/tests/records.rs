@@ -96,7 +96,7 @@ fn index_marks_resolved_requirements_without_decisions_or_rules_unbacked() {
 
     let html = render_index("default", &page);
     assert!(html.contains("status-badge resolved-unbacked"));
-    assert!(html.contains("Resolved (unbacked)"));
+    assert!(html.contains("Resolved (no decisions or rules)"));
 }
 
 #[test]
