@@ -1,12 +1,22 @@
 use crate::cache::find_gaps;
 use crate::layout::ProvenanceLayout;
 use crate::state_store::StateStore;
-use provenance_core::{EdgeType, NodeType, RequirementStatus, ResolutionStatus};
+use provenance_core::{
+    EdgeType, NodeType, RequirementStatus, ResolutionStatus, Rule, RuleSeverity,
+};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, serde::Serialize)]
 pub struct StaleItem {
     pub resolution_id: String,
     pub reason: String,
+}
+
+#[derive(Debug, Default)]
+pub struct StaleOptions {
+    pub min_age_days: u32,
+    pub rule_severities: Vec<RuleSeverity>,
+    pub min_downstream_rules: u32,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -41,11 +51,40 @@ pub fn find_stale(
     layout: &ProvenanceLayout,
     scope: &provenance_core::ScopeId,
 ) -> anyhow::Result<Vec<StaleItem>> {
+    find_stale_with_options(layout, scope, &StaleOptions::default())
+}
+
+pub fn find_stale_with_options(
+    layout: &ProvenanceLayout,
+    scope: &provenance_core::ScopeId,
+    options: &StaleOptions,
+) -> anyhow::Result<Vec<StaleItem>> {
     let store = StateStore::new(layout.clone());
     let edges = store.list_edges()?;
+    let rules = store.list_rules(scope)?;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     Ok(store
         .list_resolutions(scope)?
         .into_iter()
+        .filter(|resolution| {
+            resolution_is_old_enough(resolution.approved_at, options.min_age_days, now)
+        })
+        .filter(|resolution| {
+            let downstream_rules = rules
+                .iter()
+                .filter(|rule| {
+                    is_downstream_rule(&edges, scope, resolution.id.as_str(), rule)
+                        && (options.rule_severities.is_empty()
+                            || options.rule_severities.contains(&rule.severity))
+                })
+                .count();
+            let required_rules = if options.rule_severities.is_empty() {
+                options.min_downstream_rules
+            } else {
+                options.min_downstream_rules.max(1)
+            };
+            downstream_rules >= required_rules as usize
+        })
         .filter_map(|resolution| {
             if resolution.status == ResolutionStatus::Approved
                 && resolution
@@ -71,6 +110,37 @@ pub fn find_stale(
             }
         })
         .collect())
+}
+
+fn resolution_is_old_enough(approved_at: Option<i64>, min_age_days: u32, now: u64) -> bool {
+    if min_age_days == 0 {
+        return true;
+    }
+    let Some(mut approved_at) = approved_at.and_then(|timestamp| u64::try_from(timestamp).ok())
+    else {
+        return false;
+    };
+    // Timestamps in existing state may be seconds or milliseconds since the Unix epoch.
+    if approved_at >= 100_000_000_000 {
+        approved_at /= 1_000;
+    }
+    now.saturating_sub(approved_at) / 86_400 >= u64::from(min_age_days)
+}
+
+fn is_downstream_rule(
+    edges: &[provenance_core::Edge],
+    scope: &provenance_core::ScopeId,
+    resolution_id: &str,
+    rule: &Rule,
+) -> bool {
+    edges.iter().any(|edge| {
+        edge.scope_id == *scope
+            && edge.edge_type == EdgeType::Produces
+            && edge.from_type == NodeType::Resolution
+            && edge.from_id.as_str() == resolution_id
+            && edge.to_type == NodeType::Rule
+            && edge.to_id == rule.id
+    })
 }
 
 pub fn coverage_health(
