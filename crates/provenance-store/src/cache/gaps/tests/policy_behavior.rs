@@ -69,9 +69,11 @@ fn rule_produced_by_missing_resolution_is_orphaned_and_has_dangling_edge_gap() {
         (NodeType::Rule, "rule_orphaned"),
     )];
     let gaps = compute_for(&[], &[], &[], &rules, &[], &[], &edges);
-    assert!(gaps
-        .iter()
-        .any(|gap| gap.kind == GapKind::OrphanRule && gap.node_id == "rule_orphaned"));
+    assert!(gaps.iter().any(|gap| {
+        gap.kind == GapKind::OrphanRule
+            && gap.node_type == NodeType::Rule
+            && gap.node_id == "rule_orphaned"
+    }));
     assert!(gaps.iter().any(|gap| {
         gap.kind == GapKind::DanglingReference
             && gap.node_type == NodeType::Rule
