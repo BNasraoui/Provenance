@@ -42,6 +42,20 @@ fn rule_page_links_evidence_but_leaves_prose_references_as_text() {
 }
 
 #[test]
+fn rule_page_disambiguates_mixed_kind_producers_with_the_same_id() {
+    let mut page = rule_fixture();
+    page.produced_by = vec![
+        super::fixtures::link(PageKind::Resolution, "shared_id", "Shared producer"),
+        super::fixtures::link(PageKind::Requirement, "shared_id", "Shared producer"),
+    ];
+
+    let html = render_rule("default", &page);
+    assert!(html.contains("Produced By"));
+    assert!(html.contains("<span class=\"id-chip\">resolution · shared_id</span>"));
+    assert!(html.contains("<span class=\"id-chip\">requirement · shared_id</span>"));
+}
+
+#[test]
 fn source_page_shows_the_commit_pin_and_referenced_requirements() {
     let html = render_source("default", &source_fixture());
     assert!(html.contains("class=\"accent-bar source\""));

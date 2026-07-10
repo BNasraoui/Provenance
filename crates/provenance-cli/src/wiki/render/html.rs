@@ -1,5 +1,5 @@
 use crate::wiki::links::{EvidenceRef, InlineRef};
-use crate::wiki::model::{PageId, PageLink};
+use crate::wiki::model::{PageId, PageKind, PageLink};
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
@@ -56,10 +56,19 @@ impl PageLinksRenderer {
 
     fn with_collision_chip(&self, mut html: String, link: &PageLink) -> String {
         if let Some(targets) = self.targets_by_title.get(&link.title) {
-            let suffix = shortest_distinct_suffix(&link.target.record_id, targets);
+            let suffix = shortest_distinct_suffix(&link.target, targets);
+            let kind = targets.iter().any(|other| {
+                other.kind != link.target.kind && other.record_id == link.target.record_id
+            });
             write!(
                 html,
-                " <span class=\"id-chip\">{}{}</span>",
+                " <span class=\"id-chip\">{}{}{}{}</span>",
+                if kind {
+                    page_kind_label(link.target.kind)
+                } else {
+                    ""
+                },
+                if kind { " · " } else { "" },
                 if suffix.len() < link.target.record_id.len() {
                     "…"
                 } else {
@@ -84,7 +93,8 @@ pub(in crate::wiki::render) fn link_list(links: &[PageLink]) -> String {
     html
 }
 
-fn shortest_distinct_suffix<'a>(id: &'a str, colliding_targets: &[PageId]) -> &'a str {
+fn shortest_distinct_suffix<'a>(target: &'a PageId, colliding_targets: &[PageId]) -> &'a str {
+    let id = &target.record_id;
     let boundaries: Vec<usize> = id.char_indices().map(|(index, _)| index).collect();
     if boundaries.is_empty() {
         return id;
@@ -94,12 +104,22 @@ fn shortest_distinct_suffix<'a>(id: &'a str, colliding_targets: &[PageId]) -> &'
         let suffix = &id[boundaries[boundaries.len() - length]..];
         if colliding_targets
             .iter()
-            .all(|other| other.record_id == id || !other.record_id.ends_with(suffix))
+            .all(|other| other == target || !other.record_id.ends_with(suffix))
         {
             return suffix;
         }
     }
     id
+}
+
+const fn page_kind_label(kind: PageKind) -> &'static str {
+    match kind {
+        PageKind::ScopeIndex => "scope",
+        PageKind::Requirement => "requirement",
+        PageKind::Resolution => "resolution",
+        PageKind::Rule => "rule",
+        PageKind::Source => "source",
+    }
 }
 
 pub(in crate::wiki::render) fn evidence_html(evidence: &EvidenceRef) -> String {
