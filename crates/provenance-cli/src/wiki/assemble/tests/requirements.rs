@@ -230,6 +230,38 @@ fn requirement_page_flags_dangling_refs_and_frontier_gaps() {
 }
 
 #[test]
+fn requirement_and_index_pages_flag_references_edges_from_missing_sources() {
+    let mut state = empty_state();
+    state.requirements = vec![requirement(
+        "req_referenced",
+        "Requirement with an edge-backed source",
+        RequirementStatus::Active,
+        vec![],
+    )];
+    state.edges = vec![edge(
+        EdgeType::References,
+        (NodeType::Source, "source_missing"),
+        (NodeType::Requirement, "req_referenced"),
+    )];
+
+    let resolver = LinkResolver::new(None);
+    let corpus = build_corpus(&state, &resolver);
+    let page = requirement_page(&corpus, "req_referenced");
+
+    let page_gap = page
+        .gaps
+        .iter()
+        .find(|gap| gap.kind == GapKind::DanglingReference)
+        .expect("missing References-edge source should be a requirement gap");
+    assert!(page_gap.detail.contains("source_missing"));
+    assert!(corpus.index.gaps.iter().any(|gap| {
+        gap.kind == GapKind::DanglingReference
+            && gap.detail.contains("req_referenced")
+            && gap.detail.contains("source_missing")
+    }));
+}
+
+#[test]
 fn requirement_page_does_not_treat_a_same_id_record_of_another_kind_as_a_resolving_decision() {
     // A Resolution and a Source share the stable id "dup_id". The only
     // Resolves edge on file is authored for the source (not the
