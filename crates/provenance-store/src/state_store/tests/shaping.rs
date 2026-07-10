@@ -1,4 +1,4 @@
-use super::seeded_source_requirement_store;
+use super::{seeded_requirement_store, seeded_source_requirement_store};
 use crate::state_store::{CreateBoundaryInput, CreateQuestionInput, CreateTopicInput};
 use provenance_core::{
     ArtifactLink, ArtifactLinkTargetType, QuestionStatus, ResolutionMethod, SourceReference,
@@ -102,7 +102,7 @@ fn shaping_records_are_written_deterministically_and_validate_relationships() {
 
 #[test]
 fn topic_claims_are_check_and_set_and_clear_on_close() {
-    let (_dir, store, scope) = seeded_source_requirement_store();
+    let (_dir, store, scope) = seeded_requirement_store();
     store
         .create_topic(CreateTopicInput {
             scope_id: scope.clone(),
@@ -153,7 +153,7 @@ fn topic_claims_are_check_and_set_and_clear_on_close() {
 
 #[test]
 fn question_claims_clear_when_answered() {
-    let (_dir, store, scope) = seeded_source_requirement_store();
+    let (_dir, store, scope) = seeded_requirement_store();
     store
         .create_topic(CreateTopicInput {
             scope_id: scope.clone(),

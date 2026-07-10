@@ -1,4 +1,4 @@
-use super::{initialized_store, seeded_source_requirement_store};
+use super::{initialized_store, seeded_requirement_store};
 use crate::state_store::{AddSourceReferenceInput, CreateRequirementInput, CreateSourceInput};
 use provenance_core::{EdgeType, RequirementStatus, SourceType, StableId};
 
@@ -116,7 +116,7 @@ fn concurrent_source_creates_preserve_all_records() {
 
 #[test]
 fn requirement_fog_is_set_and_cleared_as_free_text() {
-    let (_dir, store, scope) = seeded_source_requirement_store();
+    let (_dir, store, scope) = seeded_requirement_store();
     let requirement_id = StableId::new("req_overtime").unwrap();
 
     let updated = store
