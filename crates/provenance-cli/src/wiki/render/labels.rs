@@ -27,7 +27,7 @@ pub(in crate::wiki::render) fn requirement_status_badge(
     rules: usize,
 ) -> String {
     if matches!(status, RequirementStatus::Resolved) && decisions == 0 && rules == 0 {
-        status_badge_with_label("resolved-unbacked", "Resolved (unbacked)")
+        status_badge_with_label("resolved-unbacked", "Resolved (no decisions or rules)")
     } else {
         status_badge(requirement_status_word(status))
     }
