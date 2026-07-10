@@ -1,4 +1,4 @@
-use crate::cli::SourcesCommand;
+use crate::cli::knowledge::SourcesCommand;
 use crate::output;
 use provenance_core::{ScopeId, SourceType, StableId};
 use provenance_store::{

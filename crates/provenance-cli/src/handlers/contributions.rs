@@ -1,5 +1,5 @@
 use super::common::{ideation_target, parse_json_arg, warn_if_skills_missing};
-use crate::cli::ContributionsCommand;
+use crate::cli::ideation::ContributionsCommand;
 use crate::output;
 use provenance_core::{
     ClaimChallenge, ContributionStance, IdeationEvidenceReference, MaterialClaim, ScopeId,

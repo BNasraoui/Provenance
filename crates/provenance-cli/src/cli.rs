@@ -1,19 +1,14 @@
-mod core;
-mod ideation;
-mod operations;
-mod shaping;
+pub mod graph;
+pub mod ideation;
+pub mod knowledge;
+pub mod policy;
+pub mod services;
+pub mod shaping;
+pub mod workspace;
 
-pub use core::{
-    BoundariesCommand, DomainsCommand, EdgesCommand, FogCommand, RequirementsCommand,
-    ResolutionsCommand, RulesCommand, ServiceBindingsCommand, ServiceCreateArgs, ServicesCommand,
-    SourceRefCommand, SourcesCommand,
-};
-pub use ideation::{
-    ContributionsCommand, IdeationArtifactKind, PromotionDecisionsCommand, ProposalsCommand,
-    SchemaCommand, SwarmBacktraceCommand, SynthesisPacketsCommand,
-};
-pub use operations::{CoverageCommand, DocsCommand, SkillsCommand, WikiCommand};
-pub use shaping::{QuestionsCommand, ThreadCommand, TopicsCommand};
+// Kept at the CLI root because the schema handler predates the domain modules.
+// New call sites should import command types from their owning module.
+pub use ideation::{IdeationArtifactKind, SchemaCommand};
 
 use crate::output::OutputFormat;
 use camino::Utf8PathBuf;
@@ -46,11 +41,11 @@ pub enum Command {
     },
     Docs {
         #[command(subcommand)]
-        command: DocsCommand,
+        command: workspace::DocsCommand,
     },
     Wiki {
         #[command(subcommand)]
-        command: WikiCommand,
+        command: workspace::WikiCommand,
     },
     Materialize {
         #[arg(long, default_value = ".")]
@@ -60,31 +55,31 @@ pub enum Command {
     },
     Sources {
         #[command(subcommand)]
-        command: SourcesCommand,
+        command: knowledge::SourcesCommand,
     },
     Requirements {
         #[command(subcommand)]
-        command: RequirementsCommand,
+        command: knowledge::RequirementsCommand,
     },
     Edges {
         #[command(subcommand)]
-        command: EdgesCommand,
+        command: graph::EdgesCommand,
     },
     Domains {
         #[command(subcommand)]
-        command: DomainsCommand,
+        command: knowledge::DomainsCommand,
     },
     Boundaries {
         #[command(subcommand)]
-        command: BoundariesCommand,
+        command: knowledge::BoundariesCommand,
     },
     Topics {
         #[command(subcommand)]
-        command: TopicsCommand,
+        command: shaping::TopicsCommand,
     },
     Questions {
         #[command(subcommand)]
-        command: QuestionsCommand,
+        command: shaping::QuestionsCommand,
     },
     Graph {
         requirement_id: String,
@@ -97,19 +92,19 @@ pub enum Command {
     },
     Resolutions {
         #[command(subcommand)]
-        command: ResolutionsCommand,
+        command: policy::ResolutionsCommand,
     },
     Rules {
         #[command(subcommand)]
-        command: RulesCommand,
+        command: policy::RulesCommand,
     },
     Services {
         #[command(subcommand)]
-        command: ServicesCommand,
+        command: services::ServicesCommand,
     },
     ServiceBindings {
         #[command(subcommand)]
-        command: ServiceBindingsCommand,
+        command: services::ServiceBindingsCommand,
     },
     Traceability {
         rule_id: String,
@@ -130,23 +125,23 @@ pub enum Command {
     },
     Thread {
         #[command(subcommand)]
-        command: ThreadCommand,
+        command: shaping::ThreadCommand,
     },
     Contributions {
         #[command(subcommand)]
-        command: ContributionsCommand,
+        command: ideation::ContributionsCommand,
     },
     SynthesisPackets {
         #[command(subcommand)]
-        command: SynthesisPacketsCommand,
+        command: ideation::SynthesisPacketsCommand,
     },
     Proposals {
         #[command(subcommand)]
-        command: ProposalsCommand,
+        command: ideation::ProposalsCommand,
     },
     PromotionDecisions {
         #[command(subcommand)]
-        command: PromotionDecisionsCommand,
+        command: ideation::PromotionDecisionsCommand,
     },
     Prime {
         #[arg(long, default_value = ".")]
@@ -205,22 +200,22 @@ pub enum Command {
     },
     Coverage {
         #[command(subcommand)]
-        command: CoverageCommand,
+        command: workspace::CoverageCommand,
     },
     SwarmBacktrace {
         #[command(subcommand)]
-        command: SwarmBacktraceCommand,
+        command: ideation::SwarmBacktraceCommand,
     },
     Skills {
         #[command(subcommand)]
-        command: SkillsCommand,
+        command: workspace::SkillsCommand,
     },
     Schema {
         #[command(subcommand)]
-        command: SchemaCommand,
+        command: ideation::SchemaCommand,
     },
     Validate {
-        artifact: IdeationArtifactKind,
+        artifact: ideation::IdeationArtifactKind,
         #[arg(long)]
         input: Utf8PathBuf,
         #[arg(long, value_enum, default_value_t = OutputFormat::Json)]

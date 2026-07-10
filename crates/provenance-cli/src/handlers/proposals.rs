@@ -1,5 +1,5 @@
 use super::common::{ideation_target, parse_json_arg, stable_ids, warn_if_skills_missing};
-use crate::cli::ProposalsCommand;
+use crate::cli::ideation::ProposalsCommand;
 use crate::output;
 use provenance_core::{
     IdeationEvidenceReference, PromotionState, ProposalTraceability, ProposalType, ScopeId,

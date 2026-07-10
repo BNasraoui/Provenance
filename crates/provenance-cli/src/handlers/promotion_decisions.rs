@@ -1,5 +1,5 @@
 use super::common::canonical_artifact;
-use crate::cli::PromotionDecisionsCommand;
+use crate::cli::ideation::PromotionDecisionsCommand;
 use crate::output;
 use provenance_core::{IdentityType, PromotionActor, PromotionDecision, ScopeId, StableId};
 use provenance_store::{

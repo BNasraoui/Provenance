@@ -1,4 +1,4 @@
-use crate::cli::EdgesCommand;
+use crate::cli::graph::EdgesCommand;
 use crate::output;
 use provenance_core::{EdgeType, NodeType, ScopeId, StableId};
 use provenance_store::{

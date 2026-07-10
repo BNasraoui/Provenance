@@ -1,4 +1,4 @@
-use crate::cli::{self, ServicesCommand};
+use crate::cli::services::{ServiceCreateArgs, ServicesCommand};
 use crate::output;
 use provenance_core::{ScopeId, ServiceEnvironment, ServiceStatus, ServiceTier, StableId};
 use provenance_store::{
@@ -9,7 +9,7 @@ use provenance_store::{
 pub(super) fn handle(command: ServicesCommand) -> anyhow::Result<()> {
     match command {
         ServicesCommand::Create(args) => {
-            let cli::ServiceCreateArgs {
+            let ServiceCreateArgs {
                 repo,
                 scope,
                 id,

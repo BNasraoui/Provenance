@@ -1,4 +1,4 @@
-use crate::cli::DomainsCommand;
+use crate::cli::knowledge::DomainsCommand;
 use crate::output;
 use provenance_core::{ScopeId, StableId};
 use provenance_store::{
