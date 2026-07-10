@@ -1,5 +1,5 @@
 use crate::{
-    cli::IdeationArtifactKind,
+    cli::ideation::IdeationArtifactKind,
     output::{self, OutputFormat},
 };
 use anyhow::Context;

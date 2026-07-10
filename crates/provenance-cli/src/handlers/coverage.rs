@@ -1,4 +1,4 @@
-use crate::cli::CoverageCommand;
+use crate::cli::workspace::CoverageCommand;
 use crate::output::{self, OutputFormat};
 use camino::Utf8PathBuf;
 use provenance_core::ScopeId;

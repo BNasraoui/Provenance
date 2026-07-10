@@ -1,5 +1,5 @@
 use super::common::{ideation_target, parse_json_arg, warn_if_skills_missing};
-use crate::cli::SynthesisPacketsCommand;
+use crate::cli::ideation::SynthesisPacketsCommand;
 use crate::output;
 use provenance_core::{
     ConsensusFinding, ContestedClaim, EvidenceGap, MinorityObjection, RequiredHumanDecision,
