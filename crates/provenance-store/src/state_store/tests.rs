@@ -23,8 +23,25 @@ fn initialized_store() -> (tempfile::TempDir, StateStore, ScopeId) {
     (dir, store, scope)
 }
 
-fn seeded_source_requirement_store() -> (tempfile::TempDir, StateStore, ScopeId) {
+fn seeded_requirement_store() -> (tempfile::TempDir, StateStore, ScopeId) {
     let (dir, store, scope) = initialized_store();
+    store
+        .create_requirement(CreateRequirementInput {
+            scope_id: scope.clone(),
+            id: StableId::new("req_overtime").unwrap(),
+            statement: "Overtime".into(),
+            description: None,
+            status: RequirementStatus::Active,
+            domain_id: None,
+            origin_thread: None,
+            origin_message: None,
+        })
+        .unwrap();
+    (dir, store, scope)
+}
+
+fn seeded_source_requirement_store() -> (tempfile::TempDir, StateStore, ScopeId) {
+    let (dir, store, scope) = seeded_requirement_store();
     store
         .create_source(CreateSourceInput {
             scope_id: scope.clone(),
@@ -37,18 +54,6 @@ fn seeded_source_requirement_store() -> (tempfile::TempDir, StateStore, ScopeId)
             effective_date: None,
             review_date: None,
             superseded_by: None,
-            origin_thread: None,
-            origin_message: None,
-        })
-        .unwrap();
-    store
-        .create_requirement(CreateRequirementInput {
-            scope_id: scope.clone(),
-            id: StableId::new("req_overtime").unwrap(),
-            statement: "Overtime".into(),
-            description: None,
-            status: RequirementStatus::Active,
-            domain_id: None,
             origin_thread: None,
             origin_message: None,
         })

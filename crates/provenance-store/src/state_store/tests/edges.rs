@@ -1,10 +1,10 @@
-use super::seeded_source_requirement_store;
+use super::seeded_requirement_store;
 use crate::state_store::{CreateEdgeInput, CreateRequirementInput};
 use provenance_core::{Edge, EdgeType, NodeType, RequirementStatus, SchemaVersion, StableId};
 
 #[test]
 fn generic_edges_validate_endpoints_and_delete() {
-    let (_dir, store, scope) = seeded_source_requirement_store();
+    let (_dir, store, scope) = seeded_requirement_store();
     store
         .create_requirement(CreateRequirementInput {
             scope_id: scope.clone(),
@@ -51,7 +51,7 @@ fn generic_edges_validate_endpoints_and_delete() {
 
 #[test]
 fn list_edges_reads_all_edge_shards() {
-    let (_dir, store, scope) = seeded_source_requirement_store();
+    let (_dir, store, scope) = seeded_requirement_store();
     store
         .create_requirement(CreateRequirementInput {
             scope_id: scope.clone(),
