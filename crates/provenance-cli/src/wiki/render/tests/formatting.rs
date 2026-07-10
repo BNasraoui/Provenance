@@ -76,3 +76,22 @@ fn link_list_leaves_unique_titles_unchanged() {
 </ul>\n"
     );
 }
+
+#[test]
+fn repeated_links_to_the_same_record_do_not_collide() {
+    let link = colliding_requirement_links().remove(0);
+
+    assert!(!link_list(&[link.clone(), link]).contains("class=\"id-chip\""));
+}
+
+#[test]
+fn short_ids_use_the_shortest_suffix_that_distinguishes_records() {
+    let links = vec![
+        super::fixtures::link(crate::wiki::model::PageKind::Requirement, "req_a1", "Same"),
+        super::fixtures::link(crate::wiki::model::PageKind::Requirement, "req_b1", "Same"),
+    ];
+
+    let html = link_list(&links);
+    assert!(html.contains("<span class=\"id-chip\">req_a1</span>"));
+    assert!(html.contains("<span class=\"id-chip\">req_b1</span>"));
+}
