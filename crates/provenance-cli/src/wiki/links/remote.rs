@@ -29,10 +29,8 @@ pub fn parse_git_remote(url: &str) -> Option<GitRemote> {
     {
         let rest = rest.split_once('@').map_or(rest, |(_, tail)| tail);
         rest.split_once('/')?
-    } else if let Some(rest) = url.strip_prefix("git@") {
-        rest.split_once(':')?
     } else {
-        return None;
+        url.strip_prefix("git@")?.split_once(':')?
     };
     let host = match host {
         "github.com" | "www.github.com" => GitHost::GitHub,
