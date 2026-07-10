@@ -3,7 +3,7 @@ use crate::wiki::model::{LineageEntry, PageKind};
 use crate::wiki::theme::{ICON_DEFS, THEME_SCRIPT};
 use std::fmt::Write as _;
 
-use super::html::{escape_attr, escape_html, icon_svg, link_html};
+use super::html::{escape_attr, escape_html, icon_svg};
 use super::labels::{kind_class, kind_icon, kind_label};
 
 pub(in crate::wiki::render) fn page_shell(
@@ -134,10 +134,11 @@ pub(in crate::wiki::render) fn title_row(
 }
 
 pub(in crate::wiki::render) fn breadcrumb_from_lineage(lineage: &[LineageEntry]) -> String {
+    let renderer = super::html::PageLinksRenderer::new(lineage.iter().map(|entry| &entry.link));
     let ancestors: Vec<String> = lineage
         .iter()
         .filter(|entry| !entry.is_current)
-        .map(|entry| link_html(&entry.link))
+        .map(|entry| renderer.link(&entry.link, None))
         .collect();
     ancestors.join(" <span class=\"sep\">›</span> ")
 }
