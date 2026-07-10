@@ -3,6 +3,8 @@ use predicates::prelude::*;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
+const GROUNDED_DESCRIPTION: &str = "Write specific, evidence-grounded statements for requirements, rules, sources, resolutions, and boundaries — not generic capability language. Use before calling `requirements create/update`, `rules create/update`, `sources create/update`, `resolutions create/update`, or `boundaries create`, especially for a root or mid-level requirement, a statement merging several candidates, or a resolution's position and rationale.";
+
 const LEGACY_NAMES: [&str; 4] = [
     "shaping",
     "fork-tournament",
@@ -79,6 +81,27 @@ fn cleanup_removes_only_skill_file_and_keeps_user_files() {
         std::fs::read_to_string(legacy.join("notes.txt")).unwrap(),
         "mine\n"
     );
+}
+
+#[test]
+fn rerun_reports_legacy_cleanup_as_an_update() {
+    let dir = tempfile::tempdir().unwrap();
+    install_local(dir.path()).success();
+    let legacy = legacy_dir(dir.path(), ".agents/skills", "shaping");
+    write_managed_skill(&legacy, "---\nname: old\n---\n", "payload\n");
+
+    let output = install_local(dir.path())
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let report: serde_json::Value = serde_json::from_slice(&output).unwrap();
+
+    assert_eq!(report["status"], "updated");
+    assert!(report["files"].as_array().unwrap().iter().any(|file| {
+        file["path"].as_str() == Some(legacy.join("SKILL.md").to_str().unwrap())
+            && file["status"] == "removed"
+    }));
 }
 
 #[test]
@@ -170,6 +193,46 @@ fn authentic_legacy_agents_block_is_removed() {
     install_local(dir.path()).success();
 
     assert_eq!(std::fs::read_to_string(agents).unwrap(), "before\nafter\n");
+}
+
+#[test]
+fn authentic_four_skill_legacy_agents_block_is_removed() {
+    let dir = tempfile::tempdir().unwrap();
+    let agents = dir.path().join("AGENTS.md");
+    let descriptions = [
+        ("shaping", "Guide turn-based requirement shaping in Provenance. Use when a user brings a loose idea, asks to refine requirements, work through open shaping questions, graduate fog, or run the Chart/Work loop against an anchor requirement. Land every resolved decision immediately into the graph."),
+        ("fork-tournament", "Run a fork tournament when a shaping session hits a genuine design fork — mutually exclusive directions, expensive to reverse, and the human's preference unknowable without concrete artifacts to react to. Implements the `prototype` resolution method from docs/shaping.md - spawn stance-based agents producing competing artifacts as proposals (phase 1, end session), then present them for human disposal and land the decision as a Resolution (phase 2)."),
+        ("swarm-backtrace", "Reverse-engineer candidate requirements from an existing codebase with a multi-agent swarm. Use when the user wants to extract, mine, backtrace, or reverse-engineer requirements or rules from existing code, bootstrap a Provenance graph from a legacy system, or asks \"what must be true for this code to be correct\". Lands everything as proposals (promotion_state=proposed) against a commit-pinned source — never as active requirements."),
+        ("grounded-writing", GROUNDED_DESCRIPTION),
+    ];
+    let sources = descriptions.map(|(name, description)| {
+        format!("---\nname: {name}\ndescription: {description}\n---\n\n# {name}\n")
+    });
+    let source_refs = sources.iter().map(String::as_str).collect::<Vec<_>>();
+    let block = render_legacy_agents_block(&source_refs);
+    std::fs::write(&agents, format!("before\n{block}after\n")).unwrap();
+
+    install_local(dir.path()).success();
+
+    assert_eq!(std::fs::read_to_string(agents).unwrap(), "before\nafter\n");
+}
+
+#[test]
+fn authentic_block_preserves_non_utf8_surrounding_bytes() {
+    let dir = tempfile::tempdir().unwrap();
+    let agents = dir.path().join("AGENTS.md");
+    let sources = [format!(
+        "---\nname: grounded-writing\ndescription: {GROUNDED_DESCRIPTION}\n---\n\n# Grounded writing\n"
+    )];
+    let block = render_legacy_agents_block(&[sources[0].as_str()]);
+    let mut contents = b"prefix\xff\n".to_vec();
+    contents.extend_from_slice(block.as_bytes());
+    contents.extend_from_slice(b"suffix\xfe\n");
+    std::fs::write(&agents, contents).unwrap();
+
+    install_local(dir.path()).success();
+
+    assert_eq!(std::fs::read(agents).unwrap(), b"prefix\xff\nsuffix\xfe\n");
 }
 
 #[test]
