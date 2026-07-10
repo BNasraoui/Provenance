@@ -565,17 +565,36 @@ impl GapInspector<'_, '_> {
     fn add_dangling_edge_refs(&self, gaps: &mut Vec<GapItem>) {
         for edge in self.edges() {
             if !self.node_exists(edge.from_type, &edge.from_id) {
-                gaps.push(GapItem::new(
-                    GapKind::DanglingReference,
-                    edge.from_type,
-                    &edge.from_id,
-                    format!(
-                        "edge {} points from missing {} {}",
-                        edge.id.as_str(),
-                        node_type_word(edge.from_type),
-                        edge.from_id.as_str()
-                    ),
-                ));
+                if edge.edge_type == EdgeType::References
+                    && edge.from_type == NodeType::Source
+                    && edge.to_type == NodeType::Requirement
+                {
+                    gaps.push(
+                        GapItem::new(
+                            GapKind::DanglingReference,
+                            NodeType::Requirement,
+                            &edge.to_id,
+                            format!(
+                                "references edge {} points from missing source {}",
+                                edge.id.as_str(),
+                                edge.from_id.as_str()
+                            ),
+                        )
+                        .with_related(NodeType::Source, &edge.from_id),
+                    );
+                } else {
+                    gaps.push(GapItem::new(
+                        GapKind::DanglingReference,
+                        edge.from_type,
+                        &edge.from_id,
+                        format!(
+                            "edge {} points from missing {} {}",
+                            edge.id.as_str(),
+                            node_type_word(edge.from_type),
+                            edge.from_id.as_str()
+                        ),
+                    ));
+                }
             }
             if !self.node_exists(edge.to_type, &edge.to_id) {
                 gaps.push(
