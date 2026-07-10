@@ -24,6 +24,13 @@ pub(super) fn check(repo: Utf8PathBuf, format: OutputFormat) -> anyhow::Result<(
 
     let mut index = CheckIndex::default();
     let mut dangling = Vec::new();
+    for scope_directory in store.list_scope_directories()? {
+        if !manifest_scopes.contains(&scope_directory) {
+            dangling.push(format!(
+                "scope directory {scope_directory} is absent from manifest"
+            ));
+        }
+    }
     for scope in &manifest.scopes {
         let scope_id = &scope.id;
         let sources = store.list_sources(scope_id)?;

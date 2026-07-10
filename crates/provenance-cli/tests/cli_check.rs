@@ -130,20 +130,41 @@ fn check_accepts_origin_message_in_non_default_month_shard() {
     let state = dir.path().join(".provenance/state");
     write_jsonl(
         &state.join("scopes/default/sources/source.jsonl"),
-        r#"{"schema_version":1,"scope_id":"default","id":"source_policy","name":"Policy","source_type":"policy","origin_thread":"thread_source_policy","origin_message":"msg_august"}"#,
+        r#"{"schema_version":1,"scope_id":"default","id":"source_july","name":"July policy","source_type":"policy","origin_thread":"thread_source_july","origin_message":"msg_july"}
+{"schema_version":1,"scope_id":"default","id":"source_august","name":"August policy","source_type":"policy","origin_thread":"thread_source_august","origin_message":"msg_august"}"#,
     );
     write_jsonl(
         &state.join("scopes/default/threads/threads.jsonl"),
-        r#"{"schema_version":1,"scope_id":"default","id":"thread_source_policy","parent":{"node_type":"source","node_id":"source_policy"},"status":"active","created_at":1}"#,
+        r#"{"schema_version":1,"scope_id":"default","id":"thread_source_july","parent":{"node_type":"source","node_id":"source_july"},"status":"active","created_at":1}
+{"schema_version":1,"scope_id":"default","id":"thread_source_august","parent":{"node_type":"source","node_id":"source_august"},"status":"active","created_at":2}"#,
+    );
+    write_jsonl(
+        &state.join("scopes/default/threads/2026-07.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","id":"msg_july","thread_id":"thread_source_july","role":"user","body":"July policy discussion","created_at":1}"#,
     );
     write_jsonl(
         &state.join("scopes/default/threads/2026-08.jsonl"),
-        r#"{"schema_version":1,"scope_id":"default","id":"msg_august","thread_id":"thread_source_policy","role":"user","body":"Policy discussion","created_at":1}"#,
+        r#"{"schema_version":1,"scope_id":"default","id":"msg_august","thread_id":"thread_source_august","role":"user","body":"August policy discussion","created_at":2}"#,
     );
 
     provenance(dir.path())
         .success()
         .stdout(contains(r#""status": "ok""#));
+}
+
+#[test]
+fn check_reports_scope_directory_absent_from_manifest() {
+    let dir = tempfile::tempdir().unwrap();
+    init(dir.path());
+    let state = dir.path().join(".provenance/state");
+    write_jsonl(
+        &state.join("scopes/unlisted/requirements/req.jsonl"),
+        r#"{"corrupt":"record"}"#,
+    );
+
+    provenance(dir.path())
+        .failure()
+        .stderr(contains("scope directory unlisted is absent from manifest"));
 }
 
 #[test]
