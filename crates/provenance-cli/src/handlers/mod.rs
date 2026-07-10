@@ -166,10 +166,19 @@ pub(super) async fn dispatch(command: Command, quiet: bool) -> anyhow::Result<()
         Command::Stale {
             repo,
             scope,
+            min_age_days,
+            rule_severities,
+            min_downstream_rules,
             format,
-            ..
         } => {
-            stale::handle(repo, scope, format)?;
+            stale::handle(
+                repo,
+                scope,
+                min_age_days,
+                rule_severities,
+                min_downstream_rules,
+                format,
+            )?;
         }
         Command::Health {
             repo,
