@@ -1,5 +1,6 @@
-use super::*;
-use provenance_core::{EdgeType, NodeType};
+use super::seeded_source_requirement_store;
+use crate::state_store::{CreateEdgeInput, CreateRequirementInput};
+use provenance_core::{Edge, EdgeType, NodeType, RequirementStatus, SchemaVersion, StableId};
 
 #[test]
 fn generic_edges_validate_endpoints_and_delete() {
@@ -74,7 +75,7 @@ fn list_edges_reads_all_edge_shards() {
         })
         .unwrap();
     let second_edge = Edge {
-        schema_version: provenance_core::SchemaVersion(1),
+        schema_version: SchemaVersion(1),
         scope_id: scope,
         id: StableId::new("edge_second_shard").unwrap(),
         edge_type: EdgeType::DependsOn,

@@ -1,10 +1,13 @@
-use super::*;
+use super::initialized_store;
+use crate::state_store::StateStore;
+use provenance_core::{Message, MessageRole, SchemaVersion, ScopeId, StableId};
+use tempfile::TempDir;
 
 #[test]
 fn list_messages_reads_all_month_shards() {
-    let (_dir, store, scope) = seeded_source_requirement_store();
+    let (_dir, store, scope): (TempDir, StateStore, ScopeId) = initialized_store();
     let first_message = Message {
-        schema_version: provenance_core::SchemaVersion(1),
+        schema_version: SchemaVersion(1),
         scope_id: scope.clone(),
         id: StableId::new("msg_july").unwrap(),
         thread_id: StableId::new("thread_source_source_schads").unwrap(),
@@ -14,7 +17,7 @@ fn list_messages_reads_all_month_shards() {
         ai_metadata: None,
     };
     let second_message = Message {
-        schema_version: provenance_core::SchemaVersion(1),
+        schema_version: SchemaVersion(1),
         scope_id: scope.clone(),
         id: StableId::new("msg_august").unwrap(),
         thread_id: StableId::new("thread_source_source_schads").unwrap(),
