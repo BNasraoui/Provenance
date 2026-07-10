@@ -1,4 +1,5 @@
 use crate::wiki::model::{CorpusCounts, OrphanReport, PageId, PageKind, ScopeIndexPage};
+use provenance_core::RequirementStatus;
 
 use super::super::{
     render_index, render_not_found, render_requirement, render_resolution, render_rule,
@@ -84,6 +85,18 @@ fn index_page_on_a_truly_empty_scope_shows_the_honest_empty_state() {
     assert!(!html.contains("Orphaned Records"));
     assert!(!html.contains("class=\"margin-head\">Gaps"));
     assert!(!html.contains("citation gap"));
+}
+
+#[test]
+fn index_marks_resolved_requirements_without_decisions_or_rules_unbacked() {
+    let mut page = index_fixture();
+    page.roots[0].status = RequirementStatus::Resolved;
+    page.roots[0].resolutions = 0;
+    page.roots[0].rules = 0;
+
+    let html = render_index("default", &page);
+    assert!(html.contains("status-badge resolved-unbacked"));
+    assert!(html.contains("Resolved (no decisions or rules)"));
 }
 
 #[test]

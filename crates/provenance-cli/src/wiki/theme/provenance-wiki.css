@@ -584,6 +584,7 @@
 
     .status-badge.refinement { --sc: var(--pv-status-refinement); }
     .status-badge.active, .status-badge.resolved { --sc: var(--pv-status-resolved); }
+    .status-badge.resolved-unbacked { --sc: var(--pv-muted); }
     .status-badge.draft, .status-badge.review, .status-badge.proposed { --sc: var(--pv-status-discovery); }
     .status-badge.revised, .status-badge.superseded { --sc: var(--pv-wither-superseded); }
     .status-badge.rejected, .status-badge.abandoned { --sc: var(--pv-sev-high); }
