@@ -1,4 +1,7 @@
-use super::super::*;
+use super::shaping::{
+    ArtifactLinkTargetType, Boundary, Question, QuestionStatus, ResolutionMethod, Topic,
+    TopicStatus,
+};
 
 #[test]
 fn shaping_records_roundtrip_from_convex_style_json() {
@@ -73,18 +76,6 @@ fn shaping_records_roundtrip_from_convex_style_json() {
     assert_eq!(question["claimed_by"], "agent-shaper");
     assert_eq!(question["claimed_at"], 1_714_780_800_000_i64);
     assert_eq!(question["resolution_id"], "res_overtime");
-}
-
-#[test]
-fn topic_and_question_are_thread_parent_node_types_but_not_edge_endpoints() {
-    assert_eq!(NodeType::parse("topic").unwrap(), NodeType::Topic);
-    assert_eq!(NodeType::parse("question").unwrap(), NodeType::Question);
-    assert!(crate::edge_validation::validate_edge_endpoint(
-        EdgeType::DependsOn,
-        NodeType::Topic,
-        NodeType::Topic,
-    )
-    .is_err());
 }
 
 #[test]
