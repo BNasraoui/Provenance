@@ -54,7 +54,7 @@ expression: "render_requirement(\"default\", &gappy_requirement_fixture())"
 <h1>Rostering shall respect awards</h1>
 <div class="badge-row">
 <span class="type-badge requirement"><svg class="icon"><use href="#i-git-branch"/></svg>Requirement</span>
-<span class="status-badge resolved"><svg class="icon"><use href="#i-check-circle"/></svg>Resolved</span>
+<span class="status-badge resolved-unbacked"><svg class="icon"><use href="#i-search"/></svg>Resolved (no decisions or rules)</span>
 <span class="id-chip">req_stuck</span>
 </div>
 </div>

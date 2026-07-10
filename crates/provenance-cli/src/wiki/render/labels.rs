@@ -7,15 +7,30 @@ use provenance_core::{
 use super::html::icon_svg;
 
 pub(in crate::wiki::render) fn status_badge(word: &str) -> String {
-    let icon = match word {
+    status_badge_with_label(word, &capitalize(word))
+}
+
+fn status_badge_with_label(class_word: &str, label: &str) -> String {
+    let icon = match class_word {
         "approved" | "resolved" | "active" => "i-check-circle",
         _ => "i-search",
     };
     format!(
-        "<span class=\"status-badge {word}\">{}{}</span>",
+        "<span class=\"status-badge {class_word}\">{}{label}</span>",
         icon_svg(icon),
-        capitalize(word)
     )
+}
+
+pub(in crate::wiki::render) fn requirement_status_badge(
+    status: &RequirementStatus,
+    decisions: usize,
+    rules: usize,
+) -> String {
+    if matches!(status, RequirementStatus::Resolved) && decisions == 0 && rules == 0 {
+        status_badge_with_label("resolved-unbacked", "Resolved (no decisions or rules)")
+    } else {
+        status_badge(requirement_status_word(status))
+    }
 }
 
 pub(in crate::wiki::render) fn sev_chip(class_word: &str, label: &str) -> String {
