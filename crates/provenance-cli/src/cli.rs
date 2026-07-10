@@ -6,10 +6,6 @@ pub mod services;
 pub mod shaping;
 pub mod workspace;
 
-// Kept at the CLI root because the schema handler predates the domain modules.
-// New call sites should import command types from their owning module.
-pub use ideation::{IdeationArtifactKind, SchemaCommand};
-
 use crate::output::OutputFormat;
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};

@@ -1,5 +1,5 @@
 use crate::{
-    cli::{IdeationArtifactKind, SchemaCommand},
+    cli::ideation::{IdeationArtifactKind, SchemaCommand},
     output,
 };
 use serde_json::{json, Value};
