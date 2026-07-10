@@ -564,33 +564,27 @@ impl GapInspector<'_, '_> {
 
     fn add_dangling_edge_refs(&self, gaps: &mut Vec<GapItem>) {
         for edge in self.edges() {
-            if !self.node_exists(edge.from_type, &edge.from_id) {
-                gaps.push(GapItem::new(
-                    GapKind::DanglingReference,
-                    edge.from_type,
-                    &edge.from_id,
-                    format!(
-                        "edge {} points from missing {} {}",
-                        edge.id.as_str(),
-                        node_type_word(edge.from_type),
-                        edge.from_id.as_str()
-                    ),
-                ));
+            let from_exists = self.node_exists(edge.from_type, &edge.from_id);
+            let to_exists = self.node_exists(edge.to_type, &edge.to_id);
+
+            if !from_exists {
+                add_dangling_edge_endpoint_gap(
+                    gaps,
+                    edge,
+                    (edge.from_type, &edge.from_id),
+                    (edge.to_type, &edge.to_id),
+                    to_exists,
+                    "from",
+                );
             }
-            if !self.node_exists(edge.to_type, &edge.to_id) {
-                gaps.push(
-                    GapItem::new(
-                        GapKind::DanglingReference,
-                        edge.to_type,
-                        &edge.to_id,
-                        format!(
-                            "edge {} points to missing {} {}",
-                            edge.id.as_str(),
-                            node_type_word(edge.to_type),
-                            edge.to_id.as_str()
-                        ),
-                    )
-                    .with_related(edge.from_type, &edge.from_id),
+            if !to_exists {
+                add_dangling_edge_endpoint_gap(
+                    gaps,
+                    edge,
+                    (edge.to_type, &edge.to_id),
+                    (edge.from_type, &edge.from_id),
+                    from_exists,
+                    "to",
                 );
             }
         }
@@ -688,6 +682,47 @@ impl GapInspector<'_, '_> {
                 .with_requirement(&topic.requirement_id),
             );
         }
+    }
+}
+
+fn add_dangling_edge_endpoint_gap(
+    gaps: &mut Vec<GapItem>,
+    edge: &Edge,
+    missing: (NodeType, &StableId),
+    other: (NodeType, &StableId),
+    other_exists: bool,
+    direction: &str,
+) {
+    let anchor = if other_exists { other } else { missing };
+    let related = if other_exists { missing } else { other };
+    gaps.push(
+        GapItem::new(
+            GapKind::DanglingReference,
+            anchor.0,
+            anchor.1,
+            format!(
+                "{} edge {} points {direction} missing {} {}",
+                edge_type_word(edge.edge_type),
+                edge.id.as_str(),
+                node_type_word(missing.0),
+                missing.1.as_str()
+            ),
+        )
+        .with_related(related.0, related.1),
+    );
+}
+
+const fn edge_type_word(edge_type: EdgeType) -> &'static str {
+    match edge_type {
+        EdgeType::References => "references",
+        EdgeType::RefinesInto => "refines_into",
+        EdgeType::DependsOn => "depends_on",
+        EdgeType::Contradicts => "contradicts",
+        EdgeType::Supersedes => "supersedes",
+        EdgeType::Needs => "needs",
+        EdgeType::Resolves => "resolves",
+        EdgeType::Spawns => "spawns",
+        EdgeType::Produces => "produces",
     }
 }
 
@@ -953,9 +988,11 @@ mod tests {
         }));
         assert!(gaps.iter().any(|gap| {
             gap.kind == GapKind::DanglingReference
-                && gap.node_type == NodeType::Resolution
-                && gap.node_id == "res_missing"
-                && gap.reason.contains("edge")
+                && gap.node_type == NodeType::Rule
+                && gap.node_id == "rule_orphaned"
+                && gap.related_node_type == Some(NodeType::Resolution)
+                && gap.related_node_id.as_deref() == Some("res_missing")
+                && gap.reason.contains("produces edge")
         }));
     }
 
