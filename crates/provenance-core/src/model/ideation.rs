@@ -1,6 +1,12 @@
 use serde::{Deserialize, Serialize};
 
-use super::normalize_enum_value;
+pub(super) mod contributions;
+pub(super) mod promotions;
+pub(super) mod proposals;
+pub(super) mod synthesis;
+
+use super::ids::StableId;
+use super::parsing::normalize_enum_value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IdeationTargetType {
@@ -258,4 +264,25 @@ impl PromotionDecision {
             _ => anyhow::bail!("promotion decision must be accepted, rejected, or deferred"),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IdeationTarget {
+    #[serde(alias = "artifactType")]
+    pub artifact_type: IdeationTargetType,
+    #[serde(alias = "artifactId")]
+    pub artifact_id: StableId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IdeationEvidenceReference {
+    #[serde(alias = "referenceId")]
+    pub reference_id: StableId,
+    #[serde(alias = "evidenceType")]
+    pub evidence_type: IdeationEvidenceType,
+    pub summary: String,
+    #[serde(default, alias = "filePath", skip_serializing_if = "Option::is_none")]
+    pub file_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<u32>,
 }

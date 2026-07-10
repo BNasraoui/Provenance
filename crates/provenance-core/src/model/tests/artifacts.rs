@@ -1,4 +1,4 @@
-use super::super::*;
+use super::artifacts::{Requirement, Resolution, Rule, Source};
 
 #[test]
 fn enriched_source_and_requirement_records_roundtrip_without_schema_bump() {
