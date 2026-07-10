@@ -147,7 +147,11 @@ fn install_at(base: &Path, global: bool, force: bool, copy: bool) -> anyhow::Res
             }
         }
     }
-    crate::legacy_cleanup::cleanup(base, global)?;
+    files.extend(
+        crate::legacy_cleanup::cleanup(base, global)?
+            .into_iter()
+            .map(|change| file_report(&change.path, change.status)),
+    );
 
     Ok(InstallReport {
         global,
@@ -352,7 +356,10 @@ fn provenance_header(content: &str) -> String {
 }
 
 fn combined_status(files: &[FileInstallReport]) -> &'static str {
-    if files.iter().any(|file| file.status == "updated") {
+    if files
+        .iter()
+        .any(|file| matches!(file.status, "updated" | "removed"))
+    {
         "updated"
     } else if files
         .iter()
