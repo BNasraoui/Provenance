@@ -9,9 +9,7 @@ use super::super::fragments::{
     push_lineage, push_prose_section, push_rule_territory_card, push_section_open,
 };
 use super::super::html::{icon_svg, link_list};
-use super::super::labels::{
-    format_confidence, requirement_status_word, resolution_status_word, status_badge,
-};
+use super::super::labels::{format_confidence, requirement_status_badge, resolution_status_word};
 
 /// Renders a requirement detail page.
 #[allow(clippy::too_many_lines)]
@@ -127,7 +125,11 @@ pub fn render_requirement(scope: &str, page: &RequirementPage) -> String {
         &title_row(
             PageKind::Requirement,
             &page.title,
-            Some(&status_badge(requirement_status_word(&page.status))),
+            Some(&requirement_status_badge(
+                &page.status,
+                page.decisions.len(),
+                page.produced_rules.len(),
+            )),
             &[],
             &page.id.record_id,
         ),
