@@ -1,7 +1,10 @@
-use super::*;
-use provenance_core::{Manifest, RepoPathPrefix};
+use crate::{
+    layout::ProvenanceLayout,
+    state_store::{CreateRequirementInput, CreateSourceInput, StateStore},
+};
+use provenance_core::{Manifest, RepoPathPrefix, RequirementStatus, ScopeId, SourceType, StableId};
 
-fn seeded_source_requirement_store() -> (tempfile::TempDir, StateStore, ScopeId) {
+fn initialized_store() -> (tempfile::TempDir, StateStore, ScopeId) {
     let dir = tempfile::tempdir().unwrap();
     let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
     let layout = ProvenanceLayout::new(root);
@@ -17,6 +20,11 @@ fn seeded_source_requirement_store() -> (tempfile::TempDir, StateStore, ScopeId)
     )
     .unwrap();
     let store = StateStore::new(layout);
+    (dir, store, scope)
+}
+
+fn seeded_source_requirement_store() -> (tempfile::TempDir, StateStore, ScopeId) {
+    let (dir, store, scope) = initialized_store();
     store
         .create_source(CreateSourceInput {
             scope_id: scope.clone(),

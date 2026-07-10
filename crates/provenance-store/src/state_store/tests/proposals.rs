@@ -1,23 +1,13 @@
-use super::*;
-use provenance_core::{IdeationTargetType, IdentityType};
+use super::initialized_store;
+use crate::state_store::{CreatePromotionDecisionInput, CreateProposalCardInput, ProposalCard};
+use provenance_core::{
+    IdeationTarget, IdeationTargetType, IdentityType, PromotionActor, PromotionDecision,
+    PromotionState, ProposalTraceability, ProposalType, ScopeId, StableId,
+};
 
 #[test]
 fn proposal_state_requires_duplicate_or_superseded_link() {
-    let dir = tempfile::tempdir().unwrap();
-    let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
-    let layout = ProvenanceLayout::new(root);
-    std::fs::create_dir_all(layout.manifest_path().parent().unwrap()).unwrap();
-    std::fs::write(
-        layout.manifest_path(),
-        serde_json::to_string(&Manifest::default_with_scope(
-            ScopeId::new("default").unwrap(),
-            RepoPathPrefix::new("."),
-        ))
-        .unwrap(),
-    )
-    .unwrap();
-    let store = StateStore::new(layout);
-    let scope = ScopeId::new("default").unwrap();
+    let (_dir, store, scope) = initialized_store();
 
     let err = store
         .create_proposal_card(CreateProposalCardInput {
@@ -50,21 +40,7 @@ fn proposal_state_requires_duplicate_or_superseded_link() {
 
 #[test]
 fn promotion_decision_updates_proposal_state() {
-    let dir = tempfile::tempdir().unwrap();
-    let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
-    let layout = ProvenanceLayout::new(root);
-    std::fs::create_dir_all(layout.manifest_path().parent().unwrap()).unwrap();
-    std::fs::write(
-        layout.manifest_path(),
-        serde_json::to_string(&Manifest::default_with_scope(
-            ScopeId::new("default").unwrap(),
-            RepoPathPrefix::new("."),
-        ))
-        .unwrap(),
-    )
-    .unwrap();
-    let store = StateStore::new(layout);
-    let scope = ScopeId::new("default").unwrap();
+    let (_dir, store, scope) = initialized_store();
 
     store
         .create_proposal_card(CreateProposalCardInput {
@@ -142,7 +118,7 @@ fn proposal_input(
 
 #[test]
 fn replacing_accepted_proposal_reports_human_disposition() {
-    let (_dir, store, scope) = seeded_source_requirement_store();
+    let (_dir, store, scope) = initialized_store();
     store
         .create_proposal_card(proposal_input(
             &scope,
@@ -168,7 +144,7 @@ fn replacing_accepted_proposal_reports_human_disposition() {
 
 #[test]
 fn replacing_proposed_proposal_with_decision_edge_reports_human_disposition() {
-    let (_dir, store, scope) = seeded_source_requirement_store();
+    let (_dir, store, scope) = initialized_store();
     store
         .create_proposal_card(proposal_input(
             &scope,

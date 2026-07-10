@@ -1,23 +1,13 @@
-use super::*;
-use provenance_core::{IdeationTargetType, UncertaintyLevel};
+use super::initialized_store;
+use crate::state_store::CreateContributionInput;
+use provenance_core::{
+    ContributionStance, IdeationTarget, IdeationTargetType, StableId, UncertaintyLevel,
+    UncertaintyRating,
+};
 
 #[test]
 fn ideation_output_records_are_written_deterministically() {
-    let dir = tempfile::tempdir().unwrap();
-    let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
-    let layout = ProvenanceLayout::new(root);
-    std::fs::create_dir_all(layout.manifest_path().parent().unwrap()).unwrap();
-    std::fs::write(
-        layout.manifest_path(),
-        serde_json::to_string(&Manifest::default_with_scope(
-            ScopeId::new("default").unwrap(),
-            RepoPathPrefix::new("."),
-        ))
-        .unwrap(),
-    )
-    .unwrap();
-    let store = StateStore::new(layout);
-    let scope = ScopeId::new("default").unwrap();
+    let (_dir, store, scope) = initialized_store();
 
     store
         .create_contribution(CreateContributionInput {

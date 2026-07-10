@@ -1,22 +1,10 @@
-use super::*;
+use super::{initialized_store, seeded_source_requirement_store};
+use crate::state_store::{AddSourceReferenceInput, CreateRequirementInput, CreateSourceInput};
+use provenance_core::{EdgeType, RequirementStatus, SourceType, StableId};
 
 #[test]
 fn source_requirement_records_are_written_deterministically() {
-    let dir = tempfile::tempdir().unwrap();
-    let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
-    let layout = ProvenanceLayout::new(root);
-    std::fs::create_dir_all(layout.manifest_path().parent().unwrap()).unwrap();
-    std::fs::write(
-        layout.manifest_path(),
-        serde_json::to_string(&Manifest::default_with_scope(
-            ScopeId::new("default").unwrap(),
-            RepoPathPrefix::new("."),
-        ))
-        .unwrap(),
-    )
-    .unwrap();
-    let store = StateStore::new(layout);
-    let scope = ScopeId::new("default").unwrap();
+    let (_dir, store, scope) = initialized_store();
     store
         .create_source(CreateSourceInput {
             scope_id: scope.clone(),
@@ -65,21 +53,7 @@ fn source_requirement_records_are_written_deterministically() {
 
 #[test]
 fn concurrent_source_creates_preserve_all_records() {
-    let dir = tempfile::tempdir().unwrap();
-    let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
-    let layout = ProvenanceLayout::new(root);
-    std::fs::create_dir_all(layout.manifest_path().parent().unwrap()).unwrap();
-    let scope = ScopeId::new("default").unwrap();
-    std::fs::write(
-        layout.manifest_path(),
-        serde_json::to_string(&Manifest::default_with_scope(
-            scope.clone(),
-            RepoPathPrefix::new("."),
-        ))
-        .unwrap(),
-    )
-    .unwrap();
-    let store = StateStore::new(layout);
+    let (_dir, store, scope) = initialized_store();
 
     for index in 0..200 {
         store
