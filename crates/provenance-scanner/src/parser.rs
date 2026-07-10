@@ -137,10 +137,12 @@ pub fn parse_annotations(comment_text: &str) -> ParseResult {
                 }),
             },
             "confidence" => match value.parse::<f64>() {
-                Ok(confidence) => set_field(&mut annotations, &mut shared, |ann| {
-                    ann.confidence = confidence.clamp(0.0, 1.0);
-                }),
-                Err(_) => warnings.push(ParseWarning {
+                Ok(confidence) if confidence.is_finite() => {
+                    set_field(&mut annotations, &mut shared, |ann| {
+                        ann.confidence = confidence.clamp(0.0, 1.0);
+                    });
+                }
+                Ok(_) | Err(_) => warnings.push(ParseWarning {
                     line,
                     message: format!("invalid confidence `{value}`, using default"),
                 }),
@@ -230,5 +232,43 @@ mod tests {
 
         assert_eq!(parsed.annotations.len(), 1);
         assert_eq!(parsed.annotations[0].rule, "SCHADS-PAY-001");
+    }
+
+    #[test]
+    fn rejects_non_finite_confidence_with_warning() {
+        for value in ["NaN", "inf", "-inf"] {
+            let parsed = parse_annotations(&format!(
+                "@provenance confidence: {value}\n@provenance rule: RULE-001"
+            ));
+
+            assert!((parsed.annotations[0].confidence - 1.0).abs() < f64::EPSILON);
+            assert_eq!(
+                parsed.warnings,
+                vec![ParseWarning {
+                    line: 1,
+                    message: format!("invalid confidence `{value}`, using default"),
+                }]
+            );
+        }
+    }
+
+    #[test]
+    fn clamps_out_of_range_confidence() {
+        for (value, expected) in [("-0.25", 0.0), ("1.25", 1.0)] {
+            let parsed = parse_annotations(&format!(
+                "@provenance confidence: {value}\n@provenance rule: RULE-001"
+            ));
+
+            assert!((parsed.annotations[0].confidence - expected).abs() < f64::EPSILON);
+            assert!(parsed.warnings.is_empty());
+        }
+    }
+
+    #[test]
+    fn preserves_in_range_confidence() {
+        let parsed = parse_annotations("@provenance confidence: 0.75\n@provenance rule: RULE-001");
+
+        assert!((parsed.annotations[0].confidence - 0.75).abs() < f64::EPSILON);
+        assert!(parsed.warnings.is_empty());
     }
 }
