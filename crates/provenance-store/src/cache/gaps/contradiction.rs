@@ -1,4 +1,7 @@
-use super::{graph_query::GraphQuery, GapItem, GapKind};
+use super::{
+    graph_query::GraphQuery,
+    model::{GapItem, GapKind},
+};
 use provenance_core::{EdgeType, NodeType, StableId};
 use std::collections::BTreeSet;
 

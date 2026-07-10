@@ -1,4 +1,7 @@
-use super::{graph_query::GraphQuery, node_type_word, GapItem, GapKind};
+use super::{
+    graph_query::GraphQuery,
+    model::{node_type_word, GapItem, GapKind},
+};
 use provenance_core::{Edge, EdgeType, NodeType, StableId};
 
 pub(super) fn add_reference_gaps(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapItem>) {

@@ -1,4 +1,4 @@
-use super::{compute_gaps, GapGraph, GapItem};
+use super::{compute_gaps, graph_query::GapGraph, model::GapItem};
 use crate::{layout::ProvenanceLayout, state_store::StateStore};
 use provenance_core::ScopeId;
 

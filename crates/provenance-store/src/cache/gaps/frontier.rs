@@ -1,4 +1,7 @@
-use super::{graph_query::GraphQuery, GapItem, GapKind};
+use super::{
+    graph_query::GraphQuery,
+    model::{GapItem, GapKind},
+};
 use provenance_core::{NodeType, QuestionStatus, RequirementStatus, ResolutionStatus, TopicStatus};
 
 pub(super) fn add_requirement_gaps(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapItem>) {
