@@ -20,6 +20,31 @@ impl Records {
         })
     }
 
+    pub(super) fn validate_scope_ownership(
+        &self,
+        loaded_scope_id: &ScopeId,
+        findings: &mut Vec<String>,
+    ) {
+        macro_rules! check_records {
+            ($records:expr, $record_type:literal) => {
+                for record in $records {
+                    super::check_scope_ownership(
+                        loaded_scope_id,
+                        &record.scope_id,
+                        $record_type,
+                        &record.id,
+                        findings,
+                    );
+                }
+            };
+        }
+
+        check_records!(&self.services, "service");
+        check_records!(&self.service_bindings, "service binding");
+        check_records!(&self.threads, "thread");
+        check_records!(&self.messages, "message");
+    }
+
     pub(super) fn add_to(&self, index: &mut CheckIndex) {
         for service in &self.services {
             index.add_node(&service.scope_id, "service", &service.id);
