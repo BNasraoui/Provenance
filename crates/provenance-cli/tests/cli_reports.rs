@@ -1,4 +1,5 @@
 use assert_cmd::Command;
+use std::path::Path;
 
 #[allow(clippy::too_many_lines)]
 fn seed_repo() -> (tempfile::TempDir, String) {
@@ -138,6 +139,42 @@ fn seed_repo() -> (tempfile::TempDir, String) {
     (dir, repo)
 }
 
+fn mark_resolution_stale(repo: &str) {
+    let path = Path::new(repo).join(".provenance/state/scopes/default/resolutions/res.jsonl");
+    let contents = std::fs::read_to_string(&path).unwrap();
+    let mut resolution: serde_json::Value = serde_json::from_str(contents.trim()).unwrap();
+    resolution["status"] = serde_json::json!("approved");
+    resolution["approved_at"] = serde_json::json!(0);
+    resolution["review_on"] = serde_json::json!("2000-01-01");
+    std::fs::write(
+        path,
+        format!("{}\n", serde_json::to_string(&resolution).unwrap()),
+    )
+    .unwrap();
+}
+
+fn stale_resolution_ids(repo: &str, filters: &[&str]) -> Vec<String> {
+    let mut args = vec![
+        "stale", "--repo", repo, "--scope", "default", "--format", "json",
+    ];
+    args.extend_from_slice(filters);
+    let output = Command::cargo_bin("provenance")
+        .unwrap()
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    serde_json::from_slice::<Vec<serde_json::Value>>(&output.stdout)
+        .unwrap()
+        .into_iter()
+        .map(|item| item["resolution_id"].as_str().unwrap().to_string())
+        .collect()
+}
+
 #[test]
 fn cli_reports_emit_json_shapes_for_impact_stale_health_and_orphans() {
     let (_dir, repo) = seed_repo();
@@ -186,4 +223,27 @@ fn cli_reports_emit_json_shapes_for_impact_stale_health_and_orphans() {
         .assert()
         .success()
         .stdout(predicates::str::contains("[]"));
+}
+
+#[test]
+fn stale_filters_by_age_severity_and_downstream_rule_count() {
+    let (_dir, repo) = seed_repo();
+    mark_resolution_stale(&repo);
+
+    assert_eq!(stale_resolution_ids(&repo, &[]), ["res_schads_overtime"]);
+    assert_eq!(
+        stale_resolution_ids(&repo, &["--min-age-days", "1"]),
+        ["res_schads_overtime"]
+    );
+    assert!(stale_resolution_ids(&repo, &["--min-age-days", "4294967295"]).is_empty());
+    assert_eq!(
+        stale_resolution_ids(&repo, &["--rule-severities", "medium,high"]),
+        ["res_schads_overtime"]
+    );
+    assert!(stale_resolution_ids(&repo, &["--rule-severities", "critical"]).is_empty());
+    assert_eq!(
+        stale_resolution_ids(&repo, &["--min-downstream-rules", "1"]),
+        ["res_schads_overtime"]
+    );
+    assert!(stale_resolution_ids(&repo, &["--min-downstream-rules", "2"]).is_empty());
 }
