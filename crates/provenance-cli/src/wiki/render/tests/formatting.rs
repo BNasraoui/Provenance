@@ -1,7 +1,8 @@
 use crate::wiki::links::InlineRef;
 
-use super::super::html::{escape_attr, escape_html, linkify_body};
+use super::super::html::{escape_attr, escape_html, link_list, linkify_body};
 use super::super::labels::{format_confidence, format_date_ms};
+use super::fixtures::{colliding_requirement_links, unique_requirement_links};
 
 #[test]
 fn escape_html_escapes_markup_characters() {
@@ -51,4 +52,27 @@ fn linkify_body_wraps_ref_spans_in_anchors_and_escapes_the_rest() {
 #[test]
 fn linkify_body_escapes_plain_text_when_there_are_no_refs() {
     assert_eq!(linkify_body("a < b", &[]), "a &lt; b");
+}
+
+#[test]
+fn link_list_disambiguates_identical_titles_with_stable_id_chips() {
+    let html = link_list(&colliding_requirement_links());
+
+    assert!(html.contains(
+        "Participant budget summary shall pro-rate services</a> <span class=\"id-chip\">…hall_pro</span>"
+    ));
+    assert!(html.contains(
+        "Participant budget summary shall pro-rate services</a> <span class=\"id-chip\">…ll_pro_2</span>"
+    ));
+}
+
+#[test]
+fn link_list_leaves_unique_titles_unchanged() {
+    assert_eq!(
+        link_list(&unique_requirement_links()),
+        "<ul class=\"link-list\">\n\
+<li><a href=\"/requirements/req_budget_split/\">Budget portions shall reconcile</a></li>\n\
+<li><a href=\"/requirements/req_zero_suppression/\">Zero claim items shall be suppressed</a></li>\n\
+</ul>\n"
+    );
 }
