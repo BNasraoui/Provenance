@@ -6,7 +6,8 @@ use super::super::{
     render_source,
 };
 use super::fixtures::{
-    gappy_requirement_fixture, index_fixture, resolution_fixture, rule_fixture, source_fixture,
+    colliding_requirement_links, gappy_requirement_fixture, index_fixture, resolution_fixture,
+    rule_fixture, source_fixture,
 };
 
 #[test]
@@ -63,6 +64,26 @@ fn index_page_lists_roots_counts_orphans_and_gaps() {
     assert!(html.contains("<a href=\"/sources/source_unused/\">Unused API spec</a>"));
     assert!(html.contains("citation gap"));
     assert!(html.contains("source_unused is referenced by nothing"));
+}
+
+#[test]
+fn index_page_disambiguates_roots_with_identical_titles() {
+    let mut page = index_fixture();
+    let links = colliding_requirement_links();
+    page.roots = links
+        .into_iter()
+        .map(|link| crate::wiki::model::IndexEntry {
+            link,
+            status: RequirementStatus::Active,
+            children: 0,
+            resolutions: 0,
+            rules: 0,
+        })
+        .collect();
+
+    let html = render_index("default", &page);
+    assert!(html.contains("<span class=\"id-chip\">…hall_pro</span>"));
+    assert!(html.contains("<span class=\"id-chip\">…ll_pro_2</span>"));
 }
 
 #[test]
