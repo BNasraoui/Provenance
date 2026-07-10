@@ -1,9 +1,8 @@
 use crate::cache::find_gaps;
 use crate::layout::ProvenanceLayout;
 use crate::state_store::StateStore;
-use provenance_core::{
-    EdgeType, NodeType, RequirementStatus, ResolutionStatus, Rule, RuleSeverity,
-};
+use provenance_core::{EdgeType, NodeType, RequirementStatus, ResolutionStatus, RuleSeverity};
+use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, serde::Serialize)]
@@ -62,28 +61,31 @@ pub fn find_stale_with_options(
     let store = StateStore::new(layout.clone());
     let edges = store.list_edges()?;
     let rules = store.list_rules(scope)?;
-    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+    let rule_severities: HashMap<_, _> = rules
+        .iter()
+        .map(|rule| (rule.id.as_str(), rule.severity.clone()))
+        .collect();
+    let mut downstream_rule_severities: HashMap<&str, Vec<RuleSeverity>> = HashMap::new();
+    for edge in &edges {
+        if edge.scope_id == *scope
+            && edge.edge_type == EdgeType::Produces
+            && edge.from_type == NodeType::Resolution
+            && edge.to_type == NodeType::Rule
+        {
+            if let Some(severity) = rule_severities.get(edge.to_id.as_str()) {
+                downstream_rule_severities
+                    .entry(edge.from_id.as_str())
+                    .or_default()
+                    .push(severity.clone());
+            }
+        }
+    }
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
     Ok(store
         .list_resolutions(scope)?
         .into_iter()
         .filter(|resolution| {
             resolution_is_old_enough(resolution.approved_at, options.min_age_days, now)
-        })
-        .filter(|resolution| {
-            let downstream_rules = rules
-                .iter()
-                .filter(|rule| {
-                    is_downstream_rule(&edges, scope, resolution.id.as_str(), rule)
-                        && (options.rule_severities.is_empty()
-                            || options.rule_severities.contains(&rule.severity))
-                })
-                .count();
-            let required_rules = if options.rule_severities.is_empty() {
-                options.min_downstream_rules
-            } else {
-                options.min_downstream_rules.max(1)
-            };
-            downstream_rules >= required_rules as usize
         })
         .filter_map(|resolution| {
             if resolution.status == ResolutionStatus::Approved
@@ -109,38 +111,41 @@ pub fn find_stale_with_options(
                 None
             }
         })
+        .filter(|stale| {
+            options.rule_severities.is_empty()
+                || downstream_rule_severities
+                    .get(stale.resolution_id.as_str())
+                    .is_some_and(|severities| {
+                        severities
+                            .iter()
+                            .any(|severity| options.rule_severities.contains(severity))
+                    })
+        })
+        .filter(|stale| {
+            downstream_rule_severities
+                .get(stale.resolution_id.as_str())
+                .map_or(0, |severities| {
+                    severities
+                        .iter()
+                        .filter(|severity| {
+                            options.rule_severities.is_empty()
+                                || options.rule_severities.contains(severity)
+                        })
+                        .count()
+                })
+                >= options.min_downstream_rules as usize
+        })
         .collect())
 }
 
-fn resolution_is_old_enough(approved_at: Option<i64>, min_age_days: u32, now: u64) -> bool {
+fn resolution_is_old_enough(approved_at: Option<i64>, min_age_days: u32, now: u128) -> bool {
     if min_age_days == 0 {
         return true;
     }
-    let Some(mut approved_at) = approved_at.and_then(|timestamp| u64::try_from(timestamp).ok())
-    else {
+    let Some(approved_at) = approved_at.and_then(|timestamp| u128::try_from(timestamp).ok()) else {
         return false;
     };
-    // Timestamps in existing state may be seconds or milliseconds since the Unix epoch.
-    if approved_at >= 100_000_000_000 {
-        approved_at /= 1_000;
-    }
-    now.saturating_sub(approved_at) / 86_400 >= u64::from(min_age_days)
-}
-
-fn is_downstream_rule(
-    edges: &[provenance_core::Edge],
-    scope: &provenance_core::ScopeId,
-    resolution_id: &str,
-    rule: &Rule,
-) -> bool {
-    edges.iter().any(|edge| {
-        edge.scope_id == *scope
-            && edge.edge_type == EdgeType::Produces
-            && edge.from_type == NodeType::Resolution
-            && edge.from_id.as_str() == resolution_id
-            && edge.to_type == NodeType::Rule
-            && edge.to_id == rule.id
-    })
+    now.saturating_sub(approved_at) / 86_400_000 >= u128::from(min_age_days)
 }
 
 pub fn coverage_health(
