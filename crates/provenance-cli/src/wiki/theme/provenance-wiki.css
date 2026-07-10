@@ -483,8 +483,8 @@
     .classification .row { display: flex; align-items: center; gap: 0.4rem; font-size: 11px; margin-bottom: 0.4rem; }
     .classification .icon { width: 12px; height: 12px; opacity: 0.4; }
     .classification .k { color: var(--pv-muted); }
-    .classification .v { font-weight: 500; margin-left: auto; text-align: right; }
-    .classification .v.mono { font-family: var(--pv-font-mono); font-size: 10px; }
+    .classification .v { font-weight: 500; margin-left: auto; min-width: 0; text-align: right; overflow-wrap: anywhere; }
+    .classification .v.mono { font-family: var(--pv-font-mono); font-size: 10px; word-break: break-all; }
 
     .lineage { margin-top: 1.5rem; }
     .lineage ol { list-style: none; margin: 0; padding: 0; }
