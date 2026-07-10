@@ -85,6 +85,32 @@ fn repeated_links_to_the_same_record_do_not_collide() {
 }
 
 #[test]
+fn link_list_disambiguates_same_id_across_page_kinds() {
+    let links = vec![
+        super::fixtures::link(
+            crate::wiki::model::PageKind::Requirement,
+            "shared_id",
+            "Shared title",
+        ),
+        super::fixtures::link(
+            crate::wiki::model::PageKind::Resolution,
+            "shared_id",
+            "Shared title",
+        ),
+        super::fixtures::link(
+            crate::wiki::model::PageKind::Source,
+            "shared_id",
+            "Shared title",
+        ),
+    ];
+
+    let html = link_list(&links);
+    assert!(html.contains("<span class=\"id-chip\">requirement · shared_id</span>"));
+    assert!(html.contains("<span class=\"id-chip\">resolution · shared_id</span>"));
+    assert!(html.contains("<span class=\"id-chip\">source · shared_id</span>"));
+}
+
+#[test]
 fn short_ids_use_the_shortest_suffix_that_distinguishes_records() {
     let links = vec![
         super::fixtures::link(crate::wiki::model::PageKind::Requirement, "req_a1", "Same"),
