@@ -1,4 +1,4 @@
-use super::super::*;
+use super::collaboration::Thread;
 
 #[test]
 fn resolved_threads_roundtrip_as_v1_state() {

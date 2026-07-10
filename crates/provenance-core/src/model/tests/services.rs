@@ -1,4 +1,4 @@
-use super::super::*;
+use super::services::{Domain, Service, ServiceBinding};
 
 #[test]
 fn domain_service_records_roundtrip_without_hosted_fields() {

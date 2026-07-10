@@ -1,7 +1,7 @@
 use camino::Utf8PathBuf;
 use serde::{Deserialize, Serialize};
 
-use crate::model::{SchemaVersion, ScopeId};
+use super::ids::{SchemaVersion, ScopeId};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
