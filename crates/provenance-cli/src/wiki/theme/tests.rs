@@ -172,6 +172,23 @@ fn css_allows_deep_breadcrumbs_to_wrap_in_chrome() {
 }
 
 #[test]
+fn css_wraps_long_classification_values_in_the_margin() {
+    let value_rule = css_rule(".classification .v");
+    assert!(
+        value_rule.contains("min-width: 0;"),
+        "classification values should be shrink-safe inside their flex row"
+    );
+    assert!(
+        value_rule.contains("overflow-wrap: anywhere;"),
+        "classification values should wrap instead of widening the fixed margin"
+    );
+    assert!(
+        css_rule(".classification .v.mono").contains("word-break: break-all;"),
+        "mono classification values should wrap long document paths like citation references"
+    );
+}
+
+#[test]
 fn css_makes_no_external_requests() {
     assert!(!WIKI_CSS.contains("http://"));
     assert!(!WIKI_CSS.contains("https://"));
