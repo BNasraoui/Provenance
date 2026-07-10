@@ -257,6 +257,25 @@ impl StateStore {
         )?)?)
     }
 
+    pub fn list_scope_directories(&self) -> anyhow::Result<Vec<String>> {
+        let scopes_dir = self.layout.scopes_dir();
+        if !scopes_dir.exists() {
+            return Ok(Vec::new());
+        }
+
+        let mut scope_directories = Vec::new();
+        for entry in std::fs::read_dir(scopes_dir)? {
+            let entry = entry?;
+            if entry.file_type()?.is_dir() {
+                scope_directories.push(entry.file_name().into_string().map_err(|name| {
+                    anyhow::anyhow!("non-UTF-8 scope directory name: {}", name.to_string_lossy())
+                })?);
+            }
+        }
+        scope_directories.sort();
+        Ok(scope_directories)
+    }
+
     pub fn list_sources(&self, scope: &ScopeId) -> anyhow::Result<Vec<Source>> {
         read_jsonl(&shards::sources_path(&self.layout, scope))
     }
