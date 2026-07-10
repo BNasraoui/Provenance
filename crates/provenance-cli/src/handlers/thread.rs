@@ -1,4 +1,4 @@
-use crate::cli::ThreadCommand;
+use crate::cli::shaping::ThreadCommand;
 use crate::output;
 use provenance_core::{MessageRole, NodeType, ScopeId, StableId, ThreadParent};
 use provenance_store::{

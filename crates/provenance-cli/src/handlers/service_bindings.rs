@@ -1,4 +1,4 @@
-use crate::cli::ServiceBindingsCommand;
+use crate::cli::services::ServiceBindingsCommand;
 use crate::output;
 use provenance_core::{ScopeId, ServiceBindingType, StableId};
 use provenance_store::{

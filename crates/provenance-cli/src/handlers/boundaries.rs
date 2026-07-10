@@ -1,5 +1,5 @@
 use super::common::boundary_source_ref;
-use crate::cli::BoundariesCommand;
+use crate::cli::knowledge::BoundariesCommand;
 use crate::output;
 use provenance_core::{ScopeId, StableId};
 use provenance_store::{
