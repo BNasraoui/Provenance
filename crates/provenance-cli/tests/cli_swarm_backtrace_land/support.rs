@@ -1,6 +1,6 @@
 use assert_cmd::Command;
 
-pub(super) fn init_repo(repo: &str) {
+pub fn init_repo(repo: &str) {
     Command::cargo_bin("provenance")
         .unwrap()
         .args([
@@ -16,7 +16,7 @@ pub(super) fn init_repo(repo: &str) {
         .success();
 }
 
-pub(super) fn create_source(repo: &str) {
+pub fn create_source(repo: &str) {
     Command::cargo_bin("provenance")
         .unwrap()
         .args([
@@ -43,7 +43,7 @@ pub(super) fn create_source(repo: &str) {
         .success();
 }
 
-pub(super) fn write_run_dir(root: &std::path::Path, strongest_finding: &str) {
+pub fn write_run_dir(root: &std::path::Path, strongest_finding: &str) {
     let extractors = root.join("extractors");
     let refuters = root.join("refuters");
     let merge = root.join("merge");
