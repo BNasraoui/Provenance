@@ -1,6 +1,6 @@
 use assert_cmd::Command;
 
-pub(super) fn init_repo(repo: &str) {
+pub fn init_repo(repo: &str) {
     Command::cargo_bin("provenance")
         .unwrap()
         .args([
@@ -16,7 +16,7 @@ pub(super) fn init_repo(repo: &str) {
         .success();
 }
 
-pub(super) fn create_source(repo: &str, id: &str) {
+pub fn create_source(repo: &str, id: &str) {
     Command::cargo_bin("provenance")
         .unwrap()
         .args([
