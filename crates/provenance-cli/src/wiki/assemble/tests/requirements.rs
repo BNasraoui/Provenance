@@ -230,35 +230,51 @@ fn requirement_page_flags_dangling_refs_and_frontier_gaps() {
 }
 
 #[test]
-fn requirement_and_index_pages_flag_references_edges_from_missing_sources() {
+fn requirement_and_index_pages_anchor_dangling_edges_in_both_directions() {
     let mut state = empty_state();
     state.requirements = vec![requirement(
-        "req_referenced",
-        "Requirement with an edge-backed source",
+        "req_surviving",
+        "Surviving requirement endpoint",
         RequirementStatus::Active,
         vec![],
     )];
-    state.edges = vec![edge(
-        EdgeType::References,
-        (NodeType::Source, "source_missing"),
-        (NodeType::Requirement, "req_referenced"),
-    )];
+    state.edges = vec![
+        edge(
+            EdgeType::RefinesInto,
+            (NodeType::Requirement, "req_missing_from"),
+            (NodeType::Requirement, "req_surviving"),
+        ),
+        edge(
+            EdgeType::RefinesInto,
+            (NodeType::Requirement, "req_surviving"),
+            (NodeType::Requirement, "req_missing_to"),
+        ),
+    ];
 
     let resolver = LinkResolver::new(None);
     let corpus = build_corpus(&state, &resolver);
-    let page = requirement_page(&corpus, "req_referenced");
+    let page = requirement_page(&corpus, "req_surviving");
 
-    let page_gap = page
+    let dangling_details: Vec<_> = page
         .gaps
         .iter()
-        .find(|gap| gap.kind == GapKind::DanglingReference)
-        .expect("missing References-edge source should be a requirement gap");
-    assert!(page_gap.detail.contains("source_missing"));
-    assert!(corpus.index.gaps.iter().any(|gap| {
-        gap.kind == GapKind::DanglingReference
-            && gap.detail.contains("req_referenced")
-            && gap.detail.contains("source_missing")
-    }));
+        .filter(|gap| gap.kind == GapKind::DanglingReference)
+        .map(|gap| gap.detail.as_str())
+        .collect();
+    assert_eq!(dangling_details.len(), 2);
+    for missing_id in ["req_missing_from", "req_missing_to"] {
+        assert!(dangling_details.iter().any(|detail| {
+            detail.contains("req_surviving")
+                && detail.contains(missing_id)
+                && detail.contains("refines_into")
+        }));
+        assert!(corpus.index.gaps.iter().any(|gap| {
+            gap.kind == GapKind::DanglingReference
+                && gap.detail.contains("req_surviving")
+                && gap.detail.contains(missing_id)
+                && gap.detail.contains("refines_into")
+        }));
+    }
 }
 
 #[test]
