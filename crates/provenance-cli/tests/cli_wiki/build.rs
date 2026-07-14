@@ -1,6 +1,29 @@
 use super::support::seed_full_state;
 use assert_cmd::Command;
 
+const LEGACY_FIXTURE_FILES: &[&str] = &[
+    "index.html",
+    "assets/provenance-wiki.css",
+    "requirements/req_gap/index.html",
+    "requirements/req_sah/index.html",
+    "resolutions/res_sah/index.html",
+    "rules/rule_sah_001/index.html",
+    "sources/source_sah/index.html",
+];
+
+// Captured from an actual `wiki build` by origin/main at 046b582 using
+// `seed_full_state`; unlike a hand-written sentinel, every supported v0 page
+// kind and the exact v0 stylesheet are present.
+fn seed_legacy_wiki(out: &std::path::Path) {
+    let fixture =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/legacy-wiki-v0");
+    for relative in LEGACY_FIXTURE_FILES {
+        let destination = out.join(relative);
+        std::fs::create_dir_all(destination.parent().unwrap()).unwrap();
+        std::fs::copy(fixture.join(relative), destination).unwrap();
+    }
+}
+
 #[test]
 fn wiki_build_writes_static_pages_and_stylesheet() {
     let dir = tempfile::tempdir().unwrap();
@@ -172,4 +195,82 @@ fn rebuild_removes_only_files_declared_by_generator_ownership() {
         std::fs::read_to_string(out.join("customer.txt")).unwrap(),
         "caller owned"
     );
+}
+
+#[test]
+fn first_rebuild_migrates_real_pre_manifest_wiki_and_preserves_caller_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo").to_string_lossy().to_string();
+    let out = dir.path().join("site");
+    seed_full_state(dir.path(), &repo);
+    seed_legacy_wiki(&out);
+    std::fs::write(out.join("customer.txt"), "caller owned").unwrap();
+    std::fs::create_dir_all(out.join("requirements/caller")).unwrap();
+    std::fs::write(
+        out.join("requirements/caller/index.html"),
+        "caller page in a legacy-shaped path",
+    )
+    .unwrap();
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "wiki",
+            "build",
+            "--repo",
+            &repo,
+            "--out",
+            &out.to_string_lossy(),
+        ])
+        .assert()
+        .success();
+
+    assert!(out.join("requirements/req_sah/index.html").exists());
+    assert!(std::fs::read_to_string(out.join("index.html"))
+        .unwrap()
+        .contains("class=\"global-nav\""));
+    assert_eq!(
+        std::fs::read_to_string(out.join("customer.txt")).unwrap(),
+        "caller owned"
+    );
+    assert_eq!(
+        std::fs::read_to_string(out.join("requirements/caller/index.html")).unwrap(),
+        "caller page in a legacy-shaped path"
+    );
+    assert!(out.join(".provenance-wiki-output.json").exists());
+}
+
+#[test]
+fn rejected_legacy_migration_never_changes_the_live_tree() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo").to_string_lossy().to_string();
+    let out = dir.path().join("site");
+    seed_full_state(dir.path(), &repo);
+    seed_legacy_wiki(&out);
+    std::fs::write(out.join("index.html"), "caller replacement").unwrap();
+    let legacy_requirement = std::fs::read(out.join("requirements/req_sah/index.html")).unwrap();
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "wiki",
+            "build",
+            "--repo",
+            &repo,
+            "--out",
+            &out.to_string_lossy(),
+        ])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("unowned output path"));
+
+    assert_eq!(
+        std::fs::read_to_string(out.join("index.html")).unwrap(),
+        "caller replacement"
+    );
+    assert_eq!(
+        std::fs::read(out.join("requirements/req_sah/index.html")).unwrap(),
+        legacy_requirement
+    );
+    assert!(!out.join(".provenance-wiki-output.json").exists());
 }

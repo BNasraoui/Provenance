@@ -38,6 +38,23 @@ Swarm backtrace runs can land durable run outputs with
 
 Graph edge commands: `edges create --type references|refines_into|depends_on|contradicts|supersedes|needs|resolves|spawns|produces --from-type source|requirement|resolution|rule --from-id <id> --to-type source|requirement|resolution|rule --to-id <id>`, `edges list`, and `edges delete --id <edge-id>`. Creation validates edge type/endpoints and requires both endpoint records to exist.
 
+## Wiki publication guarantees
+
+`provenance wiki build` prepares the complete replacement in a sibling staging directory.
+For manifested outputs it replaces only files listed by the generator manifest. On the first
+upgrade from the pre-manifest generator, it reconstructs the old renderer's bytes for the current
+corpus and requires the exact legacy stylesheet and page bytes; only proven matches are migrated.
+Other files are preserved, and an ambiguous collision fails without changing the live output.
+
+Publication is serialized by a sibling lock. A durable journal names random, transaction-specific
+sibling stage and backup paths: startup restores the backup when interruption happened after moving
+the old output, or removes it when the new output rename completed. Staged files and directories,
+then parent-directory metadata, are synced around the commit renames. Failures before the durable
+commit roll back; cleanup failures after it only warn. A later build deterministically reconciles
+process or host interruption once the filesystem has persisted the writes. This is not a claim of
+cross-filesystem atomicity or protection from storage hardware that violates successful flushes;
+the output, stage, backup, journal, and lock must remain on the same filesystem.
+
 Shaping turn-state commands: `questions create` requires `--method` (grill, prototype, research, verify, or task); `topics claim/release/close` and `questions claim/release/answer` manage claim state (claiming an already-claimed item fails and reports the holder; closing a topic or answering a question clears its claim); `requirements fog set/show/clear` manages the deliberately unstructured fog text on an anchor requirement.
 
 Creation commands accept enriched v1 metadata for cloud-imported projects. Examples: `sources create --source-type legislation --reference "Department guidance" --commit-pin 5e1f2a9c4b6d8e0f1234567890abcdef12345678 --effective-date 1714521600000 --review-date 1717200000000 --superseded-by source_2025`, `requirements create --status discovery --description "Research note" --domain-id domain_policy`, `resolutions create --status draft --confidence 0.9 --context "Code scan" --input-type regulatory --input-reference "Program manual" --input-summary "Reviewed rules" --made-by "Analyst" --approved-by "Approver" --approved-at 1714780800000 --superseded-by res_2025`, `rules create --status draft --rule-type business --modality obligation --source-document path --source-section "lines 1-3"`, `proposals create --confidence 0.83`, and `services create --environment production --tier critical --external-id backstage:component/api`. Confidence values must be between `0.0` and `1.0`; source commit pins must be 7-64 hexadecimal characters.
