@@ -8,6 +8,7 @@ mod coverage;
 mod docs;
 mod domains;
 mod edges;
+mod evidence_review;
 mod export;
 mod gaps;
 mod graph;
@@ -169,8 +170,6 @@ pub(super) async fn dispatch(command: Command, quiet: bool) -> anyhow::Result<()
             min_age_days,
             rule_severities,
             min_downstream_rules,
-            base,
-            head,
             format,
         } => {
             stale::handle(stale::Options {
@@ -179,11 +178,28 @@ pub(super) async fn dispatch(command: Command, quiet: bool) -> anyhow::Result<()
                 min_age_days,
                 rule_severities,
                 min_downstream_rules,
-                base,
-                head,
                 format,
             })?;
         }
+        Command::EvidenceReview {
+            repo,
+            scope,
+            min_age_days,
+            rule_severities,
+            min_downstream_rules,
+            base,
+            head,
+            format,
+        } => evidence_review::handle(evidence_review::Options {
+            repo,
+            scope,
+            min_age_days,
+            rule_severities,
+            min_downstream_rules,
+            base,
+            head,
+            format,
+        })?,
         Command::Health {
             repo,
             scope,

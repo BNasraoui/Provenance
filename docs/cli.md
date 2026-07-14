@@ -36,16 +36,18 @@ protection by default; pass `--replace` to intentionally upsert the same stable 
 Swarm backtrace runs can land durable run outputs with
 `provenance swarm-backtrace land --scope <scope> --run-dir <run-dir> --format json`.
 
-Incremental backtrace review starts with the cheap diff gate in `provenance stale`. For
-each backtrace source, the command compares its `commit_pin` with `HEAD`, intersects the
+Resolution staleness remains available through `provenance stale`. Incremental backtrace
+review uses the separate cheap diff gate in `provenance evidence-review`. For each
+explicitly source-owned evidence site, the command compares its `commit_pin` with `HEAD`, intersects the
 Git name-status diff with repository-relative evidence paths, and re-reads only evidence
 on intersecting paths. Exact cited lines are reported as `verified`, `moved`, `vanished`,
 or `unverifiable`; a vanished citation owned by an accepted requirement proposal is also
 reported under `contradictions` for human semantic review. Use `--base <revision>` to
 override source pins and `--head <revision>` to select a CI diff range. `--min-age-days`,
-`--rule-severities low,medium,high,critical`, and `--min-downstream-rules` filter both
-review-date findings and evidence owners. JSON output includes diff ranges, affected
-evidence, contradictions, overdue/superseded resolutions, diagnostics, and counts.
+`--rule-severities low,medium,high,critical`, and `--min-downstream-rules` are available
+on both commands but apply to their distinct result types. Evidence-review JSON includes
+diff ranges, affected evidence, contradictions, diagnostics, and counts; stale JSON keeps
+the established resolution array.
 
 This gate deliberately does not infer program semantics or mutate graph records. A moved
 line is an exact-text relocation, and a vanished line means the exact pinned text was not

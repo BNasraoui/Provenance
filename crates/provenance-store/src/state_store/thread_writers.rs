@@ -7,6 +7,13 @@ impl StateStore {
         &self,
         input: PostMessageInput,
     ) -> anyhow::Result<PostMessageResult> {
+        self.with_state_write(|| self.post_thread_message_locked(input))
+    }
+
+    fn post_thread_message_locked(
+        &self,
+        input: PostMessageInput,
+    ) -> anyhow::Result<PostMessageResult> {
         let PostMessageInput {
             scope_id,
             parent,

@@ -4,12 +4,12 @@ use serde::{de::DeserializeOwned, Serialize};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 
-struct AdvisoryLock {
+pub(crate) struct AdvisoryLock {
     file: File,
 }
 
 impl AdvisoryLock {
-    fn acquire(path: &Utf8Path) -> anyhow::Result<Self> {
+    fn open(path: &Utf8Path) -> anyhow::Result<File> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -19,7 +19,18 @@ impl AdvisoryLock {
             .create(true)
             .truncate(false)
             .open(path)?;
+        Ok(file)
+    }
+
+    pub(crate) fn exclusive(path: &Utf8Path) -> anyhow::Result<Self> {
+        let file = Self::open(path)?;
         file.lock_exclusive()?;
+        Ok(Self { file })
+    }
+
+    pub(crate) fn shared(path: &Utf8Path) -> anyhow::Result<Self> {
+        let file = Self::open(path)?;
+        FileExt::lock_shared(&file)?;
         Ok(Self { file })
     }
 }
@@ -46,7 +57,7 @@ pub fn mutate_jsonl_locked<T, R>(
 where
     T: DeserializeOwned + Serialize,
 {
-    let _lock = AdvisoryLock::acquire(lock_path)?;
+    let _lock = AdvisoryLock::exclusive(lock_path)?;
     let mut records = read_jsonl_unlocked(path)?;
     let result = mutate(&mut records)?;
     write_jsonl_atomic_unlocked(path, &records)?;

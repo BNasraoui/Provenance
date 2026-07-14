@@ -2,7 +2,7 @@ use super::export::ScopeExport;
 use crate::output::{self, OutputFormat};
 use camino::Utf8PathBuf;
 use provenance_core::ScopeId;
-use provenance_store::layout::ProvenanceLayout;
+use provenance_store::{layout::ProvenanceLayout, state_store::StateStore};
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -43,80 +43,90 @@ pub(super) fn import_scope(
     if !dry_run {
         let layout = ProvenanceLayout::new(repo);
         let scope_id = ScopeId::new(scope)?;
-        provenance_store::jsonl::write_jsonl_atomic(
-            &provenance_store::shards::sources_path(&layout, &scope_id),
-            &exported.sources,
-        )?;
-        provenance_store::jsonl::write_jsonl_atomic(
-            &provenance_store::shards::domains_path(&layout, &scope_id),
-            &exported.domains,
-        )?;
-        provenance_store::jsonl::write_jsonl_atomic(
-            &provenance_store::shards::requirements_path(&layout, &scope_id),
-            &exported.requirements,
-        )?;
-        provenance_store::jsonl::write_jsonl_atomic(
-            &provenance_store::shards::boundaries_path(&layout, &scope_id),
-            &exported.boundaries,
-        )?;
-        provenance_store::jsonl::write_jsonl_atomic(
-            &provenance_store::shards::topics_path(&layout, &scope_id),
-            &exported.topics,
-        )?;
-        provenance_store::jsonl::write_jsonl_atomic(
-            &provenance_store::shards::questions_path(&layout, &scope_id),
-            &exported.questions,
-        )?;
-        provenance_store::jsonl::write_jsonl_atomic(
-            &provenance_store::shards::resolutions_path(&layout, &scope_id),
-            &exported.resolutions,
-        )?;
-        provenance_store::jsonl::write_jsonl_atomic(
-            &provenance_store::shards::rules_path(&layout, &scope_id),
-            &exported.rules,
-        )?;
-        provenance_store::jsonl::write_jsonl_atomic(
-            &provenance_store::shards::services_path(&layout, &scope_id),
-            &exported.services,
-        )?;
-        provenance_store::jsonl::write_jsonl_atomic(
-            &provenance_store::shards::service_bindings_path(&layout, &scope_id),
-            &exported.service_bindings,
-        )?;
-        provenance_store::jsonl::write_jsonl_atomic(
-            &provenance_store::shards::edges_path(&layout),
-            &exported.edges,
-        )?;
-        provenance_store::jsonl::write_jsonl_atomic(
-            &provenance_store::shards::threads_path(&layout, &scope_id),
-            &exported.threads,
-        )?;
-        provenance_store::jsonl::write_jsonl_atomic(
-            &provenance_store::shards::messages_path(&layout, &scope_id),
-            &exported.messages,
-        )?;
-        provenance_store::jsonl::write_jsonl_atomic(
-            &provenance_store::shards::contributions_path(&layout, &scope_id),
-            &exported.contributions,
-        )?;
-        provenance_store::jsonl::write_jsonl_atomic(
-            &provenance_store::shards::synthesis_packets_path(&layout, &scope_id),
-            &exported.synthesis_packets,
-        )?;
-        provenance_store::jsonl::write_jsonl_atomic(
-            &provenance_store::shards::proposal_cards_path(&layout, &scope_id),
-            &exported.proposal_cards,
-        )?;
-        provenance_store::jsonl::write_jsonl_atomic(
-            &provenance_store::shards::promotion_decisions_path(&layout, &scope_id),
-            &exported.promotion_decisions,
-        )?;
+        StateStore::new(layout.clone())
+            .with_state_write(|| import_records(&layout, &scope_id, &exported))?;
     }
     Ok(ImportReport {
         status: "ok",
         dry_run,
         records,
     })
+}
+
+fn import_records(
+    layout: &ProvenanceLayout,
+    scope_id: &ScopeId,
+    exported: &ScopeExport,
+) -> anyhow::Result<()> {
+    provenance_store::jsonl::write_jsonl_atomic(
+        &provenance_store::shards::sources_path(layout, scope_id),
+        &exported.sources,
+    )?;
+    provenance_store::jsonl::write_jsonl_atomic(
+        &provenance_store::shards::domains_path(layout, scope_id),
+        &exported.domains,
+    )?;
+    provenance_store::jsonl::write_jsonl_atomic(
+        &provenance_store::shards::requirements_path(layout, scope_id),
+        &exported.requirements,
+    )?;
+    provenance_store::jsonl::write_jsonl_atomic(
+        &provenance_store::shards::boundaries_path(layout, scope_id),
+        &exported.boundaries,
+    )?;
+    provenance_store::jsonl::write_jsonl_atomic(
+        &provenance_store::shards::topics_path(layout, scope_id),
+        &exported.topics,
+    )?;
+    provenance_store::jsonl::write_jsonl_atomic(
+        &provenance_store::shards::questions_path(layout, scope_id),
+        &exported.questions,
+    )?;
+    provenance_store::jsonl::write_jsonl_atomic(
+        &provenance_store::shards::resolutions_path(layout, scope_id),
+        &exported.resolutions,
+    )?;
+    provenance_store::jsonl::write_jsonl_atomic(
+        &provenance_store::shards::rules_path(layout, scope_id),
+        &exported.rules,
+    )?;
+    provenance_store::jsonl::write_jsonl_atomic(
+        &provenance_store::shards::services_path(layout, scope_id),
+        &exported.services,
+    )?;
+    provenance_store::jsonl::write_jsonl_atomic(
+        &provenance_store::shards::service_bindings_path(layout, scope_id),
+        &exported.service_bindings,
+    )?;
+    provenance_store::jsonl::write_jsonl_atomic(
+        &provenance_store::shards::edges_path(layout),
+        &exported.edges,
+    )?;
+    provenance_store::jsonl::write_jsonl_atomic(
+        &provenance_store::shards::threads_path(layout, scope_id),
+        &exported.threads,
+    )?;
+    provenance_store::jsonl::write_jsonl_atomic(
+        &provenance_store::shards::messages_path(layout, scope_id),
+        &exported.messages,
+    )?;
+    provenance_store::jsonl::write_jsonl_atomic(
+        &provenance_store::shards::contributions_path(layout, scope_id),
+        &exported.contributions,
+    )?;
+    provenance_store::jsonl::write_jsonl_atomic(
+        &provenance_store::shards::synthesis_packets_path(layout, scope_id),
+        &exported.synthesis_packets,
+    )?;
+    provenance_store::jsonl::write_jsonl_atomic(
+        &provenance_store::shards::proposal_cards_path(layout, scope_id),
+        &exported.proposal_cards,
+    )?;
+    provenance_store::jsonl::write_jsonl_atomic(
+        &provenance_store::shards::promotion_decisions_path(layout, scope_id),
+        &exported.promotion_decisions,
+    )?;
+    Ok(())
 }
 
 pub(super) fn handle(
