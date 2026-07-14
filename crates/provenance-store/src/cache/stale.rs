@@ -60,7 +60,13 @@ fn find_stale_in_snapshot(
     now: UnixMillis,
 ) -> Vec<StaleResolution> {
     let today = CalendarDay(i64::try_from(now.0 / 86_400_000).unwrap_or(i64::MAX));
-    let query = DownstreamRuleQuery::new(&snapshot.edges, &snapshot.resolutions, &snapshot.rules);
+    let query = DownstreamRuleQuery::new(
+        &snapshot.scope,
+        &snapshot.edges,
+        &snapshot.requirements,
+        &snapshot.resolutions,
+        &snapshot.rules,
+    );
     let rule_policy = RulePolicy {
         severities: policy.rule_severities.clone(),
         minimum: policy.min_downstream_rules,

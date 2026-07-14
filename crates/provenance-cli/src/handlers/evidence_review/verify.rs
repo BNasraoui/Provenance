@@ -148,8 +148,9 @@ mod tests {
                 title: None,
                 ratified: false,
             },
-            ownership: RequirementOwnership::Proposal {
+            ownership: RequirementOwnership::TargetRequirement {
                 proposal_id: StableId::new("proposal").unwrap(),
+                requirement_id: StableId::new("requirement").unwrap(),
             },
             source_id: StableId::new("source").unwrap(),
             repository: Utf8PathBuf::from("."),
@@ -218,8 +219,9 @@ mod tests {
                 title: None,
                 ratified: false,
             },
-            ownership: RequirementOwnership::Proposal {
+            ownership: RequirementOwnership::TargetRequirement {
                 proposal_id: StableId::new("proposal").unwrap(),
+                requirement_id: StableId::new("requirement").unwrap(),
             },
             source_id: StableId::new("source").unwrap(),
             repository: Utf8PathBuf::from("."),

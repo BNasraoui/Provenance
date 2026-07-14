@@ -74,7 +74,13 @@ fn review(
     reader: &dyn RevisionReader,
 ) -> anyhow::Result<Report> {
     let mut collected = sites::collect(snapshot, repository, base_override);
-    let graph = DownstreamRuleQuery::new(&snapshot.edges, &snapshot.resolutions, &snapshot.rules);
+    let graph = DownstreamRuleQuery::new(
+        &snapshot.scope,
+        &snapshot.edges,
+        &snapshot.requirements,
+        &snapshot.resolutions,
+        &snapshot.rules,
+    );
     collected.sites.retain(|site| {
         if policy.rules.minimum == 0 && policy.rules.severities.is_empty() {
             return true;
