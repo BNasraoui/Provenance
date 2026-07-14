@@ -59,11 +59,17 @@ before output. They do **not** provide independence — see Caveats.
 ## Phase 1 — turn N (agent work, no human)
 
 Prerequisite: the fork exists as a Question with `resolution_method: prototype`.
-Claim granularity is the **single question** (see the methods table in docs/shaping.md).
+Claim the **single question** before spawning (see the methods table in docs/shaping.md):
+
+```sh
+provenance questions claim --scope <scope> \
+  --id <question_id> --actor <agent> --format json
+```
 
 1. **Spawn N agents in parallel** — one Agent tool call per stance, all in one message.
-   Each spawn prompt carries: the anchor requirement and boundaries (from
-   `provenance prime`), the question, the stance (values + quality bar + exit
+   Each spawn prompt carries: the anchor requirement and boundaries (loaded with the
+   graph and boundary commands; `provenance prime` supplies rules and computed gaps),
+   the question, the stance (values + quality bar + exit
    criterion), its evidence partition, and its task framing. Each agent produces one
    competing concrete artifact **opening with a design-principles manifesto** — the
    values stated before the output, so the human can react to the *why* as well as the
@@ -164,7 +170,17 @@ The promotion gate, with a clock. This is a grill-shaped turn against the artifa
    `--position` and `--rationale` through the `provenance-grounded-writing` skill's naming test before
    landing.
 
-4. **Dispose of every proposal** — winner accepted with the resolution as canonical
+4. **Mark the question answered.** Creating the resolution does not update question state:
+
+   ```sh
+   provenance questions answer --scope <scope> \
+     --id <question_id> \
+     --answer "<winning direction + grafts>" \
+     --resolution-id res_<question> \
+     --format json
+   ```
+
+5. **Dispose of every proposal** — winner accepted with the resolution as canonical
    artifact; losers rejected (rationale names the superseding resolution — see Gaps):
 
    ```sh
@@ -180,7 +196,7 @@ The promotion gate, with a clock. This is a grill-shaped turn against the artifa
 
    This flips each proposal's `promotion_state` — no separate update step.
 
-5. **Fan out** as any resolution does (docs/shaping.md, "Landing fan-out"): rules
+6. **Fan out** as any resolution does (docs/shaping.md, "Landing fan-out"): rules
    produced, requirements spawned, fog graduated. Then continue the turn loop or hand off.
 
 ## Caveats (empirical — from the Statesman provenance scoping record)
@@ -190,7 +206,8 @@ The promotion gate, with a clock. This is a grill-shaped turn against the artifa
   independence from personas alone. Divergence comes from **evidence partition** and
   **task framing** — engineer both, every time.
 - Convergence is still signal: when partitioned stances agree anyway, record it as
-  consensus in the synthesis packet with weight.
+  consensus in the synthesis packet with its supporting participant slots and evidence
+  references.
 - What personas reliably provide: broken sycophancy, licensed ruthlessness and taste,
   values articulated before output. Use them for that; nothing more.
 - **A tournament at forks — never a standing committee.** N artifacts cost N sessions
@@ -205,5 +222,7 @@ The promotion gate, with a clock. This is a grill-shaped turn against the artifa
 - **`promotion-decisions` supports only `accepted|rejected|deferred`** — `superseded`
   and `duplicate` states are settable only at proposal creation. Convention: reject
   losers with a rationale naming the superseding resolution.
-- **No generic `edges create`** — `spawns`/`produces`/`supersedes` edges cannot be
-  minted from the CLI. Graft traceability rides on resolution input references.
+- **Generic `edges create` is available** and requires existing endpoints. Relevant valid
+  directions are `spawns` (resolution → requirement), `produces` (requirement or resolution
+  → rule), and `supersedes` (requirement → requirement). Proposals are not graph edge
+  endpoints, so graft traceability to competing proposals rides on resolution input references.

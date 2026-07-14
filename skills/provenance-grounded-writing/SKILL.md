@@ -1,6 +1,6 @@
 ---
 name: provenance-grounded-writing
-description: Write specific, evidence-grounded statements for requirements, rules, sources, resolutions, and boundaries — not generic capability language. Use before calling `requirements create/update`, `rules create/update`, `sources create/update`, `resolutions create/update`, or `boundaries create`, especially for a root or mid-level requirement, a statement merging several candidates, or a resolution's position and rationale.
+description: Write specific, evidence-grounded statements for requirements, rules, sources, resolutions, and boundaries — not generic capability language. Use before calling `requirements create`, `rules create`, `sources create`, `resolutions create`, or `boundaries create`, especially for a root or mid-level requirement, a statement merging several candidates, or a resolution's position and rationale.
 ---
 
 # Grounded writing
@@ -29,9 +29,13 @@ or leave it as fog.
 - **Name.** Does it name a mechanism, threshold, actor, or error condition — or a category
   ("identity," "reporting," "comms")? Categories aren't requirements.
 - **Evidence.** Is there a real locator for the claim — a source clause or a `file:line` —
-  or is it marked fog / `unsupported` / `exploratory`? A code cite counts as evidence; it
-  needn't be a formal `source_ref` edge, and a `file:line` in the description is enough.
-  Nothing ungrounded lands as active.
+  or is it explicitly provisional? For graph grounding, attach a requirement source with
+  `requirements source-ref add` (which also creates a `references` edge), or create a valid
+  `references` edge directly; otherwise gap reporting emits `missing_source_refs`. For rules,
+  put code locators in `--source-document` and `--source-section`. `fog` is unstructured text
+  attached to a requirement, while `unsupported` / `exploratory` mark ideation evidence or
+  speculation. The CLI reports grounding gaps; it does not prevent an ungrounded requirement
+  or rule from being active.
 - **Climb.** Summarizing several children? Name the one decision they share, not a noun list
   joined by "and." No shared decision — narrow the parent, don't fake a summary.
 
@@ -40,7 +44,9 @@ or leave it as fog.
 The statement is one decision in one plain clause. If you're chaining clauses with "and" to
 fit the source, the destination, the mechanism, and the retry policy into a single sentence,
 you've overpacked it — a climb-test failure in a long coat. Name the decision in the
-statement; move the elaboration to `--description`, where being fuller is fine.
+statement; for requirements and rules, move the elaboration to `--description`, where being
+fuller is fine. For other record types, use their available context fields, such as a
+resolution's `--rationale` or `--context`.
 
 Write for whoever reads it next — another agent, a developer, or a non-technical
 stakeholder signing off. Plain beats verbose. Say what's true and stop; a statement that
@@ -85,10 +91,10 @@ provenance rules create --scope <scope> \
   --requirement-id <requirement_id> \
   --statement "SubmitExpense shall throw ApprovalRequired when amount exceeds employee.delegated_authority_limit and approver_id is null" \
   --severity high \
+  --source-document ApprovalService.php \
+  --source-section "44-51" \
   --format json
 ```
-
-Then attach the evidence: `ApprovalService.php:44-51`.
 
 Resolution — bad: position "Require a second approver above a threshold," rationale "Team
 decided this was the right approach" — no number, no alternative, no reason one lost. Good:
