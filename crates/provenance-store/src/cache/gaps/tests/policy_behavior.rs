@@ -109,3 +109,42 @@ fn unresolved_contradiction_pair_is_reported_once_for_bidirectional_edges() {
     let gaps = compute_for(&sources, &requirements, &[], &[], &[], &[], &edges);
     assert_eq!(count_kind(&gaps, GapKind::UnresolvedContradictsPair), 1);
 }
+
+#[test]
+fn foreign_scope_records_and_edges_do_not_close_current_scope_gaps() {
+    let mut requirement = requirement("req_current");
+    requirement.source_refs = vec![SourceReference {
+        source_id: sid("source_foreign"),
+        clause: None,
+    }];
+    let mut foreign_source = source("source_foreign");
+    foreign_source.scope_id = provenance_core::ScopeId::new("foreign").unwrap();
+    let mut foreign_edge = edge(
+        EdgeType::References,
+        (NodeType::Source, "source_foreign"),
+        (NodeType::Requirement, "req_current"),
+    );
+    foreign_edge.scope_id = provenance_core::ScopeId::new("foreign").unwrap();
+
+    let gaps = compute_for(
+        &[foreign_source],
+        &[requirement],
+        &[],
+        &[],
+        &[],
+        &[],
+        &[foreign_edge],
+    );
+
+    assert_eq!(
+        gaps.iter()
+            .filter(|gap| {
+                gap.kind == GapKind::DanglingReference
+                    && gap.node_id == "req_current"
+                    && gap.related_node_id.as_deref() == Some("source_foreign")
+            })
+            .count(),
+        1
+    );
+    assert!(!gaps.iter().any(|gap| gap.node_id == "source_foreign"));
+}

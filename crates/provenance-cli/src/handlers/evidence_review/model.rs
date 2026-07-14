@@ -1,5 +1,8 @@
 use camino::Utf8PathBuf;
-use provenance_core::StableId;
+use provenance_core::{
+    IdeationEvidenceReference, IdeationEvidenceType, IdeationTarget, IdeationTargetType,
+    ProposalType, StableId,
+};
 
 #[derive(Debug, Clone)]
 pub struct EvidenceSite {
@@ -39,9 +42,6 @@ impl OwnerKind {
 
 #[derive(Debug, Clone)]
 pub enum RequirementOwnership {
-    Proposal {
-        proposal_id: StableId,
-    },
     TargetRequirement {
         proposal_id: StableId,
         requirement_id: StableId,
@@ -55,18 +55,24 @@ pub enum RequirementOwnership {
 }
 
 impl RequirementOwnership {
+    pub fn for_target(proposal_id: &StableId, target: &IdeationTarget) -> Option<Self> {
+        (target.artifact_type == IdeationTargetType::Requirement).then(|| Self::TargetRequirement {
+            proposal_id: proposal_id.clone(),
+            requirement_id: target.artifact_id.clone(),
+        })
+    }
+
     pub const fn requirement_id(&self) -> Option<&StableId> {
         match self {
             Self::TargetRequirement { requirement_id, .. }
             | Self::CanonicalRequirement { requirement_id, .. } => Some(requirement_id),
-            Self::Proposal { .. } | Self::NotApplicable => None,
+            Self::NotApplicable => None,
         }
     }
 
     pub const fn proposal_id(&self) -> Option<&StableId> {
         match self {
-            Self::Proposal { proposal_id }
-            | Self::TargetRequirement { proposal_id, .. }
+            Self::TargetRequirement { proposal_id, .. }
             | Self::CanonicalRequirement { proposal_id, .. } => Some(proposal_id),
             Self::NotApplicable => None,
         }
@@ -75,16 +81,51 @@ impl RequirementOwnership {
     pub const fn canonical_decision_id(&self) -> Option<&StableId> {
         match self {
             Self::CanonicalRequirement { decision_id, .. } => Some(decision_id),
-            Self::Proposal { .. } | Self::TargetRequirement { .. } | Self::NotApplicable => None,
+            Self::TargetRequirement { .. } | Self::NotApplicable => None,
         }
     }
 
     pub const fn kind(&self) -> &'static str {
         match self {
-            Self::Proposal { .. } => "proposal",
             Self::TargetRequirement { .. } => "target_requirement",
             Self::CanonicalRequirement { .. } => "canonical_requirement",
             Self::NotApplicable => "not_applicable",
+        }
+    }
+}
+
+pub enum ProposalClassification {
+    RequirementCandidate,
+    Ineligible,
+}
+
+impl ProposalClassification {
+    pub const fn classify(proposal_type: ProposalType) -> Self {
+        match proposal_type {
+            ProposalType::RequirementCandidate => Self::RequirementCandidate,
+            ProposalType::ResolutionCandidate
+            | ProposalType::RuleCandidate
+            | ProposalType::SourceGap
+            | ProposalType::Question
+            | ProposalType::NoAction => Self::Ineligible,
+        }
+    }
+}
+
+pub enum EvidenceClassification {
+    Artifact,
+    Ineligible,
+}
+
+impl EvidenceClassification {
+    pub const fn classify(reference: &IdeationEvidenceReference) -> Self {
+        match reference.evidence_type {
+            IdeationEvidenceType::Artifact => Self::Artifact,
+            IdeationEvidenceType::Source
+            | IdeationEvidenceType::ThreadMessage
+            | IdeationEvidenceType::DomainKnowledge
+            | IdeationEvidenceType::Unsupported
+            | IdeationEvidenceType::Exploratory => Self::Ineligible,
         }
     }
 }

@@ -119,7 +119,7 @@ fn evidence_review_reverifies_only_intersecting_evidence() {
     commit(dir.path(), "change evidence");
 
     let report = evidence_review_json(dir.path(), &[]);
-    assert_eq!(report["summary"]["graph_evidence_paths"], 3);
+    assert_eq!(report["summary"]["graph_evidence_paths"], 2);
     assert_eq!(report["summary"]["intersecting_paths"], 2);
     assert_eq!(report["summary"]["evidence_reverified"], 2);
     assert_eq!(report["evidence"][0]["status"], "moved");
@@ -181,6 +181,7 @@ fn stale_compares_review_dates_with_today_instead_of_2099() {
         ".provenance/state/scopes/default/resolutions/res.jsonl",
         r#"{"schema_version":1,"scope_id":"default","id":"res_past","title":"Past","position":"x","rationale":"x","status":"approved","inputs":[],"review_on":"2020-01-01","review_triggers":[]}
 {"schema_version":1,"scope_id":"default","id":"res_future","title":"Future","position":"x","rationale":"x","status":"approved","inputs":[],"review_on":"2099-01-01","review_triggers":[]}
+{"schema_version":1,"scope_id":"foreign","id":"res_foreign","title":"Foreign","position":"x","rationale":"x","status":"approved","inputs":[],"review_on":"2020-01-01","review_triggers":[]}
 "#,
     );
 
@@ -241,7 +242,7 @@ fn evidence_review_rejects_ambiguous_multi_source_sites() {
 }
 
 #[test]
-fn accepted_proposal_id_is_not_fabricated_as_requirement_id() {
+fn source_target_proposal_is_not_classified_as_reviewable_requirement_evidence() {
     let dir = init_repo();
     write(dir.path(), "src/reject.rs", "return Err(\"invalid\");\n");
     let base = commit(dir.path(), "base");
@@ -263,7 +264,139 @@ fn accepted_proposal_id_is_not_fabricated_as_requirement_id() {
     commit(dir.path(), "change");
 
     let report = evidence_review_json(dir.path(), &[]);
-    assert_eq!(report["evidence"][0]["status"], "vanished");
+    assert_eq!(report["summary"]["evidence_reverified"], 0);
+    assert_eq!(report["evidence"], serde_json::json!([]));
+    assert_eq!(report["contradictions"], serde_json::json!([]));
+}
+
+#[test]
+fn non_requirement_proposal_type_is_not_classified_as_requirement_evidence() {
+    let dir = init_repo();
+    write(dir.path(), "src/reject.rs", "return Err(\"invalid\");\n");
+    let base = commit(dir.path(), "base");
+    seed_graph(dir.path(), &base);
+    let proposals = dir
+        .path()
+        .join(".provenance/state/scopes/default/ideation/proposal_cards.jsonl");
+    let resolution_proposal = fs::read_to_string(&proposals)
+        .unwrap()
+        .lines()
+        .next()
+        .unwrap()
+        .replace("requirement_candidate", "resolution_candidate");
+    fs::write(proposals, format!("{resolution_proposal}\n")).unwrap();
+    write(dir.path(), "src/reject.rs", "return Ok(());\n");
+    commit(dir.path(), "change");
+
+    let report = evidence_review_json(dir.path(), &[]);
+    assert_eq!(report["summary"]["evidence_reverified"], 0);
+    assert_eq!(report["evidence"], serde_json::json!([]));
+    assert_eq!(report["contradictions"], serde_json::json!([]));
+}
+
+#[test]
+fn non_artifact_reference_is_not_classified_as_reviewable_evidence() {
+    let dir = init_repo();
+    write(dir.path(), "src/reject.rs", "return Err(\"invalid\");\n");
+    let base = commit(dir.path(), "base");
+    seed_graph(dir.path(), &base);
+    let proposals = dir
+        .path()
+        .join(".provenance/state/scopes/default/ideation/proposal_cards.jsonl");
+    let source_reference = fs::read_to_string(&proposals)
+        .unwrap()
+        .lines()
+        .next()
+        .unwrap()
+        .replace(
+            "\"evidence_type\":\"artifact\"",
+            "\"evidence_type\":\"source\"",
+        );
+    fs::write(proposals, format!("{source_reference}\n")).unwrap();
+    write(dir.path(), "src/reject.rs", "return Ok(());\n");
+    commit(dir.path(), "change");
+
+    let report = evidence_review_json(dir.path(), &[]);
+    assert_eq!(report["summary"]["evidence_reverified"], 0);
+    assert_eq!(report["evidence"], serde_json::json!([]));
+    assert_eq!(report["contradictions"], serde_json::json!([]));
+}
+
+#[test]
+fn foreign_scope_rules_and_edges_cannot_satisfy_review_policy() {
+    let dir = init_repo();
+    write(dir.path(), "src/reject.rs", "return Err(\"invalid\");\n");
+    let base = commit(dir.path(), "base");
+    seed_graph(dir.path(), &base);
+    write(
+        dir.path(),
+        ".provenance/state/scopes/default/rules/rule.jsonl",
+        "{\"schema_version\":1,\"scope_id\":\"foreign\",\"id\":\"rule_foreign\",\"rule_code\":\"FOREIGN-1\",\"statement\":\"Foreign rule\",\"status\":\"active\",\"severity\":\"high\"}\n{\"schema_version\":1,\"scope_id\":\"default\",\"id\":\"rule_guard\",\"rule_code\":\"GUARD-1\",\"statement\":\"Current rule\",\"status\":\"active\",\"severity\":\"high\"}\n",
+    );
+    write(
+        dir.path(),
+        ".provenance/state/edges/edges-00.jsonl",
+        "{\"schema_version\":1,\"scope_id\":\"default\",\"id\":\"edge_current_to_foreign\",\"edge_type\":\"produces\",\"from_type\":\"requirement\",\"from_id\":\"req_ratified\",\"to_type\":\"rule\",\"to_id\":\"rule_foreign\"}\n{\"schema_version\":1,\"scope_id\":\"foreign\",\"id\":\"edge_foreign_to_current\",\"edge_type\":\"produces\",\"from_type\":\"requirement\",\"from_id\":\"req_ratified\",\"to_type\":\"rule\",\"to_id\":\"rule_guard\"}\n",
+    );
+    write(dir.path(), "src/reject.rs", "return Ok(());\n");
+    commit(dir.path(), "change");
+
+    let report = evidence_review_json(dir.path(), &["--min-downstream-rules", "1"]);
+    assert_eq!(report["summary"]["evidence_reverified"], 0);
+    assert_eq!(report["evidence"], serde_json::json!([]));
+    assert_eq!(report["contradictions"], serde_json::json!([]));
+}
+
+#[test]
+fn foreign_scope_proposal_cannot_enter_the_review() {
+    let dir = init_repo();
+    write(dir.path(), "src/reject.rs", "return Err(\"invalid\");\n");
+    let base = commit(dir.path(), "base");
+    seed_graph(dir.path(), &base);
+    let proposals = dir
+        .path()
+        .join(".provenance/state/scopes/default/ideation/proposal_cards.jsonl");
+    let foreign = fs::read_to_string(&proposals)
+        .unwrap()
+        .lines()
+        .next()
+        .unwrap()
+        .replace("\"scope_id\":\"default\"", "\"scope_id\":\"foreign\"");
+    fs::write(proposals, format!("{foreign}\n")).unwrap();
+    write(dir.path(), "src/reject.rs", "return Ok(());\n");
+    commit(dir.path(), "change");
+
+    let report = evidence_review_json(dir.path(), &[]);
+    assert_eq!(report["summary"]["evidence_reverified"], 0);
+    assert_eq!(report["contradictions"], serde_json::json!([]));
+}
+
+#[test]
+fn dangling_requirement_target_cannot_borrow_same_id_edges() {
+    let dir = init_repo();
+    write(dir.path(), "src/reject.rs", "return Err(\"invalid\");\n");
+    let base = commit(dir.path(), "base");
+    seed_graph(dir.path(), &base);
+    let proposals = dir
+        .path()
+        .join(".provenance/state/scopes/default/ideation/proposal_cards.jsonl");
+    let dangling = fs::read_to_string(&proposals)
+        .unwrap()
+        .lines()
+        .next()
+        .unwrap()
+        .replace("req_ratified", "req_missing");
+    fs::write(proposals, format!("{dangling}\n")).unwrap();
+    let edges = dir.path().join(".provenance/state/edges/edges-00.jsonl");
+    let colliding_edge = fs::read_to_string(&edges)
+        .unwrap()
+        .replace("req_ratified", "req_missing");
+    fs::write(edges, colliding_edge).unwrap();
+    write(dir.path(), "src/reject.rs", "return Ok(());\n");
+    commit(dir.path(), "change");
+
+    let report = evidence_review_json(dir.path(), &["--min-downstream-rules", "1"]);
+    assert_eq!(report["summary"]["evidence_reverified"], 0);
     assert_eq!(report["contradictions"], serde_json::json!([]));
 }
 
@@ -316,4 +449,40 @@ fn evidence_review_rejects_ambiguous_canonical_requirement_ownership() {
         .as_str()
         .unwrap()
         .contains("ambiguous canonical requirements"));
+}
+
+#[test]
+fn canonical_requirement_decision_establishes_review_ownership() {
+    let dir = init_repo();
+    write(dir.path(), "src/reject.rs", "return Err(\"invalid\");\n");
+    let base = commit(dir.path(), "base");
+    seed_graph(dir.path(), &base);
+    let proposals = dir
+        .path()
+        .join(".provenance/state/scopes/default/ideation/proposal_cards.jsonl");
+    let source_target = fs::read_to_string(&proposals)
+        .unwrap()
+        .lines()
+        .next()
+        .unwrap()
+        .replace(
+            "\"artifact_type\":\"requirement\",\"artifact_id\":\"req_ratified\"",
+            "\"artifact_type\":\"source\",\"artifact_id\":\"source_code\"",
+        );
+    fs::write(proposals, format!("{source_target}\n")).unwrap();
+    write(
+        dir.path(),
+        ".provenance/state/scopes/default/ideation/promotion_decisions.jsonl",
+        r#"{"schema_version":1,"scope_id":"default","id":"decision_req","proposal_id":"proposal_ratified","decision":"accepted","rationale":"canonical","actor":{"identity_type":"human","id":"reviewer"},"canonical_artifact":{"artifact_type":"requirement","artifact_id":"req_ratified"}}
+"#,
+    );
+    write(dir.path(), "src/reject.rs", "return Ok(());\n");
+    commit(dir.path(), "change");
+
+    let report = evidence_review_json(dir.path(), &[]);
+    assert_eq!(report["summary"]["evidence_reverified"], 1);
+    assert_eq!(
+        report["contradictions"][0]["requirement_id"],
+        "req_ratified"
+    );
 }

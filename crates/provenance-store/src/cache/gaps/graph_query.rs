@@ -17,7 +17,7 @@ pub struct GapGraph<'a> {
 }
 
 pub(super) struct GraphQuery<'a, 'graph> {
-    pub graph: &'a GapGraph<'graph>,
+    graph: &'a GapGraph<'graph>,
 }
 
 impl<'a, 'graph> GraphQuery<'a, 'graph> {
@@ -31,6 +31,62 @@ impl<'a, 'graph> GraphQuery<'a, 'graph> {
             .edges
             .iter()
             .filter(move |edge| edge.scope_id == *scope)
+    }
+
+    pub fn sources(&self) -> impl Iterator<Item = &Source> {
+        let scope = self.graph.scope;
+        self.graph
+            .sources
+            .iter()
+            .filter(move |source| source.scope_id == *scope)
+    }
+
+    pub fn requirements(&self) -> impl Iterator<Item = &Requirement> {
+        let scope = self.graph.scope;
+        self.graph
+            .requirements
+            .iter()
+            .filter(move |requirement| requirement.scope_id == *scope)
+    }
+
+    pub fn resolutions(&self) -> impl Iterator<Item = &Resolution> {
+        let scope = self.graph.scope;
+        self.graph
+            .resolutions
+            .iter()
+            .filter(move |resolution| resolution.scope_id == *scope)
+    }
+
+    pub fn rules(&self) -> impl Iterator<Item = &Rule> {
+        let scope = self.graph.scope;
+        self.graph
+            .rules
+            .iter()
+            .filter(move |rule| rule.scope_id == *scope)
+    }
+
+    pub fn topics(&self) -> impl Iterator<Item = &Topic> {
+        let scope = self.graph.scope;
+        self.graph
+            .topics
+            .iter()
+            .filter(move |topic| topic.scope_id == *scope)
+    }
+
+    pub fn questions(&self) -> impl Iterator<Item = &Question> {
+        let scope = self.graph.scope;
+        self.graph
+            .questions
+            .iter()
+            .filter(move |question| question.scope_id == *scope)
+    }
+
+    pub fn threads(&self) -> impl Iterator<Item = &Thread> {
+        let scope = self.graph.scope;
+        self.graph
+            .threads
+            .iter()
+            .filter(move |thread| thread.scope_id == *scope)
     }
 
     pub fn edge_exists(
@@ -51,25 +107,19 @@ impl<'a, 'graph> GraphQuery<'a, 'graph> {
     }
 
     pub fn source_exists(&self, id: &StableId) -> bool {
-        self.graph.sources.iter().any(|source| source.id == *id)
+        self.sources().any(|source| source.id == *id)
     }
 
     pub fn requirement_exists(&self, id: &StableId) -> bool {
-        self.graph
-            .requirements
-            .iter()
-            .any(|requirement| requirement.id == *id)
+        self.requirements().any(|requirement| requirement.id == *id)
     }
 
     pub fn resolution_exists(&self, id: &StableId) -> bool {
-        self.graph
-            .resolutions
-            .iter()
-            .any(|resolution| resolution.id == *id)
+        self.resolutions().any(|resolution| resolution.id == *id)
     }
 
     pub fn topic_exists(&self, id: &StableId) -> bool {
-        self.graph.topics.iter().any(|topic| topic.id == *id)
+        self.topics().any(|topic| topic.id == *id)
     }
 
     pub fn node_exists(&self, node_type: NodeType, id: &StableId) -> bool {
@@ -77,20 +127,14 @@ impl<'a, 'graph> GraphQuery<'a, 'graph> {
             NodeType::Source => self.source_exists(id),
             NodeType::Requirement => self.requirement_exists(id),
             NodeType::Resolution => self.resolution_exists(id),
-            NodeType::Rule => self.graph.rules.iter().any(|rule| rule.id == *id),
+            NodeType::Rule => self.rules().any(|rule| rule.id == *id),
             NodeType::Topic => self.topic_exists(id),
-            NodeType::Question => self
-                .graph
-                .questions
-                .iter()
-                .any(|question| question.id == *id),
+            NodeType::Question => self.questions().any(|question| question.id == *id),
         }
     }
 
     pub fn resolving_resolutions(&self, requirement_id: &StableId) -> Vec<&Resolution> {
-        self.graph
-            .resolutions
-            .iter()
+        self.resolutions()
             .filter(|resolution| {
                 self.edge_exists(
                     EdgeType::Resolves,
@@ -104,7 +148,7 @@ impl<'a, 'graph> GraphQuery<'a, 'graph> {
     }
 
     pub fn resolution_resolves_any_requirement(&self, resolution_id: &StableId) -> bool {
-        self.graph.requirements.iter().any(|requirement| {
+        self.requirements().any(|requirement| {
             self.edge_exists(
                 EdgeType::Resolves,
                 NodeType::Resolution,
@@ -116,17 +160,29 @@ impl<'a, 'graph> GraphQuery<'a, 'graph> {
     }
 
     pub fn produced_rules_for_requirement(&self, requirement_id: &StableId) -> Vec<&Rule> {
-        DownstreamRuleQuery::new(self.graph.edges, self.graph.resolutions, self.graph.rules)
-            .for_requirement(requirement_id)
+        DownstreamRuleQuery::new(
+            self.graph.scope,
+            self.graph.edges,
+            self.graph.requirements,
+            self.graph.resolutions,
+            self.graph.rules,
+        )
+        .for_requirement(requirement_id)
     }
 
     pub fn produced_rules_for_resolution(&self, resolution_id: &StableId) -> Vec<&Rule> {
-        DownstreamRuleQuery::new(self.graph.edges, self.graph.resolutions, self.graph.rules)
-            .for_resolution(resolution_id)
+        DownstreamRuleQuery::new(
+            self.graph.scope,
+            self.graph.edges,
+            self.graph.requirements,
+            self.graph.resolutions,
+            self.graph.rules,
+        )
+        .for_resolution(resolution_id)
     }
 
     pub fn rule_has_existing_producer(&self, rule_id: &StableId) -> bool {
-        self.graph.requirements.iter().any(|requirement| {
+        self.requirements().any(|requirement| {
             self.edge_exists(
                 EdgeType::Produces,
                 NodeType::Requirement,
@@ -134,7 +190,7 @@ impl<'a, 'graph> GraphQuery<'a, 'graph> {
                 NodeType::Rule,
                 rule_id,
             )
-        }) || self.graph.resolutions.iter().any(|resolution| {
+        }) || self.resolutions().any(|resolution| {
             self.edge_exists(
                 EdgeType::Produces,
                 NodeType::Resolution,
@@ -160,12 +216,12 @@ impl<'a, 'graph> GraphQuery<'a, 'graph> {
     }
 
     pub fn source_is_referenced(&self, source_id: &StableId) -> bool {
-        self.graph.requirements.iter().any(|requirement| {
+        self.requirements().any(|requirement| {
             requirement
                 .source_refs
                 .iter()
                 .any(|reference| reference.source_id == *source_id)
-        }) || self.graph.requirements.iter().any(|requirement| {
+        }) || self.requirements().any(|requirement| {
             self.edge_exists(
                 EdgeType::References,
                 NodeType::Source,

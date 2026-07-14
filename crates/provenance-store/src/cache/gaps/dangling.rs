@@ -15,7 +15,7 @@ pub(super) fn add_reference_gaps(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapI
 }
 
 fn add_requirement_source_refs(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapItem>) {
-    for requirement in query.graph.requirements {
+    for requirement in query.requirements() {
         for reference in &requirement.source_refs {
             if !query.source_exists(&reference.source_id) {
                 gaps.push(
@@ -36,7 +36,7 @@ fn add_requirement_source_refs(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapIte
 }
 
 fn add_source_refs(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapItem>) {
-    for source in query.graph.sources {
+    for source in query.sources() {
         if let Some(id) = &source.superseded_by {
             if !query.source_exists(id) {
                 gaps.push(
@@ -54,7 +54,7 @@ fn add_source_refs(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapItem>) {
 }
 
 fn add_resolution_refs(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapItem>) {
-    for resolution in query.graph.resolutions {
+    for resolution in query.resolutions() {
         if let Some(id) = &resolution.superseded_by {
             if !query.resolution_exists(id) {
                 gaps.push(
@@ -72,7 +72,7 @@ fn add_resolution_refs(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapItem>) {
 }
 
 fn add_topic_refs(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapItem>) {
-    for topic in query.graph.topics {
+    for topic in query.topics() {
         if !query.requirement_exists(&topic.requirement_id) {
             gaps.push(
                 GapItem::new(
@@ -91,7 +91,7 @@ fn add_topic_refs(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapItem>) {
 }
 
 fn add_question_refs(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapItem>) {
-    for question in query.graph.questions {
+    for question in query.questions() {
         if !query.topic_exists(&question.topic_id) {
             gaps.push(
                 GapItem::new(
@@ -139,7 +139,7 @@ fn add_question_refs(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapItem>) {
 }
 
 fn add_thread_refs(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapItem>) {
-    for thread in query.graph.threads {
+    for thread in query.threads() {
         if !query.node_exists(thread.parent.node_type, &thread.parent.node_id) {
             gaps.push(GapItem::new(
                 GapKind::DanglingReference,

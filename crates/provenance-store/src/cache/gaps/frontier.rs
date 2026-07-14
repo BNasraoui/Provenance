@@ -5,7 +5,7 @@ use super::{
 use provenance_core::{NodeType, QuestionStatus, RequirementStatus, ResolutionStatus, TopicStatus};
 
 pub(super) fn add_requirement_gaps(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapItem>) {
-    for requirement in query.graph.requirements {
+    for requirement in query.requirements() {
         let resolving = query.resolving_resolutions(&requirement.id);
         let resolved = requirement.status == RequirementStatus::Resolved;
         if requirement.domain_id.is_none() {
@@ -48,7 +48,7 @@ pub(super) fn add_requirement_gaps(query: &GraphQuery<'_, '_>, gaps: &mut Vec<Ga
 }
 
 pub(super) fn add_resolution_gaps(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapItem>) {
-    for resolution in query.graph.resolutions {
+    for resolution in query.resolutions() {
         if !query.resolution_resolves_any_requirement(&resolution.id) {
             gaps.push(GapItem::new(
                 GapKind::OrphanResolution,
@@ -73,7 +73,7 @@ pub(super) fn add_resolution_gaps(query: &GraphQuery<'_, '_>, gaps: &mut Vec<Gap
 }
 
 pub(super) fn add_rule_gaps(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapItem>) {
-    for rule in query.graph.rules {
+    for rule in query.rules() {
         if !query.rule_has_existing_producer(&rule.id) {
             gaps.push(GapItem::new(
                 GapKind::OrphanRule,
@@ -86,7 +86,7 @@ pub(super) fn add_rule_gaps(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapItem>)
 }
 
 pub(super) fn add_source_gaps(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapItem>) {
-    for source in query.graph.sources {
+    for source in query.sources() {
         if !query.source_is_referenced(&source.id) {
             gaps.push(GapItem::new(
                 GapKind::UnreferencedSource,
@@ -99,7 +99,7 @@ pub(super) fn add_source_gaps(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapItem
 }
 
 pub(super) fn add_question_gaps(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapItem>) {
-    for question in query.graph.questions.iter().filter(|question| {
+    for question in query.questions().filter(|question| {
         matches!(
             question.status,
             QuestionStatus::Open | QuestionStatus::BlockedOnHuman
@@ -124,9 +124,7 @@ pub(super) fn add_question_gaps(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapIt
 
 pub(super) fn add_topic_gaps(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapItem>) {
     for topic in query
-        .graph
-        .topics
-        .iter()
+        .topics()
         .filter(|topic| topic.status == TopicStatus::Open)
     {
         gaps.push(

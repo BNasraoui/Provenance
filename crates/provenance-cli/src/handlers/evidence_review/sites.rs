@@ -1,10 +1,14 @@
-use super::model::{EvidenceOwner, EvidenceSite, OwnerKind, RequirementOwnership};
+use super::model::{
+    EvidenceClassification, EvidenceOwner, EvidenceSite, OwnerKind, ProposalClassification,
+    RequirementOwnership,
+};
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use provenance_core::{
-    CanonicalArtifactType, IdeationTargetType, PromotionDecision, PromotionState, StableId,
+    CanonicalArtifactType, IdeationTargetType, PromotionDecision, PromotionState, ProposalCard,
+    StableId,
 };
 use provenance_store::state_store::ScopeSnapshot;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub struct SiteCollection {
     pub sites: Vec<EvidenceSite>,
@@ -15,6 +19,7 @@ struct SiteContext<'a> {
     repository: &'a Utf8Path,
     base_override: Option<&'a str>,
     sources: BTreeMap<&'a str, &'a provenance_core::Source>,
+    requirements: BTreeSet<&'a str>,
     canonical: BTreeMap<&'a str, Vec<(&'a StableId, &'a StableId)>>,
 }
 
@@ -27,6 +32,11 @@ pub fn collect(
         .sources
         .iter()
         .map(|source| (source.id.as_str(), source))
+        .collect();
+    let requirements = snapshot
+        .requirements
+        .iter()
+        .map(|requirement| requirement.id.as_str())
         .collect();
     let mut canonical: BTreeMap<_, Vec<_>> = BTreeMap::new();
     for decision in snapshot
@@ -52,6 +62,7 @@ pub fn collect(
         repository,
         base_override,
         sources,
+        requirements,
         canonical,
     };
     collect_proposals(snapshot, &context, &mut collection);
@@ -68,6 +79,10 @@ fn collect_proposals(
         if proposal.traceability.evidence_references.is_empty() {
             continue;
         }
+        let Some(ownership) = proposal_ownership(proposal, context, &mut collection.diagnostics)
+        else {
+            continue;
+        };
         let [source_id] = proposal.traceability.source_ids.as_slice() else {
             let diagnosis = if proposal.traceability.source_ids.is_empty() {
                 "has no source"
@@ -96,32 +111,6 @@ fn collect_proposals(
             ));
             continue;
         };
-        let canonical = context
-            .canonical
-            .get(proposal.id.as_str())
-            .map(Vec::as_slice);
-        let ownership = if let Some([(requirement_id, decision_id)]) = canonical {
-            RequirementOwnership::CanonicalRequirement {
-                proposal_id: proposal.id.clone(),
-                requirement_id: (*requirement_id).clone(),
-                decision_id: (*decision_id).clone(),
-            }
-        } else if canonical.is_some() {
-            collection.diagnostics.push(format!(
-                "proposal {} has ambiguous canonical requirements; its evidence sites were rejected",
-                proposal.id.as_str()
-            ));
-            continue;
-        } else if proposal.traceability.target.artifact_type == IdeationTargetType::Requirement {
-            RequirementOwnership::TargetRequirement {
-                proposal_id: proposal.id.clone(),
-                requirement_id: proposal.traceability.target.artifact_id.clone(),
-            }
-        } else {
-            RequirementOwnership::Proposal {
-                proposal_id: proposal.id.clone(),
-            }
-        };
         let owner = EvidenceOwner {
             kind: OwnerKind::Proposal,
             id: proposal.id.clone(),
@@ -139,6 +128,70 @@ fn collect_proposals(
             &proposal.traceability.evidence_references,
         );
     }
+}
+
+fn proposal_ownership(
+    proposal: &ProposalCard,
+    context: &SiteContext<'_>,
+    diagnostics: &mut Vec<String>,
+) -> Option<RequirementOwnership> {
+    if matches!(
+        ProposalClassification::classify(proposal.proposal_type),
+        ProposalClassification::Ineligible
+    ) {
+        diagnostics.push(format!(
+            "proposal {} is not a requirement candidate; its evidence sites were rejected",
+            proposal.id.as_str()
+        ));
+        return None;
+    }
+    let canonical = context
+        .canonical
+        .get(proposal.id.as_str())
+        .map(Vec::as_slice);
+    if let Some([(requirement_id, decision_id)]) = canonical {
+        if !context.requirements.contains(requirement_id.as_str()) {
+            diagnostics.push(format!(
+                "proposal {} names missing canonical requirement {}; its evidence sites were rejected",
+                proposal.id.as_str(),
+                requirement_id.as_str()
+            ));
+            return None;
+        }
+        return Some(RequirementOwnership::CanonicalRequirement {
+            proposal_id: proposal.id.clone(),
+            requirement_id: (*requirement_id).clone(),
+            decision_id: (*decision_id).clone(),
+        });
+    }
+    if canonical.is_some() {
+        diagnostics.push(format!(
+            "proposal {} has ambiguous canonical requirements; its evidence sites were rejected",
+            proposal.id.as_str()
+        ));
+        return None;
+    }
+    let Some(ownership) =
+        RequirementOwnership::for_target(&proposal.id, &proposal.traceability.target)
+    else {
+        diagnostics.push(format!(
+            "proposal {} does not target a requirement; its evidence sites were rejected",
+            proposal.id.as_str()
+        ));
+        return None;
+    };
+    let requirement_id = ownership
+        .requirement_id()
+        .expect("target requirement ownership has a requirement");
+    if !context.requirements.contains(requirement_id.as_str()) {
+        diagnostics.push(format!(
+            "proposal {} targets missing requirement {}; its evidence sites were rejected",
+            proposal.id.as_str(),
+            requirement_id.as_str()
+        ));
+        return None;
+    }
+    Some(ownership)
 }
 
 fn collect_contributions(
@@ -205,6 +258,16 @@ fn add_references(
     references: &[provenance_core::IdeationEvidenceReference],
 ) {
     for reference in references {
+        if matches!(
+            EvidenceClassification::classify(reference),
+            EvidenceClassification::Ineligible
+        ) {
+            collection.diagnostics.push(format!(
+                "evidence {} is not artifact evidence and was rejected",
+                reference.reference_id.as_str()
+            ));
+            continue;
+        }
         let Some(path) = reference.file_path.as_deref().and_then(normalize_path) else {
             collection.diagnostics.push(format!(
                 "evidence {} has no valid repository-relative path",
