@@ -78,7 +78,7 @@ impl<'de> Deserialize<'de> for StableId {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{ScopeId, StableId};
 
     #[test]
     fn stable_id_deserialize_error_names_invalid_value_and_repair_hint() {
