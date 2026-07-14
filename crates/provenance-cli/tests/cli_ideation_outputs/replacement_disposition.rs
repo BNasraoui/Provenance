@@ -246,7 +246,7 @@ fn proposal_replace_refuses_accepted_human_disposition() {
     ).unwrap();
     std::fs::write(
         ideation.join("synthesis_packets.jsonl"),
-        concat!(r#"{"schema_version":1,"scope_id":"default","id":"synthesis_publish","target":{"artifact_type":"source","artifact_id":"source_codebase"},"summary":"Adjudicated","consensus":[],"contested_claims":[],"minority_objections":[],"evidence_gaps":[],"unsupported_speculation":[],"open_questions":[],"suggested_artifacts":[{"proposal_key":"backtrace/auth/publish_requires_worker","proposal_type":"requirement_candidate","summary":"Candidate","origin_participant_slots":["extractor"]}],"required_human_decisions":[]}"#, "\n"),
+        concat!(r#"{"schema_version":1,"scope_id":"default","id":"synthesis_publish","target":{"artifact_type":"source","artifact_id":"source_codebase"},"summary":"Adjudicated","consensus":[],"contested_claims":[],"minority_objections":[],"evidence_gaps":[],"unsupported_speculation":[],"open_questions":[],"suggested_artifacts":[{"proposal_id":"prop_req_publish_requires_worker","proposal_key":"backtrace/auth/publish_requires_worker","proposal_type":"requirement_candidate","summary":"Candidate","origin_participant_slots":["extractor"]}],"required_human_decisions":[]}"#, "\n"),
     ).unwrap();
 
     Command::cargo_bin("provenance")
@@ -322,8 +322,6 @@ fn proposal_replace_refuses_accepted_human_disposition() {
             "Human accepted the proposed requirement.",
             "--actor-id",
             "ben",
-            "--actor-type",
-            "human",
             "--format",
             "json",
         ])

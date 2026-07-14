@@ -27,6 +27,10 @@ whether the canonical skills are installed and prints the repo-root install comm
 shaping/ideation commands emit a non-blocking stderr hint when skills are missing,
 suppressible with `--quiet`.
 
+Initialize trusted human disposition identities with repeated
+`init --human-authority-id <id>`. Behavior-changing dispositions are accepted only when
+their actor ID is in this repository-owned manifest registry.
+
 Ideation JSON flags accept inline JSON or `@path/to/payload.json`. Artifact helpers:
 `provenance schema show contribution|synthesis-packet|proposal --format json` prints
 canonical record schemas, and `provenance validate contribution|synthesis-packet|proposal
@@ -35,11 +39,15 @@ canonical record schemas, and `provenance validate contribution|synthesis-packet
 `--replace` is allowed only while no durable assertion depends on the record. Proposals are
 immutable and require a new stable ID for revisions.
 `proposals create` always starts a candidate as proposed. `proposals assert` performs the
-verified transition using an adjudicating synthesis packet and positive supporting claims.
+verified transition using an adjudicating synthesis packet bound to the exact proposal ID and
+positive, type-matched supporting evidence; unsupported/exploratory evidence, contested claims,
+and blocking gaps or human decisions cannot authorize it.
 `--builds-on <assertion-id>` records immutable lineage. Assertions are durable. Consult with
 `proposals list --promotion-state asserted --format json`; `prime` renders both raw
 proposals and assertions, explicitly marking assertions as not human-ratified. Human
-disposition records are the sole authority for accepted, rejected, or deferred state.
+disposition records are the sole authority for accepted, rejected, or deferred state, and all
+three outcomes require a prior assertion. `promotion-decisions create` is the explicit human
+authority for behavior-changing proposals; imports cannot manufacture that authority.
 Swarm backtrace runs can land durable run outputs with
 `provenance swarm-backtrace land --scope <scope> --run-dir <run-dir> --format json`.
 

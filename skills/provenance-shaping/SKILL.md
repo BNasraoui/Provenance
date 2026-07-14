@@ -160,13 +160,14 @@ commands. The shaping-focused subset of the computed graph frontier includes:
   rule, and approved resolutions with no produced rule;
 - open or `blocked_on_human` questions and open topics.
 
-Proposals are not part of the computed graph frontier. List them separately and treat cards
-whose `promotion_state` is `proposed` as awaiting human disposal.
+Proposals are not part of the computed graph frontier. List them separately. Cards whose
+`promotion_state` is `proposed` await positive adjudication and `proposals assert`; they are
+not yet eligible for human disposal.
 
 `prime` labels asserted proposals as not human-ratified. They need not be disposed merely
 to make a handoff complete; an unrefuted assertion is a valid resting state. A behavior-
-changing proposal still needs a human `promotion-decisions create --decision accepted`
-before it becomes canonical or enforceable.
+changing proposal still needs the authoritative human `promotion-decisions create` command
+before any accepted, rejected, or deferred disposition; bulk import cannot claim that authority.
 
 Do not hand-wire a private frontier in chat. If the graph says a different thing than your
 notes, fix the graph or trust the graph.

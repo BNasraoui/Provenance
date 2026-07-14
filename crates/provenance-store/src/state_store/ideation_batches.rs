@@ -3,7 +3,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::{IdeationLandingBatch, StateStore};
 use crate::shards;
 use provenance_core::{
-    validate_ideation_aggregate, AssertionRecord, IdeationAggregate, ProposalCard, ScopeId,
+    validate_ideation_aggregate, validate_proposal_intrinsic, AssertionRecord, IdeationAggregate,
+    ProposalCard, ScopeId,
 };
 
 impl StateStore {
@@ -26,6 +27,10 @@ impl StateStore {
         replace: bool,
     ) -> anyhow::Result<()> {
         ensure_batch_scope(scope_id, &incoming)?;
+        self.validate_raw_ideation_history(scope_id)?;
+        for proposal in &incoming.proposals {
+            validate_proposal_intrinsic(proposal)?;
+        }
         let path = shards::ideation_landings_path(&self.layout, scope_id);
         self.mutate_jsonl_records(&path, |landings: &mut Vec<IdeationLandingBatch>| {
             let mut contributions = self.list_contributions(scope_id)?;
@@ -236,7 +241,7 @@ mod tests {
                 "target": {"artifact_type": "requirement", "artifact_id": "req_a"}, "summary": "Adjudicated",
                 "consensus": [], "contested_claims": [], "minority_objections": [], "evidence_gaps": [],
                 "unsupported_speculation": [], "open_questions": [],
-                "suggested_artifacts": [{"proposal_key": "parent", "proposal_type": "requirement_candidate", "summary": "Parent", "origin_participant_slots": ["extractor"]}],
+                "suggested_artifacts": [{"proposal_id": "proposal_parent", "proposal_key": "parent", "proposal_type": "requirement_candidate", "summary": "Parent", "origin_participant_slots": ["extractor"]}],
                 "required_human_decisions": []
             }],
             "proposals": [{

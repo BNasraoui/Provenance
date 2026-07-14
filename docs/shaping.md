@@ -169,12 +169,14 @@ land their candidates through the same durable shapes (ported from the Convex
   never averaged; evidence gaps can block promotion; required human decisions are explicit.
 - **Proposals**: immutable typed candidates (`requirement_candidate`, `rule_candidate`,
   `source_gap`, …) that always begin proposed. A separate assertion records verified positive
-  adjudication; a separate human disposition records ratification or rejection.
+  adjudication; a separate authoritative human disposition records acceptance, rejection,
+  or deferral. Every modern disposition requires the assertion first.
 
 ### Two-tier promotion
 
 An assertion is a legitimate durable record, not an incomplete run. Its synthesis packet must
-own the proposal target, every supporting claim must exist with positive evidence, and no
+own the proposal target and name the exact proposal ID, every supporting claim must exist
+with genuinely positive, type-matched evidence (never `unsupported`/`exploratory`), and no
 contested claim, blocking evidence gap, or blocking human decision may remain. It is still
 provisional: `provenance prime` labels it
 "not human-ratified", and consumers must not present it as policy, compliance, or an
@@ -182,12 +184,12 @@ enforced rule. A later proposal may cite the immutable assertion ID through `bui
 preserves provisional lineage without silently promoting either proposal. Raw `proposed`
 cards are not valid lineage bases.
 
-Human ratification remains mandatory before a requirement, resolution, or rule candidate
-is accepted, because those artifacts can change behavior, settle a conflict, support an
-enforcement path, or become a compliance claim. The accepted promotion decision records
-the human actor. Non-behavior workflow proposals (`source_gap`, `question`, `no_action`)
-may be disposed by automation. Existing `proposed` records remain valid and need no
-migration; they simply carry no assertion claim.
+Human authority remains mandatory before a requirement, resolution, or rule candidate
+is accepted, rejected, or deferred, because those dispositions can change behavior, settle a conflict, support an
+enforcement path, or become a compliance claim. The dedicated disposition command records
+the human actor; bulk import cannot self-declare that authority. Non-behavior workflow proposals
+(`source_gap`, `question`, `no_action`) may be disposed by automation. Historical terminal
+definitions are read-only compatibility records and cannot acquire new lifecycle history.
 
 The run-status machinery of the original (queued/running/failed_retryable…) is *not*
 ported — skills and workflows own execution; only durable outputs enter state.

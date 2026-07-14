@@ -48,7 +48,7 @@ fn fixtures() -> (
         "target": {"artifact_type": "requirement", "artifact_id": "req_a"}, "summary": "Adjudicated",
         "consensus": [], "contested_claims": [], "minority_objections": [], "evidence_gaps": [],
         "unsupported_speculation": [], "open_questions": [],
-        "suggested_artifacts": [{"proposal_key": "proposal-a", "proposal_type": "requirement_candidate", "summary": "Candidate", "origin_participant_slots": ["extractor"]}],
+        "suggested_artifacts": [{"proposal_id": "proposal_a", "proposal_key": "proposal-a", "proposal_type": "requirement_candidate", "summary": "Candidate", "origin_participant_slots": ["extractor"]}],
         "required_human_decisions": []
     });
     let proposal = serde_json::json!({
@@ -107,6 +107,50 @@ fn assertion_requires_owned_positive_adjudication_evidence() {
             .to_string()
             .contains("positive evidence")
     );
+}
+
+#[test]
+fn assertion_rejects_non_positive_or_mismatched_evidence() {
+    for kind in ["unsupported", "exploratory"] {
+        let (mut contribution, synthesis, proposal, assertion) = fixtures();
+        contribution["material_claims"][0]["evidence_type"] = serde_json::json!(kind);
+        contribution["evidence_references"][0]["evidence_type"] = serde_json::json!(kind);
+        let error = aggregate(contribution, synthesis, vec![proposal], vec![assertion])
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("positive evidence type"), "{error}");
+    }
+
+    let (mut contribution, synthesis, proposal, assertion) = fixtures();
+    contribution["evidence_references"][0]["evidence_type"] = serde_json::json!("artifact");
+    let error = aggregate(contribution, synthesis, vec![proposal], vec![assertion])
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("evidence type does not match"), "{error}");
+}
+
+#[test]
+fn assertion_requires_a_suggestion_bound_to_the_exact_proposal() {
+    let (contribution, mut synthesis, proposal, assertion) = fixtures();
+    synthesis["suggested_artifacts"][0]["proposal_id"] = serde_json::json!("proposal_other");
+    let error = aggregate(contribution, synthesis, vec![proposal], vec![assertion])
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("does not adjudicate proposal"), "{error}");
+}
+
+#[test]
+fn synthesis_cannot_adjudicate_one_proposal_twice() {
+    let (contribution, mut synthesis, proposal, assertion) = fixtures();
+    let duplicate = synthesis["suggested_artifacts"][0].clone();
+    synthesis["suggested_artifacts"]
+        .as_array_mut()
+        .unwrap()
+        .push(duplicate);
+    let error = aggregate(contribution, synthesis, vec![proposal], vec![assertion])
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("duplicate suggested proposal"), "{error}");
 }
 
 #[test]
@@ -170,7 +214,7 @@ fn assertion_lineage_uses_immutable_assertion_ids_and_is_acyclic() {
     let mut parent = proposal;
     parent["builds_on"] = serde_json::json!(["assertion_child"]);
     let mut synthesis = synthesis;
-    synthesis["suggested_artifacts"].as_array_mut().unwrap().push(serde_json::json!({"proposal_key": "proposal-child", "proposal_type": "requirement_candidate", "summary": "Child", "origin_participant_slots": ["extractor"]}));
+    synthesis["suggested_artifacts"].as_array_mut().unwrap().push(serde_json::json!({"proposal_id": "proposal_child", "proposal_key": "proposal-child", "proposal_type": "requirement_candidate", "summary": "Child", "origin_participant_slots": ["extractor"]}));
     assert!(aggregate(
         contribution,
         synthesis,
@@ -186,28 +230,33 @@ fn assertion_lineage_uses_immutable_assertion_ids_and_is_acyclic() {
 fn legacy_terminal_proposals_remain_readable_after_lifecycle_upgrade() {
     let (contribution, synthesis, mut proposal, _) = fixtures();
     proposal["promotion_state"] = serde_json::json!("accepted");
+    proposal["legacy_terminal"] = serde_json::json!(true);
     let contributions = vec![serde_json::from_value::<Contribution>(contribution).unwrap()];
     let synthesis_packets = vec![serde_json::from_value::<SynthesisPacket>(synthesis).unwrap()];
     let proposals = vec![serde_json::from_value::<ProposalCard>(proposal).unwrap()];
 
-    let dispositions = vec![serde_json::from_value(serde_json::json!({
-        "schema_version": 1,
-        "scope_id": "default",
-        "id": "legacy_decision",
-        "proposal_id": "proposal_a",
-        "decision": "accepted",
-        "rationale": "Historical decision",
-        "actor": {"identity_type": "human", "id": "reviewer"}
-    }))
-    .unwrap()];
     validate_ideation_aggregate(IdeationAggregate {
         contributions: &contributions,
         synthesis_packets: &synthesis_packets,
         proposals: &proposals,
         assertions: &[],
-        dispositions: &dispositions,
+        dispositions: &[],
     })
     .unwrap();
+}
+
+#[test]
+fn legacy_terminal_proposals_are_frozen_against_new_history() {
+    let (contribution, synthesis, mut proposal, assertion) = fixtures();
+    proposal["promotion_state"] = serde_json::json!("accepted");
+    proposal["legacy_terminal"] = serde_json::json!(true);
+    let error = aggregate(contribution, synthesis, vec![proposal], vec![assertion])
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("legacy terminal proposal") && error.contains("frozen"),
+        "{error}"
+    );
 }
 
 #[test]

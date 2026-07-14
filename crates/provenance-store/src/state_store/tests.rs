@@ -10,13 +10,11 @@ pub(super) fn initialized_store() -> (tempfile::TempDir, StateStore, ScopeId) {
     let layout = ProvenanceLayout::new(root);
     std::fs::create_dir_all(layout.manifest_path().parent().unwrap()).unwrap();
     let scope = ScopeId::new("default").unwrap();
+    let mut manifest = Manifest::default_with_scope(scope.clone(), RepoPathPrefix::new("."));
+    manifest.human_authority_ids = vec!["ben".into(), "human_reviewer".into(), "reviewer".into()];
     std::fs::write(
         layout.manifest_path(),
-        serde_json::to_string(&Manifest::default_with_scope(
-            scope.clone(),
-            RepoPathPrefix::new("."),
-        ))
-        .unwrap(),
+        serde_json::to_string(&manifest).unwrap(),
     )
     .unwrap();
     let store = StateStore::new(layout);

@@ -26,6 +26,10 @@ pub struct Scope {
 pub struct Manifest {
     pub schema_version: SchemaVersion,
     pub scopes: Vec<Scope>,
+    /// Repository-configured identities allowed to exercise the explicit
+    /// human disposition authority boundary.
+    #[serde(default)]
+    pub human_authority_ids: Vec<String>,
 }
 
 impl Manifest {
@@ -36,6 +40,7 @@ impl Manifest {
                 id: scope,
                 path_prefix,
             }],
+            human_authority_ids: Vec::new(),
         }
     }
 }

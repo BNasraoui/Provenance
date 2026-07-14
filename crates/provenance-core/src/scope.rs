@@ -68,6 +68,7 @@ mod tests {
     fn manifest_with_scopes(scopes: &[(&str, &str)]) -> Manifest {
         Manifest {
             schema_version: SchemaVersion(1),
+            human_authority_ids: Vec::new(),
             scopes: scopes
                 .iter()
                 .map(|(id, prefix)| Scope {

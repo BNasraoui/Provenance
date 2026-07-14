@@ -38,6 +38,10 @@ pub struct ProposalCard {
     pub traceability: ProposalTraceability,
     #[serde(alias = "promotionState")]
     pub promotion_state: PromotionState,
+    /// Explicit migration marker for pre-lifecycle terminal definitions.
+    /// Active writers and import never set this authority-bearing marker.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub legacy_terminal: bool,
     #[serde(default, alias = "buildsOn", skip_serializing_if = "Vec::is_empty")]
     pub builds_on: Vec<AssertionId>,
     #[serde(

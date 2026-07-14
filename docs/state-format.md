@@ -9,6 +9,10 @@ Schema version `1` includes the local graph fields plus imported/cloud review me
 Proposal definitions begin `proposed`. Immutable assertion records carry positive adjudication
 evidence; immutable human disposition records authorize accepted, rejected, or deferred state.
 Effective state is derived. Optional `builds_on` entries are assertion IDs, so lineage remains
-valid after an ancestor receives a later disposition.
+valid after an ancestor receives a later disposition. Historical embedded terminal definitions
+carry the explicit migration-only `legacy_terminal` marker and are frozen compatibility
+records: active ingress cannot create them or add contradictory
+assertions/dispositions. The legacy input spelling `swarm_asserted` is read as `asserted`, while
+serialization always emits the canonical spelling.
 
 Concurrent writers serialize JSONL shard mutations with advisory lock files under `.provenance/cache/locks/`. A writer holds the corresponding shard lock across the full read-modify-write cycle, then atomically replaces the shard file. Lock files are derived cache artifacts, not state, and must not be committed. Readers do not take locks; the atomic replace contract means they see either the old complete shard or the new complete shard.

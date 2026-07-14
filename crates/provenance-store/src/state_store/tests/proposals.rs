@@ -133,7 +133,7 @@ fn assert_existing(store: &crate::state_store::StateStore, scope: &ScopeId, prop
         "target": {"artifact_type": "requirement", "artifact_id": "req_overtime"}, "summary": "Adjudicated",
         "consensus": [], "contested_claims": [], "minority_objections": [], "evidence_gaps": [],
         "unsupported_speculation": [], "open_questions": [],
-        "suggested_artifacts": [{"proposal_key": "overtime", "proposal_type": "requirement_candidate", "summary": "Candidate", "origin_participant_slots": ["extractor"]}],
+        "suggested_artifacts": [{"proposal_id": proposal_id, "proposal_key": "overtime", "proposal_type": "requirement_candidate", "summary": "Candidate", "origin_participant_slots": ["extractor"]}],
         "required_human_decisions": []
     })).unwrap();
     crate::jsonl::write_jsonl_atomic(
@@ -421,7 +421,7 @@ fn assertion_is_a_verified_transition_and_lineage_targets_its_identity() {
         "target": {"artifact_type": "requirement", "artifact_id": "req_overtime"}, "summary": "Adjudicated",
         "consensus": [], "contested_claims": [], "minority_objections": [], "evidence_gaps": [],
         "unsupported_speculation": [], "open_questions": [],
-        "suggested_artifacts": [{"proposal_key": "overtime", "proposal_type": "requirement_candidate", "summary": "Candidate", "origin_participant_slots": ["extractor"]}],
+        "suggested_artifacts": [{"proposal_id": "proposal_parent", "proposal_key": "overtime", "proposal_type": "requirement_candidate", "summary": "Candidate", "origin_participant_slots": ["extractor"]}],
         "required_human_decisions": []
     })).unwrap();
     crate::jsonl::write_jsonl_atomic(

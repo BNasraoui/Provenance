@@ -17,6 +17,8 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
             "default",
             "--path-prefix",
             ".",
+            "--human-authority-id",
+            "ben",
         ])
         .assert()
         .success();
@@ -120,7 +122,7 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
             "--evidence-gaps-json",
             r#"[{"question":"Which agreement applies?","needed_evidence_type":"source","blocking_promotion":false}]"#,
             "--suggested-artifacts-json",
-            r#"[{"proposal_key":"req-overtime-traceability","proposal_type":"requirement_candidate","summary":"Clarify source traceability.","origin_participant_slots":["reviewer"]}]"#,
+            r#"[{"proposal_id":"proposal_overtime_traceability","proposal_key":"req-overtime-traceability","proposal_type":"requirement_candidate","summary":"Clarify source traceability.","origin_participant_slots":["reviewer"]}]"#,
             "--required-human-decisions-json",
             r#"[{"decision_key":"decide_agreement_scope","prompt":"Confirm the governing agreement.","blocks_promotion":false}]"#,
             "--format",
@@ -211,8 +213,6 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
             "Human confirmed the source traceability.",
             "--actor-id",
             "ben",
-            "--actor-type",
-            "human",
             "--actor-name",
             "Ben",
             "--canonical-artifact-type",

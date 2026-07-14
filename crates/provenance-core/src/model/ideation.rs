@@ -107,6 +107,15 @@ pub enum IdeationEvidenceType {
     Exploratory,
 }
 
+impl IdeationEvidenceType {
+    pub const fn is_positive(self) -> bool {
+        matches!(
+            self,
+            Self::Source | Self::Artifact | Self::ThreadMessage | Self::DomainKnowledge
+        )
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ContributionStance {
     #[serde(rename = "support")]
@@ -218,7 +227,7 @@ impl ProposalType {
 pub enum PromotionState {
     #[serde(rename = "proposed")]
     Proposed,
-    #[serde(rename = "asserted")]
+    #[serde(rename = "asserted", alias = "swarm_asserted")]
     Asserted,
     #[serde(rename = "accepted")]
     Accepted,
@@ -236,7 +245,7 @@ impl PromotionState {
     pub fn parse(value: &str) -> anyhow::Result<Self> {
         match normalize_enum_value(value).as_str() {
             "proposed" => Ok(Self::Proposed),
-            "asserted" => Ok(Self::Asserted),
+            "asserted" | "swarm_asserted" => Ok(Self::Asserted),
             "accepted" => Ok(Self::Accepted),
             "rejected" => Ok(Self::Rejected),
             "deferred" => Ok(Self::Deferred),
