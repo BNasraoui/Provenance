@@ -3,6 +3,7 @@ mod health;
 mod impact;
 mod materialize;
 mod prime;
+mod stale;
 mod traceability;
 
 pub use gaps::*;
@@ -10,6 +11,7 @@ pub use health::*;
 pub use impact::*;
 pub use materialize::{materialize_empty_state, materialize_state};
 pub use prime::*;
+pub use stale::*;
 pub use traceability::*;
 
 use crate::layout::ProvenanceLayout;

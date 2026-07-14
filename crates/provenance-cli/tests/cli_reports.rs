@@ -168,8 +168,10 @@ fn stale_resolution_ids(repo: &str, filters: &[&str]) -> Vec<String> {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    serde_json::from_slice::<Vec<serde_json::Value>>(&output.stdout)
+    serde_json::from_slice::<serde_json::Value>(&output.stdout).unwrap()["stale_resolutions"]
+        .as_array()
         .unwrap()
+        .clone()
         .into_iter()
         .map(|item| item["resolution_id"].as_str().unwrap().to_string())
         .collect()

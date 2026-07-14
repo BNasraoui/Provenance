@@ -9,6 +9,9 @@ impl ProvenanceLayout {
     pub fn new(root: impl Into<Utf8PathBuf>) -> Self {
         Self { root: root.into() }
     }
+    pub fn repo_root(&self) -> &Utf8Path {
+        &self.root
+    }
     pub fn provenance_dir(&self) -> Utf8PathBuf {
         self.root.join(".provenance")
     }
