@@ -4,12 +4,13 @@ use anyhow::{bail, Context};
 use camino::{Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
-use std::sync::atomic::{AtomicU64, Ordering};
+
+mod legacy;
+mod transaction;
 
 const MANIFEST_NAME: &str = ".provenance-wiki-output.json";
 const GENERATOR: &str = "provenance-wiki";
 const MANIFEST_VERSION: u8 = 1;
-static UNIQUE_ID: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Deserialize, Serialize)]
 struct OwnershipManifest {
@@ -26,13 +27,17 @@ pub(super) fn publish(
     let parent = output_parent(out)?;
     std::fs::create_dir_all(parent)
         .with_context(|| format!("failed to create wiki output parent {parent}"))?;
-    let stage = create_unique_dir(parent, output_name(out)?, "stage")?;
+    let publication = transaction::Publication::begin(out)?;
+    let stage = publication.create_stage()?;
     let result =
-        stage_output(out, &stage, pages, stylesheet).and_then(|()| replace_output(out, &stage));
-    if result.is_err() && stage.exists() {
-        let _ = std::fs::remove_dir_all(&stage);
+        stage_output(out, &stage, pages, stylesheet).and_then(|()| publication.commit(&stage));
+    if let Err(error) = result {
+        if let Err(cleanup_error) = publication.abort(&stage) {
+            bail!("wiki publication failed: {error:#}; cleanup also failed: {cleanup_error:#}");
+        }
+        return Err(error);
     }
-    result
+    Ok(())
 }
 
 fn stage_output(
@@ -44,10 +49,17 @@ fn stage_output(
     if out.exists() {
         copy_tree(out.as_std_path(), stage.as_std_path())?;
     }
-    if let Some(owned) = load_owned_files(out)? {
-        for relative in owned {
-            remove_owned_file(&stage.join(relative))?;
-        }
+    let (owned, manifested) = match load_owned_files(out)? {
+        Ownership::Manifest(files) => (files, true),
+        Ownership::Missing => (legacy::owned_files(stage, pages)?, false),
+        Ownership::UnrecognizedManifest => (Vec::new(), false),
+    };
+    for relative in owned {
+        let path = stage.join(relative);
+        remove_owned_file(&path)?;
+        remove_empty_parents(stage, &path)?;
+    }
+    if manifested {
         remove_owned_file(&stage.join(MANIFEST_NAME))?;
     }
 
@@ -66,19 +78,27 @@ fn stage_output(
     write_manifest(stage, generated)
 }
 
-fn load_owned_files(out: &Utf8Path) -> anyhow::Result<Option<Vec<Utf8PathBuf>>> {
+enum Ownership {
+    Manifest(Vec<Utf8PathBuf>),
+    Missing,
+    UnrecognizedManifest,
+}
+
+fn load_owned_files(out: &Utf8Path) -> anyhow::Result<Ownership> {
     let path = out.join(MANIFEST_NAME);
     let source = match std::fs::read_to_string(&path) {
         Ok(source) => source,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(Ownership::Missing)
+        }
         Err(error) => return Err(error).with_context(|| format!("failed to read {path}")),
     };
     let manifest: OwnershipManifest = match serde_json::from_str(&source) {
         Ok(manifest) => manifest,
-        Err(_) => return Ok(None),
+        Err(_) => return Ok(Ownership::UnrecognizedManifest),
     };
     if manifest.generator != GENERATOR || manifest.version != MANIFEST_VERSION {
-        return Ok(None);
+        return Ok(Ownership::UnrecognizedManifest);
     }
     let mut owned = BTreeSet::new();
     for file in manifest.files {
@@ -88,7 +108,7 @@ fn load_owned_files(out: &Utf8Path) -> anyhow::Result<Option<Vec<Utf8PathBuf>>> 
         }
         owned.insert(relative);
     }
-    Ok(Some(owned.into_iter().collect()))
+    Ok(Ownership::Manifest(owned.into_iter().collect()))
 }
 
 fn is_safe_relative(path: &Utf8Path) -> bool {
@@ -145,6 +165,24 @@ fn remove_owned_file(path: &Utf8Path) -> anyhow::Result<()> {
     }
 }
 
+fn remove_empty_parents(stage: &Utf8Path, file: &Utf8Path) -> anyhow::Result<()> {
+    let mut parent = file.parent();
+    while let Some(directory) = parent.filter(|directory| *directory != stage) {
+        match std::fs::remove_dir(directory) {
+            Ok(()) => parent = directory.parent(),
+            Err(error) if error.kind() == std::io::ErrorKind::DirectoryNotEmpty => break,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                parent = directory.parent();
+            }
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("failed to prune legacy wiki directory {directory}"));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn copy_tree(source: &std::path::Path, destination: &std::path::Path) -> anyhow::Result<()> {
     for entry in std::fs::read_dir(source)
         .with_context(|| format!("failed to read existing output {}", source.display()))?
@@ -176,55 +214,6 @@ fn copy_tree(source: &std::path::Path, destination: &std::path::Path) -> anyhow:
     Ok(())
 }
 
-fn replace_output(out: &Utf8Path, stage: &Utf8Path) -> anyhow::Result<()> {
-    if !out.exists() {
-        return std::fs::rename(stage, out)
-            .with_context(|| format!("failed to publish staged wiki {stage} to {out}"));
-    }
-    let backup = unique_path(output_parent(out)?, output_name(out)?, "backup");
-    replace_output_with(out, stage, &backup, |from, to| std::fs::rename(from, to))?;
-    if let Err(error) = std::fs::remove_dir_all(&backup) {
-        eprintln!("warning: published wiki but failed to remove backup {backup}: {error}");
-    }
-    Ok(())
-}
-
-fn replace_output_with(
-    out: &Utf8Path,
-    stage: &Utf8Path,
-    backup: &Utf8Path,
-    mut rename: impl FnMut(&Utf8Path, &Utf8Path) -> std::io::Result<()>,
-) -> anyhow::Result<()> {
-    rename(out, backup)
-        .with_context(|| format!("failed to move existing wiki {out} to {backup}"))?;
-    if let Err(publish_error) = rename(stage, out) {
-        if let Err(rollback_error) = rename(backup, out) {
-            bail!(
-                "failed to publish staged wiki: {publish_error}; rollback also failed: {rollback_error}; previous output remains at {backup}"
-            );
-        }
-        return Err(publish_error)
-            .with_context(|| format!("failed to publish staged wiki {stage}"));
-    }
-    Ok(())
-}
-
-fn create_unique_dir(parent: &Utf8Path, name: &str, purpose: &str) -> anyhow::Result<Utf8PathBuf> {
-    loop {
-        let path = unique_path(parent, name, purpose);
-        match std::fs::create_dir(&path) {
-            Ok(()) => return Ok(path),
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
-            Err(error) => return Err(error).with_context(|| format!("failed to create {path}")),
-        }
-    }
-}
-
-fn unique_path(parent: &Utf8Path, name: &str, purpose: &str) -> Utf8PathBuf {
-    let id = UNIQUE_ID.fetch_add(1, Ordering::Relaxed);
-    parent.join(format!(".{name}.{purpose}.{}.{id}", std::process::id()))
-}
-
 fn output_parent(out: &Utf8Path) -> anyhow::Result<&Utf8Path> {
     out.parent()
         .filter(|parent| !parent.as_str().is_empty())
@@ -235,44 +224,4 @@ fn output_parent(out: &Utf8Path) -> anyhow::Result<&Utf8Path> {
 fn output_name(out: &Utf8Path) -> anyhow::Result<&str> {
     out.file_name()
         .context("wiki output path must name a directory")
-}
-
-#[cfg(test)]
-mod tests {
-    use camino::Utf8PathBuf;
-
-    #[test]
-    fn failed_replacement_restores_the_previous_output() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
-        let out = root.join("site");
-        let stage = root.join("site.stage");
-        let backup = root.join("site.backup");
-        std::fs::create_dir(&out).unwrap();
-        std::fs::write(out.join("index.html"), "old").unwrap();
-        std::fs::create_dir(&stage).unwrap();
-        std::fs::write(stage.join("index.html"), "new").unwrap();
-        let mut calls = 0;
-
-        let error = super::replace_output_with(&out, &stage, &backup, |from, to| {
-            calls += 1;
-            if calls == 2 {
-                Err(std::io::Error::other("injected publication failure"))
-            } else {
-                std::fs::rename(from, to)
-            }
-        })
-        .unwrap_err();
-
-        assert!(format!("{error:#}").contains("injected publication failure"));
-        assert_eq!(
-            std::fs::read_to_string(out.join("index.html")).unwrap(),
-            "old"
-        );
-        assert_eq!(
-            std::fs::read_to_string(stage.join("index.html")).unwrap(),
-            "new"
-        );
-        assert!(!backup.exists());
-    }
 }

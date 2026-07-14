@@ -1091,6 +1091,8 @@ dependencies = [
  "axum",
  "camino",
  "clap",
+ "fs2",
+ "getrandom 0.3.4",
  "insta",
  "predicates",
  "provenance-core",
