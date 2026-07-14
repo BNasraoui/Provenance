@@ -1,4 +1,4 @@
-use crate::cli::DocsCommand;
+use crate::cli::workspace::DocsCommand;
 
 pub(super) async fn handle(command: DocsCommand) -> anyhow::Result<()> {
     match command {

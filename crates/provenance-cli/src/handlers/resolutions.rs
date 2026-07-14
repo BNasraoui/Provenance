@@ -1,5 +1,5 @@
 use super::common::resolution_inputs;
-use crate::cli::ResolutionsCommand;
+use crate::cli::policy::ResolutionsCommand;
 use crate::output;
 use provenance_core::{ResolutionStatus, ScopeId, StableId};
 use provenance_store::{

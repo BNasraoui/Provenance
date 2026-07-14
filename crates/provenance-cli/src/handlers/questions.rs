@@ -1,5 +1,5 @@
 use super::common::{parse_json_arg, warn_if_skills_missing};
-use crate::cli::QuestionsCommand;
+use crate::cli::shaping::QuestionsCommand;
 use crate::output;
 use provenance_core::{ArtifactLink, QuestionStatus, ResolutionMethod, ScopeId, StableId};
 use provenance_store::{

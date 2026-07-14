@@ -1,4 +1,4 @@
-use crate::cli::RulesCommand;
+use crate::cli::policy::RulesCommand;
 use crate::output;
 use provenance_core::{RuleModality, RuleSeverity, RuleStatus, RuleType, ScopeId, StableId};
 use provenance_store::{
