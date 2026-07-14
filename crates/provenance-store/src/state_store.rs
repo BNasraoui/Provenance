@@ -227,6 +227,7 @@ pub struct CreateProposalCardInput {
     pub confidence: Option<f64>,
     pub traceability: ProposalTraceability,
     pub promotion_state: PromotionState,
+    pub builds_on: Vec<StableId>,
     pub duplicate_of: Option<StableId>,
     pub superseded_by: Option<StableId>,
 }

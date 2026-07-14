@@ -1,7 +1,9 @@
 use crate::cache::{find_gaps, GapItem};
 use crate::layout::ProvenanceLayout;
 use crate::state_store::StateStore;
-use provenance_core::{Edge, EdgeType, Message, Requirement, Rule, Source, Thread};
+use provenance_core::{
+    Edge, EdgeType, Message, PromotionState, ProposalCard, Requirement, Rule, Source, Thread,
+};
 use std::collections::BTreeSet;
 use std::fmt::Write;
 
@@ -22,6 +24,7 @@ pub struct PrimeThreadView {
 pub struct PrimeContextView {
     pub scope_id: String,
     pub rules: Vec<Rule>,
+    pub provisional_proposals: Vec<ProposalCard>,
     pub gaps: Vec<GapItem>,
     pub threads: Vec<PrimeThreadView>,
 }
@@ -50,9 +53,20 @@ pub fn prime_context(
     } else {
         Vec::new()
     };
+    let provisional_proposals = store
+        .list_proposal_cards(scope)?
+        .into_iter()
+        .filter(|proposal| {
+            matches!(
+                proposal.promotion_state,
+                PromotionState::Proposed | PromotionState::Asserted
+            )
+        })
+        .collect();
     Ok(PrimeContextView {
         scope_id: scope.as_str().to_string(),
         rules: store.list_rules(scope)?,
+        provisional_proposals,
         gaps: find_gaps(layout, scope)?,
         threads,
     })
@@ -65,6 +79,34 @@ pub fn render_prime_markdown(view: &PrimeContextView) -> String {
     );
     for rule in &view.rules {
         let _ = writeln!(out, "- {} ({})", rule.id.as_str(), rule.rule_code);
+    }
+    out.push_str("\n## Provisional proposals\n");
+    if view.provisional_proposals.is_empty() {
+        out.push_str("- none\n");
+    }
+    for proposal in &view.provisional_proposals {
+        let status = match proposal.promotion_state {
+            PromotionState::Asserted => "asserted; not human-ratified",
+            PromotionState::Proposed => "proposed; not asserted",
+            _ => unreachable!("prime filters final proposal states"),
+        };
+        let _ = writeln!(
+            out,
+            "- {} [{}]: {} — {}",
+            proposal.id.as_str(),
+            status,
+            proposal.title,
+            proposal.summary
+        );
+        if !proposal.builds_on.is_empty() {
+            let lineage = proposal
+                .builds_on
+                .iter()
+                .map(provenance_core::StableId::as_str)
+                .collect::<Vec<_>>()
+                .join(", ");
+            let _ = writeln!(out, "  - builds on provisionally: {lineage}");
+        }
     }
     out.push_str("\n## Gaps\n");
     if view.gaps.is_empty() {

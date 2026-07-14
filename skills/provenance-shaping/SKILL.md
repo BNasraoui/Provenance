@@ -16,8 +16,9 @@ graph before you move on. The graph holds state between turns, not the conversat
 1. **Land every decision as it resolves.** Never carry a resolved-but-unrecorded decision
    in conversation state.
 2. **Do not outrun context.** Stop before the map is too large to hand off accurately.
-3. **Do not proceed past unratified decisions.** If the human has not accepted the
-   position, it is a proposal, open question, or blocked-on-human fork, not a decision.
+3. **Do not turn assertions into unratified behavior.** An `asserted` proposal is durable
+   provisional knowledge: consult it and build another proposal on it with `--builds-on`,
+   but do not settle conflicts, enforce rules, or claim compliance until a human accepts it.
 4. **Leave the map consistent at handoff.** Claims, fog, questions, and frontier must tell
    the next session what to do without reconstructing your chat.
 
@@ -161,6 +162,11 @@ commands. The shaping-focused subset of the computed graph frontier includes:
 
 Proposals are not part of the computed graph frontier. List them separately and treat cards
 whose `promotion_state` is `proposed` as awaiting human disposal.
+
+`prime` labels asserted proposals as not human-ratified. They need not be disposed merely
+to make a handoff complete; an unrefuted assertion is a valid resting state. A behavior-
+changing proposal still needs a human `promotion-decisions create --decision accepted`
+before it becomes canonical or enforceable.
 
 Do not hand-wire a private frontier in chat. If the graph says a different thing than your
 notes, fix the graph or trust the graph.

@@ -77,6 +77,20 @@ fn write_merge_output_with_unknown_key(root: &std::path::Path) {
     .unwrap();
 }
 
+fn write_refuted_assertion(root: &std::path::Path) {
+    write_run_dir(root, "Publishing is guarded by worker assignment.");
+    let merge_path = root.join("merge").join("merged.json");
+    let merge_json = std::fs::read_to_string(&merge_path).unwrap();
+    std::fs::write(
+        &merge_path,
+        merge_json.replace(
+            r#""promotion_state": "proposed""#,
+            r#""promotion_state": "asserted""#,
+        ),
+    )
+    .unwrap();
+}
+
 #[test]
 fn swarm_backtrace_land_rejects_bad_proposal_confidence_before_writing() {
     let dir = tempfile::tempdir().unwrap();
@@ -177,4 +191,34 @@ fn swarm_backtrace_land_reports_nested_stable_id_errors() {
         .failure()
         .stderr(predicates::str::contains("stable id"))
         .stderr(predicates::str::contains("evidence/auth"));
+}
+
+#[test]
+fn swarm_backtrace_land_rejects_assertions_linked_to_contested_claims() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo").to_string_lossy().to_string();
+    let run_dir = dir.path().join("run");
+    init_repo(&repo);
+    create_source(&repo);
+    write_refuted_assertion(&run_dir);
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "swarm-backtrace",
+            "land",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--run-dir",
+            &run_dir.to_string_lossy(),
+            "--format",
+            "json",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "asserted proposal prop_req_publish_requires_worker is linked to contested claim claim_auth_guard",
+        ));
 }

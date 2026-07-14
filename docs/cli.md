@@ -33,6 +33,13 @@ canonical record schemas, and `provenance validate contribution|synthesis-packet
 --input artifact.json --format json` validates full records, including nested stable IDs.
 `contributions create`, `synthesis-packets create`, and `proposals create` keep duplicate
 protection by default; pass `--replace` to intentionally upsert the same stable ID.
+Use `proposals create --promotion-state asserted` only for an unrefuted adversarial result;
+`--builds-on <proposal-id>` records provisional derivation. Asserted proposals are durable
+and cannot be replaced. Consult them with
+`proposals list --promotion-state asserted --format json`; `prime` renders both raw
+proposals and assertions, explicitly marking assertions as not human-ratified. Accepting a
+requirement, resolution, or rule candidate requires a human promotion decision rather than
+direct creation in the accepted state.
 Swarm backtrace runs can land durable run outputs with
 `provenance swarm-backtrace land --scope <scope> --run-dir <run-dir> --format json`.
 

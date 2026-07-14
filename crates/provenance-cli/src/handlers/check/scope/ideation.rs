@@ -97,6 +97,17 @@ impl Records {
                     source_id,
                 );
             }
+            for ancestor_id in &proposal.builds_on {
+                check_scoped_reference(
+                    index,
+                    dangling,
+                    scope_id,
+                    &owner,
+                    "builds_on",
+                    "proposal",
+                    ancestor_id,
+                );
+            }
             if let Some(duplicate_of) = &proposal.duplicate_of {
                 check_scoped_reference(
                     index,

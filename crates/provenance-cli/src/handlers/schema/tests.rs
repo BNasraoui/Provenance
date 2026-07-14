@@ -100,6 +100,7 @@ fn assert_proposal_type_array_is_exhaustive(value: ProposalType) {
 fn assert_promotion_state_array_is_exhaustive(value: PromotionState) {
     match value {
         PromotionState::Proposed
+        | PromotionState::Asserted
         | PromotionState::Accepted
         | PromotionState::Rejected
         | PromotionState::Deferred

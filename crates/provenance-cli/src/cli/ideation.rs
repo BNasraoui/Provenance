@@ -178,6 +178,9 @@ pub enum ProposalsCommand {
         supporting_claim_id: Vec<String>,
         #[arg(long, default_value = "proposed")]
         promotion_state: String,
+        /// Proposal IDs whose provisional knowledge this candidate builds on.
+        #[arg(long)]
+        builds_on: Vec<String>,
         #[arg(long)]
         duplicate_of: Option<String>,
         #[arg(long)]
@@ -192,6 +195,9 @@ pub enum ProposalsCommand {
         repo: Utf8PathBuf,
         #[arg(long)]
         scope: String,
+        /// Restrict consultation to one promotion state.
+        #[arg(long)]
+        promotion_state: Option<String>,
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },

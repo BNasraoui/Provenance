@@ -1,3 +1,5 @@
+#[path = "cli_ideation_outputs/asserted_proposals.rs"]
+mod asserted_proposals;
 #[path = "cli_ideation_outputs/ideation_lifecycle.rs"]
 mod ideation_lifecycle;
 #[path = "cli_ideation_outputs/payload_validation.rs"]

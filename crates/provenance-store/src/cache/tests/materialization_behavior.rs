@@ -159,7 +159,7 @@ async fn materialize_state_caches_commit_pin_and_confidence_scores() {
 "#).unwrap();
     let proposals_path = crate::shards::proposal_cards_path(&layout, &scope);
     std::fs::create_dir_all(proposals_path.parent().unwrap()).unwrap();
-    std::fs::write(&proposals_path, r#"{"schema_version":1,"scope_id":"default","id":"proposal_overtime_traceability","proposal_key":"req-overtime-traceability","proposal_type":"requirement_candidate","title":"Clarify overtime traceability","summary":"Add source-backed threshold language.","confidence":0.83,"traceability":{"target":{"artifact_type":"requirement","artifact_id":"req_overtime"},"source_ids":["source_codebase"],"evidence_references":[],"supporting_claim_ids":["claim_overtime_threshold"]},"promotion_state":"proposed"}
+    std::fs::write(&proposals_path, r#"{"schema_version":1,"scope_id":"default","id":"proposal_overtime_traceability","proposal_key":"req-overtime-traceability","proposal_type":"requirement_candidate","title":"Clarify overtime traceability","summary":"Add source-backed threshold language.","confidence":0.83,"traceability":{"target":{"artifact_type":"requirement","artifact_id":"req_overtime"},"source_ids":["source_codebase"],"evidence_references":[],"supporting_claim_ids":["claim_overtime_threshold"]},"promotion_state":"asserted","builds_on":["proposal_overtime_initial"]}
 "#).unwrap();
     materialize_state(&layout).await.unwrap();
     let pool = open_cache(&layout).await.unwrap();
@@ -175,6 +175,11 @@ async fn materialize_state_caches_commit_pin_and_confidence_scores() {
             .fetch_one(&pool)
             .await
             .unwrap();
+    let builds_on: String = sqlx::query_scalar("SELECT builds_on FROM proposal_cards WHERE id = ?")
+        .bind("proposal_overtime_traceability")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     let payload: String = sqlx::query_scalar("SELECT payload FROM contributions WHERE id = ?")
         .bind("contrib_reviewer_001")
         .fetch_one(&pool)
@@ -185,5 +190,6 @@ async fn materialize_state_caches_commit_pin_and_confidence_scores() {
         Some("5e1f2a9c4b6d8e0f1234567890abcdef12345678")
     );
     assert_eq!(confidence, Some(0.83));
+    assert_eq!(builds_on, r#"["proposal_overtime_initial"]"#);
     assert!(payload.contains(r#""confidence":0.87"#));
 }

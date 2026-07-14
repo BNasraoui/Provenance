@@ -252,3 +252,52 @@ fn proposal_and_promotion_decision_accept_convex_id_aliases() {
     );
     assert_eq!(decision.actor.id, "ben");
 }
+
+#[test]
+fn swarm_asserted_proposal_round_trips_with_provisional_lineage() {
+    let value = serde_json::json!({
+        "schema_version": 1,
+        "scope_id": "default",
+        "id": "proposal_overtime_v2",
+        "proposal_key": "overtime-v2",
+        "proposal_type": "requirement_candidate",
+        "title": "Clarify overtime",
+        "summary": "Builds on the evidence-backed first pass.",
+        "traceability": {
+            "target": {"artifact_type": "requirement", "artifact_id": "req_overtime"},
+            "source_ids": [],
+            "evidence_references": [],
+            "supporting_claim_ids": []
+        },
+        "promotion_state": "asserted",
+        "builds_on": ["proposal_overtime_v1"]
+    });
+
+    let proposal: ProposalCard = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(proposal.promotion_state, PromotionState::Asserted);
+    assert_eq!(proposal.builds_on[0].as_str(), "proposal_overtime_v1");
+    assert_eq!(serde_json::to_value(proposal).unwrap(), value);
+}
+
+#[test]
+fn legacy_proposal_without_lineage_remains_compatible() {
+    let proposal: ProposalCard = serde_json::from_value(serde_json::json!({
+        "schema_version": 1,
+        "scope_id": "default",
+        "id": "proposal_legacy",
+        "proposal_key": "legacy",
+        "proposal_type": "question",
+        "title": "Legacy proposal",
+        "summary": "Predates provisional lineage.",
+        "traceability": {
+            "target": {"artifact_type": "requirement", "artifact_id": "req_overtime"},
+            "source_ids": [],
+            "evidence_references": [],
+            "supporting_claim_ids": []
+        },
+        "promotion_state": "proposed"
+    }))
+    .unwrap();
+
+    assert!(proposal.builds_on.is_empty());
+}

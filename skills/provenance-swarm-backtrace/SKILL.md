@@ -1,6 +1,6 @@
 ---
 name: provenance-swarm-backtrace
-description: Reverse-engineer candidate requirements from an existing codebase with a multi-agent swarm. Use when the user wants to extract, mine, backtrace, or reverse-engineer requirements or rules from existing code, bootstrap a Provenance graph from a legacy system, or asks "what must be true for this code to be correct". Lands everything as proposals (promotion_state=proposed) against a commit-pinned source — never as active requirements.
+description: Reverse-engineer candidate requirements from an existing codebase with a multi-agent swarm. Use when the user wants to extract, mine, backtrace, or reverse-engineer requirements or rules from existing code, bootstrap a Provenance graph from a legacy system, or asks "what must be true for this code to be correct". Lands unrefuted results as asserted proposals and contested results as proposed against a commit-pinned source — never as active requirements.
 ---
 
 # Swarm backtrace
@@ -9,12 +9,14 @@ Charting in reverse (docs/shaping.md, "Relationship to the swarm backtrace" — 
 where this file diverges, that document wins). Agents partition an existing codebase,
 extract candidate requirements — *what must be true for this code to be correct* — dedup
 keeping **all** evidence sites, challenge every candidate, and land everything as
-`proposed` proposals with the codebase (pinned to a commit) as the source.
+proposals with the codebase (pinned to a commit) as the source. Unrefuted results rest as
+`asserted`; contested results remain `proposed`.
 
 ## Ground rules
 
-1. **Proposals only.** Every candidate lands with `promotion_state=proposed` — never as
-   an active requirement, never pre-accepted. Extracted claims describe *current
+1. **Proposals only.** An unrefuted candidate lands with `promotion_state=asserted`; a
+   candidate linked to a contested claim remains `proposed`. Neither is an active
+   requirement or pre-accepted. Extracted claims describe *current
    behavior*; the code may be wrong — that's half the point. The human confirms
    "intentional" or discovers surprises via the shaping loop, question by question.
 2. **Pin the commit.** All evidence is meaningless against a moving target. Record the
@@ -195,7 +197,11 @@ Proposals:
   in `summary`;
 - keep ALL merged evidence sites in `traceability.evidence_references`;
 - keep supporting claim links in `traceability.supporting_claim_ids`;
-- every candidate remains `promotion_state: "proposed"` unless a human later disposes it.
+- use `promotion_state: "asserted"` only when none of the proposal's
+  `supporting_claim_ids` is contested; the landing command rejects a false assertion;
+- contested candidates remain `promotion_state: "proposed"`;
+- use `builds_on` when a later provisional proposal incorporates an earlier assertion;
+  neither assertion nor lineage is human ratification.
 
 **Completeness:** reconcile against the stage-1 partition manifest. Any partition with
 no extractor output — agent failed, context blown, code unreadable — is **logged, never
@@ -206,7 +212,7 @@ but silently dropped a partition is worse than one that says where it didn't loo
 ### 6. Hand off to shaping
 
 The backtrace's output *feeds* the shaping loop; it does not finish anything. Tell the
-human what landed (`provenance proposals list --scope <scope>`), what's contested, and
+human what landed (`provenance proposals list --scope <scope> --promotion-state asserted`), what's contested, and
 what surprised the refuters — then the shaping loop (docs/shaping.md, "Invocation")
 takes over: `provenance prime`, and the human disposes of proposals question by
 question via `promotion-decisions create`. Do not make promotion decisions yourself.

@@ -36,6 +36,8 @@ pub struct ProposalCard {
     pub traceability: ProposalTraceability,
     #[serde(alias = "promotionState")]
     pub promotion_state: PromotionState,
+    #[serde(default, alias = "buildsOn", skip_serializing_if = "Vec::is_empty")]
+    pub builds_on: Vec<StableId>,
     #[serde(
         default,
         alias = "duplicateOfProposalId",

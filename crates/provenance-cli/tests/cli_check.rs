@@ -142,6 +142,22 @@ fn check_rejects_dangling_promotion_decision_proposal_id() {
 }
 
 #[test]
+fn check_rejects_dangling_provisional_lineage() {
+    let dir = tempfile::tempdir().unwrap();
+    init(dir.path());
+    let state = dir.path().join(".provenance/state");
+    write_jsonl(
+        &state.join("scopes/default/ideation/proposal_cards.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","id":"proposal_child","proposal_key":"child","proposal_type":"question","title":"Child","summary":"Derived proposal","traceability":{"target":{"artifact_type":"requirement","artifact_id":"req_missing"},"source_ids":[],"evidence_references":[],"supporting_claim_ids":[]},"promotion_state":"proposed","builds_on":["proposal_missing"]}"#,
+    );
+
+    provenance(dir.path())
+        .failure()
+        .stderr(contains("proposal proposal_child"))
+        .stderr(contains("builds_on proposal proposal_missing"));
+}
+
+#[test]
 fn check_preserves_edge_shard_parse_context() {
     let dir = tempfile::tempdir().unwrap();
     init(dir.path());

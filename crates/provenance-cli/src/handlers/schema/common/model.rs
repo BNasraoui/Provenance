@@ -64,8 +64,9 @@ pub(in crate::handlers::schema) const PROPOSAL_TYPES: [ProposalType; 6] = [
     ProposalType::NoAction,
 ];
 
-pub(in crate::handlers::schema) const PROMOTION_STATES: [PromotionState; 6] = [
+pub(in crate::handlers::schema) const PROMOTION_STATES: [PromotionState; 7] = [
     PromotionState::Proposed,
+    PromotionState::Asserted,
     PromotionState::Accepted,
     PromotionState::Rejected,
     PromotionState::Deferred,
