@@ -1,6 +1,6 @@
 use super::WIKI_CSS_ROUTE;
 use crate::wiki::model::{LineageEntry, PageKind};
-use crate::wiki::theme::{ICON_DEFS, THEME_SCRIPT};
+use crate::wiki::theme::{ICON_DEFS, SEARCH_SCRIPT, THEME_SCRIPT};
 use std::fmt::Write as _;
 
 use super::html::{escape_attr, escape_html, icon_svg};
@@ -13,6 +13,45 @@ pub(in crate::wiki::render) fn page_shell(
     breadcrumb: &str,
     container: &str,
     field_notes: &str,
+) -> String {
+    page_shell_with_script(
+        scope,
+        kind_class,
+        title,
+        breadcrumb,
+        container,
+        field_notes,
+        "",
+    )
+}
+
+pub(in crate::wiki::render) fn search_page_shell(
+    scope: &str,
+    kind_class: &str,
+    title: &str,
+    breadcrumb: &str,
+    container: &str,
+) -> String {
+    page_shell_with_script(
+        scope,
+        kind_class,
+        title,
+        breadcrumb,
+        container,
+        "",
+        SEARCH_SCRIPT,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn page_shell_with_script(
+    scope: &str,
+    kind_class: &str,
+    title: &str,
+    breadcrumb: &str,
+    container: &str,
+    field_notes: &str,
+    extra_script: &str,
 ) -> String {
     let mut html = String::new();
     html.push_str("<!doctype html>\n<html lang=\"en\" data-theme=\"statesman\">\n<head>\n");
@@ -38,6 +77,11 @@ pub(in crate::wiki::render) fn page_shell(
     writeln!(html, "<nav aria-label=\"Breadcrumb\">{breadcrumb}</nav>")
         .expect("writing to a String should not fail");
     html.push_str(
+        "<nav class=\"global-nav\" aria-label=\"Wiki\">\
+         <a href=\"/\">Atlas</a><a href=\"/topics/\">Topics</a>\
+         <a href=\"/search/\">Search</a></nav>\n",
+    );
+    html.push_str(
         "<label class=\"theme-select\">Theme\n<select id=\"theme-select\">\n\
          <option value=\"statesman\" selected>Statesman</option>\n\
          <option value=\"piano\">Piano</option>\n\
@@ -57,6 +101,7 @@ pub(in crate::wiki::render) fn page_shell(
     html.push_str(field_notes);
     html.push_str("<script>");
     html.push_str(THEME_SCRIPT);
+    html.push_str(extra_script);
     html.push_str("</script>\n</body>\n</html>\n");
     html
 }

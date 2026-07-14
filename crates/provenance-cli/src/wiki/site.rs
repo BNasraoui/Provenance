@@ -9,7 +9,7 @@
 use crate::gitignore;
 use crate::output::{self, OutputFormat};
 use crate::wiki::assemble;
-use crate::wiki::render::{self, RenderedPage, WIKI_CSS_ROUTE};
+use crate::wiki::render::{self, RenderedPage, SEARCH_INDEX_ROUTE, WIKI_CSS_ROUTE};
 use crate::wiki::theme;
 use anyhow::Context;
 use axum::{
@@ -33,6 +33,7 @@ const WIKI_GITIGNORE_PATTERN: &str = ".provenance/wiki/";
 struct WikiSite {
     scope: String,
     page_by_route: BTreeMap<String, RenderedPage>,
+    search_index: String,
 }
 
 #[derive(Serialize)]
@@ -74,6 +75,7 @@ pub fn build(
     };
     let repo_hint = repo.clone();
     let corpus = assemble::load_corpus(repo, scope)?;
+    let search_index = serialize_search_index(&corpus.search)?;
     let pages = render::render_corpus(&corpus);
 
     // Each page is written independently: a page-specific failure (a
@@ -97,6 +99,9 @@ pub fn build(
         .with_context(|| format!("failed to create wiki output directory {stylesheet_dir}"))?;
     std::fs::write(&stylesheet_path, theme::WIKI_CSS)
         .with_context(|| format!("failed to write wiki stylesheet {stylesheet_path}"))?;
+    let search_index_path = out.join(SEARCH_INDEX_ROUTE.trim_start_matches('/'));
+    std::fs::write(&search_index_path, search_index)
+        .with_context(|| format!("failed to write wiki search index {search_index_path}"))?;
 
     let page_count = pages.len();
     let failure_count = failures.len();
@@ -188,6 +193,7 @@ pub async fn serve(
 impl WikiSite {
     fn load(repo: Utf8PathBuf, scope: String) -> anyhow::Result<Self> {
         let corpus = assemble::load_corpus(repo, scope)?;
+        let search_index = serialize_search_index(&corpus.search)?;
         let page_by_route = render::render_corpus(&corpus)
             .into_iter()
             .map(|page| (page.route.clone(), page))
@@ -195,6 +201,7 @@ impl WikiSite {
         Ok(Self {
             scope: corpus.scope,
             page_by_route,
+            search_index,
         })
     }
 
@@ -206,6 +213,7 @@ impl WikiSite {
 fn router(site: WikiSite) -> Router {
     Router::new()
         .route(WIKI_CSS_ROUTE, get(stylesheet))
+        .route(SEARCH_INDEX_ROUTE, get(search_index))
         .fallback(get(render_wiki_page))
         .with_state(Arc::new(site))
 }
@@ -215,6 +223,17 @@ async fn stylesheet() -> impl IntoResponse {
         [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
         theme::WIKI_CSS,
     )
+}
+
+async fn search_index(State(site): State<Arc<WikiSite>>) -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "application/json; charset=utf-8")],
+        site.search_index.clone(),
+    )
+}
+
+fn serialize_search_index(page: &crate::wiki::model::SearchIndexPage) -> anyhow::Result<String> {
+    serde_json::to_string_pretty(&page.entries).context("failed to serialize wiki search index")
 }
 
 async fn render_wiki_page(State(site): State<Arc<WikiSite>>, uri: Uri) -> impl IntoResponse {

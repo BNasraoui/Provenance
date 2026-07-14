@@ -18,12 +18,14 @@ use crate::wiki::model::{PageId, WikiCorpus};
 
 pub use pages::{
     render_index, render_not_found, render_requirement, render_resolution, render_rule,
-    render_source,
+    render_search, render_source, render_topics,
 };
 
 /// Route the vendored stylesheet is referenced under; the server (or static
 /// build) must expose [`crate::wiki::theme::WIKI_CSS`] here.
 pub const WIKI_CSS_ROUTE: &str = "/assets/provenance-wiki.css";
+/// Machine-readable copy of the requirement/rule search corpus.
+pub const SEARCH_INDEX_ROUTE: &str = "/assets/search-index.json";
 
 /// One rendered page: its canonical route, title, and full HTML document.
 #[derive(Debug, Clone)]
@@ -42,6 +44,16 @@ pub fn render_corpus(corpus: &WikiCorpus) -> Vec<RenderedPage> {
         &corpus.index.title,
         render_index(scope, &corpus.index),
     )];
+    pages.push(rendered(
+        &corpus.topics.id,
+        &corpus.topics.title,
+        render_topics(scope, &corpus.topics),
+    ));
+    pages.push(rendered(
+        &corpus.search.id,
+        &corpus.search.title,
+        render_search(scope, &corpus.search),
+    ));
     for page in &corpus.requirements {
         pages.push(rendered(
             &page.id,
@@ -77,6 +89,8 @@ fn rendered(id: &PageId, title: &str, html: String) -> RenderedPage {
 mod tests {
     #[path = "corpus.rs"]
     mod corpus;
+    #[path = "discovery.rs"]
+    mod discovery;
     #[path = "fixtures.rs"]
     mod fixtures;
     #[path = "formatting.rs"]
