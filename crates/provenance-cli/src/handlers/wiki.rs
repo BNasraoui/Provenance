@@ -1,4 +1,4 @@
-use crate::cli::WikiCommand;
+use crate::cli::workspace::WikiCommand;
 
 pub(super) async fn handle(command: WikiCommand) -> anyhow::Result<()> {
     match command {
