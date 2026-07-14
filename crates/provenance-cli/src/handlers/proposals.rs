@@ -27,6 +27,7 @@ pub(super) fn handle(command: ProposalsCommand, quiet: bool) -> anyhow::Result<(
             evidence_json,
             supporting_claim_id,
             promotion_state,
+            builds_on,
             duplicate_of,
             superseded_by,
             replace,
@@ -52,6 +53,7 @@ pub(super) fn handle(command: ProposalsCommand, quiet: bool) -> anyhow::Result<(
                     supporting_claim_ids: stable_ids(supporting_claim_id)?,
                 },
                 promotion_state: PromotionState::parse(&promotion_state)?,
+                builds_on: stable_ids(builds_on)?,
                 duplicate_of: duplicate_of.map(StableId::new).transpose()?,
                 superseded_by: superseded_by.map(StableId::new).transpose()?,
             };
@@ -65,11 +67,16 @@ pub(super) fn handle(command: ProposalsCommand, quiet: bool) -> anyhow::Result<(
         ProposalsCommand::List {
             repo,
             scope,
+            promotion_state,
             format,
         } => {
             warn_if_skills_missing(&repo, quiet)?;
-            let proposals = StateStore::new(ProvenanceLayout::new(repo))
+            let mut proposals = StateStore::new(ProvenanceLayout::new(repo))
                 .list_proposal_cards(&ScopeId::new(scope)?)?;
+            if let Some(state) = promotion_state {
+                let state = PromotionState::parse(&state)?;
+                proposals.retain(|proposal| proposal.promotion_state == state);
+            }
             output::print(format, &proposals)?;
         }
     }

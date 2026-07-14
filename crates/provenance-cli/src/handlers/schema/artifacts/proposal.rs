@@ -28,6 +28,7 @@ pub(in crate::handlers::schema) fn schema() -> Value {
             "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
             "traceability": {"$ref": "#/$defs/proposalTraceability"},
             "promotion_state": {"enum": enum_names(&PROMOTION_STATES)},
+            "builds_on": {"type": "array", "items": {"$ref": "#/$defs/stableId"}, "uniqueItems": true},
             "duplicate_of": {"$ref": "#/$defs/stableId"},
             "superseded_by": {"$ref": "#/$defs/stableId"}
         }

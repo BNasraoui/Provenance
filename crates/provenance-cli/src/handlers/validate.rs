@@ -98,6 +98,7 @@ pub(super) fn validate_proposal_card_record(proposal: &ProposalCard) -> anyhow::
             );
         }
         PromotionState::Proposed
+        | PromotionState::Asserted
         | PromotionState::Accepted
         | PromotionState::Rejected
         | PromotionState::Deferred => {}

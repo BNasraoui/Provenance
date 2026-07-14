@@ -7,7 +7,9 @@ use crate::{
 };
 use anyhow::Context;
 use camino::{Utf8Path, Utf8PathBuf};
-use provenance_core::{Contribution, ProposalCard, ScopeId, StableId, SynthesisPacket};
+use provenance_core::{
+    Contribution, PromotionState, ProposalCard, ScopeId, StableId, SynthesisPacket,
+};
 use provenance_store::{
     layout::ProvenanceLayout,
     state_store::{
@@ -93,6 +95,7 @@ fn land(
         validate_proposal_card_record(proposal)?;
         ensure_scope(&scope_id, &proposal.scope_id, "proposal", &proposal.id)?;
     }
+    ensure_assertions_are_unrefuted(&synthesis_packets, &proposals)?;
 
     let contribution_count = contributions.len();
     let synthesis_count = synthesis_packets.len();
@@ -142,6 +145,31 @@ fn land(
             replace,
         },
     )
+}
+
+fn ensure_assertions_are_unrefuted(
+    synthesis_packets: &[SynthesisPacket],
+    proposals: &[ProposalCard],
+) -> anyhow::Result<()> {
+    let contested = synthesis_packets
+        .iter()
+        .flat_map(|packet| &packet.contested_claims)
+        .map(|claim| claim.claim_id.as_str())
+        .collect::<BTreeSet<_>>();
+    for proposal in proposals
+        .iter()
+        .filter(|proposal| proposal.promotion_state == PromotionState::Asserted)
+    {
+        for claim_id in &proposal.traceability.supporting_claim_ids {
+            anyhow::ensure!(
+                !contested.contains(claim_id.as_str()),
+                "asserted proposal {} is linked to contested claim {}",
+                proposal.id.as_str(),
+                claim_id.as_str()
+            );
+        }
+    }
+    Ok(())
 }
 
 fn read_contributions(run_dir: &Utf8Path) -> anyhow::Result<Vec<Contribution>> {
@@ -406,6 +434,7 @@ fn proposal_input(scope_id: &ScopeId, proposal: ProposalCard) -> CreateProposalC
         confidence,
         traceability,
         promotion_state,
+        builds_on,
         duplicate_of,
         superseded_by,
         ..
@@ -420,6 +449,7 @@ fn proposal_input(scope_id: &ScopeId, proposal: ProposalCard) -> CreateProposalC
         confidence,
         traceability,
         promotion_state,
+        builds_on,
         duplicate_of,
         superseded_by,
     }

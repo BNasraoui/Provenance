@@ -175,6 +175,7 @@ impl StateStore {
             confidence,
             traceability,
             promotion_state,
+            builds_on,
             duplicate_of,
             superseded_by,
         } = input;
@@ -192,13 +193,39 @@ impl StateStore {
                 );
             }
             PromotionState::Proposed
+            | PromotionState::Asserted
             | PromotionState::Accepted
             | PromotionState::Rejected
             | PromotionState::Deferred => {}
         }
+        anyhow::ensure!(
+            !(promotion_state == PromotionState::Accepted
+                && behavior_changing_proposal(proposal_type)),
+            "accepting a behavior-changing proposal requires a human promotion decision"
+        );
         let confidence = validate_optional_confidence_score(confidence)?;
         let path = shards::proposal_cards_path(&self.layout, &scope_id);
         self.mutate_jsonl_records(&path, |records: &mut Vec<ProposalCard>| {
+            let mut seen_ancestors = std::collections::BTreeSet::new();
+            for ancestor in &builds_on {
+                anyhow::ensure!(ancestor != &id, "proposal cannot build on itself");
+                anyhow::ensure!(
+                    seen_ancestors.insert(ancestor.as_str()),
+                    "builds_on proposal {} is repeated",
+                    ancestor.as_str()
+                );
+                let base = records.iter().find(|record| &record.id == ancestor);
+                anyhow::ensure!(
+                    base.is_some(),
+                    "builds_on proposal {} does not exist",
+                    ancestor.as_str()
+                );
+                anyhow::ensure!(
+                    base.is_some_and(|record| record.promotion_state == PromotionState::Asserted),
+                    "builds_on proposal {} must be asserted",
+                    ancestor.as_str()
+                );
+            }
             let proposal = ProposalCard {
                 schema_version: SchemaVersion(1),
                 scope_id: scope_id.clone(),
@@ -210,6 +237,7 @@ impl StateStore {
                 confidence,
                 traceability,
                 promotion_state,
+                builds_on,
                 duplicate_of,
                 superseded_by,
             };
@@ -253,6 +281,17 @@ impl StateStore {
                 .iter()
                 .any(|proposal| proposal.id == proposal_id),
             "proposal does not exist"
+        );
+        let proposal = self
+            .list_proposal_cards(&scope_id)?
+            .into_iter()
+            .find(|proposal| proposal.id == proposal_id)
+            .expect("proposal existence checked");
+        anyhow::ensure!(
+            !(decision == provenance_core::PromotionDecision::Accepted
+                && behavior_changing_proposal(proposal.proposal_type)
+                && promotion_decision.actor.identity_type != provenance_core::IdentityType::Human),
+            "behavior-changing acceptance requires a human actor"
         );
         let decisions_path = shards::promotion_decisions_path(&self.layout, &scope_id);
         self.mutate_jsonl_records(
@@ -330,7 +369,7 @@ impl StateStore {
             .unwrap_or_else(|_| format!("{:?}", existing.promotion_state));
         if decisions.is_empty() {
             anyhow::bail!(
-                "proposal {} has a human disposition and cannot be replaced; promotion_state is {state}",
+                "proposal {} has a human disposition or durable disposition and cannot be replaced; promotion_state is {state}",
                 existing.id.as_str()
             );
         }
@@ -341,8 +380,17 @@ impl StateStore {
             .collect::<Vec<_>>()
             .join(", ");
         anyhow::bail!(
-            "proposal {} has a human disposition and cannot be replaced; promotion_state is {state}; promotion decision(s): {decision_ids}",
+            "proposal {} has a human disposition or durable disposition and cannot be replaced; promotion_state is {state}; promotion decision(s): {decision_ids}",
             existing.id.as_str()
         );
     }
+}
+
+const fn behavior_changing_proposal(proposal_type: provenance_core::ProposalType) -> bool {
+    matches!(
+        proposal_type,
+        provenance_core::ProposalType::RequirementCandidate
+            | provenance_core::ProposalType::ResolutionCandidate
+            | provenance_core::ProposalType::RuleCandidate
+    )
 }

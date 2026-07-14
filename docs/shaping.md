@@ -90,7 +90,9 @@ real invariants:
    resolved-but-unrecorded decision in conversation state. If the session dies mid-topic,
    everything answered so far is already in the graph.
 2. The session never outruns its context budget.
-3. The agent never proceeds past a decision the human hasn't ratified.
+3. The agent never treats an unratified assertion as a behavior-changing decision. It may
+   consult or build another proposal on an unrefuted swarm assertion, but conflicts,
+   enforced rules, and compliance conclusions stop at the human ratification gate.
 4. The map is consistent at handoff.
 
 ## Resolution methods
@@ -165,9 +167,26 @@ land their candidates through the same durable shapes (ported from the Convex
 - **Synthesis**: consensus, contested claims, and minority objections are kept separate —
   never averaged; evidence gaps can block promotion; required human decisions are explicit.
 - **Proposals**: typed candidates (`requirement_candidate`, `rule_candidate`,
-  `source_gap`, …) with traceability, moving through
-  `proposed → accepted/rejected/deferred/duplicate/superseded` by explicit human
-  **promotion decisions**.
+  `source_gap`, …) with traceability. Promotion has two tiers:
+  `proposed → asserted` records an unrefuted swarm conclusion, while `accepted` records
+  ratification. Rejected, deferred, duplicate, and superseded remain dispositions.
+
+### Two-tier promotion
+
+`asserted` is a legitimate durable resting state, not an incomplete run. It means the
+adversarial pass found no contested claim linked by the proposal's
+`traceability.supporting_claim_ids`. It is still provisional: `provenance prime` labels it
+"not human-ratified", and consumers must not present it as policy, compliance, or an
+enforced rule. A later proposal may cite an asserted proposal through `builds_on`; this
+preserves provisional lineage without silently promoting either proposal. Raw `proposed`
+cards are not valid lineage bases.
+
+Human ratification remains mandatory before a requirement, resolution, or rule candidate
+is accepted, because those artifacts can change behavior, settle a conflict, support an
+enforcement path, or become a compliance claim. The accepted promotion decision records
+the human actor. Non-behavior workflow proposals (`source_gap`, `question`, `no_action`)
+may be disposed by automation. Existing `proposed` records remain valid and need no
+migration; they simply carry no assertion claim.
 
 The run-status machinery of the original (queued/running/failed_retryable…) is *not*
 ported — skills and workflows own execution; only durable outputs enter state.
@@ -176,8 +195,9 @@ ported — skills and workflows own execution; only durable outputs enter state.
 
 The backtrace (`provenance-qho`) is charting in reverse: agents partition an existing
 codebase, extract candidate requirements ("what must be true for this code to be
-correct"), dedup keeping *all* evidence sites, and land everything as `proposed` — never
-`active` — with the codebase source carrying a validated `commit_pin`. Proposals and
+correct"), dedup keeping *all* evidence sites, and land unrefuted results as `asserted`
+(contested results remain `proposed`) — never as active requirements — with the codebase
+source carrying a validated `commit_pin`. Proposals and
 material claims may carry `0.0`-`1.0` confidence scores. Its output feeds the shaping loop:
 a human confirms "intentional" or discovers surprises, question by question.
 

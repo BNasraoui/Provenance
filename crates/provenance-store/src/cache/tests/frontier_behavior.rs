@@ -5,7 +5,8 @@ use crate::state_store::{
     CreateRuleInput, CreateSourceInput, CreateTopicInput, StateStore,
 };
 use provenance_core::{
-    EdgeType, NodeType, QuestionStatus, RequirementStatus, ResolutionMethod, ResolutionStatus,
+    EdgeType, IdeationTarget, IdeationTargetType, NodeType, PromotionState, ProposalTraceability,
+    ProposalType, QuestionStatus, RequirementStatus, ResolutionMethod, ResolutionStatus,
     RuleSeverity, RuleStatus, SourceType, TopicStatus,
 };
 
@@ -302,4 +303,40 @@ fn prime_renders_blocked_on_human_questions_with_status() {
     let rendered = render_prime_markdown(&prime_context(&layout, &scope, false).unwrap());
     assert!(rendered.contains("- question question_blocked:"));
     assert!(rendered.contains("blocked_on_human"));
+}
+
+#[test]
+fn prime_surfaces_asserted_proposals_as_provisional_knowledge() {
+    let (_dir, layout, scope) = empty_layout();
+    let store = StateStore::new(layout.clone());
+    store
+        .create_proposal_card(crate::state_store::CreateProposalCardInput {
+            scope_id: scope.clone(),
+            id: sid("proposal_guard"),
+            proposal_key: "guard".into(),
+            proposal_type: ProposalType::RequirementCandidate,
+            title: "Publishing requires an assignment".into(),
+            summary: "Observed and upheld by the adversarial pass.".into(),
+            confidence: Some(0.9),
+            traceability: ProposalTraceability {
+                target: IdeationTarget {
+                    artifact_type: IdeationTargetType::Requirement,
+                    artifact_id: sid("req_root"),
+                },
+                source_ids: Vec::new(),
+                evidence_references: Vec::new(),
+                supporting_claim_ids: Vec::new(),
+            },
+            promotion_state: PromotionState::Asserted,
+            builds_on: Vec::new(),
+            duplicate_of: None,
+            superseded_by: None,
+        })
+        .unwrap();
+
+    let view = prime_context(&layout, &scope, false).unwrap();
+    assert_eq!(view.provisional_proposals.len(), 1);
+    let rendered = render_prime_markdown(&view);
+    assert!(rendered.contains("## Provisional proposals"));
+    assert!(rendered.contains("proposal_guard [asserted; not human-ratified]"));
 }

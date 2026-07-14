@@ -217,6 +217,8 @@ impl ProposalType {
 pub enum PromotionState {
     #[serde(rename = "proposed")]
     Proposed,
+    #[serde(rename = "asserted", alias = "swarm_asserted")]
+    Asserted,
     #[serde(rename = "accepted")]
     Accepted,
     #[serde(rename = "rejected")]
@@ -233,13 +235,14 @@ impl PromotionState {
     pub fn parse(value: &str) -> anyhow::Result<Self> {
         match normalize_enum_value(value).as_str() {
             "proposed" => Ok(Self::Proposed),
+            "asserted" | "swarm_asserted" => Ok(Self::Asserted),
             "accepted" => Ok(Self::Accepted),
             "rejected" => Ok(Self::Rejected),
             "deferred" => Ok(Self::Deferred),
             "duplicate" => Ok(Self::Duplicate),
             "superseded" => Ok(Self::Superseded),
             _ => anyhow::bail!(
-                "promotion state must be proposed, accepted, rejected, deferred, duplicate, or superseded"
+                "promotion state must be proposed, asserted, accepted, rejected, deferred, duplicate, or superseded"
             ),
         }
     }

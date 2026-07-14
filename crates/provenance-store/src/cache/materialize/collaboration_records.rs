@@ -43,13 +43,14 @@ pub(super) async fn load_scope(
         loaded += 1;
     }
     for proposal in store.list_proposal_cards(scope)? {
-        sqlx::query("INSERT INTO proposal_cards (scope_id, id, proposal_key, proposal_type, title, summary, confidence, target_type, target_id, traceability, promotion_state, duplicate_of, superseded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        sqlx::query("INSERT INTO proposal_cards (scope_id, id, proposal_key, proposal_type, title, summary, confidence, target_type, target_id, traceability, promotion_state, builds_on, duplicate_of, superseded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(proposal.scope_id.as_str()).bind(proposal.id.as_str()).bind(&proposal.proposal_key)
             .bind(serde_name(&proposal.proposal_type)?).bind(&proposal.title).bind(&proposal.summary)
             .bind(proposal.confidence).bind(serde_name(&proposal.traceability.target.artifact_type)?)
             .bind(proposal.traceability.target.artifact_id.as_str())
             .bind(serde_json::to_string(&proposal.traceability)?)
             .bind(serde_name(&proposal.promotion_state)?)
+            .bind(serde_json::to_string(&proposal.builds_on)?)
             .bind(proposal.duplicate_of.as_ref().map(provenance_core::StableId::as_str))
             .bind(proposal.superseded_by.as_ref().map(provenance_core::StableId::as_str))
             .execute(&mut **tx).await?;
