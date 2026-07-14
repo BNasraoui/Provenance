@@ -52,6 +52,8 @@ pub(in crate::wiki::render) fn counted(count: usize, singular: &str, plural: &st
 pub(in crate::wiki::render) const fn kind_class(kind: PageKind) -> &'static str {
     match kind {
         PageKind::ScopeIndex => "scope-index",
+        PageKind::TopicIndex => "topic-index",
+        PageKind::SearchIndex => "search-index",
         PageKind::Requirement => "requirement",
         PageKind::Resolution => "resolution",
         PageKind::Rule => "rule",
@@ -62,6 +64,8 @@ pub(in crate::wiki::render) const fn kind_class(kind: PageKind) -> &'static str 
 pub(in crate::wiki::render) const fn kind_label(kind: PageKind) -> &'static str {
     match kind {
         PageKind::ScopeIndex => "Scope",
+        PageKind::TopicIndex => "Topics",
+        PageKind::SearchIndex => "Search",
         PageKind::Requirement => "Requirement",
         PageKind::Resolution => "Resolution",
         PageKind::Rule => "Rule",
@@ -72,7 +76,8 @@ pub(in crate::wiki::render) const fn kind_label(kind: PageKind) -> &'static str 
 pub(in crate::wiki::render) const fn kind_icon(kind: PageKind) -> &'static str {
     match kind {
         PageKind::ScopeIndex | PageKind::Rule | PageKind::Source => "i-book-open",
-        PageKind::Requirement => "i-git-branch",
+        PageKind::SearchIndex => "i-search",
+        PageKind::TopicIndex | PageKind::Requirement => "i-git-branch",
         PageKind::Resolution => "i-scale",
     }
 }

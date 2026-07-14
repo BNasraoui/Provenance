@@ -35,6 +35,28 @@ fn wiki_build_writes_static_pages_and_stylesheet() {
     let index = std::fs::read_to_string(out.join("index.html")).unwrap();
     assert!(index.contains("Provenance Wiki"), "{index}");
     assert!(index.contains("href=\"/requirements/req_sah/\""), "{index}");
+    assert!(index.contains("href=\"/topics/\""), "{index}");
+    assert!(index.contains("href=\"/search/\""), "{index}");
+
+    let topics = std::fs::read_to_string(out.join("topics/index.html")).unwrap();
+    assert!(topics.contains("Care delivery"), "{topics}");
+    assert!(
+        topics.contains("href=\"/requirements/req_sah/\""),
+        "{topics}"
+    );
+    assert!(topics.contains("href=\"/rules/rule_sah_001/\""), "{topics}");
+
+    let search = std::fs::read_to_string(out.join("search/index.html")).unwrap();
+    assert!(search.contains("id=\"wiki-search\""), "{search}");
+    assert!(
+        search.contains("Support at Home shall be traceable"),
+        "{search}"
+    );
+    assert!(search.contains("Draft rule shall stay draft"), "{search}");
+
+    let search_index = std::fs::read_to_string(out.join("assets/search-index.json")).unwrap();
+    let search_index: serde_json::Value = serde_json::from_str(&search_index).unwrap();
+    assert_eq!(search_index.as_array().unwrap().len(), 3);
 
     let stylesheet = std::fs::read_to_string(out.join("assets/provenance-wiki.css")).unwrap();
     assert!(stylesheet.contains("--pv-"), "stylesheet missing tokens");
@@ -84,9 +106,9 @@ fn wiki_build_default_format_prints_a_concise_summary_not_a_page_dump() {
 
     assert!(!stdout.contains("\"pages\""), "{stdout}");
     assert!(!stdout.contains("\"route\""), "{stdout}");
-    // 1 index + 2 requirements + 1 resolution + 1 rule + 1 source = 6 pages.
+    // Atlas + topics + search + 2 requirements + resolution + rule + source.
     assert!(
-        stdout.contains("6 pages"),
+        stdout.contains("8 pages"),
         "expected the page count: {stdout}"
     );
     assert!(
@@ -222,6 +244,7 @@ fn wiki_serve_serves_pages_stylesheet_and_not_found() {
 
     let index = wait_for_http(port, "/");
     let stylesheet = wait_for_http(port, "/assets/provenance-wiki.css");
+    let search_index = wait_for_http(port, "/assets/search-index.json");
     let requirement = wait_for_http(port, "/requirements/req_sah/");
     let bare_route = wait_for_http(port, "/requirements/req_sah");
     let missing = wait_for_http(port, "/nope/");
@@ -235,6 +258,10 @@ fn wiki_serve_serves_pages_stylesheet_and_not_found() {
     assert!(stylesheet.contains("200 OK"), "{stylesheet}");
     assert!(stylesheet.contains("text/css"), "{stylesheet}");
     assert!(stylesheet.contains("--pv-"), "{stylesheet}");
+
+    assert!(search_index.contains("200 OK"), "{search_index}");
+    assert!(search_index.contains("application/json"), "{search_index}");
+    assert!(search_index.contains("req_sah"), "{search_index}");
 
     assert!(requirement.contains("200 OK"), "{requirement}");
     assert!(
@@ -282,6 +309,13 @@ fn seed_state(dir: &std::path::Path, repo: &str) {
     "url": "https://example.test/sah",
     "reference": "Department guidance"
   }],
+  "domains": [{
+    "schema_version": 1,
+    "scope_id": "default",
+    "id": "domain_care",
+    "name": "Care delivery",
+    "description": "Requirements governing in-home care"
+  }],
   "requirements": [{
     "schema_version": 1,
     "scope_id": "default",
@@ -295,6 +329,7 @@ fn seed_state(dir: &std::path::Path, repo: &str) {
     "id": "req_sah",
     "statement": "Support at Home shall be traceable",
     "status": "active",
+    "domain_id": "domain_care",
     "source_refs": [{"source_id": "source_sah", "clause": "Program overview"}]
   }],
   "resolutions": [{

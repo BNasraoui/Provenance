@@ -8,7 +8,7 @@ use super::super::fragments::{
     push_attribution, push_classification_block, push_classification_row, push_decision_sections,
     push_lineage, push_prose_section, push_rule_territory_card, push_section_open,
 };
-use super::super::html::{icon_svg, link_list};
+use super::super::html::{escape_attr, escape_html, icon_svg, link_list};
 use super::super::labels::{format_confidence, requirement_status_badge, resolution_status_word};
 
 /// Renders a requirement detail page.
@@ -90,7 +90,15 @@ pub fn render_requirement(scope: &str, page: &RequirementPage) -> String {
     push_source_citations(&mut margin, &page.sources);
     let mut rows = String::new();
     if let Some(domain_id) = &page.domain_id {
-        push_classification_row(&mut rows, "i-git-branch", "Domain", domain_id, true);
+        writeln!(
+            rows,
+            "<div class=\"row\">{}<span class=\"k\">Domain</span>\
+             <a class=\"v mono\" href=\"/topics/#domain-{}\">{}</a></div>",
+            icon_svg("i-git-branch"),
+            escape_attr(domain_id),
+            escape_html(domain_id),
+        )
+        .expect("writing to a String should not fail");
     }
     for decision in &page.decisions {
         if let Some(enforcement) = &decision.enforcement {

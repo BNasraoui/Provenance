@@ -31,6 +31,7 @@ expression: "render_requirement(\"default\", &requirement_fixture())"
 <div class="chrome-inner">
 <span class="wordmark">Provenance<span class="scope">default</span></span>
 <nav aria-label="Breadcrumb"><a href="/requirements/req_platform/">ExampleOrg platform</a> <span class="sep">›</span> <a href="/requirements/req_sah/">Support at Home (SAH)</a></nav>
+<nav class="global-nav" aria-label="Wiki"><a href="/">Atlas</a><a href="/topics/">Topics</a><a href="/search/">Search</a></nav>
 <label class="theme-select">Theme
 <select id="theme-select">
 <option value="statesman" selected>Statesman</option>
@@ -121,7 +122,7 @@ expression: "render_requirement(\"default\", &requirement_fixture())"
 </div>
 <div class="classification">
 <h3 class="margin-head">Classification</h3>
-<div class="row"><svg class="icon"><use href="#i-git-branch"/></svg><span class="k">Domain</span><span class="v mono">dom_invoicing</span></div>
+<div class="row"><svg class="icon"><use href="#i-git-branch"/></svg><span class="k">Domain</span><a class="v mono" href="/topics/#domain-dom_invoicing">dom_invoicing</a></div>
 <div class="row"><svg class="icon"><use href="#i-shield"/></svg><span class="k">Enforcement</span><span class="v">Specification</span></div>
 <div class="row"><svg class="icon"><use href="#i-gauge"/></svg><span class="k">Confidence</span><span class="v">97%</span></div>
 <div class="row"><svg class="icon"><use href="#i-scale"/></svg><span class="k">Decision</span><span class="v mono">res_split</span></div>
