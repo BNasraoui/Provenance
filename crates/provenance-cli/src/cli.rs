@@ -192,7 +192,7 @@ pub enum Command {
         rule_severities: Option<String>,
         #[arg(long, default_value_t = 0)]
         min_downstream_rules: u32,
-        /// Override commit-pinned source revisions as the diff base.
+        /// Use this exact common diff base instead of source pins (no merge-base calculation).
         #[arg(long)]
         base: Option<String>,
         /// Revision to compare evidence against.

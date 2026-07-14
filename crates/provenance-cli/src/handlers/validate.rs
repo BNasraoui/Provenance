@@ -57,6 +57,7 @@ pub(super) fn validate_file(
 
 pub(super) fn validate_contribution_record(contribution: &Contribution) -> anyhow::Result<()> {
     ensure_schema_version(contribution.schema_version)?;
+    provenance_core::validate_evidence_references(&contribution.evidence_references)?;
     for claim in &contribution.material_claims {
         validate_optional_confidence_score(claim.confidence).with_context(|| {
             format!(
@@ -84,6 +85,7 @@ fn ensure_schema_version(schema_version: SchemaVersion) -> anyhow::Result<()> {
 
 pub(super) fn validate_proposal_card_record(proposal: &ProposalCard) -> anyhow::Result<()> {
     ensure_schema_version(proposal.schema_version)?;
+    provenance_core::validate_evidence_references(&proposal.traceability.evidence_references)?;
     match proposal.promotion_state {
         PromotionState::Duplicate => {
             anyhow::ensure!(

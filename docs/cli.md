@@ -42,17 +42,23 @@ explicitly source-owned evidence site, the command compares its `commit_pin` wit
 Git name-status diff with repository-relative evidence paths, and re-reads only evidence
 on intersecting paths. Exact cited lines are reported as `verified`, `moved`, `vanished`,
 or `unverifiable`; a vanished citation owned by an accepted requirement proposal is also
-reported under `contradictions` for human semantic review. Use `--base <revision>` to
-override source pins and `--head <revision>` to select a CI diff range. `--min-age-days`,
+reported under `contradictions` for human semantic review. Proposed requirement
+candidates targeting a Source remain proposal-owned evidence with no invented
+requirement ID unless a promotion decision establishes canonical ownership. Use
+`--base <revision>` to use that exact revision as the common old side of every diff
+(it overrides source pins and does not compute a merge base), and `--head <revision>`
+to select the new side. `--min-age-days`,
 `--rule-severities low,medium,high,critical`, and `--min-downstream-rules` are available
-on both commands but apply to their distinct result types. Evidence-review JSON includes
+on both commands but apply to their distinct result types; requirement/rule filters
+exclude proposal-only evidence because it has no canonical Requirement. Evidence-review JSON includes
 diff ranges, affected evidence, contradictions, diagnostics, and counts; stale JSON keeps
 the established resolution array.
 
 This gate deliberately does not infer program semantics or mutate graph records. A moved
 line is an exact-text relocation, and a vanished line means the exact pinned text was not
 found; either result is a review trigger, not proof that a requirement is true or false.
-Unpinned sources are listed in `diagnostics` and are not diffed. See
+Unpinned sources are listed in `diagnostics` and are not diffed unless `--base` supplies
+the common comparison revision. See
 `docs/incremental-backtrace.md` for the full contract and limitations.
 
 Graph edge commands: `edges create --type references|refines_into|depends_on|contradicts|supersedes|needs|resolves|spawns|produces --from-type source|requirement|resolution|rule --from-id <id> --to-type source|requirement|resolution|rule --to-id <id>`, `edges list`, and `edges delete --id <edge-id>`. Creation validates edge type/endpoints and requires both endpoint records to exist.

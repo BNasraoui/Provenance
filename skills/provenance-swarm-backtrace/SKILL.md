@@ -218,8 +218,13 @@ Before repeating a full extraction, run
 It compares commit-pinned graph evidence with `HEAD` and re-reads only citations whose
 paths changed. `moved` citations can be reviewed for a location update; `vanished` and
 `unverifiable` citations require the relevant candidate batch to be refuted again.
+Normal proposed requirement candidates targeting the codebase Source remain
+proposal-owned evidence in an unfiltered review; they do not acquire a fabricated
+requirement ID. Requirement/rule filters retain them only after explicit target or
+accepted canonical Requirement ownership exists.
 `contradictions` identifies accepted requirement candidates that lost cited support, but
 is a review trigger rather than an automatic reversal. The command is read-only and does
 not relax the proposed-only or human-promotion rules above. CI may provide an explicit
-`--base <revision> --head <revision>` range. Details and limits are in
+`--base <revision> --head <revision>` range; the base is used directly for every diff
+and is not calculated as a merge base. Details and limits are in
 `docs/incremental-backtrace.md`.

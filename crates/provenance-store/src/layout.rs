@@ -51,6 +51,9 @@ impl ProvenanceLayout {
     pub fn state_snapshot_lock_path(&self) -> Utf8PathBuf {
         self.cache_dir().join("locks/state-snapshot.lock")
     }
+    pub fn state_transaction_journal_path(&self) -> Utf8PathBuf {
+        self.cache_dir().join("locks/state-transaction.json")
+    }
 }
 
 pub fn locate_repo_root(start: &Utf8Path) -> anyhow::Result<Utf8PathBuf> {

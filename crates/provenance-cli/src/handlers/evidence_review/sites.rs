@@ -8,7 +8,7 @@ use provenance_core::{
     StableId,
 };
 use provenance_store::state_store::ScopeSnapshot;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 pub struct SiteCollection {
     pub sites: Vec<EvidenceSite>,
@@ -19,7 +19,7 @@ struct SiteContext<'a> {
     repository: &'a Utf8Path,
     base_override: Option<&'a str>,
     sources: BTreeMap<&'a str, &'a provenance_core::Source>,
-    requirements: BTreeSet<&'a str>,
+    requirements: BTreeMap<&'a str, &'a provenance_core::Requirement>,
     canonical: BTreeMap<&'a str, Vec<(&'a StableId, &'a StableId)>>,
 }
 
@@ -28,6 +28,17 @@ pub fn collect(
     repository: &Utf8Path,
     base_override: Option<&str>,
 ) -> SiteCollection {
+    let mut collection = SiteCollection {
+        sites: Vec::new(),
+        diagnostics: Vec::new(),
+    };
+    if let Err(error) = provenance_core::validate_unique_ids(
+        "source",
+        snapshot.sources.iter().map(|source| &source.id),
+    ) {
+        collection.diagnostics.push(error.to_string());
+        return collection;
+    }
     let sources = snapshot
         .sources
         .iter()
@@ -36,7 +47,7 @@ pub fn collect(
     let requirements = snapshot
         .requirements
         .iter()
-        .map(|requirement| requirement.id.as_str())
+        .map(|requirement| (requirement.id.as_str(), requirement))
         .collect();
     let mut canonical: BTreeMap<_, Vec<_>> = BTreeMap::new();
     for decision in snapshot
@@ -54,10 +65,6 @@ pub fn collect(
             canonical.entry(proposal).or_default().push(ownership);
         }
     }
-    let mut collection = SiteCollection {
-        sites: Vec::new(),
-        diagnostics: Vec::new(),
-    };
     let context = SiteContext {
         repository,
         base_override,
@@ -114,7 +121,6 @@ fn collect_proposals(
         let owner = EvidenceOwner {
             kind: OwnerKind::Proposal,
             id: proposal.id.clone(),
-            title: Some(proposal.title.clone()),
             ratified: proposal.promotion_state == PromotionState::Accepted,
         };
         add_references(
@@ -150,17 +156,18 @@ fn proposal_ownership(
         .get(proposal.id.as_str())
         .map(Vec::as_slice);
     if let Some([(requirement_id, decision_id)]) = canonical {
-        if !context.requirements.contains(requirement_id.as_str()) {
+        let Some(requirement) = context.requirements.get(requirement_id.as_str()) else {
             diagnostics.push(format!(
                 "proposal {} names missing canonical requirement {}; its evidence sites were rejected",
                 proposal.id.as_str(),
                 requirement_id.as_str()
             ));
             return None;
-        }
+        };
         return Some(RequirementOwnership::CanonicalRequirement {
             proposal_id: proposal.id.clone(),
             requirement_id: (*requirement_id).clone(),
+            requirement_statement: requirement.statement.clone(),
             decision_id: (*decision_id).clone(),
         });
     }
@@ -171,27 +178,32 @@ fn proposal_ownership(
         ));
         return None;
     }
-    let Some(ownership) =
-        RequirementOwnership::for_target(&proposal.id, &proposal.traceability.target)
-    else {
+    if proposal.traceability.target.artifact_type == IdeationTargetType::Source {
+        return Some(RequirementOwnership::ProposalCandidate {
+            proposal_id: proposal.id.clone(),
+        });
+    }
+    if proposal.traceability.target.artifact_type != IdeationTargetType::Requirement {
         diagnostics.push(format!(
-            "proposal {} does not target a requirement; its evidence sites were rejected",
+            "proposal {} does not target a source or requirement; its evidence sites were rejected",
             proposal.id.as_str()
         ));
         return None;
-    };
-    let requirement_id = ownership
-        .requirement_id()
-        .expect("target requirement ownership has a requirement");
-    if !context.requirements.contains(requirement_id.as_str()) {
+    }
+    let requirement_id = &proposal.traceability.target.artifact_id;
+    let Some(requirement) = context.requirements.get(requirement_id.as_str()) else {
         diagnostics.push(format!(
             "proposal {} targets missing requirement {}; its evidence sites were rejected",
             proposal.id.as_str(),
             requirement_id.as_str()
         ));
         return None;
-    }
-    Some(ownership)
+    };
+    Some(RequirementOwnership::TargetRequirement {
+        proposal_id: proposal.id.clone(),
+        requirement_id: requirement_id.clone(),
+        requirement_statement: requirement.statement.clone(),
+    })
 }
 
 fn collect_contributions(
@@ -230,7 +242,6 @@ fn collect_contributions(
         let owner = EvidenceOwner {
             kind: OwnerKind::Contribution,
             id: contribution.id.clone(),
-            title: None,
             ratified: false,
         };
         add_references(
@@ -258,6 +269,12 @@ fn add_references(
     references: &[provenance_core::IdeationEvidenceReference],
 ) {
     for reference in references {
+        if let Err(error) =
+            provenance_core::validate_evidence_references(std::slice::from_ref(reference))
+        {
+            collection.diagnostics.push(error.to_string());
+            continue;
+        }
         if matches!(
             EvidenceClassification::classify(reference),
             EvidenceClassification::Ineligible

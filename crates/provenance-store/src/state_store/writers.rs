@@ -2,6 +2,7 @@ use super::{
     AddSourceReferenceInput, CreateEdgeInput, CreateRequirementInput, CreateSourceInput, StateStore,
 };
 use crate::shards;
+use crate::transaction::StateTransaction;
 use provenance_core::{
     edge_validation::validate_edge_endpoint, validate_optional_commit_pin, Edge, EdgeType,
     NodeType, Requirement, SchemaVersion, ScopeId, Source, SourceReference, StableId,
@@ -118,10 +119,14 @@ impl StateStore {
     }
 
     pub fn add_source_reference(&self, input: AddSourceReferenceInput) -> anyhow::Result<Edge> {
-        self.with_state_write(|| self.add_source_reference_locked(input))
+        self.write_transaction(|transaction| self.add_source_reference_locked(transaction, input))
     }
 
-    fn add_source_reference_locked(&self, input: AddSourceReferenceInput) -> anyhow::Result<Edge> {
+    fn add_source_reference_locked(
+        &self,
+        transaction: &mut StateTransaction,
+        input: AddSourceReferenceInput,
+    ) -> anyhow::Result<Edge> {
         let AddSourceReferenceInput {
             scope_id,
             source_id,
@@ -144,7 +149,7 @@ impl StateStore {
             clause,
         };
         let requirements_path = shards::requirements_path(&self.layout, &scope_id);
-        self.mutate_jsonl_records(&requirements_path, |requirements: &mut Vec<Requirement>| {
+        transaction.mutate_jsonl(&requirements_path, |requirements: &mut Vec<Requirement>| {
             let requirement = requirements
                 .iter_mut()
                 .find(|requirement| requirement.id == requirement_id)
@@ -183,7 +188,7 @@ impl StateStore {
             label: None,
         };
         let path = shards::edges_path(&self.layout);
-        self.mutate_jsonl_records(&path, |records: &mut Vec<Edge>| {
+        transaction.mutate_jsonl(&path, |records: &mut Vec<Edge>| {
             if !records
                 .iter()
                 .any(|record| record.id == edge.id && record.scope_id == edge.scope_id)
@@ -210,9 +215,27 @@ impl StateStore {
             to_id,
         } = input;
         validate_edge_endpoint(edge_type, from_type, to_type)?;
-        self.ensure_edge_endpoint_exists(&scope_id, from_type, &from_id, "from")?;
-        self.ensure_edge_endpoint_exists(&scope_id, to_type, &to_id, "to")?;
-        self.add_edge(scope_id, edge_type, from_type, from_id, to_type, to_id)
+        self.write_transaction(|transaction| {
+            self.ensure_edge_endpoint_exists_in(
+                transaction,
+                &scope_id,
+                from_type,
+                &from_id,
+                "from",
+            )?;
+            self.ensure_edge_endpoint_exists_in(transaction, &scope_id, to_type, &to_id, "to")?;
+            self.add_edge_in(
+                transaction,
+                CreateEdgeInput {
+                    scope_id,
+                    edge_type,
+                    from_type,
+                    from_id,
+                    to_type,
+                    to_id,
+                },
+            )
+        })
     }
 
     pub fn delete_edge(&self, scope_id: &ScopeId, id: &StableId) -> anyhow::Result<Edge> {
@@ -226,15 +249,19 @@ impl StateStore {
         })
     }
 
-    pub(crate) fn add_edge(
+    pub(crate) fn add_edge_in(
         &self,
-        scope_id: ScopeId,
-        edge_type: EdgeType,
-        from_type: NodeType,
-        from_id: StableId,
-        to_type: NodeType,
-        to_id: StableId,
+        transaction: &mut StateTransaction,
+        input: CreateEdgeInput,
     ) -> anyhow::Result<Edge> {
+        let CreateEdgeInput {
+            scope_id,
+            edge_type,
+            from_type,
+            from_id,
+            to_type,
+            to_id,
+        } = input;
         validate_edge_endpoint(edge_type, from_type, to_type)?;
         let edge = Edge {
             schema_version: SchemaVersion(1),
@@ -248,7 +275,7 @@ impl StateStore {
             label: None,
         };
         let path = shards::edges_path(&self.layout);
-        self.mutate_jsonl_records(&path, |records: &mut Vec<Edge>| {
+        transaction.mutate_jsonl(&path, |records: &mut Vec<Edge>| {
             if !records
                 .iter()
                 .any(|record| record.id == edge.id && record.scope_id == edge.scope_id)
@@ -265,33 +292,43 @@ impl StateStore {
         })
     }
 
-    fn ensure_edge_endpoint_exists(
+    fn ensure_edge_endpoint_exists_in(
         &self,
+        transaction: &StateTransaction,
         scope_id: &ScopeId,
         node_type: NodeType,
         id: &StableId,
         side: &str,
     ) -> anyhow::Result<()> {
         let exists = match node_type {
-            NodeType::Source => self
-                .list_sources(scope_id)?
+            NodeType::Source => transaction
+                .read_jsonl::<Source>(&shards::sources_path(&self.layout, scope_id))?
                 .iter()
                 .any(|source| &source.id == id),
-            NodeType::Requirement => self
-                .list_requirements(scope_id)?
+            NodeType::Requirement => transaction
+                .read_jsonl::<Requirement>(&shards::requirements_path(&self.layout, scope_id))?
                 .iter()
                 .any(|requirement| &requirement.id == id),
-            NodeType::Resolution => self
-                .list_resolutions(scope_id)?
+            NodeType::Resolution => transaction
+                .read_jsonl::<provenance_core::Resolution>(&shards::resolutions_path(
+                    &self.layout,
+                    scope_id,
+                ))?
                 .iter()
                 .any(|resolution| &resolution.id == id),
-            NodeType::Rule => self.list_rules(scope_id)?.iter().any(|rule| &rule.id == id),
-            NodeType::Topic => self
-                .list_topics(scope_id)?
+            NodeType::Rule => transaction
+                .read_jsonl::<provenance_core::Rule>(&shards::rules_path(&self.layout, scope_id))?
+                .iter()
+                .any(|rule| &rule.id == id),
+            NodeType::Topic => transaction
+                .read_jsonl::<provenance_core::Topic>(&shards::topics_path(&self.layout, scope_id))?
                 .iter()
                 .any(|topic| &topic.id == id),
-            NodeType::Question => self
-                .list_questions(scope_id)?
+            NodeType::Question => transaction
+                .read_jsonl::<provenance_core::Question>(&shards::questions_path(
+                    &self.layout,
+                    scope_id,
+                ))?
                 .iter()
                 .any(|question| &question.id == id),
         };

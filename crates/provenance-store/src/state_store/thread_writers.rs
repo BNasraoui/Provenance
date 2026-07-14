@@ -1,5 +1,6 @@
 use super::{serde_name, PostMessageInput, PostMessageResult, StateStore};
 use crate::shards;
+use crate::transaction::StateTransaction;
 use provenance_core::{Message, SchemaVersion, StableId, Thread, ThreadStatus};
 
 impl StateStore {
@@ -7,11 +8,12 @@ impl StateStore {
         &self,
         input: PostMessageInput,
     ) -> anyhow::Result<PostMessageResult> {
-        self.with_state_write(|| self.post_thread_message_locked(input))
+        self.write_transaction(|transaction| self.post_thread_message_locked(transaction, input))
     }
 
     fn post_thread_message_locked(
         &self,
+        transaction: &mut StateTransaction,
         input: PostMessageInput,
     ) -> anyhow::Result<PostMessageResult> {
         let PostMessageInput {
@@ -22,7 +24,7 @@ impl StateStore {
         } = input;
         anyhow::ensure!(!body.trim().is_empty(), "message body must not be empty");
         let threads_path = shards::threads_path(&self.layout, &scope_id);
-        let thread = self.mutate_jsonl_records(&threads_path, |threads: &mut Vec<Thread>| {
+        let thread = transaction.mutate_jsonl(&threads_path, |threads: &mut Vec<Thread>| {
             let matching: Vec<_> = threads
                 .iter()
                 .filter(|thread| thread.parent == parent)
@@ -62,32 +64,31 @@ impl StateStore {
         })?;
 
         let messages_path = shards::messages_path(&self.layout, &scope_id);
-        let message =
-            self.mutate_jsonl_records(&messages_path, |messages: &mut Vec<Message>| {
-                let created_at = messages
-                    .iter()
-                    .map(|message| message.created_at)
-                    .max()
-                    .unwrap_or(0)
-                    + 1;
-                let message = Message {
-                    schema_version: SchemaVersion(1),
-                    scope_id: scope_id.clone(),
-                    id: StableId::new(format!("msg_{created_at:06}"))?,
-                    thread_id: thread.id.clone(),
-                    role,
-                    body,
-                    created_at,
-                    ai_metadata: None,
-                };
-                messages.push(message.clone());
-                messages.sort_by(|a, b| {
-                    a.created_at
-                        .cmp(&b.created_at)
-                        .then(a.id.as_str().cmp(b.id.as_str()))
-                });
-                Ok(message)
-            })?;
+        let message = transaction.mutate_jsonl(&messages_path, |messages: &mut Vec<Message>| {
+            let created_at = messages
+                .iter()
+                .map(|message| message.created_at)
+                .max()
+                .unwrap_or(0)
+                + 1;
+            let message = Message {
+                schema_version: SchemaVersion(1),
+                scope_id: scope_id.clone(),
+                id: StableId::new(format!("msg_{created_at:06}"))?,
+                thread_id: thread.id.clone(),
+                role,
+                body,
+                created_at,
+                ai_metadata: None,
+            };
+            messages.push(message.clone());
+            messages.sort_by(|a, b| {
+                a.created_at
+                    .cmp(&b.created_at)
+                    .then(a.id.as_str().cmp(b.id.as_str()))
+            });
+            Ok(message)
+        })?;
         Ok(PostMessageResult { thread, message })
     }
 }

@@ -8,15 +8,18 @@ does not replace the extraction and refutation stages in
 
 ```sh
 provenance stale --repo . --scope default --format json
-provenance evidence-review --base <merge-base> --head <candidate> --format json
+provenance evidence-review --base <revision> --head <candidate> --format json
 ```
 
 `stale` reports resolution staleness using its original result shape. `evidence-review`
 has a separate lifecycle and report. Without `--base`, each evidence site is compared
 from its single, explicitly owned source `commit_pin` to `--head` (default `HEAD`).
 Multi-source or unresolved ownership is diagnosed and rejected rather than guessed.
-Revisions are resolved to commits before Git reads them. The optional base override is
-intended for CI, where one common range is more useful than per-source pins.
+Revisions are resolved to commits before Git reads them. `--base` uses the supplied
+revision directly as the old side of every diff; it does not calculate a merge base.
+CI can supply a merge-base SHA when that is the desired common range. The override
+supersedes each per-source comparison pin (while `source_revision` still reports that
+pin) and permits an otherwise unpinned source to participate.
 
 Both commands expose equivalent policy flags, but apply them to their own result type:
 
@@ -26,6 +29,11 @@ Both commands expose equivalent policy flags, but apply them to their own result
   downstream rule at one of those severities.
 - `--min-downstream-rules N` requires at least `N` downstream rules after severity
   filtering.
+
+Without requirement/rule filters, normal proposed `requirement_candidate` proposals
+targeting their commit-pinned Source retain proposal-owned evidence and report no
+fabricated `requirement_id`. Filters that inspect downstream requirements or rules
+necessarily retain only evidence with canonical or explicit Requirement ownership.
 
 Review dates are compared with the actual UTC day. Superseded approved resolutions use
 their `superseded_by` field; the report no longer relies on an impossible

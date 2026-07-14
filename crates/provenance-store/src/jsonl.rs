@@ -27,12 +27,6 @@ impl AdvisoryLock {
         file.lock_exclusive()?;
         Ok(Self { file })
     }
-
-    pub(crate) fn shared(path: &Utf8Path) -> anyhow::Result<Self> {
-        let file = Self::open(path)?;
-        FileExt::lock_shared(&file)?;
-        Ok(Self { file })
-    }
 }
 
 impl Drop for AdvisoryLock {
