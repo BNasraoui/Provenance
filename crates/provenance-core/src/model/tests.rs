@@ -1,0 +1,6 @@
+include!("tests/artifacts.rs");
+include!("tests/collaboration.rs");
+include!("tests/graph.rs");
+include!("tests/ideation.rs");
+include!("tests/services.rs");
+include!("tests/shaping.rs");
