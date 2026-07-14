@@ -89,7 +89,7 @@ fn promotion_decision_updates_proposal_state() {
     );
 }
 
-fn proposal_input(
+pub(super) fn proposal_input(
     scope: &ScopeId,
     id: &str,
     title: &str,

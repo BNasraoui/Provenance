@@ -145,8 +145,9 @@ turn.
 
 **Phase 2** (turn N+1 — human disposal, the promotion gate with a clock): the human
 reacts, picks a winner, grafts ideas from runners-up. The decision lands as a Resolution
-referencing the competing proposals; losers are marked rejected/superseded; grafted ideas
-stay traceable to their origin proposal.
+referencing the competing proposals; losers receive rejected dispositions; grafted ideas
+stay traceable to their origin proposal. `duplicate` and `superseded` remain readable as
+legacy proposal states, but new transitions use immutable assertion and disposition records.
 
 **Empirical caveats** (from the Statesman provenance scoping record): same-model hats
 *converge* on central insights — the Steve and Jony canvas prototypes independently

@@ -374,10 +374,15 @@ impl StateStore {
                 .any(|assertion| assertion.proposal_id == proposal_id),
             "proposal must be asserted before disposition"
         );
-        anyhow::ensure!(
-            promotion_decision.actor.identity_type == provenance_core::IdentityType::Human,
-            "authoritative disposition requires a human actor"
-        );
+        let proposal = self
+            .list_proposal_records(&scope_id)?
+            .into_iter()
+            .find(|proposal| proposal.id == proposal_id)
+            .ok_or_else(|| anyhow::anyhow!("proposal does not exist"))?;
+        provenance_core::ensure_authoritative_actor(
+            &proposal,
+            promotion_decision.actor.identity_type,
+        )?;
         anyhow::ensure!(
             !self
                 .list_promotion_decisions(&scope_id)?

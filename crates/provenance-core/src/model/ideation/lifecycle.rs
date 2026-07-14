@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::{IdentityType, PromotionState};
+use super::{IdentityType, PromotionState, ProposalType};
 use crate::model::{
     validate_optional_confidence_score, Contribution, DispositionRecord, ProposalCard,
     SchemaVersion, ScopeId, StableId, SynthesisPacket,
@@ -46,6 +46,19 @@ pub struct IdeationAggregate<'a> {
 }
 
 pub fn validate_proposal_intrinsic(proposal: &ProposalCard) -> anyhow::Result<()> {
+    validate_proposal_common(proposal)?;
+    anyhow::ensure!(
+        proposal.promotion_state == PromotionState::Proposed,
+        "proposals must begin proposed; assertion and disposition are verified transitions"
+    );
+    anyhow::ensure!(
+        proposal.duplicate_of.is_none() && proposal.superseded_by.is_none(),
+        "proposal disposition links require an authoritative disposition record"
+    );
+    ensure_unique_lineage(proposal)
+}
+
+fn validate_proposal_common(proposal: &ProposalCard) -> anyhow::Result<()> {
     anyhow::ensure!(
         proposal.schema_version.0 == 1,
         "proposal schema_version must be 1"
@@ -55,14 +68,10 @@ pub fn validate_proposal_intrinsic(proposal: &ProposalCard) -> anyhow::Result<()
         "proposal_key must not be empty"
     );
     validate_optional_confidence_score(proposal.confidence)?;
-    anyhow::ensure!(
-        proposal.promotion_state == PromotionState::Proposed,
-        "proposals must begin proposed; assertion and disposition are verified transitions"
-    );
-    anyhow::ensure!(
-        proposal.duplicate_of.is_none() && proposal.superseded_by.is_none(),
-        "proposal disposition links require an authoritative disposition record"
-    );
+    Ok(())
+}
+
+fn ensure_unique_lineage(proposal: &ProposalCard) -> anyhow::Result<()> {
     let mut lineage = BTreeSet::new();
     for assertion_id in &proposal.builds_on {
         anyhow::ensure!(
@@ -113,7 +122,14 @@ pub fn validate_ideation_aggregate(aggregate: IdeationAggregate<'_>) -> anyhow::
         aggregate.assertions.iter().map(|a| a.id.as_str()),
     )?;
     for proposal in aggregate.proposals {
-        validate_proposal_intrinsic(proposal)?;
+        validate_proposal_common(proposal)?;
+        if proposal.promotion_state == PromotionState::Proposed {
+            anyhow::ensure!(
+                proposal.duplicate_of.is_none() && proposal.superseded_by.is_none(),
+                "proposal disposition links require an authoritative disposition record"
+            );
+            ensure_unique_lineage(proposal)?;
+        }
     }
 
     let proposals = aggregate
@@ -133,7 +149,13 @@ pub fn validate_ideation_aggregate(aggregate: IdeationAggregate<'_>) -> anyhow::
         .collect::<BTreeMap<_, _>>();
     ensure_assertions(&aggregate, &proposals, &synthesis)?;
     ensure_dispositions(&aggregate, &proposals, &assertions)?;
-    ensure_lineage(aggregate.proposals, &assertions)
+    let current_proposals = aggregate
+        .proposals
+        .iter()
+        .filter(|proposal| proposal.promotion_state == PromotionState::Proposed)
+        .cloned()
+        .collect::<Vec<_>>();
+    ensure_lineage(&current_proposals, &assertions)
 }
 
 #[allow(clippy::too_many_lines)]
@@ -293,10 +315,12 @@ fn ensure_dispositions(
             disposition.scope_id == proposal.scope_id,
             "disposition must share the proposal scope"
         );
+        let legacy_terminal = proposal.promotion_state != PromotionState::Proposed;
         anyhow::ensure!(
-            assertions
-                .values()
-                .any(|assertion| assertion.proposal_id == disposition.proposal_id),
+            legacy_terminal
+                || assertions
+                    .values()
+                    .any(|assertion| assertion.proposal_id == disposition.proposal_id),
             "proposal {} must be asserted before disposition",
             disposition.proposal_id.as_str()
         );
@@ -305,11 +329,27 @@ fn ensure_dispositions(
             "proposal {} has contradictory dispositions",
             disposition.proposal_id.as_str()
         );
-        anyhow::ensure!(
-            disposition.actor.identity_type == IdentityType::Human,
-            "authoritative disposition requires a human actor"
-        );
+        if !legacy_terminal {
+            ensure_authoritative_actor(proposal, disposition.actor.identity_type)?;
+        }
     }
+    Ok(())
+}
+
+pub fn ensure_authoritative_actor(
+    proposal: &ProposalCard,
+    identity_type: IdentityType,
+) -> anyhow::Result<()> {
+    let changes_behavior = matches!(
+        proposal.proposal_type,
+        ProposalType::RequirementCandidate
+            | ProposalType::ResolutionCandidate
+            | ProposalType::RuleCandidate
+    );
+    anyhow::ensure!(
+        !changes_behavior || identity_type == IdentityType::Human,
+        "authoritative disposition requires a human actor"
+    );
     Ok(())
 }
 

@@ -44,7 +44,7 @@ impl StateStore {
                             {
                                 PromotionState::Asserted
                             } else {
-                                PromotionState::Proposed
+                                proposal.promotion_state
                             }
                         },
                         |record| match record.decision {
