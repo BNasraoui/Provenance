@@ -59,10 +59,10 @@ fn link_list_disambiguates_identical_titles_with_stable_id_chips() {
     let html = link_list(&colliding_requirement_links());
 
     assert!(html.contains(
-        "Participant budget summary shall pro-rate services</a> <span class=\"id-chip\">…hall_pro</span>"
+        "Participant budget summary shall pro-rate services <span class=\"id-chip\">…hall_pro</span></a>"
     ));
     assert!(html.contains(
-        "Participant budget summary shall pro-rate services</a> <span class=\"id-chip\">…ll_pro_2</span>"
+        "Participant budget summary shall pro-rate services <span class=\"id-chip\">…ll_pro_2</span></a>"
     ));
 }
 
@@ -75,4 +75,49 @@ fn link_list_leaves_unique_titles_unchanged() {
 <li><a href=\"/requirements/req_zero_suppression/\">Zero claim items shall be suppressed</a></li>\n\
 </ul>\n"
     );
+}
+
+#[test]
+fn repeated_links_to_the_same_record_do_not_collide() {
+    let link = colliding_requirement_links().remove(0);
+
+    assert!(!link_list(&[link.clone(), link]).contains("class=\"id-chip\""));
+}
+
+#[test]
+fn link_list_disambiguates_same_id_across_page_kinds() {
+    let links = vec![
+        super::fixtures::link(
+            crate::wiki::model::PageKind::Requirement,
+            "shared_id",
+            "Shared title",
+        ),
+        super::fixtures::link(
+            crate::wiki::model::PageKind::Resolution,
+            "shared_id",
+            "Shared title",
+        ),
+        super::fixtures::link(
+            crate::wiki::model::PageKind::Source,
+            "shared_id",
+            "Shared title",
+        ),
+    ];
+
+    let html = link_list(&links);
+    assert!(html.contains("<span class=\"id-chip\">Requirement · shared_id</span>"));
+    assert!(html.contains("<span class=\"id-chip\">Resolution · shared_id</span>"));
+    assert!(html.contains("<span class=\"id-chip\">Source · shared_id</span>"));
+}
+
+#[test]
+fn short_ids_use_the_shortest_suffix_that_distinguishes_records() {
+    let links = vec![
+        super::fixtures::link(crate::wiki::model::PageKind::Requirement, "req_a1", "Same"),
+        super::fixtures::link(crate::wiki::model::PageKind::Requirement, "req_b1", "Same"),
+    ];
+
+    let html = link_list(&links);
+    assert!(html.contains("<span class=\"id-chip\">req_a1</span>"));
+    assert!(html.contains("<span class=\"id-chip\">req_b1</span>"));
 }
