@@ -17,7 +17,6 @@ pub(super) fn handle(command: PromotionDecisionsCommand) -> anyhow::Result<()> {
             decision,
             rationale,
             actor_id,
-            actor_type,
             actor_name,
             canonical_artifact_type,
             canonical_artifact_id,
@@ -31,7 +30,10 @@ pub(super) fn handle(command: PromotionDecisionsCommand) -> anyhow::Result<()> {
                     decision: PromotionDecision::parse(&decision)?,
                     rationale,
                     actor: PromotionActor {
-                        identity_type: IdentityType::parse(&actor_type)?,
+                        // This command is the repository's explicit human
+                        // disposition authority. Bulk import and caller
+                        // supplied identity types cannot mint this authority.
+                        identity_type: IdentityType::Human,
                         id: actor_id,
                         name: actor_name,
                     },

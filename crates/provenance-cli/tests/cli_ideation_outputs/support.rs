@@ -11,6 +11,8 @@ pub fn init_repo(repo: &str) {
             "default",
             "--path-prefix",
             ".",
+            "--human-authority-id",
+            "ben",
         ])
         .assert()
         .success();

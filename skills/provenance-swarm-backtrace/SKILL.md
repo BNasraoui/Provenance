@@ -200,7 +200,10 @@ Proposals:
 - keep supporting claim links in `traceability.supporting_claim_ids`;
 - every proposal uses `promotion_state: "proposed"`;
 - emit an `assertions` record only when supporting claims exist with positive evidence and the
-  adjudicating synthesis has no contested claim or promotion blocker;
+  adjudicating synthesis has no contested claim or promotion blocker; unsupported/exploratory
+  claim or reference types are never positive evidence;
+- every adjudicating `suggested_artifacts` entry names the exact `proposal_id`; matching a
+  reusable key/type pair is not adjudication;
 - use assertion IDs in `builds_on` when a later proposal incorporates an earlier assertion;
   neither assertion nor lineage is human ratification.
 
@@ -215,5 +218,7 @@ but silently dropped a partition is worse than one that says where it didn't loo
 The backtrace's output *feeds* the shaping loop; it does not finish anything. Tell the
 human what landed (`provenance proposals list --scope <scope> --promotion-state asserted`), what's contested, and
 what surprised the refuters — then the shaping loop (docs/shaping.md, "Invocation")
-takes over: `provenance prime`, and the human disposes of proposals question by
-question via `promotion-decisions create`. Do not make promotion decisions yourself.
+takes over: `provenance prime`. Only asserted proposals are disposition-ready. A contested
+proposed card first needs a later positive contribution, non-blocking synthesis bound to its
+exact ID, and `proposals assert`; the human can then dispose of it question by question via
+`promotion-decisions create`. Do not make promotion decisions yourself.

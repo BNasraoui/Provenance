@@ -231,8 +231,6 @@ pub enum PromotionDecisionsCommand {
         #[arg(long)]
         actor_id: String,
         #[arg(long)]
-        actor_type: String,
-        #[arg(long)]
         actor_name: Option<String>,
         #[arg(long)]
         canonical_artifact_type: Option<String>,

@@ -52,6 +52,10 @@ pub fn validate_proposal_intrinsic(proposal: &ProposalCard) -> anyhow::Result<()
         "proposals must begin proposed; assertion and disposition are verified transitions"
     );
     anyhow::ensure!(
+        !proposal.legacy_terminal,
+        "active proposals cannot claim legacy terminal compatibility"
+    );
+    anyhow::ensure!(
         proposal.duplicate_of.is_none() && proposal.superseded_by.is_none(),
         "proposal disposition links require an authoritative disposition record"
     );
@@ -112,6 +116,13 @@ pub fn validate_ideation_aggregate(aggregate: IdeationAggregate<'_>) -> anyhow::
             packet.schema_version.0 == 1,
             "synthesis packet schema_version must be 1"
         );
+        ensure_unique(
+            "suggested proposal",
+            packet
+                .suggested_artifacts
+                .iter()
+                .filter_map(|suggestion| suggestion.proposal_id.as_ref().map(StableId::as_str)),
+        )?;
     }
     ensure_unique(
         "proposal",
@@ -129,6 +140,23 @@ pub fn validate_ideation_aggregate(aggregate: IdeationAggregate<'_>) -> anyhow::
                 "proposal disposition links require an authoritative disposition record"
             );
             ensure_unique_lineage(proposal)?;
+        } else {
+            let matching_historical_disposition = aggregate.dispositions.iter().any(|record| {
+                record.proposal_id == proposal.id
+                    && disposition_matches_state(record.decision, proposal.promotion_state)
+            });
+            anyhow::ensure!(
+                (proposal.legacy_terminal || matching_historical_disposition)
+                    && matches!(
+                        proposal.promotion_state,
+                        PromotionState::Accepted
+                            | PromotionState::Rejected
+                            | PromotionState::Deferred
+                            | PromotionState::Duplicate
+                            | PromotionState::Superseded
+                    ),
+                "embedded state is not a safely identifiable legacy terminal record"
+            );
         }
     }
 
@@ -168,13 +196,10 @@ fn ensure_assertions<'a>(
     let mut claims = BTreeMap::new();
     for contribution in aggregate.contributions {
         for claim in &contribution.material_claims {
-            anyhow::ensure!(
-                claims
-                    .insert(claim.claim_id.as_str(), (claim, contribution))
-                    .is_none(),
-                "claim {} has multiple owners",
-                claim.claim_id.as_str()
-            );
+            claims
+                .entry(claim.claim_id.as_str())
+                .or_insert_with(Vec::new)
+                .push((claim, contribution));
         }
     }
     for assertion in aggregate.assertions {
@@ -190,6 +215,11 @@ fn ensure_assertions<'a>(
                     assertion.proposal_id.as_str()
                 )
             })?;
+        anyhow::ensure!(
+            proposal.promotion_state == PromotionState::Proposed,
+            "legacy terminal proposal {} is frozen and cannot be asserted",
+            proposal.id.as_str()
+        );
         anyhow::ensure!(
             asserted_proposals.insert(assertion.proposal_id.as_str()),
             "proposal {} has multiple assertions",
@@ -212,13 +242,11 @@ fn ensure_assertions<'a>(
             "assertion records must share the proposal scope"
         );
         anyhow::ensure!(
-            packet
-                .suggested_artifacts
-                .iter()
-                .any(
-                    |suggestion| suggestion.proposal_key == proposal.proposal_key
-                        && suggestion.proposal_type == proposal.proposal_type
-                ),
+            packet.suggested_artifacts.iter().any(|suggestion| {
+                suggestion.proposal_id.as_ref() == Some(&proposal.id)
+                    && suggestion.proposal_key == proposal.proposal_key
+                    && suggestion.proposal_type == proposal.proposal_type
+            }),
             "synthesis packet does not adjudicate proposal {}",
             proposal.id.as_str()
         );
@@ -251,9 +279,20 @@ fn ensure_assertions<'a>(
                 "assertion claim {} is contested",
                 claim_id.as_str()
             );
-            let (claim, owner) = claims.get(claim_id.as_str()).ok_or_else(|| {
+            let owners = claims.get(claim_id.as_str()).ok_or_else(|| {
                 anyhow::anyhow!("assertion claim {} does not exist", claim_id.as_str())
             })?;
+            anyhow::ensure!(
+                owners.len() == 1,
+                "assertion claim {} has multiple owners",
+                claim_id.as_str()
+            );
+            let (claim, owner) = owners[0];
+            anyhow::ensure!(
+                claim.evidence_type.is_positive(),
+                "assertion claim {} must use a positive evidence type",
+                claim_id.as_str()
+            );
             anyhow::ensure!(
                 owner.target == proposal.traceability.target,
                 "assertion claim {} is not owned by the proposal target",
@@ -270,12 +309,24 @@ fn ensure_assertions<'a>(
                 claim_id.as_str()
             );
             for evidence_id in &claim.evidence_reference_ids {
+                let evidence = owner
+                    .evidence_references
+                    .iter()
+                    .find(|evidence| evidence.reference_id == *evidence_id)
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "assertion evidence {} does not exist in the claim owner",
+                            evidence_id.as_str()
+                        )
+                    })?;
                 anyhow::ensure!(
-                    owner
-                        .evidence_references
-                        .iter()
-                        .any(|evidence| evidence.reference_id == *evidence_id),
-                    "assertion evidence {} does not exist in the claim owner",
+                    evidence.evidence_type == claim.evidence_type,
+                    "assertion evidence type does not match claim {}",
+                    claim_id.as_str()
+                );
+                anyhow::ensure!(
+                    evidence.evidence_type.is_positive(),
+                    "assertion evidence {} must use a positive evidence type",
                     evidence_id.as_str()
                 );
             }
@@ -315,12 +366,29 @@ fn ensure_dispositions(
             disposition.scope_id == proposal.scope_id,
             "disposition must share the proposal scope"
         );
-        let legacy_terminal = proposal.promotion_state != PromotionState::Proposed;
-        anyhow::ensure!(
-            legacy_terminal
-                || assertions
+        if proposal.promotion_state != PromotionState::Proposed {
+            anyhow::ensure!(
+                !assertions
                     .values()
                     .any(|assertion| assertion.proposal_id == disposition.proposal_id),
+                "legacy terminal proposal {} is frozen against assertions",
+                proposal.id.as_str()
+            );
+            anyhow::ensure!(
+                disposition_matches_state(disposition.decision, proposal.promotion_state),
+                "legacy terminal proposal state disagrees with its historical disposition"
+            );
+            anyhow::ensure!(
+                disposed.insert(disposition.proposal_id.as_str()),
+                "proposal {} has contradictory dispositions",
+                disposition.proposal_id.as_str()
+            );
+            continue;
+        }
+        anyhow::ensure!(
+            assertions
+                .values()
+                .any(|assertion| assertion.proposal_id == disposition.proposal_id),
             "proposal {} must be asserted before disposition",
             disposition.proposal_id.as_str()
         );
@@ -329,11 +397,28 @@ fn ensure_dispositions(
             "proposal {} has contradictory dispositions",
             disposition.proposal_id.as_str()
         );
-        if !legacy_terminal {
-            ensure_authoritative_actor(proposal, disposition.actor.identity_type)?;
-        }
+        ensure_authoritative_actor(proposal, disposition.actor.identity_type)?;
     }
     Ok(())
+}
+
+const fn disposition_matches_state(
+    decision: crate::model::PromotionDecision,
+    state: PromotionState,
+) -> bool {
+    matches!(
+        (decision, state),
+        (
+            crate::model::PromotionDecision::Accepted,
+            PromotionState::Accepted
+        ) | (
+            crate::model::PromotionDecision::Rejected,
+            PromotionState::Rejected
+        ) | (
+            crate::model::PromotionDecision::Deferred,
+            PromotionState::Deferred
+        )
+    )
 }
 
 pub fn ensure_authoritative_actor(

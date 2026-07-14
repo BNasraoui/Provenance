@@ -30,6 +30,9 @@ pub enum Command {
         scope: String,
         #[arg(long, default_value = ".")]
         path_prefix: Utf8PathBuf,
+        /// Trusted human identity allowed to record behavior-changing dispositions.
+        #[arg(long)]
+        human_authority_id: Vec<String>,
     },
     Check {
         #[arg(long, default_value = ".")]

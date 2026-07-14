@@ -205,8 +205,6 @@ fn swarm_backtrace_land_refuses_to_replace_accepted_proposals() {
             "Human accepted the proposal.",
             "--actor-id",
             "ben",
-            "--actor-type",
-            "human",
             "--format",
             "json",
         ])

@@ -11,6 +11,8 @@ pub fn init_repo(repo: &str) {
             "default",
             "--path-prefix",
             ".",
+            "--human-authority-id",
+            "ben",
         ])
         .assert()
         .success();
@@ -116,7 +118,7 @@ pub fn write_run_dir(root: &std::path::Path, strongest_finding: &str) {
             "evidence_gaps": [],
             "unsupported_speculation": [],
             "open_questions": [],
-            "suggested_artifacts": [{"proposal_key":"backtrace/auth/publish_requires_worker","proposal_type":"requirement_candidate","summary":"Review the candidate requirement.","origin_participant_slots":["extract_auth"]}],
+            "suggested_artifacts": [{"proposal_id":"prop_req_publish_requires_worker","proposal_key":"backtrace/auth/publish_requires_worker","proposal_type":"requirement_candidate","summary":"Review the candidate requirement.","origin_participant_slots":["extract_auth"]}],
             "required_human_decisions": [{"decision_key":"decide_publish_guard","prompt":"Confirm this behavior is intentional.","blocks_promotion":true}]
           },
           "proposals": [{

@@ -6,6 +6,14 @@ use super::ideation::{PromotionDecision, PromotionState, ProposalType};
 use super::ids::SchemaVersion;
 
 #[test]
+fn legacy_swarm_asserted_alias_is_read_but_never_emitted() {
+    let state: PromotionState = serde_json::from_str("\"swarm_asserted\"").unwrap();
+    assert_eq!(state, PromotionState::Asserted);
+    assert_eq!(PromotionState::parse("swarm_asserted").unwrap(), state);
+    assert_eq!(serde_json::to_string(&state).unwrap(), "\"asserted\"");
+}
+
+#[test]
 #[allow(clippy::too_many_lines)]
 fn ideation_output_records_roundtrip_without_schema_bump() {
     let contribution = serde_json::json!({

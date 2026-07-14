@@ -1,5 +1,5 @@
 use super::{
-    read_jsonl, CreateAssertionInput, CreateContributionInput, CreatePromotionDecisionInput,
+    CreateAssertionInput, CreateContributionInput, CreatePromotionDecisionInput,
     CreateProposalCardInput, CreateSynthesisPacketInput, StateStore,
 };
 use crate::shards;
@@ -52,13 +52,7 @@ impl StateStore {
             validate_optional_confidence_score(claim.confidence)?;
         }
         let path = shards::contributions_path(&self.layout, &scope_id);
-        let direct: Vec<Contribution> = read_jsonl(&path)?;
-        if self
-            .list_contributions(&scope_id)?
-            .iter()
-            .any(|record| record.id == id)
-            && !direct.iter().any(|record| record.id == id)
-        {
+        if self.has_landed_contribution(&scope_id, &id)? {
             anyhow::bail!("landed contribution cannot be replaced through the direct writer");
         }
         self.mutate_jsonl_records(&path, |records: &mut Vec<Contribution>| {
@@ -155,13 +149,7 @@ impl StateStore {
             required_human_decisions,
         } = input;
         let path = shards::synthesis_packets_path(&self.layout, &scope_id);
-        let direct: Vec<SynthesisPacket> = read_jsonl(&path)?;
-        if self
-            .list_synthesis_packets(&scope_id)?
-            .iter()
-            .any(|record| record.id == id)
-            && !direct.iter().any(|record| record.id == id)
-        {
+        if self.has_landed_synthesis(&scope_id, &id)? {
             anyhow::bail!("landed synthesis packet cannot be replaced through the direct writer");
         }
         self.mutate_jsonl_records(&path, |records: &mut Vec<SynthesisPacket>| {
@@ -255,6 +243,7 @@ impl StateStore {
             confidence,
             traceability,
             promotion_state: PromotionState::Proposed,
+            legacy_terminal: false,
             builds_on,
             duplicate_of,
             superseded_by,
@@ -383,6 +372,14 @@ impl StateStore {
             &proposal,
             promotion_decision.actor.identity_type,
         )?;
+        if matches!(
+            proposal.proposal_type,
+            provenance_core::ProposalType::RequirementCandidate
+                | provenance_core::ProposalType::ResolutionCandidate
+                | provenance_core::ProposalType::RuleCandidate
+        ) {
+            self.ensure_human_authority(&promotion_decision.actor.id)?;
+        }
         anyhow::ensure!(
             !self
                 .list_promotion_decisions(&scope_id)?

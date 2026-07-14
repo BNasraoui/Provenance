@@ -51,6 +51,9 @@ impl ProvenanceLayout {
             .join(scope.as_str())
             .join("ideation.lock")
     }
+    pub fn state_transaction_lock_path(&self) -> Utf8PathBuf {
+        self.cache_dir().join("locks/state-transaction.lock")
+    }
 }
 
 pub fn locate_repo_root(start: &Utf8Path) -> anyhow::Result<Utf8PathBuf> {

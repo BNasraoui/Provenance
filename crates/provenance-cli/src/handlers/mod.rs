@@ -50,8 +50,9 @@ pub(super) async fn dispatch(command: Command, quiet: bool) -> anyhow::Result<()
             path,
             scope,
             path_prefix,
+            human_authority_id,
         } => {
-            repo::init(path, scope, path_prefix)?;
+            repo::init(path, scope, path_prefix, human_authority_id)?;
         }
         Command::Check { repo, format } => {
             check::check(repo, format)?;

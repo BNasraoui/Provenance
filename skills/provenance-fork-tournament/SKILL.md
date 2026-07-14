@@ -84,8 +84,8 @@ provenance questions claim --scope <scope> \
      --participant-slot <stance_slug> \
      --stance support \
      --strongest-finding "<one-line: the artifact's central claim>" \
-     --claims-json '<claims citing typed evidence>' \
-     --evidence-json '<evidence refs; file_path for artifact files>' \
+     --claims-json '[{"claim_id":"claim_<question>_<slot>","evidence_type":"artifact","evidence_reference_ids":["evidence_<question>_<slot>"],...}]' \
+     --evidence-json '[{"reference_id":"evidence_<question>_<slot>","evidence_type":"artifact",...}]' \
      --unsupported-recommendations-json '<speculation, explicitly marked>' \
      --uncertainty-level <low|medium|high> \
      --uncertainty-rationale "<why>"
@@ -97,7 +97,8 @@ provenance questions claim --scope <scope> \
      --title "<stance>: <artifact one-liner>" \
      --summary "<manifesto, then the artifact body or a file pointer>" \
      --target-type question --target-id <question_id> \
-     --evidence-json '<same refs>'
+     --evidence-json '<same refs>' \
+     --supporting-claim-id claim_<question>_<slot>
    ```
 
    Note `--stance` on contributions is the enum stance toward the target
@@ -151,7 +152,29 @@ The promotion gate, with a clock. This is a grill-shaped turn against the artifa
    conversation state. Push past "I like B": *which property* of B, and what from the
    losers still matters?
 
-3. **Land the decision the moment it resolves:**
+3. **Adjudicate and assert after the reactions resolve the fork.** Preserve the blocking
+   phase-1 synthesis as history. Create a new packet with no contested supporting claims,
+   blocking evidence gaps, or blocking human decisions. Every suggested artifact must bind
+   its exact immutable proposal identity:
+
+   ```sh
+   provenance synthesis-packets create --scope <scope> \
+     --id synth_<question>_adjudicated \
+     --target-type question --target-id <question_id> \
+     --summary "<resolved comparison grounded in the reactions>" \
+     --suggested-artifacts-json '[{"proposal_id":"prop_<question>_<slot>","proposal_key":"<question>_<slot>","proposal_type":"resolution_candidate",...}]'
+
+   provenance proposals assert --scope <scope> \
+     --id assertion_<question>_<slot> \
+     --proposal-id prop_<question>_<slot> \
+     --synthesis-packet-id synth_<question>_adjudicated \
+     --supporting-claim-id claim_<question>_<slot>
+   ```
+
+   Repeat the assertion for every proposal. Unsupported/exploratory evidence cannot support
+   an assertion. Assertion verifies an evidence-backed candidate; it does not choose a winner.
+
+4. **Land the decision the moment it resolves:**
 
    ```sh
    provenance resolutions create --scope <scope> \
@@ -170,7 +193,7 @@ The promotion gate, with a clock. This is a grill-shaped turn against the artifa
    `--position` and `--rationale` through the `provenance-grounded-writing` skill's naming test before
    landing.
 
-4. **Mark the question answered.** Creating the resolution does not update question state:
+5. **Mark the question answered.** Creating the resolution does not update question state:
 
    ```sh
    provenance questions answer --scope <scope> \
@@ -180,7 +203,7 @@ The promotion gate, with a clock. This is a grill-shaped turn against the artifa
      --format json
    ```
 
-5. **Dispose of every proposal** — winner accepted with the resolution as canonical
+6. **Dispose of every asserted proposal** — winner accepted with the resolution as canonical
    artifact; losers rejected (rationale names the superseding resolution — see Gaps):
 
    ```sh
@@ -189,14 +212,15 @@ The promotion gate, with a clock. This is a grill-shaped turn against the artifa
      --proposal-id prop_<question>_<slot> \
      --decision accepted \
      --rationale "<from the reactions>" \
-     --actor-id <human_id> --actor-type human \
+     --actor-id <human_id> \
      --canonical-artifact-type resolution --canonical-artifact-id res_<question>
    # losers: --decision rejected --rationale "superseded by res_<question>; grafted: <idea>"
    ```
 
-   This flips each proposal's `promotion_state` — no separate update step.
+   The dedicated command is the authoritative human boundary; bulk import cannot claim human
+   authority. Effective state is derived from the immutable disposition — no update step.
 
-6. **Fan out** as any resolution does (docs/shaping.md, "Landing fan-out"): rules
+7. **Fan out** as any resolution does (docs/shaping.md, "Landing fan-out"): rules
    produced, requirements spawned, fog graduated. Then continue the turn loop or hand off.
 
 ## Caveats (empirical — from the Statesman provenance scoping record)

@@ -277,6 +277,17 @@ impl StateStore {
         )?)?)
     }
 
+    pub(crate) fn ensure_human_authority(&self, actor_id: &str) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.manifest()?
+                .human_authority_ids
+                .iter()
+                .any(|trusted| trusted == actor_id),
+            "actor {actor_id} is not a repository-configured human authority"
+        );
+        Ok(())
+    }
+
     pub fn list_scope_directories(&self) -> anyhow::Result<Vec<String>> {
         let scopes_dir = self.layout.scopes_dir();
         if !scopes_dir.exists() {
@@ -344,7 +355,9 @@ impl StateStore {
         T: DeserializeOwned + Serialize,
     {
         let lock_path = self.layout.state_shard_lock_path(path)?;
-        crate::jsonl::mutate_jsonl_locked(path, &lock_path, mutate)
+        crate::jsonl::with_exclusive_lock(&self.layout.state_transaction_lock_path(), || {
+            crate::jsonl::mutate_jsonl_locked(path, &lock_path, mutate)
+        })
     }
 
     pub(crate) fn with_ideation_lock<R>(
@@ -353,6 +366,13 @@ impl StateStore {
         operation: impl FnOnce() -> anyhow::Result<R>,
     ) -> anyhow::Result<R> {
         crate::jsonl::with_exclusive_lock(&self.layout.ideation_lock_path(scope), operation)
+    }
+
+    pub fn with_state_transaction<R>(
+        &self,
+        operation: impl FnOnce() -> anyhow::Result<R>,
+    ) -> anyhow::Result<R> {
+        crate::jsonl::with_exclusive_lock(&self.layout.state_transaction_lock_path(), operation)
     }
 }
 

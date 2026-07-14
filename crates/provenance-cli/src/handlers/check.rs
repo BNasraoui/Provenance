@@ -12,6 +12,11 @@ mod scope;
 use index::CheckIndex;
 
 pub(super) fn check(repo: Utf8PathBuf, format: OutputFormat) -> anyhow::Result<()> {
+    validate_repository(repo)?;
+    output::print(format, &Status { status: "ok" })
+}
+
+pub(super) fn validate_repository(repo: Utf8PathBuf) -> anyhow::Result<()> {
     let store = StateStore::new(ProvenanceLayout::new(repo));
     let manifest = store.manifest()?;
     anyhow::ensure!(
@@ -46,5 +51,5 @@ pub(super) fn check(repo: Utf8PathBuf, format: OutputFormat) -> anyhow::Result<(
         "dangling reference(s):\n- {}",
         dangling.join("\n- ")
     );
-    output::print(format, &Status { status: "ok" })
+    Ok(())
 }

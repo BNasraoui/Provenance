@@ -55,6 +55,10 @@ pub struct UnsupportedSpeculation {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SuggestedArtifact {
+    /// Exact immutable proposal adjudicated by this suggestion. Historical
+    /// packets may omit it, but such a packet cannot authorize an assertion.
+    #[serde(default, alias = "proposalId", skip_serializing_if = "Option::is_none")]
+    pub proposal_id: Option<StableId>,
     #[serde(alias = "proposalKey")]
     pub proposal_key: String,
     #[serde(alias = "proposalType")]
