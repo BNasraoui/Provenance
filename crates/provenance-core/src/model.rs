@@ -21,8 +21,8 @@ pub use ideation::contributions::{
     UnsupportedRecommendation,
 };
 pub use ideation::lifecycle::{
-    validate_ideation_aggregate, validate_proposal_intrinsic, AssertionId, AssertionRecord,
-    IdeationAggregate,
+    ensure_authoritative_actor, validate_ideation_aggregate, validate_proposal_intrinsic,
+    AssertionId, AssertionRecord, IdeationAggregate,
 };
 pub use ideation::promotions::{CanonicalArtifact, DispositionRecord, PromotionActor};
 pub use ideation::proposals::{ProposalCard, ProposalTraceability, ProposalView};

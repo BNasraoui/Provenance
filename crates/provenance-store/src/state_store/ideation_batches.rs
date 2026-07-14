@@ -25,6 +25,7 @@ impl StateStore {
         mut incoming: IdeationLandingBatch,
         replace: bool,
     ) -> anyhow::Result<()> {
+        ensure_batch_scope(scope_id, &incoming)?;
         let path = shards::ideation_landings_path(&self.layout, scope_id);
         self.mutate_jsonl_records(&path, |landings: &mut Vec<IdeationLandingBatch>| {
             let mut contributions = self.list_contributions(scope_id)?;
@@ -117,6 +118,44 @@ impl StateStore {
             Ok(())
         })
     }
+}
+
+fn ensure_batch_scope(scope_id: &ScopeId, incoming: &IdeationLandingBatch) -> anyhow::Result<()> {
+    for (kind, actual) in incoming
+        .contributions
+        .iter()
+        .map(|record| ("contribution", &record.scope_id))
+        .chain(
+            incoming
+                .synthesis_packets
+                .iter()
+                .map(|record| ("synthesis packet", &record.scope_id)),
+        )
+        .chain(
+            incoming
+                .proposals
+                .iter()
+                .map(|record| ("proposal", &record.scope_id)),
+        )
+        .chain(
+            incoming
+                .assertions
+                .iter()
+                .map(|record| ("assertion", &record.scope_id)),
+        )
+        .chain(
+            incoming
+                .dispositions
+                .iter()
+                .map(|record| ("disposition", &record.scope_id)),
+        )
+    {
+        anyhow::ensure!(
+            actual == scope_id,
+            "{kind} scope_id must match landing scope"
+        );
+    }
+    Ok(())
 }
 
 fn merge_records<T: Clone>(

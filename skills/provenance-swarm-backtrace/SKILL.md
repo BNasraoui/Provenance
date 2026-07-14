@@ -138,7 +138,8 @@ Run directory contract:
 - `<run-dir>/refuters/<batch>.json` — `<Contribution>` or
   `{"contribution": <Contribution>}` for each refuter participant slot.
 - `<run-dir>/merge/merged.json` — `{"synthesis_packet": <SynthesisPacket>, "proposals":
-  [<ProposalCard>, ...]}` for the merged candidate set.
+  [<ProposalCard>, ...], "assertions": [<AssertionRecord>, ...]}` for the merged candidate
+  set. Omit `assertions` only when every candidate remains contested.
 
 Use the CLI schemas while assembling these files:
 
@@ -158,17 +159,17 @@ provenance validate proposal --input proposal.json --format json
 ```
 
 The landing command reads extractor/refuter contributions plus merge outputs, validates
-schema version and nested IDs, and writes contributions, synthesis packets, and proposals
-serially:
+schema version, nested IDs, and the complete lifecycle aggregate, then appends one atomic
+landing batch:
 
 ```sh
 provenance swarm-backtrace land --scope <scope> --run-dir <run-dir> --format json
 ```
 
-Use `--replace` when intentionally re-landing a regenerated run with the same stable IDs.
-It can replace matching contribution and synthesis IDs; an existing proposal is replaceable
-only while it is still `proposed` and has no promotion decision. Without `--replace`,
-existing contribution/synthesis/proposal IDs fail fast.
+Use `--replace` when intentionally re-landing regenerated contributions or synthesis packets
+with the same stable IDs. Durable assertion evidence cannot be replaced, and proposals and
+assertions are immutable; mint new IDs when revising them. Without `--replace`, existing
+contribution or synthesis IDs also fail fast.
 
 Contribution records:
 

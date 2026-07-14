@@ -181,3 +181,62 @@ fn assertion_lineage_uses_immutable_assertion_ids_and_is_acyclic() {
     .to_string()
     .contains("cycle"));
 }
+
+#[test]
+fn legacy_terminal_proposals_remain_readable_after_lifecycle_upgrade() {
+    let (contribution, synthesis, mut proposal, _) = fixtures();
+    proposal["promotion_state"] = serde_json::json!("accepted");
+    let contributions = vec![serde_json::from_value::<Contribution>(contribution).unwrap()];
+    let synthesis_packets = vec![serde_json::from_value::<SynthesisPacket>(synthesis).unwrap()];
+    let proposals = vec![serde_json::from_value::<ProposalCard>(proposal).unwrap()];
+
+    let dispositions = vec![serde_json::from_value(serde_json::json!({
+        "schema_version": 1,
+        "scope_id": "default",
+        "id": "legacy_decision",
+        "proposal_id": "proposal_a",
+        "decision": "accepted",
+        "rationale": "Historical decision",
+        "actor": {"identity_type": "human", "id": "reviewer"}
+    }))
+    .unwrap()];
+    validate_ideation_aggregate(IdeationAggregate {
+        contributions: &contributions,
+        synthesis_packets: &synthesis_packets,
+        proposals: &proposals,
+        assertions: &[],
+        dispositions: &dispositions,
+    })
+    .unwrap();
+}
+
+#[test]
+fn automation_can_dispose_only_non_behavior_proposals() {
+    let (contribution, synthesis, mut proposal, assertion) = fixtures();
+    proposal["proposal_type"] = serde_json::json!("source_gap");
+    let mut synthesis = synthesis;
+    synthesis["suggested_artifacts"][0]["proposal_type"] = serde_json::json!("source_gap");
+    let contributions = vec![serde_json::from_value::<Contribution>(contribution).unwrap()];
+    let synthesis_packets = vec![serde_json::from_value::<SynthesisPacket>(synthesis).unwrap()];
+    let proposals = vec![serde_json::from_value::<ProposalCard>(proposal).unwrap()];
+    let assertions = vec![serde_json::from_value::<AssertionRecord>(assertion).unwrap()];
+    let dispositions = vec![serde_json::from_value(serde_json::json!({
+        "schema_version": 1,
+        "scope_id": "default",
+        "id": "disposition_a",
+        "proposal_id": "proposal_a",
+        "decision": "deferred",
+        "rationale": "Automation recorded a workflow outcome.",
+        "actor": {"identity_type": "agent", "id": "workflow"}
+    }))
+    .unwrap()];
+
+    validate_ideation_aggregate(IdeationAggregate {
+        contributions: &contributions,
+        synthesis_packets: &synthesis_packets,
+        proposals: &proposals,
+        assertions: &assertions,
+        dispositions: &dispositions,
+    })
+    .unwrap();
+}
