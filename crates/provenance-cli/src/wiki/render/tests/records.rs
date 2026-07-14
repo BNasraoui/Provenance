@@ -7,7 +7,7 @@ use super::super::{
 };
 use super::fixtures::{
     colliding_requirement_links, gappy_requirement_fixture, index_fixture, resolution_fixture,
-    rule_fixture, source_fixture,
+    rule_fixture, source_fixture, unique_requirement_links,
 };
 
 #[test]
@@ -39,6 +39,20 @@ fn rule_page_links_evidence_but_leaves_prose_references_as_text() {
     assert!(!html.contains("href=\"\""));
     assert!(html.contains("sev high"));
     assert!(html.contains("prohibition"));
+}
+
+#[test]
+fn rule_page_disambiguates_mixed_kind_producers_with_the_same_id() {
+    let mut page = rule_fixture();
+    page.produced_by = vec![
+        super::fixtures::link(PageKind::Resolution, "shared_id", "Shared producer"),
+        super::fixtures::link(PageKind::Requirement, "shared_id", "Shared producer"),
+    ];
+
+    let html = render_rule("default", &page);
+    assert!(html.contains("Produced By"));
+    assert!(html.contains("<span class=\"id-chip\">Resolution · shared_id</span>"));
+    assert!(html.contains("<span class=\"id-chip\">Requirement · shared_id</span>"));
 }
 
 #[test]
@@ -84,6 +98,30 @@ fn index_page_disambiguates_roots_with_identical_titles() {
     let html = render_index("default", &page);
     assert!(html.contains("<span class=\"id-chip\">…hall_pro</span>"));
     assert!(html.contains("<span class=\"id-chip\">…ll_pro_2</span>"));
+}
+
+#[test]
+fn index_page_keeps_unique_root_links_unchanged() {
+    let mut page = index_fixture();
+    page.roots = unique_requirement_links()
+        .into_iter()
+        .map(|link| crate::wiki::model::IndexEntry {
+            link,
+            status: RequirementStatus::Active,
+            children: 0,
+            resolutions: 0,
+            rules: 0,
+        })
+        .collect();
+
+    let html = render_index("default", &page);
+    assert!(html.contains(
+        "<a class=\"entry-title\" href=\"/requirements/req_budget_split/\">Budget portions shall reconcile</a>\n"
+    ));
+    assert!(html.contains(
+        "<a class=\"entry-title\" href=\"/requirements/req_zero_suppression/\">Zero claim items shall be suppressed</a>\n"
+    ));
+    assert!(!html.contains("…"));
 }
 
 #[test]

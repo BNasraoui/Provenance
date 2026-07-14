@@ -4,7 +4,7 @@ use std::fmt::Write as _;
 use super::super::chrome::{container_html, page_shell, title_row};
 use super::super::citations::push_gap_citations;
 use super::super::fragments::{push_classification_row, push_orphan_group, push_section_open};
-use super::super::html::ListLinkRenderer;
+use super::super::html::PageLinksRenderer;
 use super::super::labels::{counted, requirement_status_badge};
 
 /// Renders the scope index page.
@@ -20,13 +20,13 @@ pub fn render_index(scope: &str, page: &ScopeIndexPage) -> String {
         main.push_str("<p class=\"prose\">No requirements recorded in this scope.</p>\n");
     } else {
         main.push_str("<ul class=\"index-list\">\n");
-        let link_renderer = ListLinkRenderer::new(page.roots.iter().map(|entry| &entry.link));
+        let link_renderer = PageLinksRenderer::new(page.roots.iter().map(|entry| &entry.link));
         for entry in &page.roots {
             main.push_str("<li>\n");
             writeln!(
                 main,
                 "{}",
-                link_renderer.link_html(&entry.link, Some("entry-title"))
+                link_renderer.link(&entry.link, Some("entry-title"))
             )
             .expect("writing to a String should not fail");
             main.push_str(&requirement_status_badge(

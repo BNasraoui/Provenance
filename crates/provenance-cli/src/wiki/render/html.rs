@@ -1,7 +1,9 @@
 use crate::wiki::links::{EvidenceRef, InlineRef};
-use crate::wiki::model::PageLink;
+use crate::wiki::model::{PageId, PageLink};
 use std::collections::HashMap;
 use std::fmt::Write as _;
+
+use super::labels::kind_label;
 
 pub(in crate::wiki::render) fn escape_html(text: &str) -> String {
     text.replace('&', "&amp;")
@@ -21,41 +23,55 @@ pub(in crate::wiki::render) fn link_html(link: &PageLink) -> String {
     )
 }
 
-pub(in crate::wiki::render) struct ListLinkRenderer {
-    links_by_title: HashMap<String, Vec<String>>,
+pub(in crate::wiki::render) struct PageLinksRenderer {
+    targets_by_title: HashMap<String, Vec<PageId>>,
 }
 
-impl ListLinkRenderer {
+impl PageLinksRenderer {
     pub(in crate::wiki::render) fn new<'a>(links: impl IntoIterator<Item = &'a PageLink>) -> Self {
-        let mut links_by_title: HashMap<String, Vec<String>> = HashMap::new();
+        let mut targets_by_title: HashMap<String, Vec<PageId>> = HashMap::new();
         for link in links {
-            links_by_title
-                .entry(link.title.clone())
-                .or_default()
-                .push(link.target.record_id.clone());
+            let targets = targets_by_title.entry(link.title.clone()).or_default();
+            if !targets.contains(&link.target) {
+                targets.push(link.target.clone());
+            }
         }
-        links_by_title.retain(|_, ids| ids.len() > 1);
-        Self { links_by_title }
+        targets_by_title.retain(|_, targets| targets.len() > 1);
+        Self { targets_by_title }
     }
 
-    pub(in crate::wiki::render) fn link_html(
-        &self,
-        link: &PageLink,
-        class: Option<&str>,
-    ) -> String {
+    pub(in crate::wiki::render) fn link(&self, link: &PageLink, class: Option<&str>) -> String {
         let class = class.map_or_else(String::new, |class| {
             format!(" class=\"{}\"", escape_attr(class))
         });
-        let mut html = format!(
-            "<a{class} href=\"{}\">{}</a>",
+        format!(
+            "<a{class} href=\"{}\">{}{}</a>",
             escape_attr(&link.target.route()),
-            escape_html(&link.title)
-        );
-        if let Some(ids) = self.links_by_title.get(&link.title) {
-            let suffix = shortest_distinct_suffix(&link.target.record_id, ids);
+            escape_html(&link.title),
+            self.collision_chip(link)
+        )
+    }
+
+    pub(in crate::wiki::render) fn text(&self, link: &PageLink) -> String {
+        format!("{}{}", escape_html(&link.title), self.collision_chip(link))
+    }
+
+    fn collision_chip(&self, link: &PageLink) -> String {
+        let mut html = String::new();
+        if let Some(targets) = self.targets_by_title.get(&link.title) {
+            let suffix = shortest_distinct_suffix(&link.target, targets);
+            let kind = targets.iter().any(|other| {
+                other.kind != link.target.kind && other.record_id == link.target.record_id
+            });
             write!(
                 html,
-                " <span class=\"id-chip\">{}{}</span>",
+                " <span class=\"id-chip\">{}{}{}{}</span>",
+                if kind {
+                    kind_label(link.target.kind)
+                } else {
+                    ""
+                },
+                if kind { " · " } else { "" },
                 if suffix.len() < link.target.record_id.len() {
                     "…"
                 } else {
@@ -71,16 +87,17 @@ impl ListLinkRenderer {
 
 pub(in crate::wiki::render) fn link_list(links: &[PageLink]) -> String {
     let mut html = String::from("<ul class=\"link-list\">\n");
-    let renderer = ListLinkRenderer::new(links);
+    let renderer = PageLinksRenderer::new(links);
     for link in links {
-        writeln!(html, "<li>{}</li>", renderer.link_html(link, None))
+        writeln!(html, "<li>{}</li>", renderer.link(link, None))
             .expect("writing to a String should not fail");
     }
     html.push_str("</ul>\n");
     html
 }
 
-fn shortest_distinct_suffix<'a>(id: &'a str, colliding_ids: &[String]) -> &'a str {
+fn shortest_distinct_suffix<'a>(target: &'a PageId, colliding_targets: &[PageId]) -> &'a str {
+    let id = &target.record_id;
     let boundaries: Vec<usize> = id.char_indices().map(|(index, _)| index).collect();
     if boundaries.is_empty() {
         return id;
@@ -88,9 +105,9 @@ fn shortest_distinct_suffix<'a>(id: &'a str, colliding_ids: &[String]) -> &'a st
     let minimum_length = 8.min(boundaries.len());
     for length in minimum_length..=boundaries.len() {
         let suffix = &id[boundaries[boundaries.len() - length]..];
-        if colliding_ids
+        if colliding_targets
             .iter()
-            .all(|other| other == id || !other.ends_with(suffix))
+            .all(|other| other == target || !other.record_id.ends_with(suffix))
         {
             return suffix;
         }
