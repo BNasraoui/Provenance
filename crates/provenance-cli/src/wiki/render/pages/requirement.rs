@@ -93,9 +93,9 @@ pub fn render_requirement(scope: &str, page: &RequirementPage) -> String {
         writeln!(
             rows,
             "<div class=\"row\">{}<span class=\"k\">Domain</span>\
-             <a class=\"v mono\" href=\"/topics/#domain-{}\">{}</a></div>",
+             <a class=\"v mono\" href=\"{}\">{}</a></div>",
             icon_svg("i-git-branch"),
-            escape_attr(domain_id),
+            escape_attr(&super::super::routes::topic_fragment(domain_id)),
             escape_html(domain_id),
         )
         .expect("writing to a String should not fail");
@@ -125,8 +125,18 @@ pub fn render_requirement(scope: &str, page: &RequirementPage) -> String {
     push_lineage(&mut margin, &page.lineage);
 
     let back = page.back_link.as_ref().map_or_else(
-        || ("/".to_string(), scope.to_string()),
-        |link| (link.target.route(), link.title.clone()),
+        || {
+            (
+                super::super::routes::WikiRoute::Index.path(),
+                scope.to_string(),
+            )
+        },
+        |link| {
+            (
+                super::super::routes::WikiRoute::Record(&link.target).path(),
+                link.title.clone(),
+            )
+        },
     );
     let container = container_html(
         Some((PageKind::Requirement, back)),

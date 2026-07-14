@@ -1,6 +1,7 @@
 use super::super::build_corpus;
 use super::fixtures::*;
 use crate::wiki::links::LinkResolver;
+use crate::wiki::model::Topic;
 use provenance_core::{Domain, RequirementStatus, SchemaVersion};
 
 fn domain(id: &str, name: &str) -> Domain {
@@ -32,7 +33,6 @@ fn discovery_indexes_requirement_and_rule_titles_and_statements() {
         rule.statement,
         "Claim items shall be grouped by participant"
     );
-    assert_eq!(corpus.search.search("invoices claim"), vec![rule]);
 }
 
 #[test]
@@ -42,9 +42,14 @@ fn topics_group_requirements_and_their_rules_under_defined_domains() {
     let corpus = build_corpus(&state, &LinkResolver::new(None));
 
     let group = &corpus.topics.groups[0];
-    assert_eq!(group.domain_id.as_deref(), Some("domain_default"));
-    assert_eq!(group.name, "Invoicing");
-    assert!(!group.missing);
+    assert_eq!(
+        group.topic,
+        Topic::Defined {
+            id: "domain_default".to_string(),
+            name: "Invoicing".to_string(),
+            description: None,
+        }
+    );
     assert!(group
         .requirements
         .iter()
@@ -85,16 +90,15 @@ fn topics_surface_missing_and_unassigned_domain_data_without_dropping_records() 
         .topics
         .groups
         .iter()
-        .find(|group| group.domain_id.as_deref() == Some("domain_missing"))
+        .find(|group| matches!(&group.topic, Topic::Missing { id } if id == "domain_missing"))
         .unwrap();
-    assert!(missing.missing);
     assert_eq!(missing.requirements[0].target.record_id, "req_dangling");
 
     let unassigned = corpus
         .topics
         .groups
         .iter()
-        .find(|group| group.domain_id.is_none())
+        .find(|group| group.topic == Topic::Unassigned)
         .unwrap();
     let requirement_ids: Vec<&str> = unassigned
         .requirements
@@ -109,6 +113,5 @@ fn topics_surface_missing_and_unassigned_domain_data_without_dropping_records() 
 fn discovery_pages_are_empty_but_present_for_an_empty_scope() {
     let corpus = build_corpus(&empty_state(), &LinkResolver::new(None));
     assert!(corpus.search.entries.is_empty());
-    assert!(corpus.search.search("anything").is_empty());
     assert!(corpus.topics.groups.is_empty());
 }

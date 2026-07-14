@@ -80,7 +80,7 @@ pub(in crate::wiki::render) fn push_rule_territory_card(html: &mut String, rules
         writeln!(
             html,
             "<span class=\"rcode\"><a href=\"{}\">{}</a></span>",
-            escape_attr(&rule.link.target.route()),
+            escape_attr(&super::routes::WikiRoute::Record(&rule.link.target).path()),
             escape_html(&rule.rule_code)
         )
         .expect("writing to a String should not fail");
