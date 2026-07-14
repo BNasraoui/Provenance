@@ -74,6 +74,57 @@ fn check_accepts_edges_whose_endpoints_exist_in_different_scopes() {
 }
 
 #[test]
+fn check_registers_every_scope_record_before_validating_references() {
+    let dir = tempfile::tempdir().unwrap();
+    init(dir.path());
+    let state = dir.path().join(".provenance/state");
+    std::fs::write(
+        state.join("manifest.json"),
+        r#"{"schema_version":1,"scopes":[{"id":"frontend","path_prefix":"."},{"id":"platform","path_prefix":"services/platform"}]}"#,
+    )
+    .unwrap();
+    write_jsonl(
+        &state.join("scopes/platform/requirements/req.jsonl"),
+        r#"{"schema_version":1,"scope_id":"platform","id":"req_platform","domain_id":"domain_platform","statement":"Platform requirement","status":"active"}"#,
+    );
+    write_jsonl(
+        &state.join("scopes/platform/domains/domain.jsonl"),
+        r#"{"schema_version":1,"scope_id":"platform","id":"domain_platform","name":"Platform domain"}"#,
+    );
+
+    provenance(dir.path())
+        .success()
+        .stdout(contains(r#""status": "ok""#));
+}
+
+#[test]
+fn check_rejects_record_whose_embedded_scope_differs_from_directory_scope() {
+    let dir = tempfile::tempdir().unwrap();
+    init(dir.path());
+    let state = dir.path().join(".provenance/state");
+    std::fs::write(
+        state.join("manifest.json"),
+        r#"{"schema_version":1,"scopes":[{"id":"frontend","path_prefix":"."},{"id":"platform","path_prefix":"services/platform"}]}"#,
+    )
+    .unwrap();
+    write_jsonl(
+        &state.join("scopes/frontend/requirements/req.jsonl"),
+        r#"{"schema_version":1,"scope_id":"frontend","id":"req_frontend","domain_id":"domain_misfiled","statement":"Frontend requirement","status":"active"}"#,
+    );
+    write_jsonl(
+        &state.join("scopes/platform/domains/domain.jsonl"),
+        r#"{"schema_version":1,"scope_id":"frontend","id":"domain_misfiled","name":"Misfiled domain"}"#,
+    );
+
+    provenance(dir.path())
+        .failure()
+        .stderr(contains("scope ownership finding(s):"))
+        .stderr(contains(
+            "domain domain_misfiled loaded from scope platform has embedded scope_id frontend",
+        ));
+}
+
+#[test]
 fn check_rejects_dangling_promotion_decision_proposal_id() {
     let dir = tempfile::tempdir().unwrap();
     init(dir.path());
