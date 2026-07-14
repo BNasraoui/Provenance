@@ -1,7 +1,7 @@
 use assert_cmd::Command;
 use predicates::prelude::PredicateBooleanExt;
 
-fn proposal(repo: &str, id: &str, state: &str, builds_on: Option<&str>) {
+fn proposal(repo: &str, id: &str, builds_on: Option<&str>) {
     let mut command = Command::cargo_bin("provenance").unwrap();
     command.args([
         "proposals",
@@ -24,8 +24,8 @@ fn proposal(repo: &str, id: &str, state: &str, builds_on: Option<&str>) {
         "requirement",
         "--target-id",
         "req_anchor",
-        "--promotion-state",
-        state,
+        "--supporting-claim-id",
+        "claim_a",
         "--format",
         "json",
     ]);
@@ -53,13 +53,32 @@ fn asserted_proposals_are_consultable_and_can_be_built_on_provisionally() {
         .assert()
         .success();
 
-    proposal(&repo, "proposal_asserted", "asserted", None);
-    proposal(
-        &repo,
-        "proposal_derivative",
-        "proposed",
-        Some("proposal_asserted"),
-    );
+    let ideation = dir.path().join(".provenance/state/scopes/default/ideation");
+    std::fs::create_dir_all(&ideation).unwrap();
+    std::fs::write(ideation.join("contributions.jsonl"), concat!(r#"{"schema_version":1,"scope_id":"default","id":"contribution_a","target":{"artifact_type":"requirement","artifact_id":"req_anchor"},"participant_slot":"extractor","stance":"support","strongest_finding":"Observed","evidence_references":[{"reference_id":"evidence_a","evidence_type":"source","summary":"Pinned"}],"material_claims":[{"claim_id":"claim_a","statement":"Observed","evidence_type":"source","evidence_reference_ids":["evidence_a"]}],"risks":[],"objections":[],"challenges":[],"suggested_artifact_changes":[],"unsupported_recommendations":[],"uncertainty":{"level":"low","rationale":"Direct"},"open_questions":[]}"#, "\n")).unwrap();
+    std::fs::write(ideation.join("synthesis_packets.jsonl"), concat!(r#"{"schema_version":1,"scope_id":"default","id":"synthesis_a","target":{"artifact_type":"requirement","artifact_id":"req_anchor"},"summary":"Adjudicated","consensus":[],"contested_claims":[],"minority_objections":[],"evidence_gaps":[],"unsupported_speculation":[],"open_questions":[],"suggested_artifacts":[{"proposal_key":"proposal_asserted","proposal_type":"requirement_candidate","summary":"Candidate","origin_participant_slots":["extractor"]}],"required_human_decisions":[]}"#, "\n")).unwrap();
+    proposal(&repo, "proposal_asserted", None);
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "proposals",
+            "assert",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--id",
+            "assertion_asserted",
+            "--proposal-id",
+            "proposal_asserted",
+            "--synthesis-packet-id",
+            "synthesis_a",
+            "--supporting-claim-id",
+            "claim_a",
+        ])
+        .assert()
+        .success();
+    proposal(&repo, "proposal_derivative", Some("assertion_asserted"));
 
     Command::cargo_bin("provenance")
         .unwrap()
@@ -91,6 +110,6 @@ fn asserted_proposals_are_consultable_and_can_be_built_on_provisionally() {
             "proposal_asserted [asserted; not human-ratified]",
         ))
         .stdout(predicates::str::contains(
-            "builds on provisionally: proposal_asserted",
+            "builds on provisionally: assertion_asserted",
         ));
 }

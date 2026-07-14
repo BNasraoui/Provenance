@@ -1,4 +1,6 @@
 mod domain_service_writers;
+mod ideation_batches;
+mod ideation_readers;
 mod ideation_writers;
 mod rule_writers;
 mod shaping_writers;
@@ -9,11 +11,11 @@ use crate::{layout::ProvenanceLayout, shards};
 use anyhow::Context;
 use camino::{Utf8Path, Utf8PathBuf};
 use provenance_core::{
-    ArtifactLink, Boundary, CanonicalArtifact, ClaimChallenge, ConsensusFinding, ContestedClaim,
-    Contribution, ContributionStance, Domain, Edge, EdgeType, EvidenceGap,
-    IdeationEvidenceReference, IdeationTarget, Manifest, MaterialClaim, Message, MessageRole,
-    MinorityObjection, NodeType, PromotionActor, PromotionDecision, PromotionDecisionRecord,
-    PromotionState, ProposalCard, ProposalTraceability, ProposalType, Question, QuestionStatus,
+    ArtifactLink, AssertionId, AssertionRecord, Boundary, CanonicalArtifact, ClaimChallenge,
+    ConsensusFinding, ContestedClaim, Contribution, ContributionStance, DispositionRecord, Domain,
+    Edge, EdgeType, EvidenceGap, IdeationEvidenceReference, IdeationTarget, Manifest,
+    MaterialClaim, Message, MessageRole, MinorityObjection, NodeType, PromotionActor,
+    PromotionDecision, ProposalCard, ProposalTraceability, ProposalType, Question, QuestionStatus,
     RequiredHumanDecision, Requirement, RequirementStatus, Resolution, ResolutionInput,
     ResolutionMethod, ResolutionStatus, Rule, RuleModality, RuleSeverity, RuleStatus, RuleType,
     ScopeId, Service, ServiceBinding, ServiceBindingType, ServiceEnvironment, ServiceStatus,
@@ -226,10 +228,27 @@ pub struct CreateProposalCardInput {
     pub summary: String,
     pub confidence: Option<f64>,
     pub traceability: ProposalTraceability,
-    pub promotion_state: PromotionState,
-    pub builds_on: Vec<StableId>,
+    pub builds_on: Vec<AssertionId>,
     pub duplicate_of: Option<StableId>,
     pub superseded_by: Option<StableId>,
+}
+
+pub struct CreateAssertionInput {
+    pub scope_id: ScopeId,
+    pub id: AssertionId,
+    pub proposal_id: StableId,
+    pub synthesis_packet_id: StableId,
+    pub supporting_claim_ids: Vec<StableId>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct IdeationLandingBatch {
+    pub contributions: Vec<Contribution>,
+    pub synthesis_packets: Vec<SynthesisPacket>,
+    pub proposals: Vec<ProposalCard>,
+    pub assertions: Vec<AssertionRecord>,
+    #[serde(default)]
+    pub dispositions: Vec<DispositionRecord>,
 }
 
 pub struct CreatePromotionDecisionInput {
@@ -316,22 +335,6 @@ impl StateStore {
     pub fn list_messages(&self, scope: &ScopeId) -> anyhow::Result<Vec<Message>> {
         read_message_shards(&self.layout, scope)
     }
-    pub fn list_contributions(&self, scope: &ScopeId) -> anyhow::Result<Vec<Contribution>> {
-        read_jsonl(&shards::contributions_path(&self.layout, scope))
-    }
-    pub fn list_synthesis_packets(&self, scope: &ScopeId) -> anyhow::Result<Vec<SynthesisPacket>> {
-        read_jsonl(&shards::synthesis_packets_path(&self.layout, scope))
-    }
-    pub fn list_proposal_cards(&self, scope: &ScopeId) -> anyhow::Result<Vec<ProposalCard>> {
-        read_jsonl(&shards::proposal_cards_path(&self.layout, scope))
-    }
-    pub fn list_promotion_decisions(
-        &self,
-        scope: &ScopeId,
-    ) -> anyhow::Result<Vec<PromotionDecisionRecord>> {
-        read_jsonl(&shards::promotion_decisions_path(&self.layout, scope))
-    }
-
     pub(crate) fn mutate_jsonl_records<T, R>(
         &self,
         path: &Utf8Path,
@@ -342,6 +345,14 @@ impl StateStore {
     {
         let lock_path = self.layout.state_shard_lock_path(path)?;
         crate::jsonl::mutate_jsonl_locked(path, &lock_path, mutate)
+    }
+
+    pub(crate) fn with_ideation_lock<R>(
+        &self,
+        scope: &ScopeId,
+        operation: impl FnOnce() -> anyhow::Result<R>,
+    ) -> anyhow::Result<R> {
+        crate::jsonl::with_exclusive_lock(&self.layout.ideation_lock_path(scope), operation)
     }
 }
 

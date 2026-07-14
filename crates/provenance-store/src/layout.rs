@@ -45,6 +45,12 @@ impl ProvenanceLayout {
             .join(relative)
             .with_extension("jsonl.lock"))
     }
+    pub fn ideation_lock_path(&self, scope: &provenance_core::ScopeId) -> Utf8PathBuf {
+        self.cache_dir()
+            .join("locks/scopes")
+            .join(scope.as_str())
+            .join("ideation.lock")
+    }
 }
 
 pub fn locate_repo_root(start: &Utf8Path) -> anyhow::Result<Utf8PathBuf> {

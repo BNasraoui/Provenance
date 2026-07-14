@@ -22,7 +22,7 @@ pub struct CanonicalArtifact {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PromotionDecisionRecord {
+pub struct DispositionRecord {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,
     #[serde(alias = "promotionDecisionId")]

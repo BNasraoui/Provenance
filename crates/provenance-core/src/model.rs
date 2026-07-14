@@ -20,8 +20,12 @@ pub use ideation::contributions::{
     ClaimChallenge, Contribution, MaterialClaim, SuggestedArtifactChange, UncertaintyRating,
     UnsupportedRecommendation,
 };
-pub use ideation::promotions::{CanonicalArtifact, PromotionActor, PromotionDecisionRecord};
-pub use ideation::proposals::{ProposalCard, ProposalTraceability};
+pub use ideation::lifecycle::{
+    validate_ideation_aggregate, validate_proposal_intrinsic, AssertionId, AssertionRecord,
+    IdeationAggregate,
+};
+pub use ideation::promotions::{CanonicalArtifact, DispositionRecord, PromotionActor};
+pub use ideation::proposals::{ProposalCard, ProposalTraceability, ProposalView};
 pub use ideation::synthesis::{
     ConsensusFinding, ContestedClaim, EvidenceGap, MinorityObjection, RequiredHumanDecision,
     SuggestedArtifact, SynthesisPacket, UnsupportedSpeculation,

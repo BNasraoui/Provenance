@@ -1,5 +1,6 @@
 use super::support::{create_source, init_repo, write_run_dir};
 use assert_cmd::Command;
+use predicates::prelude::PredicateBooleanExt;
 
 #[test]
 fn swarm_backtrace_land_writes_run_dir_outputs_end_to_end() {
@@ -47,7 +48,7 @@ fn swarm_backtrace_land_writes_run_dir_outputs_end_to_end() {
 }
 
 #[test]
-fn swarm_backtrace_land_can_replace_existing_run_outputs() {
+fn swarm_backtrace_land_cannot_replace_immutable_proposals() {
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path().join("repo").to_string_lossy().to_string();
     let run_dir = dir.path().join("run");
@@ -89,8 +90,10 @@ fn swarm_backtrace_land_can_replace_existing_run_outputs() {
             "json",
         ])
         .assert()
-        .success()
-        .stdout(predicates::str::contains(r#""replace": true"#));
+        .failure()
+        .stderr(predicates::str::contains(
+            "proposal prop_req_publish_requires_worker already exists and is immutable",
+        ));
 
     Command::cargo_bin("provenance")
         .unwrap()
@@ -99,6 +102,7 @@ fn swarm_backtrace_land_can_replace_existing_run_outputs() {
         ])
         .assert()
         .success()
-        .stdout(predicates::str::contains("Updated extracted finding."))
+        .stdout(predicates::str::contains("Original extracted finding."))
+        .stdout(predicates::str::contains("Updated extracted finding.").not())
         .stdout(predicates::str::contains(r#""contributions""#));
 }

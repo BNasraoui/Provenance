@@ -118,11 +118,11 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
             "--consensus-json",
             r#"[{"statement":"The requirement needs a source reference.","supporting_participant_slots":["reviewer"],"evidence_reference_ids":["evidence_code_line"]}]"#,
             "--evidence-gaps-json",
-            r#"[{"question":"Which agreement applies?","needed_evidence_type":"source","blocking_promotion":true}]"#,
+            r#"[{"question":"Which agreement applies?","needed_evidence_type":"source","blocking_promotion":false}]"#,
             "--suggested-artifacts-json",
             r#"[{"proposal_key":"req-overtime-traceability","proposal_type":"requirement_candidate","summary":"Clarify source traceability.","origin_participant_slots":["reviewer"]}]"#,
             "--required-human-decisions-json",
-            r#"[{"decision_key":"decide_agreement_scope","prompt":"Confirm the governing agreement.","blocks_promotion":true}]"#,
+            r#"[{"decision_key":"decide_agreement_scope","prompt":"Confirm the governing agreement.","blocks_promotion":false}]"#,
             "--format",
             "json",
         ])
@@ -161,8 +161,6 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
             r#"[{"reference_id":"evidence_code_line","evidence_type":"artifact","summary":"Existing payroll check","file_path":"src/payroll/overtime.rs","line":42}]"#,
             "--supporting-claim-id",
             "claim_overtime_threshold",
-            "--promotion-state",
-            "proposed",
             "--format",
             "json",
         ])
@@ -170,6 +168,29 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
         .success()
         .stdout(predicates::str::contains("proposal_overtime_traceability"))
         .stdout(predicates::str::contains(r#""confidence": 0.83"#));
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "proposals",
+            "assert",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--id",
+            "assertion_overtime_traceability",
+            "--proposal-id",
+            "proposal_overtime_traceability",
+            "--synthesis-packet-id",
+            "synth_overtime_001",
+            "--supporting-claim-id",
+            "claim_overtime_threshold",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success();
 
     Command::cargo_bin("provenance")
         .unwrap()
@@ -210,7 +231,7 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
         .args(["materialize", "--repo", &repo, "--format", "json"])
         .assert()
         .success()
-        .stdout(predicates::str::contains(r#""records_loaded": 6"#));
+        .stdout(predicates::str::contains(r#""records_loaded": 7"#));
 
     Command::cargo_bin("provenance")
         .unwrap()
@@ -255,5 +276,5 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
     assert!(exported.contains(r#""promotion_decisions""#));
     assert!(exported.contains(r#""contributions""#));
     assert!(exported.contains(r#""synthesis_packets""#));
-    assert!(exported.contains(r#""blocking_promotion": true"#));
+    assert!(exported.contains(r#""blocking_promotion": false"#));
 }

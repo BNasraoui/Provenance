@@ -9,13 +9,13 @@ Charting in reverse (docs/shaping.md, "Relationship to the swarm backtrace" — 
 where this file diverges, that document wins). Agents partition an existing codebase,
 extract candidate requirements — *what must be true for this code to be correct* — dedup
 keeping **all** evidence sites, challenge every candidate, and land everything as
-proposals with the codebase (pinned to a commit) as the source. Unrefuted results rest as
-`asserted`; contested results remain `proposed`.
+proposals with the codebase (pinned to a commit) as the source. Every proposal begins proposed;
+unrefuted results receive separate immutable assertion records.
 
 ## Ground rules
 
-1. **Proposals only.** An unrefuted candidate lands with `promotion_state=asserted`; a
-   candidate linked to a contested claim remains `proposed`. Neither is an active
+1. **Proposals only.** Every candidate lands with `promotion_state=proposed`. An unrefuted
+   candidate may also land with an evidence-backed assertion record. Neither is an active
    requirement or pre-accepted. Extracted claims describe *current
    behavior*; the code may be wrong — that's half the point. The human confirms
    "intentional" or discovers surprises via the shaping loop, question by question.
@@ -197,10 +197,10 @@ Proposals:
   in `summary`;
 - keep ALL merged evidence sites in `traceability.evidence_references`;
 - keep supporting claim links in `traceability.supporting_claim_ids`;
-- use `promotion_state: "asserted"` only when none of the proposal's
-  `supporting_claim_ids` is contested; the landing command rejects a false assertion;
-- contested candidates remain `promotion_state: "proposed"`;
-- use `builds_on` when a later provisional proposal incorporates an earlier assertion;
+- every proposal uses `promotion_state: "proposed"`;
+- emit an `assertions` record only when supporting claims exist with positive evidence and the
+  adjudicating synthesis has no contested claim or promotion blocker;
+- use assertion IDs in `builds_on` when a later proposal incorporates an earlier assertion;
   neither assertion nor lineage is human ratification.
 
 **Completeness:** reconcile against the stage-1 partition manifest. Any partition with

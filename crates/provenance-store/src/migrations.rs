@@ -12,6 +12,7 @@ pub const DOMAINS_SERVICES_MIGRATION_ID: &str = "009";
 pub const SHAPING_TURN_STATE_MIGRATION_ID: &str = "010";
 pub const COMMIT_PIN_CONFIDENCE_MIGRATION_ID: &str = "011";
 pub const PROPOSAL_ASSERTIONS_MIGRATION_ID: &str = "012";
+pub const ASSERTION_RECORDS_MIGRATION_ID: &str = "013";
 const INITIAL_SQL: &str = include_str!("../migrations/001_initial_cache.sql");
 const SOURCE_REQUIREMENT_SQL: &str =
     include_str!("../migrations/002_sources_requirements_edges.sql");
@@ -26,6 +27,7 @@ const DOMAINS_SERVICES_SQL: &str = include_str!("../migrations/009_domains_servi
 const SHAPING_TURN_STATE_SQL: &str = include_str!("../migrations/010_shaping_turn_state.sql");
 const COMMIT_PIN_CONFIDENCE_SQL: &str = include_str!("../migrations/011_commit_pin_confidence.sql");
 const PROPOSAL_ASSERTIONS_SQL: &str = include_str!("../migrations/012_proposal_assertions.sql");
+const ASSERTION_RECORDS_SQL: &str = include_str!("../migrations/013_assertion_records.sql");
 
 pub async fn run_migrations(pool: &SqlitePool) -> anyhow::Result<Vec<String>> {
     pool.execute("CREATE TABLE IF NOT EXISTS _schema_migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").await?;
@@ -50,6 +52,7 @@ pub async fn run_migrations(pool: &SqlitePool) -> anyhow::Result<Vec<String>> {
             COMMIT_PIN_CONFIDENCE_SQL,
         ),
         (PROPOSAL_ASSERTIONS_MIGRATION_ID, PROPOSAL_ASSERTIONS_SQL),
+        (ASSERTION_RECORDS_MIGRATION_ID, ASSERTION_RECORDS_SQL),
     ] {
         let already_applied: Option<String> =
             sqlx::query_scalar("SELECT id FROM _schema_migrations WHERE id = ?")
@@ -88,14 +91,16 @@ mod tests {
         assert_eq!(
             run_migrations(&pool).await.unwrap(),
             vec![
-                "001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012"
+                "001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012",
+                "013"
             ]
         );
         assert!(run_migrations(&pool).await.unwrap().is_empty());
         assert_eq!(
             applied_migrations(&pool).await.unwrap(),
             vec![
-                "001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012"
+                "001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012",
+                "013"
             ]
         );
     }

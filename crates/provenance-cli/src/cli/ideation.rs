@@ -176,17 +176,26 @@ pub enum ProposalsCommand {
         evidence_json: String,
         #[arg(long)]
         supporting_claim_id: Vec<String>,
-        #[arg(long, default_value = "proposed")]
-        promotion_state: String,
-        /// Proposal IDs whose provisional knowledge this candidate builds on.
+        /// Immutable assertion IDs whose adjudicated knowledge this candidate builds on.
         #[arg(long)]
         builds_on: Vec<String>,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+    /// Verify a proposed candidate against durable adjudication evidence.
+    Assert {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
         #[arg(long)]
-        duplicate_of: Option<String>,
+        scope: String,
         #[arg(long)]
-        superseded_by: Option<String>,
+        id: String,
         #[arg(long)]
-        replace: bool,
+        proposal_id: String,
+        #[arg(long)]
+        synthesis_packet_id: String,
+        #[arg(long)]
+        supporting_claim_id: Vec<String>,
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },

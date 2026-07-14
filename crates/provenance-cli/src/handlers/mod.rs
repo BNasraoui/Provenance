@@ -228,7 +228,7 @@ pub(super) async fn dispatch(command: Command, quiet: bool) -> anyhow::Result<()
             dry_run,
             format,
         } => {
-            import::handle(repo, scope, input, dry_run, format)?;
+            import::handle(repo, &scope, input, dry_run, format)?;
         }
         Command::MergeJsonl {
             base,

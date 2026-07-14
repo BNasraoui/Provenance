@@ -53,6 +53,14 @@ where
     Ok(result)
 }
 
+pub(crate) fn with_exclusive_lock<R>(
+    lock_path: &Utf8Path,
+    operation: impl FnOnce() -> anyhow::Result<R>,
+) -> anyhow::Result<R> {
+    let _lock = AdvisoryLock::acquire(lock_path)?;
+    operation()
+}
+
 fn read_jsonl_unlocked<T: DeserializeOwned>(path: &Utf8Path) -> anyhow::Result<Vec<T>> {
     if !path.exists() {
         return Ok(Vec::new());

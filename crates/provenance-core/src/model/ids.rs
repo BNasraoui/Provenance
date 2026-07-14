@@ -4,7 +4,7 @@ use serde::{de::Error, Deserialize, Deserializer, Serialize};
 #[serde(transparent)]
 pub struct SchemaVersion(pub u32);
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(transparent)]
 pub struct ScopeId(String);
 
@@ -40,7 +40,7 @@ impl<'de> Deserialize<'de> for ScopeId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(transparent)]
 pub struct StableId(String);
 

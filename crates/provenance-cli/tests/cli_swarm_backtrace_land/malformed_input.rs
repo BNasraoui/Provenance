@@ -80,15 +80,19 @@ fn write_merge_output_with_unknown_key(root: &std::path::Path) {
 fn write_refuted_assertion(root: &std::path::Path) {
     write_run_dir(root, "Publishing is guarded by worker assignment.");
     let merge_path = root.join("merge").join("merged.json");
-    let merge_json = std::fs::read_to_string(&merge_path).unwrap();
-    std::fs::write(
-        &merge_path,
-        merge_json.replace(
-            r#""promotion_state": "proposed""#,
-            r#""promotion_state": "asserted""#,
-        ),
-    )
-    .unwrap();
+    let mut merge: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&merge_path).unwrap()).unwrap();
+    merge["synthesis_packet"]["required_human_decisions"][0]["blocks_promotion"] =
+        serde_json::json!(false);
+    merge["assertions"] = serde_json::json!([{
+        "schema_version": 1,
+        "scope_id": "default",
+        "id": "assertion_publish_guard",
+        "proposal_id": "prop_req_publish_requires_worker",
+        "synthesis_packet_id": "synth_backtrace_auth",
+        "supporting_claim_ids": ["claim_auth_guard"]
+    }]);
+    std::fs::write(&merge_path, serde_json::to_vec_pretty(&merge).unwrap()).unwrap();
 }
 
 #[test]
@@ -219,6 +223,6 @@ fn swarm_backtrace_land_rejects_assertions_linked_to_contested_claims() {
         .assert()
         .failure()
         .stderr(predicates::str::contains(
-            "asserted proposal prop_req_publish_requires_worker is linked to contested claim claim_auth_guard",
+            "assertion claim claim_auth_guard is contested",
         ));
 }

@@ -21,6 +21,9 @@ pub async fn materialize_state(layout: &ProvenanceLayout) -> anyhow::Result<Mate
     let migrations_applied = migrations::run_migrations(&pool).await?;
     let store = StateStore::new(layout.clone());
     let manifest = store.manifest()?;
+    for scope in &manifest.scopes {
+        store.validate_ideation_scope(&scope.id)?;
+    }
     let mut tx = pool.begin().await?;
     clear_cache(&mut tx).await?;
 
@@ -56,6 +59,7 @@ async fn clear_cache(tx: &mut Transaction<'_, Sqlite>) -> anyhow::Result<()> {
         "contributions",
         "synthesis_packets",
         "proposal_cards",
+        "assertion_records",
         "promotion_decisions",
     ] {
         sqlx::query(&format!("DELETE FROM {table}"))

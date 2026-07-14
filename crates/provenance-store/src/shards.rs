@@ -108,6 +108,20 @@ pub fn proposal_cards_path(layout: &ProvenanceLayout, scope: &ScopeId) -> Utf8Pa
         .join("ideation/proposal_cards.jsonl")
 }
 
+pub fn assertion_records_path(layout: &ProvenanceLayout, scope: &ScopeId) -> Utf8PathBuf {
+    layout
+        .scopes_dir()
+        .join(scope.as_str())
+        .join("ideation/assertion_records.jsonl")
+}
+
+pub fn ideation_landings_path(layout: &ProvenanceLayout, scope: &ScopeId) -> Utf8PathBuf {
+    layout
+        .scopes_dir()
+        .join(scope.as_str())
+        .join("ideation/landings.jsonl")
+}
+
 pub fn promotion_decisions_path(layout: &ProvenanceLayout, scope: &ScopeId) -> Utf8PathBuf {
     layout
         .scopes_dir()

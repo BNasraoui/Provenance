@@ -5,8 +5,8 @@ use crate::{
 use anyhow::Context;
 use camino::Utf8Path;
 use provenance_core::{
-    validate_optional_confidence_score, Contribution, PromotionState, ProposalCard, SchemaVersion,
-    SynthesisPacket,
+    validate_optional_confidence_score, validate_proposal_intrinsic, Contribution, ProposalCard,
+    SchemaVersion, SynthesisPacket,
 };
 use serde::Serialize;
 
@@ -83,26 +83,7 @@ fn ensure_schema_version(schema_version: SchemaVersion) -> anyhow::Result<()> {
 }
 
 pub(super) fn validate_proposal_card_record(proposal: &ProposalCard) -> anyhow::Result<()> {
-    ensure_schema_version(proposal.schema_version)?;
-    match proposal.promotion_state {
-        PromotionState::Duplicate => {
-            anyhow::ensure!(
-                proposal.duplicate_of.is_some(),
-                "duplicate proposals must set duplicate_of"
-            );
-        }
-        PromotionState::Superseded => {
-            anyhow::ensure!(
-                proposal.superseded_by.is_some(),
-                "superseded proposals must set superseded_by"
-            );
-        }
-        PromotionState::Proposed
-        | PromotionState::Asserted
-        | PromotionState::Accepted
-        | PromotionState::Rejected
-        | PromotionState::Deferred => {}
-    }
+    validate_proposal_intrinsic(proposal)?;
     validate_optional_confidence_score(proposal.confidence)
         .with_context(|| format!("proposal {} confidence is invalid", proposal.id.as_str()))?;
     Ok(())

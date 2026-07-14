@@ -2,7 +2,7 @@ use crate::cache::{find_gaps, GapItem};
 use crate::layout::ProvenanceLayout;
 use crate::state_store::StateStore;
 use provenance_core::{
-    Edge, EdgeType, Message, PromotionState, ProposalCard, Requirement, Rule, Source, Thread,
+    Edge, EdgeType, Message, PromotionState, ProposalView, Requirement, Rule, Source, Thread,
 };
 use std::collections::BTreeSet;
 use std::fmt::Write;
@@ -24,7 +24,7 @@ pub struct PrimeThreadView {
 pub struct PrimeContextView {
     pub scope_id: String,
     pub rules: Vec<Rule>,
-    pub provisional_proposals: Vec<ProposalCard>,
+    pub provisional_proposals: Vec<ProposalView>,
     pub gaps: Vec<GapItem>,
     pub threads: Vec<PrimeThreadView>,
 }
@@ -102,7 +102,7 @@ pub fn render_prime_markdown(view: &PrimeContextView) -> String {
             let lineage = proposal
                 .builds_on
                 .iter()
-                .map(provenance_core::StableId::as_str)
+                .map(provenance_core::AssertionId::as_str)
                 .collect::<Vec<_>>()
                 .join(", ");
             let _ = writeln!(out, "  - builds on provisionally: {lineage}");

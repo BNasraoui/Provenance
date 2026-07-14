@@ -166,18 +166,18 @@ land their candidates through the same durable shapes (ported from the Convex
   `unsupported`/`exploratory`; uncertainty is rated with rationale.
 - **Synthesis**: consensus, contested claims, and minority objections are kept separate —
   never averaged; evidence gaps can block promotion; required human decisions are explicit.
-- **Proposals**: typed candidates (`requirement_candidate`, `rule_candidate`,
-  `source_gap`, …) with traceability. Promotion has two tiers:
-  `proposed → asserted` records an unrefuted swarm conclusion, while `accepted` records
-  ratification. Rejected, deferred, duplicate, and superseded remain dispositions.
+- **Proposals**: immutable typed candidates (`requirement_candidate`, `rule_candidate`,
+  `source_gap`, …) that always begin proposed. A separate assertion records verified positive
+  adjudication; a separate human disposition records ratification or rejection.
 
 ### Two-tier promotion
 
-`asserted` is a legitimate durable resting state, not an incomplete run. It means the
-adversarial pass found no contested claim linked by the proposal's
-`traceability.supporting_claim_ids`. It is still provisional: `provenance prime` labels it
+An assertion is a legitimate durable record, not an incomplete run. Its synthesis packet must
+own the proposal target, every supporting claim must exist with positive evidence, and no
+contested claim, blocking evidence gap, or blocking human decision may remain. It is still
+provisional: `provenance prime` labels it
 "not human-ratified", and consumers must not present it as policy, compliance, or an
-enforced rule. A later proposal may cite an asserted proposal through `builds_on`; this
+enforced rule. A later proposal may cite the immutable assertion ID through `builds_on`; this
 preserves provisional lineage without silently promoting either proposal. Raw `proposed`
 cards are not valid lineage bases.
 

@@ -31,15 +31,15 @@ Ideation JSON flags accept inline JSON or `@path/to/payload.json`. Artifact help
 `provenance schema show contribution|synthesis-packet|proposal --format json` prints
 canonical record schemas, and `provenance validate contribution|synthesis-packet|proposal
 --input artifact.json --format json` validates full records, including nested stable IDs.
-`contributions create`, `synthesis-packets create`, and `proposals create` keep duplicate
-protection by default; pass `--replace` to intentionally upsert the same stable ID.
-Use `proposals create --promotion-state asserted` only for an unrefuted adversarial result;
-`--builds-on <proposal-id>` records provisional derivation. Asserted proposals are durable
-and cannot be replaced. Consult them with
+`contributions create` and `synthesis-packets create` keep duplicate protection by default;
+`--replace` is allowed only while no durable assertion depends on the record. Proposals are
+immutable and require a new stable ID for revisions.
+`proposals create` always starts a candidate as proposed. `proposals assert` performs the
+verified transition using an adjudicating synthesis packet and positive supporting claims.
+`--builds-on <assertion-id>` records immutable lineage. Assertions are durable. Consult with
 `proposals list --promotion-state asserted --format json`; `prime` renders both raw
-proposals and assertions, explicitly marking assertions as not human-ratified. Accepting a
-requirement, resolution, or rule candidate requires a human promotion decision rather than
-direct creation in the accepted state.
+proposals and assertions, explicitly marking assertions as not human-ratified. Human
+disposition records are the sole authority for accepted, rejected, or deferred state.
 Swarm backtrace runs can land durable run outputs with
 `provenance swarm-backtrace land --scope <scope> --run-dir <run-dir> --format json`.
 

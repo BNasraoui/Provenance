@@ -1,7 +1,7 @@
 use crate::handlers::check::index::CheckIndex;
 use crate::handlers::check::references::{check_ideation_target, check_scoped_reference};
 use provenance_core::{
-    Contribution, PromotionDecisionRecord, ProposalCard, ScopeId, SynthesisPacket,
+    AssertionRecord, Contribution, DispositionRecord, ProposalCard, ScopeId, SynthesisPacket,
 };
 use provenance_store::state_store::StateStore;
 
@@ -9,15 +9,18 @@ pub(super) struct Records {
     contributions: Vec<Contribution>,
     synthesis_packets: Vec<SynthesisPacket>,
     proposal_cards: Vec<ProposalCard>,
-    promotion_decisions: Vec<PromotionDecisionRecord>,
+    assertions: Vec<AssertionRecord>,
+    promotion_decisions: Vec<DispositionRecord>,
 }
 
 impl Records {
     pub(super) fn load(store: &StateStore, scope_id: &ScopeId) -> anyhow::Result<Self> {
+        store.validate_ideation_scope(scope_id)?;
         Ok(Self {
             contributions: store.list_contributions(scope_id)?,
             synthesis_packets: store.list_synthesis_packets(scope_id)?,
-            proposal_cards: store.list_proposal_cards(scope_id)?,
+            proposal_cards: store.list_proposal_definitions(scope_id)?,
+            assertions: store.list_assertion_records(scope_id)?,
             promotion_decisions: store.list_promotion_decisions(scope_id)?,
         })
     }
@@ -44,12 +47,28 @@ impl Records {
         check_records!(&self.contributions, "contribution");
         check_records!(&self.synthesis_packets, "synthesis packet");
         check_records!(&self.proposal_cards, "proposal");
+        for assertion in &self.assertions {
+            super::check_scope_ownership(
+                loaded_scope_id,
+                &assertion.scope_id,
+                "assertion",
+                assertion.id.as_stable_id(),
+                findings,
+            );
+        }
         check_records!(&self.promotion_decisions, "promotion decision");
     }
 
     pub(super) fn add_to(&self, index: &mut CheckIndex) {
         for proposal in &self.proposal_cards {
             index.add_node(&proposal.scope_id, "proposal", &proposal.id);
+        }
+        for assertion in &self.assertions {
+            index.add_node(
+                &assertion.scope_id,
+                "assertion",
+                assertion.id.as_stable_id(),
+            );
         }
     }
 
@@ -104,8 +123,8 @@ impl Records {
                     scope_id,
                     &owner,
                     "builds_on",
-                    "proposal",
-                    ancestor_id,
+                    "assertion",
+                    ancestor_id.as_stable_id(),
                 );
             }
             if let Some(duplicate_of) = &proposal.duplicate_of {
