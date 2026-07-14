@@ -2,12 +2,12 @@ use super::common::{ideation_target, parse_json_arg, stable_ids, warn_if_skills_
 use crate::cli::ideation::ProposalsCommand;
 use crate::output;
 use provenance_core::{
-    IdeationEvidenceReference, PromotionState, ProposalTraceability, ProposalType, ScopeId,
-    StableId,
+    AssertionId, IdeationEvidenceReference, PromotionState, ProposalTraceability, ProposalType,
+    ScopeId, StableId,
 };
 use provenance_store::{
     layout::ProvenanceLayout,
-    state_store::{CreateProposalCardInput, StateStore},
+    state_store::{CreateAssertionInput, CreateProposalCardInput, StateStore},
 };
 
 pub(super) fn handle(command: ProposalsCommand, quiet: bool) -> anyhow::Result<()> {
@@ -26,11 +26,7 @@ pub(super) fn handle(command: ProposalsCommand, quiet: bool) -> anyhow::Result<(
             source_id,
             evidence_json,
             supporting_claim_id,
-            promotion_state,
             builds_on,
-            duplicate_of,
-            superseded_by,
-            replace,
             format,
         } => {
             warn_if_skills_missing(&repo, quiet)?;
@@ -52,17 +48,36 @@ pub(super) fn handle(command: ProposalsCommand, quiet: bool) -> anyhow::Result<(
                     )?,
                     supporting_claim_ids: stable_ids(supporting_claim_id)?,
                 },
-                promotion_state: PromotionState::parse(&promotion_state)?,
-                builds_on: stable_ids(builds_on)?,
-                duplicate_of: duplicate_of.map(StableId::new).transpose()?,
-                superseded_by: superseded_by.map(StableId::new).transpose()?,
+                builds_on: builds_on
+                    .into_iter()
+                    .map(AssertionId::new)
+                    .collect::<anyhow::Result<_>>()?,
+                duplicate_of: None,
+                superseded_by: None,
             };
-            let proposal = if replace {
-                store.upsert_proposal_card(input)?
-            } else {
-                store.create_proposal_card(input)?
-            };
+            let proposal = store.create_proposal_card(input)?;
             output::print(format, &proposal)?;
+        }
+        ProposalsCommand::Assert {
+            repo,
+            scope,
+            id,
+            proposal_id,
+            synthesis_packet_id,
+            supporting_claim_id,
+            format,
+        } => {
+            warn_if_skills_missing(&repo, quiet)?;
+            let assertion = StateStore::new(ProvenanceLayout::new(repo)).assert_proposal(
+                CreateAssertionInput {
+                    scope_id: ScopeId::new(scope)?,
+                    id: AssertionId::new(id)?,
+                    proposal_id: StableId::new(proposal_id)?,
+                    synthesis_packet_id: StableId::new(synthesis_packet_id)?,
+                    supporting_claim_ids: stable_ids(supporting_claim_id)?,
+                },
+            )?;
+            output::print(format, &assertion)?;
         }
         ProposalsCommand::List {
             repo,

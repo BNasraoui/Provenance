@@ -4,3 +4,6 @@ include!("tests/graph.rs");
 include!("tests/ideation.rs");
 include!("tests/services.rs");
 include!("tests/shaping.rs");
+
+#[path = "tests/proposal_lifecycle.rs"]
+mod proposal_lifecycle;

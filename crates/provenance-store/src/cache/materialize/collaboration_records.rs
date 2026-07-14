@@ -42,6 +42,14 @@ pub(super) async fn load_scope(
             .execute(&mut **tx).await?;
         loaded += 1;
     }
+    for assertion in store.list_assertion_records(scope)? {
+        sqlx::query("INSERT INTO assertion_records (scope_id, id, proposal_id, synthesis_packet_id, supporting_claim_ids, payload) VALUES (?, ?, ?, ?, ?, ?)")
+            .bind(assertion.scope_id.as_str()).bind(assertion.id.as_str())
+            .bind(assertion.proposal_id.as_str()).bind(assertion.synthesis_packet_id.as_str())
+            .bind(serde_json::to_string(&assertion.supporting_claim_ids)?)
+            .bind(serde_json::to_string(&assertion)?).execute(&mut **tx).await?;
+        loaded += 1;
+    }
     for proposal in store.list_proposal_cards(scope)? {
         sqlx::query("INSERT INTO proposal_cards (scope_id, id, proposal_key, proposal_type, title, summary, confidence, target_type, target_id, traceability, promotion_state, builds_on, duplicate_of, superseded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(proposal.scope_id.as_str()).bind(proposal.id.as_str()).bind(&proposal.proposal_key)

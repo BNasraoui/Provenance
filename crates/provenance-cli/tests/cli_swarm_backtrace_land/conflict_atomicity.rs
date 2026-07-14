@@ -157,6 +157,17 @@ fn swarm_backtrace_land_refuses_to_replace_accepted_proposals() {
     init_repo(&repo);
     create_source(&repo);
     write_run_dir(&run_dir, "Original extracted finding.");
+    let merge_path = run_dir.join("merge/merged.json");
+    let mut merge: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&merge_path).unwrap()).unwrap();
+    merge["synthesis_packet"]["contested_claims"] = serde_json::json!([]);
+    merge["synthesis_packet"]["required_human_decisions"] = serde_json::json!([]);
+    merge["assertions"] = serde_json::json!([{
+        "schema_version": 1, "scope_id": "default", "id": "assertion_publish_guard",
+        "proposal_id": "prop_req_publish_requires_worker", "synthesis_packet_id": "synth_backtrace_auth",
+        "supporting_claim_ids": ["claim_auth_guard"]
+    }]);
+    std::fs::write(&merge_path, serde_json::to_vec_pretty(&merge).unwrap()).unwrap();
     let run_dir_arg = run_dir.to_string_lossy().to_string();
 
     Command::cargo_bin("provenance")
@@ -220,8 +231,9 @@ fn swarm_backtrace_land_refuses_to_replace_accepted_proposals() {
         ])
         .assert()
         .failure()
-        .stderr(predicates::str::contains("human disposition"))
-        .stderr(predicates::str::contains("accepted"));
+        .stderr(predicates::str::contains(
+            "durable assertion evidence and cannot be replaced",
+        ));
 
     Command::cargo_bin("provenance")
         .unwrap()
@@ -233,6 +245,6 @@ fn swarm_backtrace_land_refuses_to_replace_accepted_proposals() {
         .stdout(predicates::str::contains("Original extracted finding."))
         .stdout(predicates::str::contains("Updated extracted finding.").not())
         .stdout(predicates::str::contains(
-            r#""promotion_state": "accepted""#,
+            "decision_publish_requires_worker",
         ));
 }

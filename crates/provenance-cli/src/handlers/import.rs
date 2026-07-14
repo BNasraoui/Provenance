@@ -1,8 +1,9 @@
 use super::export::ScopeExport;
 use crate::output::{self, OutputFormat};
 use camino::Utf8PathBuf;
-use provenance_core::ScopeId;
+use provenance_core::{validate_ideation_aggregate, IdeationAggregate, ScopeId};
 use provenance_store::layout::ProvenanceLayout;
+use provenance_store::state_store::{IdeationLandingBatch, StateStore};
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -12,9 +13,10 @@ pub struct ImportReport {
     pub records: usize,
 }
 
+#[allow(clippy::too_many_lines)]
 pub(super) fn import_scope(
     repo: Utf8PathBuf,
-    scope: String,
+    scope: &str,
     input: Utf8PathBuf,
     dry_run: bool,
 ) -> anyhow::Result<ImportReport> {
@@ -39,10 +41,52 @@ pub(super) fn import_scope(
         + exported.contributions.len()
         + exported.synthesis_packets.len()
         + exported.proposal_cards.len()
+        + exported.assertion_records.len()
         + exported.promotion_decisions.len();
+    let scope_id = ScopeId::new(scope)?;
+    for (kind, actual) in exported
+        .contributions
+        .iter()
+        .map(|record| ("contribution", &record.scope_id))
+        .chain(
+            exported
+                .synthesis_packets
+                .iter()
+                .map(|record| ("synthesis packet", &record.scope_id)),
+        )
+        .chain(
+            exported
+                .proposal_cards
+                .iter()
+                .map(|record| ("proposal", &record.scope_id)),
+        )
+        .chain(
+            exported
+                .assertion_records
+                .iter()
+                .map(|record| ("assertion", &record.scope_id)),
+        )
+        .chain(
+            exported
+                .promotion_decisions
+                .iter()
+                .map(|record| ("disposition", &record.scope_id)),
+        )
+    {
+        anyhow::ensure!(
+            actual == &scope_id,
+            "{kind} scope_id must match imported scope"
+        );
+    }
+    validate_ideation_aggregate(IdeationAggregate {
+        contributions: &exported.contributions,
+        synthesis_packets: &exported.synthesis_packets,
+        proposals: &exported.proposal_cards,
+        assertions: &exported.assertion_records,
+        dispositions: &exported.promotion_decisions,
+    })?;
     if !dry_run {
         let layout = ProvenanceLayout::new(repo);
-        let scope_id = ScopeId::new(scope)?;
         provenance_store::jsonl::write_jsonl_atomic(
             &provenance_store::shards::sources_path(&layout, &scope_id),
             &exported.sources,
@@ -95,21 +139,16 @@ pub(super) fn import_scope(
             &provenance_store::shards::messages_path(&layout, &scope_id),
             &exported.messages,
         )?;
-        provenance_store::jsonl::write_jsonl_atomic(
-            &provenance_store::shards::contributions_path(&layout, &scope_id),
-            &exported.contributions,
-        )?;
-        provenance_store::jsonl::write_jsonl_atomic(
-            &provenance_store::shards::synthesis_packets_path(&layout, &scope_id),
-            &exported.synthesis_packets,
-        )?;
-        provenance_store::jsonl::write_jsonl_atomic(
-            &provenance_store::shards::proposal_cards_path(&layout, &scope_id),
-            &exported.proposal_cards,
-        )?;
-        provenance_store::jsonl::write_jsonl_atomic(
-            &provenance_store::shards::promotion_decisions_path(&layout, &scope_id),
-            &exported.promotion_decisions,
+        StateStore::new(layout).land_ideation_batch(
+            &scope_id,
+            IdeationLandingBatch {
+                contributions: exported.contributions,
+                synthesis_packets: exported.synthesis_packets,
+                proposals: exported.proposal_cards,
+                assertions: exported.assertion_records,
+                dispositions: exported.promotion_decisions,
+            },
+            false,
         )?;
     }
     Ok(ImportReport {
@@ -121,7 +160,7 @@ pub(super) fn import_scope(
 
 pub(super) fn handle(
     repo: Utf8PathBuf,
-    scope: String,
+    scope: &str,
     input: Utf8PathBuf,
     dry_run: bool,
     format: OutputFormat,

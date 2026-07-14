@@ -153,7 +153,6 @@ fn schema_show_enum_values_match_model_serialization() {
     let uncertainty_levels = enum_names(&UNCERTAINTY_LEVELS);
     let evidence_qualities = enum_names(&EVIDENCE_QUALITIES);
     let proposal_types = enum_names(&PROPOSAL_TYPES);
-    let promotion_states = enum_names(&PROMOTION_STATES);
 
     assert_eq!(
         enum_values_at(
@@ -231,7 +230,7 @@ fn schema_show_enum_values_match_model_serialization() {
         proposal_types
     );
     assert_eq!(
-        enum_values_at(&proposal, "/schema/properties/promotion_state/enum"),
-        promotion_states
+        proposal["schema"]["properties"]["promotion_state"]["const"],
+        "proposed"
     );
 }

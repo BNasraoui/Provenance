@@ -1,11 +1,12 @@
 use super::{
-    serde_name, CreateContributionInput, CreatePromotionDecisionInput, CreateProposalCardInput,
-    CreateSynthesisPacketInput, StateStore,
+    read_jsonl, CreateAssertionInput, CreateContributionInput, CreatePromotionDecisionInput,
+    CreateProposalCardInput, CreateSynthesisPacketInput, StateStore,
 };
 use crate::shards;
 use provenance_core::{
-    validate_optional_confidence_score, Contribution, PromotionDecisionRecord, PromotionState,
-    ProposalCard, SchemaVersion, ScopeId, StableId, SynthesisPacket,
+    validate_ideation_aggregate, validate_optional_confidence_score, validate_proposal_intrinsic,
+    AssertionRecord, Contribution, DispositionRecord, IdeationAggregate, PromotionState,
+    ProposalCard, SchemaVersion, SynthesisPacket,
 };
 
 impl StateStore {
@@ -13,14 +14,16 @@ impl StateStore {
         &self,
         input: CreateContributionInput,
     ) -> anyhow::Result<Contribution> {
-        self.write_contribution(input, false)
+        let scope = input.scope_id.clone();
+        self.with_ideation_lock(&scope, || self.write_contribution(input, false))
     }
 
     pub fn upsert_contribution(
         &self,
         input: CreateContributionInput,
     ) -> anyhow::Result<Contribution> {
-        self.write_contribution(input, true)
+        let scope = input.scope_id.clone();
+        self.with_ideation_lock(&scope, || self.write_contribution(input, true))
     }
 
     fn write_contribution(
@@ -49,6 +52,15 @@ impl StateStore {
             validate_optional_confidence_score(claim.confidence)?;
         }
         let path = shards::contributions_path(&self.layout, &scope_id);
+        let direct: Vec<Contribution> = read_jsonl(&path)?;
+        if self
+            .list_contributions(&scope_id)?
+            .iter()
+            .any(|record| record.id == id)
+            && !direct.iter().any(|record| record.id == id)
+        {
+            anyhow::bail!("landed contribution cannot be replaced through the direct writer");
+        }
         self.mutate_jsonl_records(&path, |records: &mut Vec<Contribution>| {
             let contribution = Contribution {
                 schema_version: SchemaVersion(1),
@@ -73,10 +85,35 @@ impl StateStore {
                 .position(|record| record.id == contribution.id)
             {
                 anyhow::ensure!(replace, "contribution already exists");
+                let asserted_claims = self
+                    .list_assertion_records(&scope_id)?
+                    .into_iter()
+                    .flat_map(|assertion| assertion.supporting_claim_ids)
+                    .collect::<std::collections::BTreeSet<_>>();
+                anyhow::ensure!(
+                    !records[index]
+                        .material_claims
+                        .iter()
+                        .any(|claim| asserted_claims.contains(&claim.claim_id)),
+                    "contribution supplies durable assertion evidence and cannot be replaced"
+                );
                 records[index] = contribution.clone();
             } else {
                 records.push(contribution.clone());
             }
+            let mut all = self.list_contributions(&scope_id)?;
+            if let Some(index) = all.iter().position(|record| record.id == contribution.id) {
+                all[index] = contribution.clone();
+            } else {
+                all.push(contribution.clone());
+            }
+            validate_ideation_aggregate(IdeationAggregate {
+                contributions: &all,
+                synthesis_packets: &self.list_synthesis_packets(&scope_id)?,
+                proposals: &self.list_proposal_records(&scope_id)?,
+                assertions: &self.list_assertion_records(&scope_id)?,
+                dispositions: &self.list_promotion_decisions(&scope_id)?,
+            })?;
             records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
             Ok(contribution)
         })
@@ -86,14 +123,16 @@ impl StateStore {
         &self,
         input: CreateSynthesisPacketInput,
     ) -> anyhow::Result<SynthesisPacket> {
-        self.write_synthesis_packet(input, false)
+        let scope = input.scope_id.clone();
+        self.with_ideation_lock(&scope, || self.write_synthesis_packet(input, false))
     }
 
     pub fn upsert_synthesis_packet(
         &self,
         input: CreateSynthesisPacketInput,
     ) -> anyhow::Result<SynthesisPacket> {
-        self.write_synthesis_packet(input, true)
+        let scope = input.scope_id.clone();
+        self.with_ideation_lock(&scope, || self.write_synthesis_packet(input, true))
     }
 
     fn write_synthesis_packet(
@@ -116,6 +155,15 @@ impl StateStore {
             required_human_decisions,
         } = input;
         let path = shards::synthesis_packets_path(&self.layout, &scope_id);
+        let direct: Vec<SynthesisPacket> = read_jsonl(&path)?;
+        if self
+            .list_synthesis_packets(&scope_id)?
+            .iter()
+            .any(|record| record.id == id)
+            && !direct.iter().any(|record| record.id == id)
+        {
+            anyhow::bail!("landed synthesis packet cannot be replaced through the direct writer");
+        }
         self.mutate_jsonl_records(&path, |records: &mut Vec<SynthesisPacket>| {
             let synthesis_packet = SynthesisPacket {
                 schema_version: SchemaVersion(1),
@@ -137,10 +185,33 @@ impl StateStore {
                 .position(|record| record.id == synthesis_packet.id)
             {
                 anyhow::ensure!(replace, "synthesis packet already exists");
+                anyhow::ensure!(
+                    !self
+                        .list_assertion_records(&scope_id)?
+                        .iter()
+                        .any(|assertion| assertion.synthesis_packet_id == records[index].id),
+                    "synthesis packet adjudicates a durable assertion and cannot be replaced"
+                );
                 records[index] = synthesis_packet.clone();
             } else {
                 records.push(synthesis_packet.clone());
             }
+            let mut all = self.list_synthesis_packets(&scope_id)?;
+            if let Some(index) = all
+                .iter()
+                .position(|record| record.id == synthesis_packet.id)
+            {
+                all[index] = synthesis_packet.clone();
+            } else {
+                all.push(synthesis_packet.clone());
+            }
+            validate_ideation_aggregate(IdeationAggregate {
+                contributions: &self.list_contributions(&scope_id)?,
+                synthesis_packets: &all,
+                proposals: &self.list_proposal_records(&scope_id)?,
+                assertions: &self.list_assertion_records(&scope_id)?,
+                dispositions: &self.list_promotion_decisions(&scope_id)?,
+            })?;
             records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
             Ok(synthesis_packet)
         })
@@ -150,21 +221,11 @@ impl StateStore {
         &self,
         input: CreateProposalCardInput,
     ) -> anyhow::Result<ProposalCard> {
-        self.write_proposal_card(input, false)
+        let scope = input.scope_id.clone();
+        self.with_ideation_lock(&scope, || self.write_proposal_card(input))
     }
 
-    pub fn upsert_proposal_card(
-        &self,
-        input: CreateProposalCardInput,
-    ) -> anyhow::Result<ProposalCard> {
-        self.write_proposal_card(input, true)
-    }
-
-    fn write_proposal_card(
-        &self,
-        input: CreateProposalCardInput,
-        replace: bool,
-    ) -> anyhow::Result<ProposalCard> {
+    fn write_proposal_card(&self, input: CreateProposalCardInput) -> anyhow::Result<ProposalCard> {
         let CreateProposalCardInput {
             scope_id,
             id,
@@ -174,89 +235,114 @@ impl StateStore {
             summary,
             confidence,
             traceability,
-            promotion_state,
             builds_on,
             duplicate_of,
             superseded_by,
         } = input;
-        match promotion_state {
-            PromotionState::Duplicate => {
-                anyhow::ensure!(
-                    duplicate_of.is_some(),
-                    "duplicate proposals must set duplicate_of"
-                );
-            }
-            PromotionState::Superseded => {
-                anyhow::ensure!(
-                    superseded_by.is_some(),
-                    "superseded proposals must set superseded_by"
-                );
-            }
-            PromotionState::Proposed
-            | PromotionState::Asserted
-            | PromotionState::Accepted
-            | PromotionState::Rejected
-            | PromotionState::Deferred => {}
-        }
         anyhow::ensure!(
-            !(promotion_state == PromotionState::Accepted
-                && behavior_changing_proposal(proposal_type)),
-            "accepting a behavior-changing proposal requires a human promotion decision"
+            duplicate_of.is_none() && superseded_by.is_none(),
+            "proposal disposition links require an authoritative disposition record"
         );
         let confidence = validate_optional_confidence_score(confidence)?;
+        let proposal = ProposalCard {
+            schema_version: SchemaVersion(1),
+            scope_id: scope_id.clone(),
+            id,
+            proposal_key,
+            proposal_type,
+            title,
+            summary,
+            confidence,
+            traceability,
+            promotion_state: PromotionState::Proposed,
+            builds_on,
+            duplicate_of,
+            superseded_by,
+        };
+        validate_proposal_intrinsic(&proposal)?;
+        anyhow::ensure!(
+            !self
+                .list_proposal_records(&scope_id)?
+                .iter()
+                .any(|record| record.id == proposal.id),
+            "proposal already exists and is immutable"
+        );
         let path = shards::proposal_cards_path(&self.layout, &scope_id);
         self.mutate_jsonl_records(&path, |records: &mut Vec<ProposalCard>| {
-            let mut seen_ancestors = std::collections::BTreeSet::new();
-            for ancestor in &builds_on {
-                anyhow::ensure!(ancestor != &id, "proposal cannot build on itself");
-                anyhow::ensure!(
-                    seen_ancestors.insert(ancestor.as_str()),
-                    "builds_on proposal {} is repeated",
-                    ancestor.as_str()
-                );
-                let base = records.iter().find(|record| &record.id == ancestor);
-                anyhow::ensure!(
-                    base.is_some(),
-                    "builds_on proposal {} does not exist",
-                    ancestor.as_str()
-                );
-                anyhow::ensure!(
-                    base.is_some_and(|record| record.promotion_state == PromotionState::Asserted),
-                    "builds_on proposal {} must be asserted",
-                    ancestor.as_str()
-                );
-            }
-            let proposal = ProposalCard {
-                schema_version: SchemaVersion(1),
-                scope_id: scope_id.clone(),
-                id,
-                proposal_key,
-                proposal_type,
-                title,
-                summary,
-                confidence,
-                traceability,
-                promotion_state,
-                builds_on,
-                duplicate_of,
-                superseded_by,
-            };
-            if let Some(index) = records.iter().position(|record| record.id == proposal.id) {
-                anyhow::ensure!(replace, "proposal already exists");
-                self.ensure_existing_proposal_card_replaceable(&scope_id, &records[index])?;
-                records[index] = proposal.clone();
-            } else {
-                records.push(proposal.clone());
-            }
+            records.push(proposal.clone());
+            let mut all = self.list_proposal_records(&scope_id)?;
+            all.push(proposal.clone());
+            validate_ideation_aggregate(IdeationAggregate {
+                contributions: &self.list_contributions(&scope_id)?,
+                synthesis_packets: &self.list_synthesis_packets(&scope_id)?,
+                proposals: &all,
+                assertions: &self.list_assertion_records(&scope_id)?,
+                dispositions: &self.list_promotion_decisions(&scope_id)?,
+            })?;
             records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
             Ok(proposal)
+        })
+    }
+
+    pub fn assert_proposal(&self, input: CreateAssertionInput) -> anyhow::Result<AssertionRecord> {
+        let scope = input.scope_id.clone();
+        self.with_ideation_lock(&scope, || self.write_assertion(input))
+    }
+
+    fn write_assertion(&self, input: CreateAssertionInput) -> anyhow::Result<AssertionRecord> {
+        let assertion = AssertionRecord {
+            schema_version: SchemaVersion(1),
+            scope_id: input.scope_id.clone(),
+            id: input.id,
+            proposal_id: input.proposal_id,
+            synthesis_packet_id: input.synthesis_packet_id,
+            supporting_claim_ids: input.supporting_claim_ids,
+        };
+        anyhow::ensure!(
+            !self
+                .list_promotion_decisions(&input.scope_id)?
+                .iter()
+                .any(|record| record.proposal_id == assertion.proposal_id),
+            "a disposed proposal cannot be asserted"
+        );
+        let path = shards::assertion_records_path(&self.layout, &input.scope_id);
+        self.mutate_jsonl_records(&path, |records: &mut Vec<AssertionRecord>| {
+            anyhow::ensure!(
+                !self
+                    .list_assertion_records(&input.scope_id)?
+                    .iter()
+                    .any(|record| {
+                        record.id == assertion.id || record.proposal_id == assertion.proposal_id
+                    }),
+                "assertion identity or proposal assertion already exists"
+            );
+            records.push(assertion.clone());
+            let mut all = self.list_assertion_records(&input.scope_id)?;
+            all.push(assertion.clone());
+            validate_ideation_aggregate(IdeationAggregate {
+                contributions: &self.list_contributions(&input.scope_id)?,
+                synthesis_packets: &self.list_synthesis_packets(&input.scope_id)?,
+                proposals: &self.list_proposal_records(&input.scope_id)?,
+                assertions: &all,
+                dispositions: &self.list_promotion_decisions(&input.scope_id)?,
+            })?;
+            records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+            Ok(assertion)
         })
     }
 
     pub fn create_promotion_decision(
         &self,
         input: CreatePromotionDecisionInput,
-    ) -> anyhow::Result<PromotionDecisionRecord> {
+    ) -> anyhow::Result<DispositionRecord> {
+        let scope = input.scope_id.clone();
+        self.with_ideation_lock(&scope, || self.write_disposition(input))
+    }
+
+    fn write_disposition(
+        &self,
+        input: CreatePromotionDecisionInput,
+    ) -> anyhow::Result<DispositionRecord> {
         let CreatePromotionDecisionInput {
             scope_id,
             id,
@@ -266,7 +352,7 @@ impl StateStore {
             actor,
             canonical_artifact,
         } = input;
-        let promotion_decision = PromotionDecisionRecord {
+        let promotion_decision = DispositionRecord {
             schema_version: SchemaVersion(1),
             scope_id: scope_id.clone(),
             id,
@@ -282,115 +368,52 @@ impl StateStore {
                 .any(|proposal| proposal.id == proposal_id),
             "proposal does not exist"
         );
-        let proposal = self
-            .list_proposal_cards(&scope_id)?
-            .into_iter()
-            .find(|proposal| proposal.id == proposal_id)
-            .expect("proposal existence checked");
         anyhow::ensure!(
-            !(decision == provenance_core::PromotionDecision::Accepted
-                && behavior_changing_proposal(proposal.proposal_type)
-                && promotion_decision.actor.identity_type != provenance_core::IdentityType::Human),
-            "behavior-changing acceptance requires a human actor"
+            self.list_assertion_records(&scope_id)?
+                .iter()
+                .any(|assertion| assertion.proposal_id == proposal_id),
+            "proposal must be asserted before disposition"
+        );
+        anyhow::ensure!(
+            promotion_decision.actor.identity_type == provenance_core::IdentityType::Human,
+            "authoritative disposition requires a human actor"
+        );
+        anyhow::ensure!(
+            !self
+                .list_promotion_decisions(&scope_id)?
+                .iter()
+                .any(|record| {
+                    record.id == promotion_decision.id
+                        || record.proposal_id == promotion_decision.proposal_id
+                }),
+            "proposal already has an authoritative disposition"
         );
         let decisions_path = shards::promotion_decisions_path(&self.layout, &scope_id);
-        self.mutate_jsonl_records(
-            &decisions_path,
-            |records: &mut Vec<PromotionDecisionRecord>| {
-                anyhow::ensure!(
-                    !records
-                        .iter()
-                        .any(|record| record.id == promotion_decision.id),
-                    "promotion decision already exists"
-                );
-                Ok(())
-            },
-        )?;
-        let proposals_path = shards::proposal_cards_path(&self.layout, &scope_id);
-        self.mutate_jsonl_records(&proposals_path, |proposals: &mut Vec<ProposalCard>| {
-            let proposal = proposals
-                .iter_mut()
-                .find(|proposal| proposal.id == proposal_id)
-                .ok_or_else(|| anyhow::anyhow!("proposal does not exist"))?;
-            proposal.promotion_state = match decision {
-                provenance_core::PromotionDecision::Accepted => PromotionState::Accepted,
-                provenance_core::PromotionDecision::Rejected => PromotionState::Rejected,
-                provenance_core::PromotionDecision::Deferred => PromotionState::Deferred,
-            };
-            proposals.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-            Ok(())
-        })?;
-        self.mutate_jsonl_records(
-            &decisions_path,
-            |records: &mut Vec<PromotionDecisionRecord>| {
-                anyhow::ensure!(
-                    !records
-                        .iter()
-                        .any(|record| record.id == promotion_decision.id),
-                    "promotion decision already exists"
-                );
-                records.push(promotion_decision.clone());
-                records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-                Ok(promotion_decision)
-            },
-        )
-    }
-
-    pub fn ensure_proposal_card_replaceable(
-        &self,
-        scope_id: &ScopeId,
-        proposal_id: &StableId,
-    ) -> anyhow::Result<()> {
-        if let Some(existing) = self
-            .list_proposal_cards(scope_id)?
-            .into_iter()
-            .find(|proposal| proposal.id.as_str() == proposal_id.as_str())
-        {
-            self.ensure_existing_proposal_card_replaceable(scope_id, &existing)?;
-        }
-        Ok(())
-    }
-
-    fn ensure_existing_proposal_card_replaceable(
-        &self,
-        scope_id: &ScopeId,
-        existing: &ProposalCard,
-    ) -> anyhow::Result<()> {
-        let decisions = self
-            .list_promotion_decisions(scope_id)?
-            .into_iter()
-            .filter(|decision| decision.proposal_id.as_str() == existing.id.as_str())
-            .collect::<Vec<_>>();
-        if existing.promotion_state == PromotionState::Proposed && decisions.is_empty() {
-            return Ok(());
-        }
-
-        let state = serde_name(&existing.promotion_state)
-            .unwrap_or_else(|_| format!("{:?}", existing.promotion_state));
-        if decisions.is_empty() {
-            anyhow::bail!(
-                "proposal {} has a human disposition or durable disposition and cannot be replaced; promotion_state is {state}",
-                existing.id.as_str()
+        self.mutate_jsonl_records(&decisions_path, |records: &mut Vec<DispositionRecord>| {
+            anyhow::ensure!(
+                !records
+                    .iter()
+                    .any(|record| record.id == promotion_decision.id),
+                "promotion decision already exists"
             );
-        }
-
-        let decision_ids = decisions
-            .iter()
-            .map(|decision| decision.id.as_str())
-            .collect::<Vec<_>>()
-            .join(", ");
-        anyhow::bail!(
-            "proposal {} has a human disposition or durable disposition and cannot be replaced; promotion_state is {state}; promotion decision(s): {decision_ids}",
-            existing.id.as_str()
-        );
+            anyhow::ensure!(
+                !records
+                    .iter()
+                    .any(|record| record.proposal_id == promotion_decision.proposal_id),
+                "proposal already has an authoritative disposition"
+            );
+            records.push(promotion_decision.clone());
+            let mut all = self.list_promotion_decisions(&scope_id)?;
+            all.push(promotion_decision.clone());
+            validate_ideation_aggregate(IdeationAggregate {
+                contributions: &self.list_contributions(&scope_id)?,
+                synthesis_packets: &self.list_synthesis_packets(&scope_id)?,
+                proposals: &self.list_proposal_records(&scope_id)?,
+                assertions: &self.list_assertion_records(&scope_id)?,
+                dispositions: &all,
+            })?;
+            records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+            Ok(promotion_decision)
+        })
     }
-}
-
-const fn behavior_changing_proposal(proposal_type: provenance_core::ProposalType) -> bool {
-    matches!(
-        proposal_type,
-        provenance_core::ProposalType::RequirementCandidate
-            | provenance_core::ProposalType::ResolutionCandidate
-            | provenance_core::ProposalType::RuleCandidate
-    )
 }

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 pub(super) mod contributions;
+pub(super) mod lifecycle;
 pub(super) mod promotions;
 pub(super) mod proposals;
 pub(super) mod synthesis;
@@ -217,7 +218,7 @@ impl ProposalType {
 pub enum PromotionState {
     #[serde(rename = "proposed")]
     Proposed,
-    #[serde(rename = "asserted", alias = "swarm_asserted")]
+    #[serde(rename = "asserted")]
     Asserted,
     #[serde(rename = "accepted")]
     Accepted,
@@ -235,7 +236,7 @@ impl PromotionState {
     pub fn parse(value: &str) -> anyhow::Result<Self> {
         match normalize_enum_value(value).as_str() {
             "proposed" => Ok(Self::Proposed),
-            "asserted" | "swarm_asserted" => Ok(Self::Asserted),
+            "asserted" => Ok(Self::Asserted),
             "accepted" => Ok(Self::Accepted),
             "rejected" => Ok(Self::Rejected),
             "deferred" => Ok(Self::Deferred),

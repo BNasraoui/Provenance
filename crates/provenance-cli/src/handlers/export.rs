@@ -33,7 +33,9 @@ pub struct ScopeExport {
     #[serde(default)]
     pub proposal_cards: Vec<provenance_core::ProposalCard>,
     #[serde(default)]
-    pub promotion_decisions: Vec<provenance_core::PromotionDecisionRecord>,
+    pub assertion_records: Vec<provenance_core::AssertionRecord>,
+    #[serde(default)]
+    pub promotion_decisions: Vec<provenance_core::DispositionRecord>,
 }
 
 pub fn export_scope(repo: Utf8PathBuf, scope: String) -> anyhow::Result<ScopeExport> {
@@ -60,7 +62,8 @@ pub fn export_scope(repo: Utf8PathBuf, scope: String) -> anyhow::Result<ScopeExp
         messages: store.list_messages(&scope_id)?,
         contributions: store.list_contributions(&scope_id)?,
         synthesis_packets: store.list_synthesis_packets(&scope_id)?,
-        proposal_cards: store.list_proposal_cards(&scope_id)?,
+        proposal_cards: store.list_proposal_definitions(&scope_id)?,
+        assertion_records: store.list_assertion_records(&scope_id)?,
         promotion_decisions: store.list_promotion_decisions(&scope_id)?,
     })
 }

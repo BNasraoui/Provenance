@@ -1,5 +1,5 @@
 use super::ideation::contributions::{Contribution, MaterialClaim};
-use super::ideation::promotions::PromotionDecisionRecord;
+use super::ideation::promotions::DispositionRecord;
 use super::ideation::proposals::ProposalCard;
 use super::ideation::synthesis::SynthesisPacket;
 use super::ideation::{PromotionDecision, PromotionState, ProposalType};
@@ -130,7 +130,7 @@ fn ideation_output_records_roundtrip_without_schema_bump() {
     let contribution: Contribution = serde_json::from_value(contribution).unwrap();
     let synthesis: SynthesisPacket = serde_json::from_value(synthesis).unwrap();
     let proposal: ProposalCard = serde_json::from_value(proposal).unwrap();
-    let decision: PromotionDecisionRecord = serde_json::from_value(decision).unwrap();
+    let decision: DispositionRecord = serde_json::from_value(decision).unwrap();
 
     assert_eq!(contribution.schema_version, SchemaVersion(1));
     assert_eq!(
@@ -241,7 +241,7 @@ fn proposal_and_promotion_decision_accept_convex_id_aliases() {
     });
 
     let proposal: ProposalCard = serde_json::from_value(proposal).unwrap();
-    let decision: PromotionDecisionRecord = serde_json::from_value(decision).unwrap();
+    let decision: DispositionRecord = serde_json::from_value(decision).unwrap();
 
     assert_eq!(proposal.id.as_str(), "proposal_overtime_traceability");
     assert_eq!(proposal.proposal_type, ProposalType::RequirementCandidate);
@@ -254,7 +254,7 @@ fn proposal_and_promotion_decision_accept_convex_id_aliases() {
 }
 
 #[test]
-fn swarm_asserted_proposal_round_trips_with_provisional_lineage() {
+fn persisted_asserted_projection_round_trips_with_assertion_lineage() {
     let value = serde_json::json!({
         "schema_version": 1,
         "scope_id": "default",
@@ -270,12 +270,12 @@ fn swarm_asserted_proposal_round_trips_with_provisional_lineage() {
             "supporting_claim_ids": []
         },
         "promotion_state": "asserted",
-        "builds_on": ["proposal_overtime_v1"]
+        "builds_on": ["assertion_overtime_v1"]
     });
 
     let proposal: ProposalCard = serde_json::from_value(value.clone()).unwrap();
     assert_eq!(proposal.promotion_state, PromotionState::Asserted);
-    assert_eq!(proposal.builds_on[0].as_str(), "proposal_overtime_v1");
+    assert_eq!(proposal.builds_on[0].as_str(), "assertion_overtime_v1");
     assert_eq!(serde_json::to_value(proposal).unwrap(), value);
 }
 

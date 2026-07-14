@@ -4,7 +4,7 @@ use crate::{
 };
 use provenance_core::{Manifest, RepoPathPrefix, RequirementStatus, ScopeId, SourceType, StableId};
 
-fn initialized_store() -> (tempfile::TempDir, StateStore, ScopeId) {
+pub(super) fn initialized_store() -> (tempfile::TempDir, StateStore, ScopeId) {
     let dir = tempfile::tempdir().unwrap();
     let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
     let layout = ProvenanceLayout::new(root);

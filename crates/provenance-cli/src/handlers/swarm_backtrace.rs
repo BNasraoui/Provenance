@@ -8,17 +8,14 @@ use crate::{
 use anyhow::Context;
 use camino::{Utf8Path, Utf8PathBuf};
 use provenance_core::{
-    Contribution, PromotionState, ProposalCard, ScopeId, StableId, SynthesisPacket,
+    AssertionRecord, Contribution, ProposalCard, ScopeId, StableId, SynthesisPacket,
 };
 use provenance_store::{
     layout::ProvenanceLayout,
-    state_store::{
-        CreateContributionInput, CreateProposalCardInput, CreateSynthesisPacketInput, StateStore,
-    },
+    state_store::{IdeationLandingBatch, StateStore},
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::BTreeSet;
 
 pub(super) fn handle(command: SwarmBacktraceCommand) -> anyhow::Result<()> {
     match command {
@@ -38,6 +35,7 @@ struct LandReport {
     contributions: usize,
     synthesis_packets: usize,
     proposals: usize,
+    assertions: usize,
     replace: bool,
 }
 
@@ -50,6 +48,8 @@ struct MergeOutput {
     synthesis_packets: Vec<SynthesisPacket>,
     #[serde(default, alias = "proposal_cards")]
     proposals: Vec<ProposalCard>,
+    #[serde(default)]
+    assertions: Vec<AssertionRecord>,
 }
 
 fn land(
@@ -62,7 +62,7 @@ fn land(
     anyhow::ensure!(run_dir.is_dir(), "--run-dir must be an existing directory");
     let scope_id = ScopeId::new(scope)?;
     let contributions = read_contributions(run_dir)?;
-    let (synthesis_packets, proposals) = read_merge_outputs(run_dir)?;
+    let (synthesis_packets, proposals, assertions) = read_merge_outputs(run_dir)?;
 
     anyhow::ensure!(
         !contributions.is_empty(),
@@ -95,45 +95,31 @@ fn land(
         validate_proposal_card_record(proposal)?;
         ensure_scope(&scope_id, &proposal.scope_id, "proposal", &proposal.id)?;
     }
-    ensure_assertions_are_unrefuted(&synthesis_packets, &proposals)?;
+    for assertion in &assertions {
+        ensure_scope(
+            &scope_id,
+            &assertion.scope_id,
+            "assertion",
+            &StableId::new(assertion.id.as_str())?,
+        )?;
+    }
 
     let contribution_count = contributions.len();
     let synthesis_count = synthesis_packets.len();
     let proposal_count = proposals.len();
+    let assertion_count = assertions.len();
     let store = StateStore::new(ProvenanceLayout::new(repo));
-    preflight_land(
-        &store,
+    store.land_ideation_batch(
         &scope_id,
-        &contributions,
-        &synthesis_packets,
-        &proposals,
+        IdeationLandingBatch {
+            contributions,
+            synthesis_packets,
+            proposals,
+            assertions,
+            dispositions: Vec::new(),
+        },
         replace,
     )?;
-
-    for contribution in contributions {
-        let input = contribution_input(&scope_id, contribution);
-        if replace {
-            store.upsert_contribution(input)?;
-        } else {
-            store.create_contribution(input)?;
-        }
-    }
-    for synthesis_packet in synthesis_packets {
-        let input = synthesis_packet_input(&scope_id, synthesis_packet);
-        if replace {
-            store.upsert_synthesis_packet(input)?;
-        } else {
-            store.create_synthesis_packet(input)?;
-        }
-    }
-    for proposal in proposals {
-        let input = proposal_input(&scope_id, proposal);
-        if replace {
-            store.upsert_proposal_card(input)?;
-        } else {
-            store.create_proposal_card(input)?;
-        }
-    }
 
     output::print(
         format,
@@ -142,34 +128,10 @@ fn land(
             contributions: contribution_count,
             synthesis_packets: synthesis_count,
             proposals: proposal_count,
+            assertions: assertion_count,
             replace,
         },
     )
-}
-
-fn ensure_assertions_are_unrefuted(
-    synthesis_packets: &[SynthesisPacket],
-    proposals: &[ProposalCard],
-) -> anyhow::Result<()> {
-    let contested = synthesis_packets
-        .iter()
-        .flat_map(|packet| &packet.contested_claims)
-        .map(|claim| claim.claim_id.as_str())
-        .collect::<BTreeSet<_>>();
-    for proposal in proposals
-        .iter()
-        .filter(|proposal| proposal.promotion_state == PromotionState::Asserted)
-    {
-        for claim_id in &proposal.traceability.supporting_claim_ids {
-            anyhow::ensure!(
-                !contested.contains(claim_id.as_str()),
-                "asserted proposal {} is linked to contested claim {}",
-                proposal.id.as_str(),
-                claim_id.as_str()
-            );
-        }
-    }
-    Ok(())
 }
 
 fn read_contributions(run_dir: &Utf8Path) -> anyhow::Result<Vec<Contribution>> {
@@ -199,7 +161,11 @@ fn read_contribution_file(path: &Utf8Path) -> anyhow::Result<Vec<Contribution>> 
 
 fn read_merge_outputs(
     run_dir: &Utf8Path,
-) -> anyhow::Result<(Vec<SynthesisPacket>, Vec<ProposalCard>)> {
+) -> anyhow::Result<(
+    Vec<SynthesisPacket>,
+    Vec<ProposalCard>,
+    Vec<AssertionRecord>,
+)> {
     let mut paths = json_files(&run_dir.join("merge"))?;
     for file_name in ["merged.json", "merge.json"] {
         let path = run_dir.join(file_name);
@@ -212,6 +178,7 @@ fn read_merge_outputs(
 
     let mut synthesis_packets = Vec::new();
     let mut proposals = Vec::new();
+    let mut assertions = Vec::new();
     for path in paths {
         let merge_output: MergeOutput = read_json(&path)?;
         if let Some(synthesis_packet) = merge_output.synthesis_packet {
@@ -219,8 +186,9 @@ fn read_merge_outputs(
         }
         synthesis_packets.extend(merge_output.synthesis_packets);
         proposals.extend(merge_output.proposals);
+        assertions.extend(merge_output.assertions);
     }
-    Ok((synthesis_packets, proposals))
+    Ok((synthesis_packets, proposals, assertions))
 }
 
 fn json_files(directory: &Utf8Path) -> anyhow::Result<Vec<Utf8PathBuf>> {
@@ -254,85 +222,6 @@ fn deserialize_landing_value<T: DeserializeOwned>(
         .with_context(|| format!("{path} {field} must be valid landing JSON"))
 }
 
-fn preflight_land(
-    store: &StateStore,
-    scope_id: &ScopeId,
-    contributions: &[Contribution],
-    synthesis_packets: &[SynthesisPacket],
-    proposals: &[ProposalCard],
-    replace: bool,
-) -> anyhow::Result<()> {
-    ensure_unique_run_ids(
-        "contribution",
-        contributions.iter().map(|record| &record.id),
-    )?;
-    ensure_unique_run_ids(
-        "synthesis packet",
-        synthesis_packets.iter().map(|record| &record.id),
-    )?;
-    ensure_unique_run_ids("proposal", proposals.iter().map(|record| &record.id))?;
-
-    if replace {
-        for proposal in proposals {
-            store.ensure_proposal_card_replaceable(scope_id, &proposal.id)?;
-        }
-        return Ok(());
-    }
-
-    let existing_contributions = store.list_contributions(scope_id)?;
-    ensure_no_existing_ids(
-        "contribution",
-        existing_contributions.iter().map(|record| &record.id),
-        contributions.iter().map(|record| &record.id),
-    )?;
-    let existing_synthesis_packets = store.list_synthesis_packets(scope_id)?;
-    ensure_no_existing_ids(
-        "synthesis packet",
-        existing_synthesis_packets.iter().map(|record| &record.id),
-        synthesis_packets.iter().map(|record| &record.id),
-    )?;
-    let existing_proposals = store.list_proposal_cards(scope_id)?;
-    ensure_no_existing_ids(
-        "proposal",
-        existing_proposals.iter().map(|record| &record.id),
-        proposals.iter().map(|record| &record.id),
-    )
-}
-
-fn ensure_unique_run_ids<'a>(
-    artifact: &str,
-    ids: impl IntoIterator<Item = &'a StableId>,
-) -> anyhow::Result<()> {
-    let mut seen = BTreeSet::new();
-    for id in ids {
-        anyhow::ensure!(
-            seen.insert(id.as_str().to_string()),
-            "duplicate {artifact} id {} in run",
-            id.as_str()
-        );
-    }
-    Ok(())
-}
-
-fn ensure_no_existing_ids<'existing, 'incoming>(
-    artifact: &str,
-    existing_ids: impl IntoIterator<Item = &'existing StableId>,
-    incoming_ids: impl IntoIterator<Item = &'incoming StableId>,
-) -> anyhow::Result<()> {
-    let existing_ids = existing_ids
-        .into_iter()
-        .map(|id| id.as_str().to_string())
-        .collect::<BTreeSet<_>>();
-    for id in incoming_ids {
-        anyhow::ensure!(
-            !existing_ids.contains(id.as_str()),
-            "{artifact} {} already exists; rerun with --replace to replace generated records",
-            id.as_str()
-        );
-    }
-    Ok(())
-}
-
 fn utf8_path(path: std::path::PathBuf) -> anyhow::Result<Utf8PathBuf> {
     Utf8PathBuf::from_path_buf(path)
         .map_err(|path| anyhow::anyhow!("path is not valid UTF-8: {}", path.display()))
@@ -351,106 +240,4 @@ fn ensure_scope(
         expected.as_str()
     );
     Ok(())
-}
-
-fn contribution_input(scope_id: &ScopeId, contribution: Contribution) -> CreateContributionInput {
-    let Contribution {
-        id,
-        target,
-        participant_slot,
-        stance,
-        strongest_finding,
-        evidence_references,
-        material_claims,
-        risks,
-        objections,
-        challenges,
-        suggested_artifact_changes,
-        unsupported_recommendations,
-        uncertainty,
-        open_questions,
-        ..
-    } = contribution;
-    CreateContributionInput {
-        scope_id: scope_id.clone(),
-        id,
-        target,
-        participant_slot,
-        stance,
-        strongest_finding,
-        evidence_references,
-        material_claims,
-        risks,
-        objections,
-        challenges,
-        suggested_artifact_changes,
-        unsupported_recommendations,
-        uncertainty,
-        open_questions,
-    }
-}
-
-fn synthesis_packet_input(
-    scope_id: &ScopeId,
-    synthesis_packet: SynthesisPacket,
-) -> CreateSynthesisPacketInput {
-    let SynthesisPacket {
-        id,
-        target,
-        summary,
-        consensus,
-        contested_claims,
-        minority_objections,
-        evidence_gaps,
-        unsupported_speculation,
-        open_questions,
-        suggested_artifacts,
-        required_human_decisions,
-        ..
-    } = synthesis_packet;
-    CreateSynthesisPacketInput {
-        scope_id: scope_id.clone(),
-        id,
-        target,
-        summary,
-        consensus,
-        contested_claims,
-        minority_objections,
-        evidence_gaps,
-        unsupported_speculation,
-        open_questions,
-        suggested_artifacts,
-        required_human_decisions,
-    }
-}
-
-fn proposal_input(scope_id: &ScopeId, proposal: ProposalCard) -> CreateProposalCardInput {
-    let ProposalCard {
-        id,
-        proposal_key,
-        proposal_type,
-        title,
-        summary,
-        confidence,
-        traceability,
-        promotion_state,
-        builds_on,
-        duplicate_of,
-        superseded_by,
-        ..
-    } = proposal;
-    CreateProposalCardInput {
-        scope_id: scope_id.clone(),
-        id,
-        proposal_key,
-        proposal_type,
-        title,
-        summary,
-        confidence,
-        traceability,
-        promotion_state,
-        builds_on,
-        duplicate_of,
-        superseded_by,
-    }
 }

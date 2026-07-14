@@ -134,11 +134,9 @@ fn check_rejects_dangling_promotion_decision_proposal_id() {
         r#"{"schema_version":1,"scope_id":"default","promotionDecisionId":"decision_missing_proposal","proposalId":"proposal_missing","decision":"accepted","rationale":"Looks good.","decidedBy":{"identity_type":"human","id":"ben"}}"#,
     );
 
-    provenance(dir.path())
-        .failure()
-        .stderr(contains("dangling reference"))
-        .stderr(contains("promotion decision decision_missing_proposal"))
-        .stderr(contains("proposal proposal_missing"));
+    provenance(dir.path()).failure().stderr(contains(
+        "disposition proposal proposal_missing does not exist",
+    ));
 }
 
 #[test]
@@ -151,10 +149,9 @@ fn check_rejects_dangling_provisional_lineage() {
         r#"{"schema_version":1,"scope_id":"default","id":"proposal_child","proposal_key":"child","proposal_type":"question","title":"Child","summary":"Derived proposal","traceability":{"target":{"artifact_type":"requirement","artifact_id":"req_missing"},"source_ids":[],"evidence_references":[],"supporting_claim_ids":[]},"promotion_state":"proposed","builds_on":["proposal_missing"]}"#,
     );
 
-    provenance(dir.path())
-        .failure()
-        .stderr(contains("proposal proposal_child"))
-        .stderr(contains("builds_on proposal proposal_missing"));
+    provenance(dir.path()).failure().stderr(contains(
+        "builds_on assertion proposal_missing does not exist",
+    ));
 }
 
 #[test]
