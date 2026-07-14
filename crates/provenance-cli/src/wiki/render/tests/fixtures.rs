@@ -18,6 +18,36 @@ pub(super) fn link(kind: PageKind, id: &str, title: &str) -> PageLink {
     }
 }
 
+pub(super) fn colliding_requirement_links() -> Vec<PageLink> {
+    vec![
+        link(
+            PageKind::Requirement,
+            "req_sah_participant_budget_summary_shall_pro",
+            "Participant budget summary shall pro-rate services",
+        ),
+        link(
+            PageKind::Requirement,
+            "req_sah_participant_budget_summary_shall_pro_2",
+            "Participant budget summary shall pro-rate services",
+        ),
+    ]
+}
+
+pub(super) fn unique_requirement_links() -> Vec<PageLink> {
+    vec![
+        link(
+            PageKind::Requirement,
+            "req_budget_split",
+            "Budget portions shall reconcile",
+        ),
+        link(
+            PageKind::Requirement,
+            "req_zero_suppression",
+            "Zero claim items shall be suppressed",
+        ),
+    ]
+}
+
 pub(super) fn rule_card(resolver: &LinkResolver) -> RuleCard {
     RuleCard {
         link: link(
