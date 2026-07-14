@@ -177,6 +177,21 @@ pub enum Command {
         rule_severities: Option<String>,
         #[arg(long, default_value_t = 0)]
         min_downstream_rules: u32,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+    /// Re-verify changed evidence independently of resolution staleness.
+    EvidenceReview {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long, default_value = "default")]
+        scope: String,
+        #[arg(long, default_value_t = 0)]
+        min_age_days: u32,
+        #[arg(long)]
+        rule_severities: Option<String>,
+        #[arg(long, default_value_t = 0)]
+        min_downstream_rules: u32,
         /// Override commit-pinned source revisions as the diff base.
         #[arg(long)]
         base: Option<String>,

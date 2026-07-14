@@ -213,7 +213,8 @@ question via `promotion-decisions create`. Do not make promotion decisions yours
 
 ### Incremental review after the pin moves
 
-Before repeating a full extraction, run `provenance stale --scope <scope> --format json`.
+Before repeating a full extraction, run
+`provenance evidence-review --scope <scope> --format json`.
 It compares commit-pinned graph evidence with `HEAD` and re-reads only citations whose
 paths changed. `moved` citations can be reviewed for a location update; `vanished` and
 `unverifiable` citations require the relevant candidate batch to be refuted again.

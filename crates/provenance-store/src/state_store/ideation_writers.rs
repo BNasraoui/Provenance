@@ -229,6 +229,13 @@ impl StateStore {
         &self,
         input: CreatePromotionDecisionInput,
     ) -> anyhow::Result<PromotionDecisionRecord> {
+        self.with_state_write(|| self.create_promotion_decision_locked(input))
+    }
+
+    fn create_promotion_decision_locked(
+        &self,
+        input: CreatePromotionDecisionInput,
+    ) -> anyhow::Result<PromotionDecisionRecord> {
         let CreatePromotionDecisionInput {
             scope_id,
             id,

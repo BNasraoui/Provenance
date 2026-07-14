@@ -2,6 +2,7 @@ mod domain_service_writers;
 mod ideation_writers;
 mod rule_writers;
 mod shaping_writers;
+mod snapshot;
 mod thread_writers;
 mod writers;
 
@@ -27,6 +28,8 @@ use serde::{de::DeserializeOwned, Serialize};
 pub struct StateStore {
     pub(crate) layout: ProvenanceLayout,
 }
+
+pub use snapshot::ScopeSnapshot;
 
 pub struct CreateSourceInput {
     pub scope_id: ScopeId,
@@ -331,6 +334,15 @@ impl StateStore {
         read_jsonl(&shards::promotion_decisions_path(&self.layout, scope))
     }
 
+    /// Keeps a logical multi-shard write outside immutable snapshot reads.
+    pub fn with_state_write<R>(
+        &self,
+        write: impl FnOnce() -> anyhow::Result<R>,
+    ) -> anyhow::Result<R> {
+        let _guard = crate::jsonl::AdvisoryLock::shared(&self.layout.state_snapshot_lock_path())?;
+        write()
+    }
+
     pub(crate) fn mutate_jsonl_records<T, R>(
         &self,
         path: &Utf8Path,
@@ -339,6 +351,8 @@ impl StateStore {
     where
         T: DeserializeOwned + Serialize,
     {
+        let _snapshot_guard =
+            crate::jsonl::AdvisoryLock::shared(&self.layout.state_snapshot_lock_path())?;
         let lock_path = self.layout.state_shard_lock_path(path)?;
         crate::jsonl::mutate_jsonl_locked(path, &lock_path, mutate)
     }

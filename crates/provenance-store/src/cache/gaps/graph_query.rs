@@ -1,8 +1,8 @@
+use crate::cache::DownstreamRuleQuery;
 use provenance_core::{
     Edge, EdgeType, NodeType, Question, Requirement, Resolution, Rule, ScopeId, Source, StableId,
     Thread, Topic,
 };
-use std::collections::BTreeSet;
 
 pub struct GapGraph<'a> {
     pub scope: &'a ScopeId,
@@ -116,42 +116,13 @@ impl<'a, 'graph> GraphQuery<'a, 'graph> {
     }
 
     pub fn produced_rules_for_requirement(&self, requirement_id: &StableId) -> Vec<&Rule> {
-        let resolution_ids: BTreeSet<&str> = self
-            .resolving_resolutions(requirement_id)
-            .into_iter()
-            .map(|resolution| resolution.id.as_str())
-            .collect();
-        self.graph
-            .rules
-            .iter()
-            .filter(|rule| {
-                self.edges().any(|edge| {
-                    edge.edge_type == EdgeType::Produces
-                        && edge.to_type == NodeType::Rule
-                        && edge.to_id == rule.id
-                        && ((edge.from_type == NodeType::Requirement
-                            && edge.from_id == *requirement_id)
-                            || (edge.from_type == NodeType::Resolution
-                                && resolution_ids.contains(edge.from_id.as_str())))
-                })
-            })
-            .collect()
+        DownstreamRuleQuery::new(self.graph.edges, self.graph.resolutions, self.graph.rules)
+            .for_requirement(requirement_id)
     }
 
     pub fn produced_rules_for_resolution(&self, resolution_id: &StableId) -> Vec<&Rule> {
-        self.graph
-            .rules
-            .iter()
-            .filter(|rule| {
-                self.edge_exists(
-                    EdgeType::Produces,
-                    NodeType::Resolution,
-                    resolution_id,
-                    NodeType::Rule,
-                    &rule.id,
-                )
-            })
-            .collect()
+        DownstreamRuleQuery::new(self.graph.edges, self.graph.resolutions, self.graph.rules)
+            .for_resolution(resolution_id)
     }
 
     pub fn rule_has_existing_producer(&self, rule_id: &StableId) -> bool {

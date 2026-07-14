@@ -6,6 +6,10 @@ use provenance_core::{
 
 impl StateStore {
     pub fn create_resolution(&self, input: CreateResolutionInput) -> anyhow::Result<Resolution> {
+        self.with_state_write(|| self.create_resolution_locked(input))
+    }
+
+    fn create_resolution_locked(&self, input: CreateResolutionInput) -> anyhow::Result<Resolution> {
         let CreateResolutionInput {
             scope_id,
             id,
@@ -87,6 +91,10 @@ impl StateStore {
     }
 
     pub fn create_rule(&self, input: CreateRuleInput) -> anyhow::Result<Rule> {
+        self.with_state_write(|| self.create_rule_locked(input))
+    }
+
+    fn create_rule_locked(&self, input: CreateRuleInput) -> anyhow::Result<Rule> {
         let CreateRuleInput {
             scope_id,
             id,

@@ -3,6 +3,7 @@ mod health;
 mod impact;
 mod materialize;
 mod prime;
+mod rules;
 mod stale;
 mod traceability;
 
@@ -11,6 +12,7 @@ pub use health::*;
 pub use impact::*;
 pub use materialize::{materialize_empty_state, materialize_state};
 pub use prime::*;
+pub use rules::*;
 pub use stale::*;
 pub use traceability::*;
 

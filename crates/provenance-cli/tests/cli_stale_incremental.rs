@@ -1,6 +1,7 @@
 use assert_cmd::Command;
 use serde_json::Value;
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 use std::process::Command as ProcessCommand;
 
@@ -83,10 +84,10 @@ fn seed_graph(repo: &Path, base: &str) {
     fs::write(scope.join("ideation/proposal_cards.jsonl"), proposals).unwrap();
 }
 
-fn stale_json(repo: &Path, extra: &[&str]) -> Value {
+fn evidence_review_json(repo: &Path, extra: &[&str]) -> Value {
     let mut command = Command::cargo_bin("provenance").unwrap();
     command.args([
-        "stale",
+        "evidence-review",
         "--repo",
         repo.to_str().unwrap(),
         "--scope",
@@ -100,7 +101,7 @@ fn stale_json(repo: &Path, extra: &[&str]) -> Value {
 }
 
 #[test]
-fn stale_diff_gate_reverifies_only_intersecting_evidence() {
+fn evidence_review_reverifies_only_intersecting_evidence() {
     let dir = init_repo();
     write(dir.path(), "src/guard.rs", "pub fn guard() {}\n");
     write(dir.path(), "src/reject.rs", "return Err(\"invalid\");\n");
@@ -117,7 +118,7 @@ fn stale_diff_gate_reverifies_only_intersecting_evidence() {
     write(dir.path(), "notes.txt", "unrelated\n");
     commit(dir.path(), "change evidence");
 
-    let report = stale_json(dir.path(), &[]);
+    let report = evidence_review_json(dir.path(), &[]);
     assert_eq!(report["summary"]["graph_evidence_paths"], 3);
     assert_eq!(report["summary"]["intersecting_paths"], 2);
     assert_eq!(report["summary"]["evidence_reverified"], 2);
@@ -140,7 +141,7 @@ fn stale_diff_gate_reverifies_only_intersecting_evidence() {
 }
 
 #[test]
-fn stale_honors_downstream_rule_and_severity_filters() {
+fn evidence_review_honors_downstream_rule_and_severity_filters() {
     let dir = init_repo();
     write(dir.path(), "src/reject.rs", "return Err(\"invalid\");\n");
     let base = commit(dir.path(), "base");
@@ -148,17 +149,17 @@ fn stale_honors_downstream_rule_and_severity_filters() {
     write(dir.path(), "src/reject.rs", "return Ok(());\n");
     commit(dir.path(), "contradict requirement");
 
-    let severity = stale_json(dir.path(), &["--rule-severities", "critical"]);
+    let severity = evidence_review_json(dir.path(), &["--rule-severities", "critical"]);
     assert_eq!(severity["summary"]["evidence_reverified"], 0);
     assert_eq!(severity["contradictions"], serde_json::json!([]));
 
-    let downstream = stale_json(dir.path(), &["--min-downstream-rules", "2"]);
+    let downstream = evidence_review_json(dir.path(), &["--min-downstream-rules", "2"]);
     assert_eq!(downstream["summary"]["evidence_reverified"], 0);
     assert_eq!(downstream["contradictions"], serde_json::json!([]));
 }
 
 #[test]
-fn stale_base_override_supports_ci_diff_ranges() {
+fn evidence_review_base_override_supports_ci_diff_ranges() {
     let dir = init_repo();
     write(dir.path(), "src/reject.rs", "return Err(\"invalid\");\n");
     let base = commit(dir.path(), "base");
@@ -166,7 +167,7 @@ fn stale_base_override_supports_ci_diff_ranges() {
     write(dir.path(), "src/reject.rs", "return Ok(());\n");
     let head = commit(dir.path(), "change");
 
-    let report = stale_json(dir.path(), &["--base", &base, "--head", &head]);
+    let report = evidence_review_json(dir.path(), &["--base", &base, "--head", &head]);
     assert_eq!(report["diffs"][0]["base"], base);
     assert_eq!(report["diffs"][0]["head"], head);
     assert_eq!(report["evidence"][0]["status"], "vanished");
@@ -183,7 +184,136 @@ fn stale_compares_review_dates_with_today_instead_of_2099() {
 "#,
     );
 
-    let report = stale_json(dir.path(), &[]);
-    assert_eq!(report["stale_resolutions"].as_array().unwrap().len(), 1);
-    assert_eq!(report["stale_resolutions"][0]["resolution_id"], "res_past");
+    let output = Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "stale",
+            "--repo",
+            dir.path().to_str().unwrap(),
+            "--scope",
+            "default",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let report: Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(report.as_array().unwrap().len(), 1);
+    assert_eq!(report[0]["resolution_id"], "res_past");
+}
+
+#[test]
+fn evidence_review_rejects_ambiguous_multi_source_sites() {
+    let dir = init_repo();
+    write(dir.path(), "src/reject.rs", "return Err(\"invalid\");\n");
+    let base = commit(dir.path(), "base");
+    seed_graph(dir.path(), &base);
+    let sources = dir
+        .path()
+        .join(".provenance/state/scopes/default/sources/source.jsonl");
+    fs::OpenOptions::new()
+        .append(true)
+        .open(sources)
+        .unwrap()
+        .write_all(format!("{{\"schema_version\":1,\"scope_id\":\"default\",\"id\":\"source_other\",\"name\":\"other\",\"source_type\":\"system_state\",\"commit_pin\":\"{base}\"}}\n").as_bytes())
+        .unwrap();
+    let proposals = dir
+        .path()
+        .join(".provenance/state/scopes/default/ideation/proposal_cards.jsonl");
+    let contents = fs::read_to_string(&proposals).unwrap().replacen(
+        "\"source_ids\":[\"source_code\"]",
+        "\"source_ids\":[\"source_code\",\"source_other\"]",
+        1,
+    );
+    fs::write(proposals, contents).unwrap();
+    write(dir.path(), "src/reject.rs", "return Ok(());\n");
+    commit(dir.path(), "change");
+
+    let report = evidence_review_json(dir.path(), &[]);
+    assert_eq!(report["summary"]["evidence_reverified"], 0);
+    assert!(report["diagnostics"][0]
+        .as_str()
+        .unwrap()
+        .contains("ambiguous sources"));
+}
+
+#[test]
+fn accepted_proposal_id_is_not_fabricated_as_requirement_id() {
+    let dir = init_repo();
+    write(dir.path(), "src/reject.rs", "return Err(\"invalid\");\n");
+    let base = commit(dir.path(), "base");
+    seed_graph(dir.path(), &base);
+    let proposals = dir
+        .path()
+        .join(".provenance/state/scopes/default/ideation/proposal_cards.jsonl");
+    let only_source_target = fs::read_to_string(&proposals)
+        .unwrap()
+        .lines()
+        .next()
+        .unwrap()
+        .replace(
+            "\"artifact_type\":\"requirement\",\"artifact_id\":\"req_ratified\"",
+            "\"artifact_type\":\"source\",\"artifact_id\":\"source_code\"",
+        );
+    fs::write(proposals, format!("{only_source_target}\n")).unwrap();
+    write(dir.path(), "src/reject.rs", "return Ok(());\n");
+    commit(dir.path(), "change");
+
+    let report = evidence_review_json(dir.path(), &[]);
+    assert_eq!(report["evidence"][0]["status"], "vanished");
+    assert_eq!(report["contradictions"], serde_json::json!([]));
+}
+
+#[test]
+fn evidence_review_uses_rules_produced_by_resolving_resolutions() {
+    let dir = init_repo();
+    write(dir.path(), "src/reject.rs", "return Err(\"invalid\");\n");
+    let base = commit(dir.path(), "base");
+    seed_graph(dir.path(), &base);
+    write(
+        dir.path(),
+        ".provenance/state/scopes/default/resolutions/res.jsonl",
+        "{\"schema_version\":1,\"scope_id\":\"default\",\"id\":\"res_guard\",\"title\":\"Guard\",\"position\":\"reject\",\"rationale\":\"safe\",\"status\":\"approved\",\"inputs\":[],\"review_triggers\":[]}\n",
+    );
+    write(
+        dir.path(),
+        ".provenance/state/edges/edges-00.jsonl",
+        "{\"schema_version\":1,\"scope_id\":\"default\",\"id\":\"edge_resolves\",\"edge_type\":\"resolves\",\"from_type\":\"resolution\",\"from_id\":\"res_guard\",\"to_type\":\"requirement\",\"to_id\":\"req_ratified\"}\n{\"schema_version\":1,\"scope_id\":\"default\",\"id\":\"edge_produces\",\"edge_type\":\"produces\",\"from_type\":\"resolution\",\"from_id\":\"res_guard\",\"to_type\":\"rule\",\"to_id\":\"rule_guard\"}\n",
+    );
+    write(dir.path(), "src/reject.rs", "return Ok(());\n");
+    commit(dir.path(), "change");
+
+    let report = evidence_review_json(
+        dir.path(),
+        &["--rule-severities", "high", "--min-downstream-rules", "1"],
+    );
+    assert_eq!(report["summary"]["evidence_reverified"], 1);
+    assert_eq!(report["evidence"][0]["status"], "vanished");
+}
+
+#[test]
+fn evidence_review_rejects_ambiguous_canonical_requirement_ownership() {
+    let dir = init_repo();
+    write(dir.path(), "src/reject.rs", "return Err(\"invalid\");\n");
+    let base = commit(dir.path(), "base");
+    seed_graph(dir.path(), &base);
+    write(
+        dir.path(),
+        ".provenance/state/scopes/default/ideation/promotion_decisions.jsonl",
+        r#"{"schema_version":1,"scope_id":"default","id":"decision_one","proposal_id":"proposal_ratified","decision":"accepted","rationale":"one","actor":{"identity_type":"human","id":"one"},"canonical_artifact":{"artifact_type":"requirement","artifact_id":"req_one"}}
+{"schema_version":1,"scope_id":"default","id":"decision_two","proposal_id":"proposal_ratified","decision":"accepted","rationale":"two","actor":{"identity_type":"human","id":"two"},"canonical_artifact":{"artifact_type":"requirement","artifact_id":"req_two"}}
+"#,
+    );
+    write(dir.path(), "src/reject.rs", "return Ok(());\n");
+    commit(dir.path(), "change");
+
+    let report = evidence_review_json(dir.path(), &[]);
+    assert_eq!(report["summary"]["evidence_reverified"], 0);
+    assert!(report["diagnostics"][0]
+        .as_str()
+        .unwrap()
+        .contains("ambiguous canonical requirements"));
 }
