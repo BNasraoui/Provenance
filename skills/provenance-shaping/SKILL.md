@@ -37,6 +37,7 @@ by question; expensive methods claim one question and often stop at a phase boun
 
    ```sh
    provenance prime --scope <scope> --format json
+   provenance graph <anchor_requirement_id> --scope <scope> --format json
    provenance requirements fog show --scope <scope> --requirement-id <anchor_requirement_id> --format json
    provenance topics list --scope <scope> --format json
    provenance questions list --scope <scope> --format json
@@ -45,8 +46,9 @@ by question; expensive methods claim one question and often stop at a phase boun
    ```
 
 3. Treat the map as an index, not a store. Keep only gists in your working context and
-   zoom into full artifacts on demand with `provenance graph`, `traceability`, or list/show
-   commands. Refer to artifacts by meaningful names plus ids; never hand off bare ids.
+   zoom into the available graph and rule views with `provenance graph <requirement_id>`
+   and `provenance traceability <rule_id>`; use the shaping list commands above for their
+   full records. Refer to artifacts by meaningful names plus ids; never hand off bare ids.
 
 ## Mode 1: Chart
 
@@ -67,8 +69,9 @@ resolve the questions you create.
      --format json
    ```
 
-2. **Attach known sources to the anchor.** Requirements with no source edge remain on the
-   frontier, so add source references when evidence already exists.
+2. **Attach known sources to the anchor.** Requirements with neither a valid embedded
+   source reference nor a valid `references` edge remain on the missing-source frontier,
+   so add source references when evidence already exists.
 
    ```sh
    provenance requirements source-ref add --scope <scope> \
@@ -145,15 +148,19 @@ frontier.
 
 ### 1. Prime
 
-Load the map low-res: anchor requirement, decisions so far, fog, boundaries, open topics,
-open questions, blocked-on-human questions, and proposals awaiting disposal. Compute the
-frontier from graph semantics:
+Load the map low-res with the commands from **Start every session**. `provenance prime`
+supplies rules and computed gaps (plus active threads only with `--include-threads`); load
+the anchor graph, fog, boundaries, topics, questions, and proposals with their separate
+commands. The shaping-focused subset of the computed graph frontier includes:
 
-- requirements with no source edge;
+- requirements with neither a valid source reference nor a valid `references` edge;
 - unresolved `contradicts` pairs;
-- requirements that cannot produce a rule;
-- open questions and unexplored topics;
-- proposals that need human promotion decisions.
+- resolved requirements (including those with a resolving resolution) with no downstream
+  rule, and approved resolutions with no produced rule;
+- open or `blocked_on_human` questions and open topics.
+
+Proposals are not part of the computed graph frontier. List them separately and treat cards
+whose `promotion_state` is `proposed` as awaiting human disposal.
 
 Do not hand-wire a private frontier in chat. If the graph says a different thing than your
 notes, fix the graph or trust the graph.
@@ -168,7 +175,7 @@ Claim before work so concurrent sessions skip what you are touching.
 | `prototype` | single question | `provenance questions claim --scope <scope> --id <question_id> --actor <agent> --format json` |
 | `research` | single question | `provenance questions claim --scope <scope> --id <question_id> --actor <agent> --format json` |
 | `verify` | single question | `provenance questions claim --scope <scope> --id <question_id> --actor <agent> --format json` |
-| `task` | the task's record | claim the concrete question/topic only if it is represented in the graph |
+| `task` | single question | claim its open question if represented; there is no separate task record or task claim |
 
 If claim fails, do not work that item. Pick another frontier item or hand off that it is
 already held.
@@ -305,7 +312,9 @@ Stop at the first condition:
 
 Before final response:
 
-1. Clear or close claims you finished:
+1. Clear claims you finished. These commands are alternatives, not a sequence: close a
+   finished topic **or** release it if it remains open; answered questions clear their
+   claims automatically, while unanswered questions should be released.
 
    ```sh
    provenance topics close --scope <scope> --id <topic_id> --format json
@@ -337,7 +346,8 @@ Before moving to the next question, verify the current answer has been handled:
 - boundaries/out-of-scope rejections are explicit;
 - source references and evidence are attached where they exist;
 - fog is updated;
-- invalidated questions are answered, updated, or closed by thread note;
+- invalidated questions are answered or updated; a thread note can document the change but
+  does not change question status;
 - claims are cleared on answered questions and closed topics.
 
 If you cannot check these, do not continue the interview. Fix the graph first.

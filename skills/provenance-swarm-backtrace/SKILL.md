@@ -21,12 +21,15 @@ keeping **all** evidence sites, challenge every candidate, and land everything a
    exact commit in the Source; if the target repo changes mid-run, the run is against
    the pinned commit, not HEAD.
 3. **Evidence discipline** (the output contract, docs/shaping.md): every claim cites
-   typed evidence with `file_path` + `line`; speculation is explicitly marked
-   `unsupported`/`exploratory`; uncertainty is rated with a rationale.
-4. **Only the orchestrator writes the store.** Record types share append-only JSONL
-   files under `.provenance/state/`; concurrent writers can corrupt or lose records.
-   Subagents *return* structured findings; the orchestrating session lands them
-   serially via the CLI.
+   typed evidence. For this code-backtrace workflow, code evidence must include
+   `file_path` + `line`; other evidence types do not require file locations. Speculation is
+   explicitly marked `unsupported`/`exploratory`; uncertainty is rated with a rationale.
+4. **Only the orchestrator lands this run.** State uses sorted JSONL shards under
+   `.provenance/state/`. Concurrent mutations of one shard serialize through an advisory
+   lock, preventing lost updates, and atomic shard replacement gives readers a complete old
+   or new shard; this is shard-level protection, not a multi-command transaction. Subagents
+   still return structured findings so the orchestrator can deduplicate, validate, and land
+   one coherent run through the CLI.
 
 ## Pipeline
 
@@ -36,19 +39,22 @@ run concurrently). Stage 3 is a genuine barrier — it needs every extractor's o
 
 ### 1. Scout (inline)
 
-- Confirm the Provenance store exists (`.provenance/state/`); if not:
+- Confirm the Provenance manifest exists (`.provenance/state/manifest.json`); if not:
   `provenance init --path . --scope <scope> --path-prefix .`
 - Pin the target: `git -C <target> rev-parse HEAD`.
 - Create the codebase Source, commit-pinned:
 
   ```sh
   provenance sources create --scope <scope> \
-    --id source_codebase_<repo>_<short-sha> \
+    --id source_codebase_<repo-slug>_<short-sha> \
     --name "<repo> @ <short-sha>" \
     --source-type system_state \
     --reference "git:<repo>@<full-sha>" \
+    --commit-pin "<full-sha>" \
     --format json
   ```
+
+  `<repo-slug>` must use only lowercase letters, digits, `_`, and `-`.
 
   `system_state` is the type for observed system behavior; `project_artifact` also
   exists — use it only when backtracing docs/specs rather than running code.
@@ -158,7 +164,9 @@ provenance swarm-backtrace land --scope <scope> --run-dir <run-dir> --format jso
 ```
 
 Use `--replace` when intentionally re-landing a regenerated run with the same stable IDs.
-Without `--replace`, existing contribution/synthesis/proposal IDs fail fast.
+It can replace matching contribution and synthesis IDs; an existing proposal is replaceable
+only while it is still `proposed` and has no promotion decision. Without `--replace`,
+existing contribution/synthesis/proposal IDs fail fast.
 
 Contribution records:
 
@@ -166,7 +174,8 @@ Contribution records:
 - extractor stance is usually `support`;
 - refuter stance is usually `oppose`, `mixed`, or `needs_more_evidence`;
 - code evidence uses `evidence_type: "artifact"` with `file_path` and `line`;
-- hunches stay in `unsupported_recommendations` as `"unsupported"` or `"exploratory"`.
+- hunches stay in `unsupported_recommendations` objects whose `marker` is `"unsupported"`
+  or `"exploratory"`.
 
 Synthesis packet:
 
