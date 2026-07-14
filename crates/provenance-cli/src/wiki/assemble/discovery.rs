@@ -1,7 +1,7 @@
 use crate::handlers::ScopeExport;
 use crate::wiki::model::{
-    PageId, PageKind, PageLink, RequirementPage, RulePage, SearchEntry, SearchIndexPage, Topic,
-    TopicGroup, TopicIndexPage,
+    PageId, PageLink, RequirementPage, RulePage, SearchEntry, SearchIndexPage, Topic, TopicGroup,
+    TopicIndexPage,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -85,12 +85,10 @@ fn search_index(
         .iter()
         .map(|requirement| SearchEntry {
             link: requirement.link.clone(),
-            kind: PageKind::Requirement,
             statement: requirement.statement.to_string(),
         })
         .chain(rules.iter().map(|rule| SearchEntry {
             link: rule.link.clone(),
-            kind: PageKind::Rule,
             statement: rule.statement.to_string(),
         }))
         .collect();

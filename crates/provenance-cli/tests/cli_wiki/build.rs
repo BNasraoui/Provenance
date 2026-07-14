@@ -10,6 +10,8 @@ fn wiki_build_writes_static_pages_and_stylesheet() {
     seed_full_state(dir.path(), &repo);
     std::fs::create_dir_all(out.join("assets")).unwrap();
     std::fs::write(out.join("assets/search-index.json"), "stale").unwrap();
+    std::fs::create_dir_all(out.join("customer/nested")).unwrap();
+    std::fs::write(out.join("customer/nested/notes.txt"), "keep me").unwrap();
 
     Command::cargo_bin("provenance")
         .unwrap()
@@ -52,9 +54,15 @@ fn wiki_build_writes_static_pages_and_stylesheet() {
         "{search}"
     );
     assert!(search.contains("Draft rule shall stay draft"), "{search}");
-    assert!(
-        !out.join("assets/search-index.json").exists(),
-        "the rendered DOM is the only search publication"
+    assert_eq!(
+        std::fs::read_to_string(out.join("assets/search-index.json")).unwrap(),
+        "stale",
+        "an unowned legacy pathname must not be deleted"
+    );
+    assert_eq!(
+        std::fs::read_to_string(out.join("customer/nested/notes.txt")).unwrap(),
+        "keep me",
+        "arbitrary caller output must survive publication"
     );
 
     let stylesheet = std::fs::read_to_string(out.join("assets/provenance-wiki.css")).unwrap();
@@ -76,13 +84,14 @@ fn wiki_build_writes_static_pages_and_stylesheet() {
 }
 
 #[test]
-fn wiki_build_reports_per_page_write_failures_without_aborting_the_rest() {
+fn failed_wiki_build_preserves_the_existing_output_tree() {
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path().join("repo").to_string_lossy().to_string();
     let out = dir.path().join("site");
     seed_full_state(dir.path(), &repo);
     std::fs::create_dir_all(out.join("requirements")).unwrap();
     std::fs::write(out.join("requirements/req_sah"), "blocking file").unwrap();
+    std::fs::write(out.join("index.html"), "existing index").unwrap();
 
     Command::cargo_bin("provenance")
         .unwrap()
@@ -96,16 +105,71 @@ fn wiki_build_reports_per_page_write_failures_without_aborting_the_rest() {
         ])
         .assert()
         .failure()
-        .stderr(predicates::str::contains("req_sah"));
+        .stderr(predicates::str::contains("unowned output path"));
 
-    for (path, text) in [
-        ("requirements/req_gap/index.html", "citation gap"),
-        ("index.html", "Provenance Wiki"),
-        ("resolutions/res_sah/index.html", "SAH extraction"),
-        ("rules/rule_sah_001/index.html", "SAH rule"),
-        ("sources/source_sah/index.html", "Support at Home"),
-    ] {
-        let page = std::fs::read_to_string(out.join(path)).unwrap();
-        assert!(page.contains(text), "{path}: {page}");
-    }
+    assert_eq!(
+        std::fs::read_to_string(out.join("index.html")).unwrap(),
+        "existing index"
+    );
+    assert_eq!(
+        std::fs::read_to_string(out.join("requirements/req_sah")).unwrap(),
+        "blocking file"
+    );
+    assert!(!out.join("requirements/req_gap/index.html").exists());
+    assert!(!out.join("assets/provenance-wiki.css").exists());
+}
+
+#[test]
+fn rebuild_removes_only_files_declared_by_generator_ownership() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo").to_string_lossy().to_string();
+    let out = dir.path().join("site");
+    seed_full_state(dir.path(), &repo);
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "wiki",
+            "build",
+            "--repo",
+            &repo,
+            "--out",
+            &out.to_string_lossy(),
+        ])
+        .assert()
+        .success();
+
+    let manifest_path = out.join(".provenance-wiki-output.json");
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+    manifest["files"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::Value::String("obsolete.html".to_string()));
+    std::fs::write(
+        &manifest_path,
+        serde_json::to_vec_pretty(&manifest).unwrap(),
+    )
+    .unwrap();
+    std::fs::write(out.join("obsolete.html"), "owned stale page").unwrap();
+    std::fs::write(out.join("customer.txt"), "caller owned").unwrap();
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "wiki",
+            "build",
+            "--repo",
+            &repo,
+            "--out",
+            &out.to_string_lossy(),
+        ])
+        .assert()
+        .success();
+
+    assert!(!out.join("obsolete.html").exists());
+    assert_eq!(
+        std::fs::read_to_string(out.join("customer.txt")).unwrap(),
+        "caller owned"
+    );
 }

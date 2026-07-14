@@ -1,11 +1,10 @@
-use super::{PageKind, PageLink};
+use super::PageLink;
 use serde::Serialize;
 
 /// One requirement or rule in the static full-text index.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SearchEntry {
     pub link: PageLink,
-    pub kind: PageKind,
     pub statement: String,
 }
 

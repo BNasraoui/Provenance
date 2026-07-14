@@ -7,6 +7,7 @@
 pub mod assemble;
 pub mod links;
 pub mod model;
+mod publish;
 pub mod render;
 pub mod site;
 pub mod theme;

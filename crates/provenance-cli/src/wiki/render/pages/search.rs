@@ -30,6 +30,7 @@ pub fn render_search(scope: &str, page: &SearchIndexPage) -> String {
     main.push_str("<ol id=\"search-results\" class=\"search-results\">\n");
     let links = PageLinksRenderer::new(page.entries.iter().map(|entry| &entry.link));
     for entry in &page.entries {
+        let kind = entry.link.target.kind.into();
         writeln!(
             main,
             "<li data-search-entry data-search-title=\"{}\" data-search-statement=\"{}\">\n\
@@ -37,8 +38,8 @@ pub fn render_search(scope: &str, page: &SearchIndexPage) -> String {
                  {}<p>{}</p></li>",
             escape_attr(&entry.link.title),
             escape_attr(&entry.statement),
-            kind_class(entry.kind),
-            kind_label(entry.kind),
+            kind_class(kind),
+            kind_label(kind),
             links.link(&entry.link, None),
             escape_html(&entry.statement),
         )
@@ -50,7 +51,10 @@ pub fn render_search(scope: &str, page: &SearchIndexPage) -> String {
         page.entries.len()
     );
     let container = container_html(
-        Some((PageKind::ScopeIndex, ("/".to_string(), scope.to_string()))),
+        Some((
+            PageKind::ScopeIndex,
+            (WikiRoute::Index.path(), scope.to_string()),
+        )),
         &title_row(PageKind::SearchIndex, &page.title, None, &[], &page.scope),
         &main,
         &margin,

@@ -1,4 +1,4 @@
-use crate::wiki::model::{PageId, PageKind, PageLink, RulePage};
+use crate::wiki::model::{PageId, PageLink, RecordKind, RulePage};
 use provenance_core::{EdgeType, NodeType, Requirement, Resolution, Rule};
 use std::collections::BTreeSet;
 
@@ -86,7 +86,7 @@ impl<'a> Assembler<'a> {
             .map(source_link)
             .collect();
         RulePage {
-            id: PageId::new(PageKind::Rule, rule.id.as_str()),
+            id: PageId::new(RecordKind::Rule, rule.id.as_str()),
             title: rule_title(rule),
             rule_code: rule.rule_code.clone(),
             statement: rule.statement.clone(),

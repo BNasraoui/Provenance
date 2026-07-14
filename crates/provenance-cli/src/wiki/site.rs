@@ -9,7 +9,8 @@
 use crate::gitignore;
 use crate::output::{self, OutputFormat};
 use crate::wiki::assemble;
-use crate::wiki::render::routes::{normalize_request_path, static_page_path, WIKI_CSS_ROUTE};
+use crate::wiki::publish;
+use crate::wiki::render::routes::{normalize_request_path, WIKI_CSS_ROUTE};
 use crate::wiki::render::{self, RenderedPage};
 use crate::wiki::theme;
 use anyhow::Context;
@@ -30,8 +31,6 @@ use std::sync::Arc;
 /// Trailing slash marks it as a directory, matching the existing
 /// `.provenance/cache/` entry.
 const WIKI_GITIGNORE_PATTERN: &str = ".provenance/wiki/";
-const LEGACY_SEARCH_INDEX_PATH: &str = "assets/search-index.json";
-
 struct WikiSite {
     scope: String,
     page_by_route: BTreeMap<String, RenderedPage>,
@@ -44,20 +43,12 @@ struct WikiBuildReport {
     out: Utf8PathBuf,
     page_count: usize,
     pages: Vec<WikiPageSummary>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    failures: Vec<WikiPageFailure>,
 }
 
 #[derive(Serialize)]
 struct WikiPageSummary {
     route: String,
     title: String,
-}
-
-#[derive(Serialize)]
-struct WikiPageFailure {
-    route: String,
-    error: String,
 }
 
 pub fn build(
@@ -77,33 +68,10 @@ pub fn build(
     let repo_hint = repo.clone();
     let corpus = assemble::load_corpus(repo, scope)?;
     let pages = render::render_corpus(&corpus);
-    remove_legacy_search_index(&out)?;
-
-    // Each page is written independently: a page-specific failure (a
-    // colliding path, a permissions error) shouldn't hide every other page
-    // that built fine. Failures are collected and reported instead.
-    let mut failures = Vec::new();
-    for page in &pages {
-        if let Err(error) = write_page(&out, page) {
-            failures.push(WikiPageFailure {
-                route: page.route.clone(),
-                error: format!("{error:#}"),
-            });
-        }
-    }
-
-    let stylesheet_path = out.join(WIKI_CSS_ROUTE.trim_start_matches('/'));
-    let stylesheet_dir = stylesheet_path
-        .parent()
-        .with_context(|| format!("stylesheet path {stylesheet_path} has no parent directory"))?;
-    std::fs::create_dir_all(stylesheet_dir)
-        .with_context(|| format!("failed to create wiki output directory {stylesheet_dir}"))?;
-    std::fs::write(&stylesheet_path, theme::WIKI_CSS)
-        .with_context(|| format!("failed to write wiki stylesheet {stylesheet_path}"))?;
+    publish::publish(&out, &pages, theme::WIKI_CSS)?;
     let page_count = pages.len();
-    let failure_count = failures.len();
     let report = WikiBuildReport {
-        status: if failures.is_empty() { "ok" } else { "partial" },
+        status: "ok",
         scope: corpus.scope,
         out,
         page_count,
@@ -114,44 +82,14 @@ pub fn build(
                 title: page.title,
             })
             .collect(),
-        failures,
     };
     print_build_report(format, &report, &repo_hint)?;
-
-    anyhow::ensure!(
-        failure_count == 0,
-        "{failure_count} of {page_count} wiki pages failed to write"
-    );
-    Ok(())
-}
-
-fn remove_legacy_search_index(out: &Utf8PathBuf) -> anyhow::Result<()> {
-    let path = out.join(LEGACY_SEARCH_INDEX_PATH);
-    match std::fs::remove_file(&path) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => {
-            Err(error).with_context(|| format!("failed to remove legacy wiki asset {path}"))
-        }
-    }
-}
-
-fn write_page(out: &Utf8PathBuf, page: &RenderedPage) -> anyhow::Result<()> {
-    let path = static_page_path(out, &page.route);
-    let parent = path
-        .parent()
-        .with_context(|| format!("wiki page path {path} has no parent directory"))?;
-    std::fs::create_dir_all(parent)
-        .with_context(|| format!("failed to create wiki output directory {parent}"))?;
-    std::fs::write(&path, &page.html)
-        .with_context(|| format!("failed to write wiki page {path}"))?;
     Ok(())
 }
 
 /// JSON/JSONL get the full machine-readable report. The human-facing
 /// formats (table, the CLI default, and friends) get a short summary
-/// instead of a dump of every page -- with an explicit list of any pages
-/// that failed to write.
+/// instead of a dump of every page.
 fn print_build_report(
     format: OutputFormat,
     report: &WikiBuildReport,
@@ -160,20 +98,16 @@ fn print_build_report(
     match format {
         OutputFormat::Json | OutputFormat::Jsonl => output::print(format, report)?,
         OutputFormat::Table | OutputFormat::Markdown | OutputFormat::Toon => {
-            let written = report.page_count - report.failures.len();
-            let noun = if written == 1 { "page" } else { "pages" };
-            println!(
-                "Built {written} {noun} for scope \"{}\" into {}",
-                report.scope, report.out
-            );
-            if report.failures.is_empty() {
-                println!("Run `provenance wiki serve --repo {repo}` to view them.");
+            let noun = if report.page_count == 1 {
+                "page"
             } else {
-                eprintln!("Failed to write {} page(s):", report.failures.len());
-                for failure in &report.failures {
-                    eprintln!("  - {}: {}", failure.route, failure.error);
-                }
-            }
+                "pages"
+            };
+            println!(
+                "Built {} {noun} for scope \"{}\" into {}",
+                report.page_count, report.scope, report.out
+            );
+            println!("Run `provenance wiki serve --repo {repo}` to view them.");
         }
     }
     Ok(())

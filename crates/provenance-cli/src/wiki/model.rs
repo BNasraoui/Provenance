@@ -29,16 +29,36 @@ pub enum PageKind {
     Source,
 }
 
-/// Identifies one wiki page: a page kind plus the record's stable id
-/// (the scope id for the index page).
+/// A persisted record kind. Singleton pages deliberately have no variant here.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RecordKind {
+    Requirement,
+    Resolution,
+    Rule,
+    Source,
+}
+
+impl From<RecordKind> for PageKind {
+    fn from(kind: RecordKind) -> Self {
+        match kind {
+            RecordKind::Requirement => Self::Requirement,
+            RecordKind::Resolution => Self::Resolution,
+            RecordKind::Rule => Self::Rule,
+            RecordKind::Source => Self::Source,
+        }
+    }
+}
+
+/// Identifies one persisted record page by kind and stable record id.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PageId {
-    pub kind: PageKind,
+    pub kind: RecordKind,
     pub record_id: String,
 }
 
 impl PageId {
-    pub fn new(kind: PageKind, record_id: impl Into<String>) -> Self {
+    pub fn new(kind: RecordKind, record_id: impl Into<String>) -> Self {
         Self {
             kind,
             record_id: record_id.into(),

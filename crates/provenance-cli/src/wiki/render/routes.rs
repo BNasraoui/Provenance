@@ -1,4 +1,4 @@
-use crate::wiki::model::{PageId, PageKind};
+use crate::wiki::model::{PageId, RecordKind};
 use camino::{Utf8Path, Utf8PathBuf};
 
 pub(in crate::wiki) const WIKI_CSS_ROUTE: &str = "/assets/provenance-wiki.css";
@@ -20,13 +20,10 @@ impl WikiRoute<'_> {
             Self::Stylesheet => WIKI_CSS_ROUTE.to_string(),
             Self::Record(id) => {
                 let collection = match id.kind {
-                    PageKind::Requirement => "requirements",
-                    PageKind::Resolution => "resolutions",
-                    PageKind::Rule => "rules",
-                    PageKind::Source => "sources",
-                    PageKind::ScopeIndex | PageKind::TopicIndex | PageKind::SearchIndex => {
-                        return Self::Index.path();
-                    }
+                    RecordKind::Requirement => "requirements",
+                    RecordKind::Resolution => "resolutions",
+                    RecordKind::Rule => "rules",
+                    RecordKind::Source => "sources",
                 };
                 format!("/{collection}/{}/", id.record_id)
             }
@@ -81,6 +78,7 @@ pub(in crate::wiki) fn static_page_path(out: &Utf8Path, route: &str) -> Utf8Path
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::wiki::model::RecordKind;
     use camino::Utf8PathBuf;
 
     #[test]
@@ -89,10 +87,22 @@ mod tests {
         assert_eq!(WikiRoute::Topics.path(), "/topics/");
         assert_eq!(WikiRoute::Search.path(), "/search/");
         assert_eq!(WikiRoute::Stylesheet.path(), "/assets/provenance-wiki.css");
-        assert_eq!(
-            WikiRoute::Record(&PageId::new(PageKind::Requirement, "req_split")).path(),
-            "/requirements/req_split/"
-        );
+        for (kind, id, expected) in [
+            (
+                RecordKind::Requirement,
+                "req_split",
+                "/requirements/req_split/",
+            ),
+            (
+                RecordKind::Resolution,
+                "res_split",
+                "/resolutions/res_split/",
+            ),
+            (RecordKind::Rule, "rule_split", "/rules/rule_split/"),
+            (RecordKind::Source, "source_split", "/sources/source_split/"),
+        ] {
+            assert_eq!(WikiRoute::Record(&PageId::new(kind, id)).path(), expected);
+        }
         assert_eq!(
             topic_fragment("domain/a b"),
             "/topics/#domain-domain%2Fa%20b"

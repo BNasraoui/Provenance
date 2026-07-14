@@ -10,6 +10,7 @@ use super::super::fragments::{
 };
 use super::super::html::{escape_html, link_list};
 use super::super::labels::{format_confidence, resolution_status_word, status_badge};
+use super::super::routes::WikiRoute;
 
 /// Renders a resolution detail page.
 pub fn render_resolution(scope: &str, page: &ResolutionPage) -> String {
@@ -92,7 +93,10 @@ pub fn render_resolution(scope: &str, page: &ResolutionPage) -> String {
     push_classification_block(&mut margin, &rows);
 
     let container = container_html(
-        Some((PageKind::Resolution, ("/".to_string(), scope.to_string()))),
+        Some((
+            PageKind::Resolution,
+            (WikiRoute::Index.path(), scope.to_string()),
+        )),
         &title_row(
             PageKind::Resolution,
             &page.title,

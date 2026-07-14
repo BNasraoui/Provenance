@@ -3,7 +3,7 @@ use std::fmt::Write as _;
 
 use super::super::chrome::{container_html, index_breadcrumb, page_shell, title_row};
 use super::super::html::{escape_attr, escape_html, link_list};
-use super::super::routes::{topic_anchor, UNASSIGNED_TOPIC_ANCHOR};
+use super::super::routes::{topic_anchor, WikiRoute, UNASSIGNED_TOPIC_ANCHOR};
 
 pub fn render_topics(scope: &str, page: &TopicIndexPage) -> String {
     let mut main = String::new();
@@ -85,7 +85,10 @@ pub fn render_topics(scope: &str, page: &TopicIndexPage) -> String {
         page.groups.len()
     );
     let container = container_html(
-        Some((PageKind::ScopeIndex, ("/".to_string(), scope.to_string()))),
+        Some((
+            PageKind::ScopeIndex,
+            (WikiRoute::Index.path(), scope.to_string()),
+        )),
         &title_row(PageKind::TopicIndex, &page.title, None, &[], &page.scope),
         &main,
         &margin,

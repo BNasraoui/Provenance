@@ -10,8 +10,10 @@ use super::super::fragments::{
 };
 use super::super::html::{escape_attr, escape_html, evidence_html, link_list};
 use super::super::labels::{format_date_ms, source_type_label, status_badge};
+use super::super::routes::WikiRoute;
 
 /// Renders a source detail page.
+#[allow(clippy::too_many_lines)]
 pub fn render_source(scope: &str, page: &SourcePage) -> String {
     let mut main = String::new();
     push_section_open(&mut main, "sh-source", Some("i-book-open"), "Reference");
@@ -96,7 +98,10 @@ pub fn render_source(scope: &str, page: &SourcePage) -> String {
         .as_ref()
         .map(|_| status_badge("superseded"));
     let container = container_html(
-        Some((PageKind::Source, ("/".to_string(), scope.to_string()))),
+        Some((
+            PageKind::Source,
+            (WikiRoute::Index.path(), scope.to_string()),
+        )),
         &title_row(
             PageKind::Source,
             &page.title,

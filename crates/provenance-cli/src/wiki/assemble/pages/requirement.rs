@@ -1,4 +1,4 @@
-use crate::wiki::model::{DecisionSection, PageId, PageKind, RequirementPage, RuleCard};
+use crate::wiki::model::{DecisionSection, PageId, RecordKind, RequirementPage, RuleCard};
 use provenance_core::{EdgeType, NodeType, Requirement};
 
 use super::super::context::Assembler;
@@ -26,7 +26,7 @@ impl<'a> Assembler<'a> {
             threads.extend(self.threads_for(NodeType::Resolution, &resolution.id));
         }
         RequirementPage {
-            id: PageId::new(PageKind::Requirement, requirement.id.as_str()),
+            id: PageId::new(RecordKind::Requirement, requirement.id.as_str()),
             title: requirement.statement.clone(),
             status: requirement.status.clone(),
             statement: requirement.statement.clone(),
