@@ -210,3 +210,15 @@ human what landed (`provenance proposals list --scope <scope>`), what's conteste
 what surprised the refuters — then the shaping loop (docs/shaping.md, "Invocation")
 takes over: `provenance prime`, and the human disposes of proposals question by
 question via `promotion-decisions create`. Do not make promotion decisions yourself.
+
+### Incremental review after the pin moves
+
+Before repeating a full extraction, run `provenance stale --scope <scope> --format json`.
+It compares commit-pinned graph evidence with `HEAD` and re-reads only citations whose
+paths changed. `moved` citations can be reviewed for a location update; `vanished` and
+`unverifiable` citations require the relevant candidate batch to be refuted again.
+`contradictions` identifies accepted requirement candidates that lost cited support, but
+is a review trigger rather than an automatic reversal. The command is read-only and does
+not relax the proposed-only or human-promotion rules above. CI may provide an explicit
+`--base <revision> --head <revision>` range. Details and limits are in
+`docs/incremental-backtrace.md`.

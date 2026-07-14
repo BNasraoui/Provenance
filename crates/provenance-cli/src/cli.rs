@@ -177,6 +177,12 @@ pub enum Command {
         rule_severities: Option<String>,
         #[arg(long, default_value_t = 0)]
         min_downstream_rules: u32,
+        /// Override commit-pinned source revisions as the diff base.
+        #[arg(long)]
+        base: Option<String>,
+        /// Revision to compare evidence against.
+        #[arg(long, default_value = "HEAD")]
+        head: String,
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },

@@ -1,22 +1,7 @@
 use crate::cache::find_gaps;
 use crate::layout::ProvenanceLayout;
 use crate::state_store::StateStore;
-use provenance_core::{EdgeType, NodeType, RequirementStatus, ResolutionStatus, RuleSeverity};
-use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
-
-#[derive(Debug, serde::Serialize)]
-pub struct StaleItem {
-    pub resolution_id: String,
-    pub reason: String,
-}
-
-#[derive(Debug, Default)]
-pub struct StaleOptions {
-    pub min_age_days: u32,
-    pub rule_severities: Vec<RuleSeverity>,
-    pub min_downstream_rules: u32,
-}
+use provenance_core::{EdgeType, NodeType, RequirementStatus};
 
 #[derive(Debug, serde::Serialize)]
 pub struct CountMetric {
@@ -44,108 +29,6 @@ pub struct HealthView {
 pub struct OrphanRuleItem {
     pub rule_id: String,
     pub missing: Vec<String>,
-}
-
-pub fn find_stale(
-    layout: &ProvenanceLayout,
-    scope: &provenance_core::ScopeId,
-) -> anyhow::Result<Vec<StaleItem>> {
-    find_stale_with_options(layout, scope, &StaleOptions::default())
-}
-
-pub fn find_stale_with_options(
-    layout: &ProvenanceLayout,
-    scope: &provenance_core::ScopeId,
-    options: &StaleOptions,
-) -> anyhow::Result<Vec<StaleItem>> {
-    let store = StateStore::new(layout.clone());
-    let edges = store.list_edges()?;
-    let rules = store.list_rules(scope)?;
-    let rule_severities: HashMap<_, _> = rules
-        .iter()
-        .map(|rule| (rule.id.as_str(), rule.severity.clone()))
-        .collect();
-    let mut downstream_rule_severities: HashMap<&str, Vec<RuleSeverity>> = HashMap::new();
-    for edge in &edges {
-        if edge.scope_id == *scope
-            && edge.edge_type == EdgeType::Produces
-            && edge.from_type == NodeType::Resolution
-            && edge.to_type == NodeType::Rule
-        {
-            if let Some(severity) = rule_severities.get(edge.to_id.as_str()) {
-                downstream_rule_severities
-                    .entry(edge.from_id.as_str())
-                    .or_default()
-                    .push(severity.clone());
-            }
-        }
-    }
-    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
-    Ok(store
-        .list_resolutions(scope)?
-        .into_iter()
-        .filter(|resolution| {
-            resolution_is_old_enough(resolution.approved_at, options.min_age_days, now)
-        })
-        .filter_map(|resolution| {
-            if resolution.status == ResolutionStatus::Approved
-                && resolution
-                    .review_on
-                    .as_deref()
-                    .is_some_and(|date| date < "2099-01-01")
-            {
-                Some(StaleItem {
-                    resolution_id: resolution.id.as_str().to_string(),
-                    reason: "approved resolution is past review date".to_string(),
-                })
-            } else if edges.iter().any(|edge| {
-                edge.scope_id == *scope
-                    && edge.edge_type == EdgeType::Supersedes
-                    && edge.to_id == resolution.id
-            }) {
-                Some(StaleItem {
-                    resolution_id: resolution.id.as_str().to_string(),
-                    reason: "upstream source was superseded".to_string(),
-                })
-            } else {
-                None
-            }
-        })
-        .filter(|stale| {
-            options.rule_severities.is_empty()
-                || downstream_rule_severities
-                    .get(stale.resolution_id.as_str())
-                    .is_some_and(|severities| {
-                        severities
-                            .iter()
-                            .any(|severity| options.rule_severities.contains(severity))
-                    })
-        })
-        .filter(|stale| {
-            downstream_rule_severities
-                .get(stale.resolution_id.as_str())
-                .map_or(0, |severities| {
-                    severities
-                        .iter()
-                        .filter(|severity| {
-                            options.rule_severities.is_empty()
-                                || options.rule_severities.contains(severity)
-                        })
-                        .count()
-                })
-                >= options.min_downstream_rules as usize
-        })
-        .collect())
-}
-
-fn resolution_is_old_enough(approved_at: Option<i64>, min_age_days: u32, now: u128) -> bool {
-    if min_age_days == 0 {
-        return true;
-    }
-    let Some(approved_at) = approved_at.and_then(|timestamp| u128::try_from(timestamp).ok()) else {
-        return false;
-    };
-    now.saturating_sub(approved_at) / 86_400_000 >= u128::from(min_age_days)
 }
 
 pub fn coverage_health(
@@ -189,7 +72,7 @@ pub fn coverage_health(
         .count();
     let orphan_count = orphan_rules(layout, scope)?.len();
     let with_complete_traceability = rules.len().saturating_sub(orphan_count);
-    let stale = find_stale(layout, scope)?.len();
+    let stale = crate::cache::find_stale(layout, scope)?.len();
     let gaps = find_gaps(layout, scope)?.len();
     Ok(HealthView {
         requirements: CountMetric {

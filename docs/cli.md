@@ -36,6 +36,23 @@ protection by default; pass `--replace` to intentionally upsert the same stable 
 Swarm backtrace runs can land durable run outputs with
 `provenance swarm-backtrace land --scope <scope> --run-dir <run-dir> --format json`.
 
+Incremental backtrace review starts with the cheap diff gate in `provenance stale`. For
+each backtrace source, the command compares its `commit_pin` with `HEAD`, intersects the
+Git name-status diff with repository-relative evidence paths, and re-reads only evidence
+on intersecting paths. Exact cited lines are reported as `verified`, `moved`, `vanished`,
+or `unverifiable`; a vanished citation owned by an accepted requirement proposal is also
+reported under `contradictions` for human semantic review. Use `--base <revision>` to
+override source pins and `--head <revision>` to select a CI diff range. `--min-age-days`,
+`--rule-severities low,medium,high,critical`, and `--min-downstream-rules` filter both
+review-date findings and evidence owners. JSON output includes diff ranges, affected
+evidence, contradictions, overdue/superseded resolutions, diagnostics, and counts.
+
+This gate deliberately does not infer program semantics or mutate graph records. A moved
+line is an exact-text relocation, and a vanished line means the exact pinned text was not
+found; either result is a review trigger, not proof that a requirement is true or false.
+Unpinned sources are listed in `diagnostics` and are not diffed. See
+`docs/incremental-backtrace.md` for the full contract and limitations.
+
 Graph edge commands: `edges create --type references|refines_into|depends_on|contradicts|supersedes|needs|resolves|spawns|produces --from-type source|requirement|resolution|rule --from-id <id> --to-type source|requirement|resolution|rule --to-id <id>`, `edges list`, and `edges delete --id <edge-id>`. Creation validates edge type/endpoints and requires both endpoint records to exist.
 
 Shaping turn-state commands: `questions create` requires `--method` (grill, prototype, research, verify, or task); `topics claim/release/close` and `questions claim/release/answer` manage claim state (claiming an already-claimed item fails and reports the holder; closing a topic or answering a question clears its claim); `requirements fog set/show/clear` manages the deliberately unstructured fog text on an anchor requirement.
