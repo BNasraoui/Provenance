@@ -1,15 +1,20 @@
-use super::{CreateResolutionInput, CreateRuleInput, StateStore};
+use super::{CreateEdgeInput, CreateResolutionInput, CreateRuleInput, StateStore};
 use crate::shards;
+use crate::transaction::StateTransaction;
 use provenance_core::{
     validate_optional_confidence_score, EdgeType, NodeType, Resolution, Rule, SchemaVersion,
 };
 
 impl StateStore {
     pub fn create_resolution(&self, input: CreateResolutionInput) -> anyhow::Result<Resolution> {
-        self.with_state_write(|| self.create_resolution_locked(input))
+        self.write_transaction(|transaction| self.create_resolution_locked(transaction, input))
     }
 
-    fn create_resolution_locked(&self, input: CreateResolutionInput) -> anyhow::Result<Resolution> {
+    fn create_resolution_locked(
+        &self,
+        transaction: &mut StateTransaction,
+        input: CreateResolutionInput,
+    ) -> anyhow::Result<Resolution> {
         let CreateResolutionInput {
             scope_id,
             id,
@@ -39,7 +44,7 @@ impl StateStore {
             );
         }
         let path = shards::resolutions_path(&self.layout, &scope_id);
-        let resolution = self.mutate_jsonl_records(&path, |records: &mut Vec<Resolution>| {
+        let resolution = transaction.mutate_jsonl(&path, |records: &mut Vec<Resolution>| {
             let resolution = Resolution {
                 schema_version: SchemaVersion(1),
                 scope_id: scope_id.clone(),
@@ -70,31 +75,41 @@ impl StateStore {
             Ok(resolution)
         })?;
         if let Some(requirement_id) = requirement_id {
-            self.add_edge(
-                scope_id.clone(),
-                EdgeType::Needs,
-                NodeType::Requirement,
-                requirement_id.clone(),
-                NodeType::Resolution,
-                id.clone(),
+            self.add_edge_in(
+                transaction,
+                CreateEdgeInput {
+                    scope_id: scope_id.clone(),
+                    edge_type: EdgeType::Needs,
+                    from_type: NodeType::Requirement,
+                    from_id: requirement_id.clone(),
+                    to_type: NodeType::Resolution,
+                    to_id: id.clone(),
+                },
             )?;
-            self.add_edge(
-                scope_id,
-                EdgeType::Resolves,
-                NodeType::Resolution,
-                id,
-                NodeType::Requirement,
-                requirement_id,
+            self.add_edge_in(
+                transaction,
+                CreateEdgeInput {
+                    scope_id,
+                    edge_type: EdgeType::Resolves,
+                    from_type: NodeType::Resolution,
+                    from_id: id,
+                    to_type: NodeType::Requirement,
+                    to_id: requirement_id,
+                },
             )?;
         }
         Ok(resolution)
     }
 
     pub fn create_rule(&self, input: CreateRuleInput) -> anyhow::Result<Rule> {
-        self.with_state_write(|| self.create_rule_locked(input))
+        self.write_transaction(|transaction| self.create_rule_locked(transaction, input))
     }
 
-    fn create_rule_locked(&self, input: CreateRuleInput) -> anyhow::Result<Rule> {
+    fn create_rule_locked(
+        &self,
+        transaction: &mut StateTransaction,
+        input: CreateRuleInput,
+    ) -> anyhow::Result<Rule> {
         let CreateRuleInput {
             scope_id,
             id,
@@ -133,7 +148,7 @@ impl StateStore {
             );
         }
         let path = shards::rules_path(&self.layout, &scope_id);
-        let rule = self.mutate_jsonl_records(&path, |records: &mut Vec<Rule>| {
+        let rule = transaction.mutate_jsonl(&path, |records: &mut Vec<Rule>| {
             let rule = Rule {
                 schema_version: SchemaVersion(1),
                 scope_id: scope_id.clone(),
@@ -164,23 +179,29 @@ impl StateStore {
             Ok(rule)
         })?;
         if let Some(requirement_id) = requirement_id {
-            self.add_edge(
-                scope_id.clone(),
-                EdgeType::Produces,
-                NodeType::Requirement,
-                requirement_id,
-                NodeType::Rule,
-                id.clone(),
+            self.add_edge_in(
+                transaction,
+                CreateEdgeInput {
+                    scope_id: scope_id.clone(),
+                    edge_type: EdgeType::Produces,
+                    from_type: NodeType::Requirement,
+                    from_id: requirement_id,
+                    to_type: NodeType::Rule,
+                    to_id: id.clone(),
+                },
             )?;
         }
         if let Some(resolution_id) = resolution_id {
-            self.add_edge(
-                scope_id,
-                EdgeType::Produces,
-                NodeType::Resolution,
-                resolution_id,
-                NodeType::Rule,
-                id,
+            self.add_edge_in(
+                transaction,
+                CreateEdgeInput {
+                    scope_id,
+                    edge_type: EdgeType::Produces,
+                    from_type: NodeType::Resolution,
+                    from_id: resolution_id,
+                    to_type: NodeType::Rule,
+                    to_id: id,
+                },
             )?;
         }
         Ok(rule)

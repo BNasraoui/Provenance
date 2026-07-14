@@ -43,8 +43,9 @@ pub use shaping::{
     Topic, TopicStatus,
 };
 pub use validation::{
-    validate_commit_pin, validate_confidence_score, validate_optional_commit_pin,
-    validate_optional_confidence_score,
+    validate_commit_pin, validate_confidence_score, validate_evidence_references,
+    validate_optional_commit_pin, validate_optional_confidence_score, validate_record_scope,
+    validate_unique_ids,
 };
 
 #[cfg(test)]

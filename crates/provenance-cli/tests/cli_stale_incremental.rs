@@ -119,7 +119,7 @@ fn evidence_review_reverifies_only_intersecting_evidence() {
     commit(dir.path(), "change evidence");
 
     let report = evidence_review_json(dir.path(), &[]);
-    assert_eq!(report["summary"]["graph_evidence_paths"], 2);
+    assert_eq!(report["summary"]["graph_evidence_paths"], 3);
     assert_eq!(report["summary"]["intersecting_paths"], 2);
     assert_eq!(report["summary"]["evidence_reverified"], 2);
     assert_eq!(report["evidence"][0]["status"], "moved");
@@ -242,7 +242,7 @@ fn evidence_review_rejects_ambiguous_multi_source_sites() {
 }
 
 #[test]
-fn source_target_proposal_is_not_classified_as_reviewable_requirement_evidence() {
+fn source_target_requirement_candidate_retains_proposal_owned_evidence() {
     let dir = init_repo();
     write(dir.path(), "src/reject.rs", "return Err(\"invalid\");\n");
     let base = commit(dir.path(), "base");
@@ -264,9 +264,13 @@ fn source_target_proposal_is_not_classified_as_reviewable_requirement_evidence()
     commit(dir.path(), "change");
 
     let report = evidence_review_json(dir.path(), &[]);
-    assert_eq!(report["summary"]["evidence_reverified"], 0);
-    assert_eq!(report["evidence"], serde_json::json!([]));
+    assert_eq!(report["summary"]["evidence_reverified"], 1);
+    assert_eq!(report["evidence"][0]["owner_type"], "proposal");
+    assert_eq!(report["evidence"][0]["requirement_id"], Value::Null);
     assert_eq!(report["contradictions"], serde_json::json!([]));
+    let filtered = evidence_review_json(dir.path(), &["--min-downstream-rules", "1"]);
+    assert_eq!(filtered["summary"]["evidence_reverified"], 0);
+    assert_eq!(filtered["evidence"], serde_json::json!([]));
 }
 
 #[test]
@@ -468,6 +472,10 @@ fn canonical_requirement_decision_establishes_review_ownership() {
         .replace(
             "\"artifact_type\":\"requirement\",\"artifact_id\":\"req_ratified\"",
             "\"artifact_type\":\"source\",\"artifact_id\":\"source_code\"",
+        )
+        .replace(
+            "The guard must reject invalid input",
+            "Candidate wording differs",
         );
     fs::write(proposals, format!("{source_target}\n")).unwrap();
     write(
@@ -484,5 +492,9 @@ fn canonical_requirement_decision_establishes_review_ownership() {
     assert_eq!(
         report["contradictions"][0]["requirement_id"],
         "req_ratified"
+    );
+    assert_eq!(
+        report["contradictions"][0]["requirement"],
+        "The guard must reject invalid input"
     );
 }

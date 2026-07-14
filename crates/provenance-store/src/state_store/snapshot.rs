@@ -21,10 +21,11 @@ pub struct ScopeSnapshot {
 }
 
 impl StateStore {
-    /// Reads a scope while holding the state-generation lock exclusively.
-    /// Writers hold a shared generation lock for their complete mutation.
+    /// Reads a scope under the generation lock, recovering an interrupted
+    /// publication before exposing either complete generation.
     pub fn scope_snapshot(&self, scope: &ScopeId) -> anyhow::Result<ScopeSnapshot> {
         let _guard = AdvisoryLock::exclusive(&self.layout.state_snapshot_lock_path())?;
+        crate::transaction::recover(&self.layout.state_transaction_journal_path())?;
         Ok(ScopeSnapshot {
             scope: scope.clone(),
             sources: read_scoped(

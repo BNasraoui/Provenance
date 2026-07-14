@@ -1,8 +1,5 @@
 use camino::Utf8PathBuf;
-use provenance_core::{
-    IdeationEvidenceReference, IdeationEvidenceType, IdeationTarget, IdeationTargetType,
-    ProposalType, StableId,
-};
+use provenance_core::{IdeationEvidenceReference, IdeationEvidenceType, ProposalType, StableId};
 
 #[derive(Debug, Clone)]
 pub struct EvidenceSite {
@@ -21,7 +18,6 @@ pub struct EvidenceSite {
 pub struct EvidenceOwner {
     pub kind: OwnerKind,
     pub id: StableId,
-    pub title: Option<String>,
     pub ratified: bool,
 }
 
@@ -42,37 +38,50 @@ impl OwnerKind {
 
 #[derive(Debug, Clone)]
 pub enum RequirementOwnership {
+    ProposalCandidate {
+        proposal_id: StableId,
+    },
     TargetRequirement {
         proposal_id: StableId,
         requirement_id: StableId,
+        requirement_statement: String,
     },
     CanonicalRequirement {
         proposal_id: StableId,
         requirement_id: StableId,
+        requirement_statement: String,
         decision_id: StableId,
     },
     NotApplicable,
 }
 
 impl RequirementOwnership {
-    pub fn for_target(proposal_id: &StableId, target: &IdeationTarget) -> Option<Self> {
-        (target.artifact_type == IdeationTargetType::Requirement).then(|| Self::TargetRequirement {
-            proposal_id: proposal_id.clone(),
-            requirement_id: target.artifact_id.clone(),
-        })
-    }
-
     pub const fn requirement_id(&self) -> Option<&StableId> {
         match self {
             Self::TargetRequirement { requirement_id, .. }
             | Self::CanonicalRequirement { requirement_id, .. } => Some(requirement_id),
-            Self::NotApplicable => None,
+            Self::ProposalCandidate { .. } | Self::NotApplicable => None,
+        }
+    }
+
+    pub fn requirement_statement(&self) -> Option<&str> {
+        match self {
+            Self::TargetRequirement {
+                requirement_statement,
+                ..
+            }
+            | Self::CanonicalRequirement {
+                requirement_statement,
+                ..
+            } => Some(requirement_statement),
+            Self::ProposalCandidate { .. } | Self::NotApplicable => None,
         }
     }
 
     pub const fn proposal_id(&self) -> Option<&StableId> {
         match self {
-            Self::TargetRequirement { proposal_id, .. }
+            Self::ProposalCandidate { proposal_id }
+            | Self::TargetRequirement { proposal_id, .. }
             | Self::CanonicalRequirement { proposal_id, .. } => Some(proposal_id),
             Self::NotApplicable => None,
         }
@@ -81,12 +90,15 @@ impl RequirementOwnership {
     pub const fn canonical_decision_id(&self) -> Option<&StableId> {
         match self {
             Self::CanonicalRequirement { decision_id, .. } => Some(decision_id),
-            Self::TargetRequirement { .. } | Self::NotApplicable => None,
+            Self::ProposalCandidate { .. }
+            | Self::TargetRequirement { .. }
+            | Self::NotApplicable => None,
         }
     }
 
     pub const fn kind(&self) -> &'static str {
         match self {
+            Self::ProposalCandidate { .. } => "proposal_candidate",
             Self::TargetRequirement { .. } => "target_requirement",
             Self::CanonicalRequirement { .. } => "canonical_requirement",
             Self::NotApplicable => "not_applicable",

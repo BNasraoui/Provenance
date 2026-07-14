@@ -3,9 +3,11 @@ use super::{
     CreateSynthesisPacketInput, StateStore,
 };
 use crate::shards;
+use crate::transaction::StateTransaction;
 use provenance_core::{
-    validate_optional_confidence_score, Contribution, PromotionDecisionRecord, PromotionState,
-    ProposalCard, SchemaVersion, ScopeId, StableId, SynthesisPacket,
+    validate_evidence_references, validate_optional_confidence_score, Contribution,
+    PromotionDecisionRecord, PromotionState, ProposalCard, SchemaVersion, ScopeId, StableId,
+    SynthesisPacket,
 };
 
 impl StateStore {
@@ -48,6 +50,7 @@ impl StateStore {
         for claim in &material_claims {
             validate_optional_confidence_score(claim.confidence)?;
         }
+        validate_evidence_references(&evidence_references)?;
         let path = shards::contributions_path(&self.layout, &scope_id);
         self.mutate_jsonl_records(&path, |records: &mut Vec<Contribution>| {
             let contribution = Contribution {
@@ -197,6 +200,7 @@ impl StateStore {
             | PromotionState::Deferred => {}
         }
         let confidence = validate_optional_confidence_score(confidence)?;
+        validate_evidence_references(&traceability.evidence_references)?;
         let path = shards::proposal_cards_path(&self.layout, &scope_id);
         self.mutate_jsonl_records(&path, |records: &mut Vec<ProposalCard>| {
             let proposal = ProposalCard {
@@ -229,11 +233,14 @@ impl StateStore {
         &self,
         input: CreatePromotionDecisionInput,
     ) -> anyhow::Result<PromotionDecisionRecord> {
-        self.with_state_write(|| self.create_promotion_decision_locked(input))
+        self.write_transaction(|transaction| {
+            self.create_promotion_decision_locked(transaction, input)
+        })
     }
 
     fn create_promotion_decision_locked(
         &self,
+        transaction: &mut StateTransaction,
         input: CreatePromotionDecisionInput,
     ) -> anyhow::Result<PromotionDecisionRecord> {
         let CreatePromotionDecisionInput {
@@ -262,7 +269,7 @@ impl StateStore {
             "proposal does not exist"
         );
         let decisions_path = shards::promotion_decisions_path(&self.layout, &scope_id);
-        self.mutate_jsonl_records(
+        transaction.mutate_jsonl(
             &decisions_path,
             |records: &mut Vec<PromotionDecisionRecord>| {
                 anyhow::ensure!(
@@ -275,7 +282,7 @@ impl StateStore {
             },
         )?;
         let proposals_path = shards::proposal_cards_path(&self.layout, &scope_id);
-        self.mutate_jsonl_records(&proposals_path, |proposals: &mut Vec<ProposalCard>| {
+        transaction.mutate_jsonl(&proposals_path, |proposals: &mut Vec<ProposalCard>| {
             let proposal = proposals
                 .iter_mut()
                 .find(|proposal| proposal.id == proposal_id)
@@ -288,7 +295,7 @@ impl StateStore {
             proposals.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
             Ok(())
         })?;
-        self.mutate_jsonl_records(
+        transaction.mutate_jsonl(
             &decisions_path,
             |records: &mut Vec<PromotionDecisionRecord>| {
                 anyhow::ensure!(

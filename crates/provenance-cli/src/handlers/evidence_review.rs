@@ -268,7 +268,7 @@ fn contradiction(verified: &verify::VerifiedSite<'_>) -> Option<Contradiction> {
     Some(Contradiction {
         proposal_id: verified.site.ownership.proposal_id()?.as_str().to_string(),
         requirement_id: requirement_id.as_str().to_string(),
-        requirement: verified.site.owner.title.clone()?,
+        requirement: verified.site.ownership.requirement_statement()?.to_string(),
         evidence_reference_id: verified.site.reference_id.as_str().to_string(),
         reason: "ratified requirement lost its cited supporting line; semantic review is required",
     })

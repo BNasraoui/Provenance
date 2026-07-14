@@ -27,6 +27,8 @@ use serde::{de::DeserializeOwned, Serialize};
 #[derive(Debug, Clone)]
 pub struct StateStore {
     pub(crate) layout: ProvenanceLayout,
+    #[cfg(test)]
+    test_fail_commit_after: Option<usize>,
 }
 
 pub use snapshot::ScopeSnapshot;
@@ -252,7 +254,11 @@ pub struct PostMessageResult {
 
 impl StateStore {
     pub const fn new(layout: ProvenanceLayout) -> Self {
-        Self { layout }
+        Self {
+            layout,
+            #[cfg(test)]
+            test_fail_commit_after: None,
+        }
     }
     pub fn manifest(&self) -> anyhow::Result<Manifest> {
         Ok(serde_json::from_str(&std::fs::read_to_string(
@@ -334,13 +340,33 @@ impl StateStore {
         read_jsonl(&shards::promotion_decisions_path(&self.layout, scope))
     }
 
-    /// Keeps a logical multi-shard write outside immutable snapshot reads.
-    pub fn with_state_write<R>(
+    pub fn write_transaction<R>(
         &self,
-        write: impl FnOnce() -> anyhow::Result<R>,
+        write: impl FnOnce(&mut crate::transaction::StateTransaction) -> anyhow::Result<R>,
     ) -> anyhow::Result<R> {
-        let _guard = crate::jsonl::AdvisoryLock::shared(&self.layout.state_snapshot_lock_path())?;
-        write()
+        let _guard =
+            crate::jsonl::AdvisoryLock::exclusive(&self.layout.state_snapshot_lock_path())?;
+        let journal_path = self.layout.state_transaction_journal_path();
+        crate::transaction::recover(&journal_path)?;
+        #[cfg(test)]
+        let fail_commit_after = self.test_fail_commit_after;
+        #[cfg(not(test))]
+        let fail_commit_after = None;
+        let mut transaction =
+            crate::transaction::StateTransaction::new(journal_path, fail_commit_after);
+        let result = write(&mut transaction)?;
+        transaction.commit()?;
+        Ok(result)
+    }
+
+    pub fn read_generation<R>(
+        &self,
+        read: impl FnOnce() -> anyhow::Result<R>,
+    ) -> anyhow::Result<R> {
+        let _guard =
+            crate::jsonl::AdvisoryLock::exclusive(&self.layout.state_snapshot_lock_path())?;
+        crate::transaction::recover(&self.layout.state_transaction_journal_path())?;
+        read()
     }
 
     pub(crate) fn mutate_jsonl_records<T, R>(
@@ -351,10 +377,15 @@ impl StateStore {
     where
         T: DeserializeOwned + Serialize,
     {
-        let _snapshot_guard =
-            crate::jsonl::AdvisoryLock::shared(&self.layout.state_snapshot_lock_path())?;
-        let lock_path = self.layout.state_shard_lock_path(path)?;
-        crate::jsonl::mutate_jsonl_locked(path, &lock_path, mutate)
+        self.write_transaction(|transaction| transaction.mutate_jsonl(path, mutate))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_test_commit_failure(&self, after: usize) -> Self {
+        Self {
+            layout: self.layout.clone(),
+            test_fail_commit_after: Some(after),
+        }
     }
 }
 

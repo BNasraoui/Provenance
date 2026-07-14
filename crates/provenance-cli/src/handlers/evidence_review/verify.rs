@@ -145,12 +145,12 @@ mod tests {
             owner: EvidenceOwner {
                 kind: OwnerKind::Proposal,
                 id: StableId::new("proposal").unwrap(),
-                title: None,
                 ratified: false,
             },
             ownership: RequirementOwnership::TargetRequirement {
                 proposal_id: StableId::new("proposal").unwrap(),
                 requirement_id: StableId::new("requirement").unwrap(),
+                requirement_statement: "Requirement".into(),
             },
             source_id: StableId::new("source").unwrap(),
             repository: Utf8PathBuf::from("."),
@@ -216,12 +216,12 @@ mod tests {
             owner: EvidenceOwner {
                 kind: OwnerKind::Proposal,
                 id: StableId::new("proposal").unwrap(),
-                title: None,
                 ratified: false,
             },
             ownership: RequirementOwnership::TargetRequirement {
                 proposal_id: StableId::new("proposal").unwrap(),
                 requirement_id: StableId::new("requirement").unwrap(),
+                requirement_statement: "Requirement".into(),
             },
             source_id: StableId::new("source").unwrap(),
             repository: Utf8PathBuf::from("."),
