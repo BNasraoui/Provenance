@@ -1,4 +1,4 @@
-use crate::cli::{FogCommand, RequirementsCommand, SourceRefCommand};
+use crate::cli::knowledge::{FogCommand, RequirementsCommand, SourceRefCommand};
 use crate::output;
 use provenance_core::{RequirementStatus, ScopeId, StableId};
 use provenance_store::{

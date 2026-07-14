@@ -1,5 +1,5 @@
 use super::common::parse_json_arg;
-use crate::cli::TopicsCommand;
+use crate::cli::shaping::TopicsCommand;
 use crate::output;
 use provenance_core::{ArtifactLink, ScopeId, StableId, TopicStatus};
 use provenance_store::{

@@ -1,4 +1,4 @@
-use crate::cli::SkillsCommand;
+use crate::cli::workspace::SkillsCommand;
 use crate::output;
 use crate::skills;
 

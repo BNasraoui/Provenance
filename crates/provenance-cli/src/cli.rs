@@ -1,6 +1,16 @@
+pub mod graph;
+pub mod ideation;
+pub mod knowledge;
+pub mod policy;
+pub mod services;
+pub mod shaping;
+pub mod workspace;
+
+pub use ideation::{IdeationArtifactKind, SchemaCommand};
+
 use crate::output::OutputFormat;
 use camino::Utf8PathBuf;
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand};
 use serde::Serialize;
 
 #[derive(Parser)]
@@ -29,11 +39,11 @@ pub enum Command {
     },
     Docs {
         #[command(subcommand)]
-        command: DocsCommand,
+        command: workspace::DocsCommand,
     },
     Wiki {
         #[command(subcommand)]
-        command: WikiCommand,
+        command: workspace::WikiCommand,
     },
     Materialize {
         #[arg(long, default_value = ".")]
@@ -43,31 +53,31 @@ pub enum Command {
     },
     Sources {
         #[command(subcommand)]
-        command: SourcesCommand,
+        command: knowledge::SourcesCommand,
     },
     Requirements {
         #[command(subcommand)]
-        command: RequirementsCommand,
+        command: knowledge::RequirementsCommand,
     },
     Edges {
         #[command(subcommand)]
-        command: EdgesCommand,
+        command: graph::EdgesCommand,
     },
     Domains {
         #[command(subcommand)]
-        command: DomainsCommand,
+        command: knowledge::DomainsCommand,
     },
     Boundaries {
         #[command(subcommand)]
-        command: BoundariesCommand,
+        command: knowledge::BoundariesCommand,
     },
     Topics {
         #[command(subcommand)]
-        command: TopicsCommand,
+        command: shaping::TopicsCommand,
     },
     Questions {
         #[command(subcommand)]
-        command: QuestionsCommand,
+        command: shaping::QuestionsCommand,
     },
     Graph {
         requirement_id: String,
@@ -80,19 +90,19 @@ pub enum Command {
     },
     Resolutions {
         #[command(subcommand)]
-        command: ResolutionsCommand,
+        command: policy::ResolutionsCommand,
     },
     Rules {
         #[command(subcommand)]
-        command: RulesCommand,
+        command: policy::RulesCommand,
     },
     Services {
         #[command(subcommand)]
-        command: ServicesCommand,
+        command: services::ServicesCommand,
     },
     ServiceBindings {
         #[command(subcommand)]
-        command: ServiceBindingsCommand,
+        command: services::ServiceBindingsCommand,
     },
     Traceability {
         rule_id: String,
@@ -113,23 +123,23 @@ pub enum Command {
     },
     Thread {
         #[command(subcommand)]
-        command: ThreadCommand,
+        command: shaping::ThreadCommand,
     },
     Contributions {
         #[command(subcommand)]
-        command: ContributionsCommand,
+        command: ideation::ContributionsCommand,
     },
     SynthesisPackets {
         #[command(subcommand)]
-        command: SynthesisPacketsCommand,
+        command: ideation::SynthesisPacketsCommand,
     },
     Proposals {
         #[command(subcommand)]
-        command: ProposalsCommand,
+        command: ideation::ProposalsCommand,
     },
     PromotionDecisions {
         #[command(subcommand)]
-        command: PromotionDecisionsCommand,
+        command: ideation::PromotionDecisionsCommand,
     },
     Prime {
         #[arg(long, default_value = ".")]
@@ -188,22 +198,22 @@ pub enum Command {
     },
     Coverage {
         #[command(subcommand)]
-        command: CoverageCommand,
+        command: workspace::CoverageCommand,
     },
     SwarmBacktrace {
         #[command(subcommand)]
-        command: SwarmBacktraceCommand,
+        command: ideation::SwarmBacktraceCommand,
     },
     Skills {
         #[command(subcommand)]
-        command: SkillsCommand,
+        command: workspace::SkillsCommand,
     },
     Schema {
         #[command(subcommand)]
-        command: SchemaCommand,
+        command: ideation::SchemaCommand,
     },
     Validate {
-        artifact: IdeationArtifactKind,
+        artifact: ideation::IdeationArtifactKind,
         #[arg(long)]
         input: Utf8PathBuf,
         #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
@@ -238,905 +248,6 @@ pub enum Command {
         #[arg(long)]
         output: Option<Utf8PathBuf>,
         #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
-        format: OutputFormat,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum SwarmBacktraceCommand {
-    Land {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long, default_value = "default")]
-        scope: String,
-        #[arg(long)]
-        run_dir: Utf8PathBuf,
-        #[arg(long)]
-        replace: bool,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
-        format: OutputFormat,
-    },
-}
-
-#[derive(Debug, Clone, Copy, ValueEnum)]
-pub enum IdeationArtifactKind {
-    Contribution,
-    SynthesisPacket,
-    Proposal,
-}
-
-impl IdeationArtifactKind {
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::Contribution => "contribution",
-            Self::SynthesisPacket => "synthesis-packet",
-            Self::Proposal => "proposal",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Subcommand)]
-pub enum SchemaCommand {
-    Show {
-        artifact: IdeationArtifactKind,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
-        format: OutputFormat,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum DocsCommand {
-    Check {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    Serve {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long, default_value = "127.0.0.1")]
-        host: String,
-        #[arg(long, default_value_t = 5174)]
-        port: u16,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum WikiCommand {
-    Build {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long, default_value = "default")]
-        scope: String,
-        /// Defaults to `.provenance/wiki`, which is added to `.gitignore`
-        /// automatically. Pass an explicit path to write elsewhere instead
-        /// (`.gitignore` is left untouched in that case).
-        #[arg(long)]
-        out: Option<Utf8PathBuf>,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    Serve {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long, default_value = "default")]
-        scope: String,
-        #[arg(long, default_value = "127.0.0.1")]
-        host: String,
-        #[arg(long, default_value_t = 5175)]
-        port: u16,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum EdgesCommand {
-    Create {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long = "type")]
-        edge_type: String,
-        #[arg(long)]
-        from_type: String,
-        #[arg(long)]
-        from_id: String,
-        #[arg(long)]
-        to_type: String,
-        #[arg(long)]
-        to_id: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    List {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    Delete {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        id: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum SkillsCommand {
-    List {
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    Show {
-        name: String,
-    },
-    Install {
-        #[arg(long)]
-        global: bool,
-        #[arg(long)]
-        copy: bool,
-        #[arg(long)]
-        force: bool,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-}
-
-#[derive(Subcommand)]
-#[allow(clippy::large_enum_variant)]
-pub enum ContributionsCommand {
-    Create {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        id: String,
-        #[arg(long)]
-        target_type: String,
-        #[arg(long)]
-        target_id: String,
-        #[arg(long)]
-        participant_slot: String,
-        #[arg(long)]
-        stance: String,
-        #[arg(long)]
-        strongest_finding: String,
-        #[arg(long, default_value = "[]")]
-        evidence_json: String,
-        #[arg(long, default_value = "[]")]
-        claims_json: String,
-        #[arg(long, default_value = "[]")]
-        risks_json: String,
-        #[arg(long, default_value = "[]")]
-        objections_json: String,
-        #[arg(long, default_value = "[]")]
-        challenges_json: String,
-        #[arg(long, default_value = "[]")]
-        suggested_changes_json: String,
-        #[arg(long, default_value = "[]")]
-        unsupported_recommendations_json: String,
-        #[arg(long, default_value = "medium")]
-        uncertainty_level: String,
-        #[arg(long)]
-        uncertainty_rationale: String,
-        #[arg(long, default_value = "[]")]
-        open_questions_json: String,
-        #[arg(long)]
-        replace: bool,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    List {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-}
-
-#[derive(Subcommand)]
-#[allow(clippy::large_enum_variant)]
-pub enum SynthesisPacketsCommand {
-    Create {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        id: String,
-        #[arg(long)]
-        target_type: String,
-        #[arg(long)]
-        target_id: String,
-        #[arg(long)]
-        summary: String,
-        #[arg(long, default_value = "[]")]
-        consensus_json: String,
-        #[arg(long, default_value = "[]")]
-        contested_claims_json: String,
-        #[arg(long, default_value = "[]")]
-        minority_objections_json: String,
-        #[arg(long, default_value = "[]")]
-        evidence_gaps_json: String,
-        #[arg(long, default_value = "[]")]
-        unsupported_speculation_json: String,
-        #[arg(long, default_value = "[]")]
-        open_questions_json: String,
-        #[arg(long, default_value = "[]")]
-        suggested_artifacts_json: String,
-        #[arg(long, default_value = "[]")]
-        required_human_decisions_json: String,
-        #[arg(long)]
-        replace: bool,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    List {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-}
-
-#[derive(Subcommand)]
-#[allow(clippy::large_enum_variant)]
-pub enum ProposalsCommand {
-    Create {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        id: String,
-        #[arg(long)]
-        proposal_key: String,
-        #[arg(long)]
-        proposal_type: String,
-        #[arg(long)]
-        title: String,
-        #[arg(long)]
-        summary: String,
-        #[arg(long)]
-        confidence: Option<f64>,
-        #[arg(long)]
-        target_type: String,
-        #[arg(long)]
-        target_id: String,
-        #[arg(long)]
-        source_id: Vec<String>,
-        #[arg(long, default_value = "[]")]
-        evidence_json: String,
-        #[arg(long)]
-        supporting_claim_id: Vec<String>,
-        #[arg(long, default_value = "proposed")]
-        promotion_state: String,
-        #[arg(long)]
-        duplicate_of: Option<String>,
-        #[arg(long)]
-        superseded_by: Option<String>,
-        #[arg(long)]
-        replace: bool,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    List {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-}
-
-#[derive(Subcommand)]
-#[allow(clippy::large_enum_variant)]
-pub enum PromotionDecisionsCommand {
-    Create {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        id: String,
-        #[arg(long)]
-        proposal_id: String,
-        #[arg(long)]
-        decision: String,
-        #[arg(long)]
-        rationale: String,
-        #[arg(long)]
-        actor_id: String,
-        #[arg(long)]
-        actor_type: String,
-        #[arg(long)]
-        actor_name: Option<String>,
-        #[arg(long)]
-        canonical_artifact_type: Option<String>,
-        #[arg(long)]
-        canonical_artifact_id: Option<String>,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    List {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum CoverageCommand {
-    Scan {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        path: Utf8PathBuf,
-        #[arg(long, default_value = "default")]
-        scope: String,
-        #[arg(long)]
-        validate_rules: bool,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-        #[arg(long)]
-        output: Option<Utf8PathBuf>,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum ThreadCommand {
-    Post {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        parent_type: String,
-        #[arg(long)]
-        parent_id: String,
-        #[arg(long)]
-        role: String,
-        body: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    List {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum ResolutionsCommand {
-    Create {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        id: String,
-        #[arg(long)]
-        title: String,
-        #[arg(long)]
-        requirement_id: Option<String>,
-        #[arg(long)]
-        position: String,
-        #[arg(long)]
-        rationale: String,
-        #[arg(long, default_value = "proposed")]
-        status: String,
-        #[arg(long)]
-        context: Option<String>,
-        #[arg(long)]
-        enforcement: Option<String>,
-        #[arg(long)]
-        confidence: Option<f64>,
-        #[arg(long = "input-type")]
-        input_type: Vec<String>,
-        #[arg(long = "input-reference")]
-        input_reference: Vec<String>,
-        #[arg(long = "input-summary")]
-        input_summary: Vec<String>,
-        #[arg(long)]
-        made_by: Option<String>,
-        #[arg(long)]
-        approved_by: Option<String>,
-        #[arg(long)]
-        approved_at: Option<i64>,
-        #[arg(long)]
-        superseded_by: Option<String>,
-        #[arg(long)]
-        origin_thread: Option<String>,
-        #[arg(long)]
-        origin_message: Option<String>,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum RulesCommand {
-    Create {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        id: String,
-        #[arg(long)]
-        rule_code: String,
-        #[arg(long)]
-        name: Option<String>,
-        #[arg(long)]
-        description: Option<String>,
-        #[arg(long)]
-        requirement_id: Option<String>,
-        #[arg(long)]
-        resolution_id: Option<String>,
-        #[arg(long)]
-        statement: String,
-        #[arg(long, default_value = "active")]
-        status: String,
-        #[arg(long, default_value = "medium")]
-        severity: String,
-        #[arg(long)]
-        rule_type: Option<String>,
-        #[arg(long)]
-        modality: Option<String>,
-        #[arg(long)]
-        confidence: Option<f64>,
-        #[arg(long)]
-        extraction_method: Option<String>,
-        #[arg(long)]
-        source_document: Option<String>,
-        #[arg(long)]
-        source_section: Option<String>,
-        #[arg(long)]
-        origin_thread: Option<String>,
-        #[arg(long)]
-        origin_message: Option<String>,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-}
-
-#[derive(Args)]
-pub struct ServiceCreateArgs {
-    #[arg(long, default_value = ".")]
-    pub repo: Utf8PathBuf,
-    #[arg(long)]
-    pub scope: String,
-    #[arg(long)]
-    pub id: String,
-    #[arg(long)]
-    pub name: String,
-    #[arg(long)]
-    pub description: Option<String>,
-    #[arg(long)]
-    pub owner: Option<String>,
-    #[arg(long)]
-    pub repository: Option<String>,
-    #[arg(long)]
-    pub environment: Option<String>,
-    #[arg(long)]
-    pub tier: Option<String>,
-    #[arg(long)]
-    pub external_id: Option<String>,
-    #[arg(long, default_value = "active")]
-    pub status: String,
-    #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-    pub format: OutputFormat,
-}
-
-#[derive(Subcommand)]
-pub enum ServicesCommand {
-    Create(Box<ServiceCreateArgs>),
-    List {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum ServiceBindingsCommand {
-    Create {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        rule_id: String,
-        #[arg(long)]
-        service_id: String,
-        #[arg(long)]
-        binding_type: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    List {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum SourcesCommand {
-    Create {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        id: String,
-        #[arg(long)]
-        name: String,
-        #[arg(long, default_value = "policy")]
-        source_type: String,
-        #[arg(long)]
-        url: Option<String>,
-        #[arg(long)]
-        reference: Option<String>,
-        #[arg(long)]
-        commit_pin: Option<String>,
-        #[arg(long)]
-        effective_date: Option<i64>,
-        #[arg(long)]
-        review_date: Option<i64>,
-        #[arg(long)]
-        superseded_by: Option<String>,
-        #[arg(long)]
-        origin_thread: Option<String>,
-        #[arg(long)]
-        origin_message: Option<String>,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum RequirementsCommand {
-    Create {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        id: String,
-        #[arg(long)]
-        statement: String,
-        #[arg(long)]
-        description: Option<String>,
-        #[arg(long, default_value = "active")]
-        status: String,
-        #[arg(long)]
-        domain_id: Option<String>,
-        #[arg(long)]
-        origin_thread: Option<String>,
-        #[arg(long)]
-        origin_message: Option<String>,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    SourceRef {
-        #[command(subcommand)]
-        command: SourceRefCommand,
-    },
-    /// Set, show, or clear the unstructured fog text on a requirement.
-    Fog {
-        #[command(subcommand)]
-        command: FogCommand,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum FogCommand {
-    /// Set the fog text: the decisions and investigations sensed but not yet
-    /// sharp enough to state as questions.
-    Set {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        requirement_id: String,
-        #[arg(long)]
-        text: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    /// Show the fog text on a requirement.
-    Show {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        requirement_id: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    /// Clear the fog text on a requirement.
-    Clear {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        requirement_id: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum DomainsCommand {
-    Create {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        id: String,
-        #[arg(long)]
-        name: String,
-        #[arg(long)]
-        description: Option<String>,
-        #[arg(long)]
-        color: Option<String>,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    List {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum BoundariesCommand {
-    Create {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        id: String,
-        #[arg(long)]
-        requirement_id: String,
-        #[arg(long)]
-        statement: String,
-        #[arg(long)]
-        source_id: Option<String>,
-        #[arg(long)]
-        source_clause: Option<String>,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    List {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum TopicsCommand {
-    Create {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        id: String,
-        #[arg(long)]
-        requirement_id: String,
-        #[arg(long)]
-        title: String,
-        #[arg(long, default_value = "open")]
-        status: String,
-        #[arg(long, default_value = "[]")]
-        links_json: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    List {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    /// Claim a topic so concurrent sessions skip it. Claiming an
-    /// already-claimed topic is an error showing who holds it.
-    Claim {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        id: String,
-        /// Actor name recorded on the claim.
-        #[arg(long)]
-        actor: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    /// Release a claimed topic without closing it.
-    Release {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        id: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    /// Close a topic. Closing clears any claim on it.
-    Close {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        id: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum QuestionsCommand {
-    /// Create a question. A question should be resolvable in one agent
-    /// session; otherwise it is fog or needs decomposition.
-    Create {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        id: String,
-        #[arg(long)]
-        topic_id: String,
-        #[arg(long)]
-        question: String,
-        /// Resolution method: grill, prototype, research, verify, or task.
-        #[arg(long)]
-        method: String,
-        #[arg(long, default_value = "open")]
-        status: String,
-        #[arg(long)]
-        answer: Option<String>,
-        #[arg(long, default_value = "[]")]
-        links_json: String,
-        #[arg(long)]
-        resolution_id: Option<String>,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    List {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    /// Update mutable question state after creation.
-    Update {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        id: String,
-        /// Resolution method: grill, prototype, research, verify, or task.
-        #[arg(long)]
-        method: Option<String>,
-        /// Status: open, `blocked_on_human`, or answered. Hyphens are accepted.
-        #[arg(long)]
-        status: Option<String>,
-        #[arg(long)]
-        links_json: Option<String>,
-        #[arg(long)]
-        resolution_id: Option<String>,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    /// Claim a question so concurrent sessions skip it. Claiming an
-    /// already-claimed question is an error showing who holds it.
-    Claim {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        id: String,
-        /// Actor name recorded on the claim.
-        #[arg(long)]
-        actor: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    /// Release a claimed question without answering it.
-    Release {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        id: String,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-    /// Record the answer to a question. Answering clears any claim on it.
-    Answer {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        id: String,
-        #[arg(long)]
-        answer: String,
-        #[arg(long)]
-        resolution_id: Option<String>,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
-        format: OutputFormat,
-    },
-}
-
-#[derive(Subcommand)]
-pub enum SourceRefCommand {
-    Add {
-        #[arg(long, default_value = ".")]
-        repo: Utf8PathBuf,
-        #[arg(long)]
-        scope: String,
-        #[arg(long)]
-        requirement_id: String,
-        #[arg(long)]
-        source_id: String,
-        #[arg(long)]
-        clause: Option<String>,
-        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },
 }

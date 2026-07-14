@@ -2,7 +2,7 @@ use super::validate::{
     validate_contribution_record, validate_proposal_card_record, validate_synthesis_packet_record,
 };
 use crate::{
-    cli::SwarmBacktraceCommand,
+    cli::ideation::SwarmBacktraceCommand,
     output::{self, OutputFormat},
 };
 use anyhow::Context;
