@@ -6,6 +6,8 @@ pub mod services;
 pub mod shaping;
 pub mod workspace;
 
+pub use ideation::{IdeationArtifactKind, SchemaCommand};
+
 use crate::output::OutputFormat;
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};
