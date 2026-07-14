@@ -1,4 +1,4 @@
-use crate::wiki::model::PageKind;
+use crate::wiki::model::{LineageEntry, PageKind};
 
 use super::super::render_requirement;
 use super::fixtures::{gappy_requirement_fixture, link, requirement_fixture};
@@ -47,6 +47,73 @@ fn requirement_page_shows_lineage_with_the_current_entry_unlinked() {
     let html = render_requirement("default", &requirement_fixture());
     assert!(html.contains("<a href=\"/requirements/req_platform/\">Visualcare platform</a>"));
     assert!(html.contains("<li class=\"current\">SaveInvoice shall split each claim item"));
+}
+
+#[test]
+fn requirement_page_disambiguates_colliding_refined_into_links() {
+    let mut page = requirement_fixture();
+    page.children = super::fixtures::colliding_requirement_links();
+
+    let html = render_requirement("default", &page);
+    assert!(html.contains(">Refined Into</h2>"));
+    assert!(html.contains(
+        "<a href=\"/requirements/req_sah_participant_budget_summary_shall_pro/\">Participant budget summary shall pro-rate services <span class=\"id-chip\">…hall_pro</span></a>"
+    ));
+    assert!(html.contains(
+        "<a href=\"/requirements/req_sah_participant_budget_summary_shall_pro_2/\">Participant budget summary shall pro-rate services <span class=\"id-chip\">…ll_pro_2</span></a>"
+    ));
+}
+
+#[test]
+fn requirement_page_keeps_unique_refined_into_markup_unchanged() {
+    let mut page = requirement_fixture();
+    page.children = super::fixtures::unique_requirement_links();
+
+    let html = render_requirement("default", &page);
+    assert!(html.contains(
+        "<ul class=\"link-list\">\n<li><a href=\"/requirements/req_budget_split/\">Budget portions shall reconcile</a></li>\n<li><a href=\"/requirements/req_zero_suppression/\">Zero claim items shall be suppressed</a></li>\n</ul>"
+    ));
+}
+
+#[test]
+fn lineage_and_breadcrumb_disambiguate_collisions_including_current_text() {
+    let mut page = requirement_fixture();
+    page.lineage = vec![
+        LineageEntry {
+            link: link(PageKind::Requirement, "req_shared_parent", "Shared title"),
+            is_current: false,
+        },
+        LineageEntry {
+            link: link(PageKind::Requirement, "req_shared_child", "Shared title"),
+            is_current: true,
+        },
+    ];
+
+    let html = render_requirement("default", &page);
+    assert!(html.contains(
+        "<li><a href=\"/requirements/req_shared_parent/\">Shared title <span class=\"id-chip\">…d_parent</span></a></li>"
+    ));
+    assert!(html.contains(
+        "<li class=\"current\">Shared title <span class=\"id-chip\">…ed_child</span></li>"
+    ));
+    assert!(html.contains(
+        "<nav aria-label=\"Breadcrumb\"><a href=\"/requirements/req_shared_parent/\">Shared title <span class=\"id-chip\">…d_parent</span></a></nav>"
+    ));
+}
+
+#[test]
+fn unique_lineage_and_breadcrumb_markup_remains_unchanged() {
+    let html = render_requirement("default", &requirement_fixture());
+
+    assert!(
+        html.contains("<li><a href=\"/requirements/req_platform/\">Visualcare platform</a></li>")
+    );
+    assert!(html.contains(
+        "<li class=\"current\">SaveInvoice shall split each claim item into portions</li>"
+    ));
+    assert!(html.contains(
+        "<nav aria-label=\"Breadcrumb\"><a href=\"/requirements/req_platform/\">Visualcare platform</a> <span class=\"sep\">›</span> <a href=\"/requirements/req_sah/\">Support at Home (SAH)</a></nav>"
+    ));
 }
 
 #[test]
