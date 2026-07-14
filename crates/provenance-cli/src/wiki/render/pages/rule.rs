@@ -12,6 +12,7 @@ use super::super::labels::{
     format_confidence, modality_word, rule_status_word, rule_type_word, sev_chip, severity_word,
     status_badge,
 };
+use super::super::routes::WikiRoute;
 
 /// Renders a rule detail page.
 #[allow(clippy::too_many_lines)]
@@ -116,7 +117,7 @@ pub fn render_rule(scope: &str, page: &RulePage) -> String {
     let mut chips = vec![severity_chip];
     chips.extend(modality_chip);
     let container = container_html(
-        Some((PageKind::Rule, ("/".to_string(), scope.to_string()))),
+        Some((PageKind::Rule, (WikiRoute::Index.path(), scope.to_string()))),
         &title_row(
             PageKind::Rule,
             &format!("{} — {}", page.rule_code, page.title),

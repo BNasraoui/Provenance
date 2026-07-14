@@ -53,7 +53,6 @@ fn search_page_contains_offline_index_and_safe_filtering_hooks() {
                 "rule_safe",
                 "<script>alert('title')</script>",
             ),
-            kind: PageKind::Rule,
             statement: "unsafe \"statement\" & <tag>".to_string(),
         }],
     };
@@ -74,6 +73,26 @@ fn search_page_contains_offline_index_and_safe_filtering_hooks() {
         !html.contains("innerHTML"),
         "search must not inject result HTML"
     );
+}
+
+#[test]
+fn search_presentation_is_derived_from_its_typed_target() {
+    let page = SearchIndexPage {
+        scope: "default".to_string(),
+        title: "Search".to_string(),
+        entries: vec![SearchEntry {
+            link: link(PageKind::Rule, "rule_one", "Rule one"),
+            statement: "A rule statement".to_string(),
+        }],
+    };
+
+    let html = render_search("default", &page);
+
+    assert!(
+        html.contains("class=\"type-badge rule\">Rule</span>"),
+        "{html}"
+    );
+    assert!(html.contains("href=\"/rules/rule_one/\""), "{html}");
 }
 
 #[test]
@@ -107,12 +126,10 @@ fn search_results_disambiguate_colliding_titles_with_stable_ids() {
         entries: vec![
             SearchEntry {
                 link: link(PageKind::Requirement, "req_alpha_one", "Shared title"),
-                kind: PageKind::Requirement,
                 statement: "First".to_string(),
             },
             SearchEntry {
                 link: link(PageKind::Rule, "rule_alpha_two", "Shared title"),
-                kind: PageKind::Rule,
                 statement: "Second".to_string(),
             },
         ],
