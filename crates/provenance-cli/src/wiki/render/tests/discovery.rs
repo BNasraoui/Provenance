@@ -2,18 +2,18 @@ use super::super::render_requirement;
 use super::super::{render_search, render_topics};
 use super::fixtures::{corpus_fixture, link};
 use crate::wiki::model::{
-    PageId, PageKind, SearchEntry, SearchIndexPage, TopicGroup, TopicIndexPage,
+    PageKind, SearchEntry, SearchIndexPage, Topic, TopicGroup, TopicIndexPage,
 };
 
 #[test]
 fn topic_index_groups_real_links_and_describes_empty_domains() {
     let mut page = corpus_fixture().topics;
     page.groups.push(TopicGroup {
-        domain_id: Some("domain_empty".to_string()),
-        anchor: "domain-domain_empty".to_string(),
-        name: "Empty domain".to_string(),
-        description: None,
-        missing: false,
+        topic: Topic::Defined {
+            id: "domain_empty".to_string(),
+            name: "Empty domain".to_string(),
+            description: None,
+        },
         requirements: vec![],
         rules: vec![],
     });
@@ -34,7 +34,6 @@ fn topic_index_groups_real_links_and_describes_empty_domains() {
 #[test]
 fn topic_index_is_honest_when_no_domain_data_exists() {
     let page = TopicIndexPage {
-        id: PageId::new(PageKind::TopicIndex, "default"),
         scope: "default".to_string(),
         title: "Topics by domain".to_string(),
         groups: vec![],
@@ -46,7 +45,6 @@ fn topic_index_is_honest_when_no_domain_data_exists() {
 #[test]
 fn search_page_contains_offline_index_and_safe_filtering_hooks() {
     let page = SearchIndexPage {
-        id: PageId::new(PageKind::SearchIndex, "default"),
         scope: "default".to_string(),
         title: "Search".to_string(),
         entries: vec![SearchEntry {
@@ -81,13 +79,14 @@ fn search_page_contains_offline_index_and_safe_filtering_hooks() {
 #[test]
 fn empty_search_index_explains_that_there_is_nothing_to_search() {
     let page = SearchIndexPage {
-        id: PageId::new(PageKind::SearchIndex, "default"),
         scope: "default".to_string(),
         title: "Search".to_string(),
         entries: vec![],
     };
     let html = render_search("default", &page);
     assert!(html.contains("No requirements or rules are available to search."));
+    assert!(html.contains("id=\"search-summary\""), "{html}");
+    assert!(html.contains("id=\"search-results\""), "{html}");
 }
 
 #[test]
@@ -103,7 +102,6 @@ fn requirement_domain_classification_links_back_to_its_topic_group() {
 #[test]
 fn search_results_disambiguate_colliding_titles_with_stable_ids() {
     let page = SearchIndexPage {
-        id: PageId::new(PageKind::SearchIndex, "default"),
         scope: "default".to_string(),
         title: "Search".to_string(),
         entries: vec![

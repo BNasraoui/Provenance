@@ -14,7 +14,7 @@ pub use provenance_store::cache::GapKind;
 use serde::Serialize;
 
 mod discovery;
-pub use discovery::{SearchEntry, SearchIndexPage, TopicGroup, TopicIndexPage};
+pub use discovery::{SearchEntry, SearchIndexPage, Topic, TopicGroup, TopicIndexPage};
 
 /// The kind of page an id refers to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -43,21 +43,6 @@ impl PageId {
             kind,
             record_id: record_id.into(),
         }
-    }
-
-    /// The canonical route for this page, mirroring the docs server's
-    /// trailing-slash convention.
-    pub fn route(&self) -> String {
-        let prefix = match self.kind {
-            PageKind::ScopeIndex => return "/".to_string(),
-            PageKind::TopicIndex => return "/topics/".to_string(),
-            PageKind::SearchIndex => return "/search/".to_string(),
-            PageKind::Requirement => "requirements",
-            PageKind::Resolution => "resolutions",
-            PageKind::Rule => "rules",
-            PageKind::Source => "sources",
-        };
-        format!("/{prefix}/{}/", self.record_id)
     }
 }
 
@@ -113,7 +98,6 @@ pub struct IndexEntry {
 /// orphans.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ScopeIndexPage {
-    pub id: PageId,
     pub scope: String,
     pub title: String,
     pub counts: CorpusCounts,
@@ -338,75 +322,4 @@ pub struct WikiCorpus {
     pub resolutions: Vec<ResolutionPage>,
     pub rules: Vec<RulePage>,
     pub sources: Vec<SourcePage>,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn page_id_routes_the_scope_index_to_the_root() {
-        assert_eq!(PageId::new(PageKind::ScopeIndex, "default").route(), "/");
-    }
-
-    #[test]
-    fn page_id_routes_records_under_their_kind() {
-        assert_eq!(
-            PageId::new(PageKind::Requirement, "req_split").route(),
-            "/requirements/req_split/"
-        );
-        assert_eq!(
-            PageId::new(PageKind::Resolution, "res_split").route(),
-            "/resolutions/res_split/"
-        );
-        assert_eq!(
-            PageId::new(PageKind::Rule, "rule_sah_inv_001").route(),
-            "/rules/rule_sah_inv_001/"
-        );
-        assert_eq!(
-            PageId::new(PageKind::Source, "source_schads").route(),
-            "/sources/source_schads/"
-        );
-        assert_eq!(
-            PageId::new(PageKind::TopicIndex, "default").route(),
-            "/topics/"
-        );
-        assert_eq!(
-            PageId::new(PageKind::SearchIndex, "default").route(),
-            "/search/"
-        );
-    }
-
-    #[test]
-    fn search_matches_all_case_insensitive_terms_across_titles_and_statements() {
-        let index = SearchIndexPage {
-            id: PageId::new(PageKind::SearchIndex, "default"),
-            scope: "default".to_string(),
-            title: "Search".to_string(),
-            entries: vec![
-                SearchEntry {
-                    link: PageLink {
-                        target: PageId::new(PageKind::Requirement, "req_invoice"),
-                        title: "Invoice settlement".to_string(),
-                    },
-                    kind: PageKind::Requirement,
-                    statement: "Claims shall settle nightly".to_string(),
-                },
-                SearchEntry {
-                    link: PageLink {
-                        target: PageId::new(PageKind::Rule, "rule_claim"),
-                        title: "Claim guard".to_string(),
-                    },
-                    kind: PageKind::Rule,
-                    statement: "Invoice claims require a participant".to_string(),
-                },
-            ],
-        };
-
-        let matches = index.search("INVOICE participant");
-        assert_eq!(matches.len(), 1);
-        assert_eq!(matches[0].link.target.record_id, "rule_claim");
-        assert!(index.search("missing phrase").is_empty());
-        assert!(index.search("   ").is_empty());
-    }
 }

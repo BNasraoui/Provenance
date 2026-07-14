@@ -9,7 +9,8 @@
 use crate::gitignore;
 use crate::output::{self, OutputFormat};
 use crate::wiki::assemble;
-use crate::wiki::render::{self, RenderedPage, SEARCH_INDEX_ROUTE, WIKI_CSS_ROUTE};
+use crate::wiki::render::routes::{normalize_request_path, static_page_path, WIKI_CSS_ROUTE};
+use crate::wiki::render::{self, RenderedPage};
 use crate::wiki::theme;
 use anyhow::Context;
 use axum::{
@@ -29,11 +30,11 @@ use std::sync::Arc;
 /// Trailing slash marks it as a directory, matching the existing
 /// `.provenance/cache/` entry.
 const WIKI_GITIGNORE_PATTERN: &str = ".provenance/wiki/";
+const LEGACY_SEARCH_INDEX_PATH: &str = "assets/search-index.json";
 
 struct WikiSite {
     scope: String,
     page_by_route: BTreeMap<String, RenderedPage>,
-    search_index: String,
 }
 
 #[derive(Serialize)]
@@ -75,8 +76,8 @@ pub fn build(
     };
     let repo_hint = repo.clone();
     let corpus = assemble::load_corpus(repo, scope)?;
-    let search_index = serialize_search_index(&corpus.search)?;
     let pages = render::render_corpus(&corpus);
+    remove_legacy_search_index(&out)?;
 
     // Each page is written independently: a page-specific failure (a
     // colliding path, a permissions error) shouldn't hide every other page
@@ -99,10 +100,6 @@ pub fn build(
         .with_context(|| format!("failed to create wiki output directory {stylesheet_dir}"))?;
     std::fs::write(&stylesheet_path, theme::WIKI_CSS)
         .with_context(|| format!("failed to write wiki stylesheet {stylesheet_path}"))?;
-    let search_index_path = out.join(SEARCH_INDEX_ROUTE.trim_start_matches('/'));
-    std::fs::write(&search_index_path, search_index)
-        .with_context(|| format!("failed to write wiki search index {search_index_path}"))?;
-
     let page_count = pages.len();
     let failure_count = failures.len();
     let report = WikiBuildReport {
@@ -126,6 +123,17 @@ pub fn build(
         "{failure_count} of {page_count} wiki pages failed to write"
     );
     Ok(())
+}
+
+fn remove_legacy_search_index(out: &Utf8PathBuf) -> anyhow::Result<()> {
+    let path = out.join(LEGACY_SEARCH_INDEX_PATH);
+    match std::fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => {
+            Err(error).with_context(|| format!("failed to remove legacy wiki asset {path}"))
+        }
+    }
 }
 
 fn write_page(out: &Utf8PathBuf, page: &RenderedPage) -> anyhow::Result<()> {
@@ -193,7 +201,6 @@ pub async fn serve(
 impl WikiSite {
     fn load(repo: Utf8PathBuf, scope: String) -> anyhow::Result<Self> {
         let corpus = assemble::load_corpus(repo, scope)?;
-        let search_index = serialize_search_index(&corpus.search)?;
         let page_by_route = render::render_corpus(&corpus)
             .into_iter()
             .map(|page| (page.route.clone(), page))
@@ -201,19 +208,17 @@ impl WikiSite {
         Ok(Self {
             scope: corpus.scope,
             page_by_route,
-            search_index,
         })
     }
 
     fn page_for_request_path(&self, path: &str) -> Option<&RenderedPage> {
-        self.page_by_route.get(&normalize_request_route(path))
+        self.page_by_route.get(&normalize_request_path(path))
     }
 }
 
 fn router(site: WikiSite) -> Router {
     Router::new()
         .route(WIKI_CSS_ROUTE, get(stylesheet))
-        .route(SEARCH_INDEX_ROUTE, get(search_index))
         .fallback(get(render_wiki_page))
         .with_state(Arc::new(site))
 }
@@ -223,17 +228,6 @@ async fn stylesheet() -> impl IntoResponse {
         [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
         theme::WIKI_CSS,
     )
-}
-
-async fn search_index(State(site): State<Arc<WikiSite>>) -> impl IntoResponse {
-    (
-        [(header::CONTENT_TYPE, "application/json; charset=utf-8")],
-        site.search_index.clone(),
-    )
-}
-
-fn serialize_search_index(page: &crate::wiki::model::SearchIndexPage) -> anyhow::Result<String> {
-    serde_json::to_string_pretty(&page.entries).context("failed to serialize wiki search index")
 }
 
 async fn render_wiki_page(State(site): State<Arc<WikiSite>>, uri: Uri) -> impl IntoResponse {
@@ -248,63 +242,4 @@ async fn render_wiki_page(State(site): State<Arc<WikiSite>>, uri: Uri) -> impl I
         },
         |page| Html(page.html.clone()).into_response(),
     )
-}
-
-/// Maps a wiki route to its file in the static output tree: `/` becomes
-/// `<out>/index.html`, `/requirements/<id>/` becomes
-/// `<out>/requirements/<id>/index.html`.
-fn static_page_path(out: &Utf8PathBuf, route: &str) -> Utf8PathBuf {
-    let mut path = out.clone();
-    for segment in route.split('/').filter(|segment| !segment.is_empty()) {
-        path.push(segment);
-    }
-    path.push("index.html");
-    path
-}
-
-fn normalize_request_route(path: &str) -> String {
-    let mut route = String::from("/");
-    route.push_str(path.trim_matches('/'));
-    if !route.ends_with('/') {
-        route.push('/');
-    }
-    route
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{normalize_request_route, static_page_path};
-    use camino::Utf8PathBuf;
-
-    #[test]
-    fn static_page_path_maps_index_route_to_root_index_html() {
-        let out = Utf8PathBuf::from("site");
-        assert_eq!(
-            static_page_path(&out, "/"),
-            Utf8PathBuf::from("site/index.html")
-        );
-    }
-
-    #[test]
-    fn static_page_path_maps_nested_routes_to_directory_index_html() {
-        let out = Utf8PathBuf::from("site");
-        assert_eq!(
-            static_page_path(&out, "/requirements/req_sah/"),
-            Utf8PathBuf::from("site/requirements/req_sah/index.html")
-        );
-    }
-
-    #[test]
-    fn normalize_request_route_adds_missing_slashes() {
-        assert_eq!(
-            normalize_request_route("/requirements/req_sah"),
-            "/requirements/req_sah/"
-        );
-        assert_eq!(
-            normalize_request_route("requirements/req_sah/"),
-            "/requirements/req_sah/"
-        );
-        assert_eq!(normalize_request_route("/"), "/");
-        assert_eq!(normalize_request_route(""), "/");
-    }
 }

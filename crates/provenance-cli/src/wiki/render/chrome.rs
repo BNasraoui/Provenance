@@ -1,10 +1,10 @@
-use super::WIKI_CSS_ROUTE;
 use crate::wiki::model::{LineageEntry, PageKind};
 use crate::wiki::theme::{ICON_DEFS, SEARCH_SCRIPT, THEME_SCRIPT};
 use std::fmt::Write as _;
 
 use super::html::{escape_attr, escape_html, icon_svg};
 use super::labels::{kind_class, kind_icon, kind_label};
+use super::routes::WikiRoute;
 
 pub(in crate::wiki::render) fn page_shell(
     scope: &str,
@@ -63,8 +63,12 @@ fn page_shell_with_script(
         escape_html(title)
     )
     .expect("writing to a String should not fail");
-    writeln!(html, "<link rel=\"stylesheet\" href=\"{WIKI_CSS_ROUTE}\">")
-        .expect("writing to a String should not fail");
+    writeln!(
+        html,
+        "<link rel=\"stylesheet\" href=\"{}\">",
+        WikiRoute::Stylesheet.path()
+    )
+    .expect("writing to a String should not fail");
     html.push_str("</head>\n<body>\n");
     html.push_str(ICON_DEFS.trim_start_matches('\n'));
     html.push_str("<header class=\"chrome\">\n<div class=\"chrome-inner\">\n");
@@ -76,11 +80,16 @@ fn page_shell_with_script(
     .expect("writing to a String should not fail");
     writeln!(html, "<nav aria-label=\"Breadcrumb\">{breadcrumb}</nav>")
         .expect("writing to a String should not fail");
-    html.push_str(
+    writeln!(
+        html,
         "<nav class=\"global-nav\" aria-label=\"Wiki\">\
-         <a href=\"/\">Atlas</a><a href=\"/topics/\">Topics</a>\
-         <a href=\"/search/\">Search</a></nav>\n",
-    );
+         <a href=\"{}\">Atlas</a><a href=\"{}\">Topics</a>\
+         <a href=\"{}\">Search</a></nav>",
+        WikiRoute::Index.path(),
+        WikiRoute::Topics.path(),
+        WikiRoute::Search.path(),
+    )
+    .expect("writing to a String should not fail");
     html.push_str(
         "<label class=\"theme-select\">Theme\n<select id=\"theme-select\">\n\
          <option value=\"statesman\" selected>Statesman</option>\n\
@@ -189,5 +198,9 @@ pub(in crate::wiki::render) fn breadcrumb_from_lineage(lineage: &[LineageEntry])
 }
 
 pub(in crate::wiki::render) fn index_breadcrumb(scope: &str) -> String {
-    format!("<a href=\"/\">{}</a>", escape_html(scope))
+    format!(
+        "<a href=\"{}\">{}</a>",
+        WikiRoute::Index.path(),
+        escape_html(scope)
+    )
 }

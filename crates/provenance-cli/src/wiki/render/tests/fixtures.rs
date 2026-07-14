@@ -3,7 +3,7 @@ use crate::wiki::model::{
     CorpusCounts, DecisionSection, EvidenceThread, FieldNote, GapKind, GapNotice, IndexEntry,
     InputCitation, LineageEntry, OrphanReport, PageId, PageKind, PageLink, RequirementPage,
     ResolutionPage, RuleCard, RulePage, ScopeIndexPage, SearchEntry, SearchIndexPage,
-    SourceCitation, SourcePage, TopicGroup, TopicIndexPage, WikiCorpus,
+    SourceCitation, SourcePage, Topic, TopicGroup, TopicIndexPage, WikiCorpus,
 };
 use provenance_core::{
     MessageRole, NodeType, RequirementStatus, ResolutionInputType, ResolutionStatus, RuleModality,
@@ -310,7 +310,6 @@ pub(super) fn source_fixture() -> SourcePage {
 
 pub(super) fn index_fixture() -> ScopeIndexPage {
     ScopeIndexPage {
-        id: PageId::new(PageKind::ScopeIndex, "default"),
         scope: "default".to_string(),
         title: "Provenance atlas — default".to_string(),
         counts: CorpusCounts {
@@ -345,15 +344,14 @@ pub(super) fn corpus_fixture() -> WikiCorpus {
         scope: "default".to_string(),
         index: index_fixture(),
         topics: TopicIndexPage {
-            id: PageId::new(PageKind::TopicIndex, "default"),
             scope: "default".to_string(),
             title: "Topics by domain".to_string(),
             groups: vec![TopicGroup {
-                domain_id: Some("dom_invoicing".to_string()),
-                anchor: "domain-dom_invoicing".to_string(),
-                name: "Invoicing".to_string(),
-                description: Some("Claim and invoice settlement".to_string()),
-                missing: false,
+                topic: Topic::Defined {
+                    id: "dom_invoicing".to_string(),
+                    name: "Invoicing".to_string(),
+                    description: Some("Claim and invoice settlement".to_string()),
+                },
                 requirements: vec![link(
                     PageKind::Requirement,
                     "req_saveinvoice_split",
@@ -363,7 +361,6 @@ pub(super) fn corpus_fixture() -> WikiCorpus {
             }],
         },
         search: SearchIndexPage {
-            id: PageId::new(PageKind::SearchIndex, "default"),
             scope: "default".to_string(),
             title: "Search requirements and rules".to_string(),
             entries: vec![

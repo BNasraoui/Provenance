@@ -1,4 +1,4 @@
-use crate::wiki::model::{CorpusCounts, OrphanReport, PageId, PageKind, ScopeIndexPage};
+use crate::wiki::model::{CorpusCounts, OrphanReport, PageKind, ScopeIndexPage};
 use provenance_core::RequirementStatus;
 
 use super::super::{
@@ -127,7 +127,6 @@ fn index_page_keeps_unique_root_links_unchanged() {
 #[test]
 fn index_page_on_a_truly_empty_scope_shows_the_honest_empty_state() {
     let page = ScopeIndexPage {
-        id: PageId::new(PageKind::ScopeIndex, "default"),
         scope: "default".to_string(),
         title: "Provenance atlas — default".to_string(),
         counts: CorpusCounts::default(),

@@ -1,8 +1,9 @@
-use crate::wiki::model::{PageKind, TopicIndexPage};
+use crate::wiki::model::{PageKind, Topic, TopicIndexPage};
 use std::fmt::Write as _;
 
 use super::super::chrome::{container_html, index_breadcrumb, page_shell, title_row};
 use super::super::html::{escape_attr, escape_html, link_list};
+use super::super::routes::{topic_anchor, UNASSIGNED_TOPIC_ANCHOR};
 
 pub fn render_topics(scope: &str, page: &TopicIndexPage) -> String {
     let mut main = String::new();
@@ -12,15 +13,42 @@ pub fn render_topics(scope: &str, page: &TopicIndexPage) -> String {
         );
     }
     for group in &page.groups {
+        let (anchor, name, domain_id, description, gap) = match &group.topic {
+            Topic::Defined {
+                id,
+                name,
+                description,
+            } => (
+                topic_anchor(id),
+                name.as_str(),
+                Some(id.as_str()),
+                description.as_deref(),
+                false,
+            ),
+            Topic::Missing { id } => (
+                topic_anchor(id),
+                "Missing domain",
+                Some(id.as_str()),
+                None,
+                true,
+            ),
+            Topic::Unassigned => (
+                UNASSIGNED_TOPIC_ANCHOR.to_string(),
+                "Unassigned",
+                None,
+                Some("Records with no domain, or rules with no domain-backed requirement provenance."),
+                true,
+            ),
+        };
         writeln!(
             main,
             "<section class=\"topic-group{}\" id=\"{}\">\n<h2>{}</h2>",
-            if group.missing { " topic-gap" } else { "" },
-            escape_attr(&group.anchor),
-            escape_html(&group.name)
+            if gap { " topic-gap" } else { "" },
+            escape_attr(&anchor),
+            escape_html(name)
         )
         .expect("writing to a String should not fail");
-        if let Some(domain_id) = &group.domain_id {
+        if let Some(domain_id) = domain_id {
             writeln!(
                 main,
                 "<code class=\"domain-id\">{}</code>",
@@ -28,11 +56,11 @@ pub fn render_topics(scope: &str, page: &TopicIndexPage) -> String {
             )
             .expect("writing to a String should not fail");
         }
-        if let Some(description) = &group.description {
+        if let Some(description) = description {
             writeln!(main, "<p class=\"prose\">{}</p>", escape_html(description))
                 .expect("writing to a String should not fail");
         }
-        if group.missing {
+        if gap {
             main.push_str(
                 "<p class=\"data-note\">Domain metadata is missing or unassigned; membership shown here follows the available provenance.</p>\n",
             );
