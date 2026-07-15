@@ -25,11 +25,11 @@ keeping **all** evidence sites, challenge every candidate, and land everything a
    `file_path` + `line`; other evidence types do not require file locations. Speculation is
    explicitly marked `unsupported`/`exploratory`; uncertainty is rated with a rationale.
 4. **Only the orchestrator lands this run.** State uses sorted JSONL shards under
-   `.provenance/state/`. Concurrent mutations of one shard serialize through an advisory
-   lock, preventing lost updates, and atomic shard replacement gives readers a complete old
-   or new shard; this is shard-level protection, not a multi-command transaction. Subagents
-   still return structured findings so the orchestrator can deduplicate, validate, and land
-   one coherent run through the CLI.
+   `.provenance/state/`. A state mutation publishes its shard replacements through one
+   exclusive generation transaction; cooperating generation snapshot/export readers see
+   the complete old or new generation. The transaction boundary is one `StateStore`
+   mutation, not a sequence of CLI commands, so subagents still return structured findings
+   for the orchestrator to deduplicate, validate, and land in one CLI operation.
 
 ## Pipeline
 
@@ -220,11 +220,14 @@ paths changed. `moved` citations can be reviewed for a location update; `vanishe
 `unverifiable` citations require the relevant candidate batch to be refuted again.
 Normal proposed requirement candidates targeting the codebase Source remain
 proposal-owned evidence in an unfiltered review; they do not acquire a fabricated
-requirement ID. Requirement/rule filters retain them only after explicit target or
-accepted canonical Requirement ownership exists.
+requirement ID. Proposal ownership requires the target Source ID to equal the sole
+`traceability.source_ids` entry; a mismatched site is excluded with a diagnostic. Requirement/rule
+filters retain them only after explicit target or accepted canonical Requirement
+ownership exists.
 `contradictions` identifies accepted requirement candidates that lost cited support, but
 is a review trigger rather than an automatic reversal. The command is read-only and does
 not relax the proposed-only or human-promotion rules above. CI may provide an explicit
 `--base <revision> --head <revision>` range; the base is used directly for every diff
-and is not calculated as a merge base. Details and limits are in
+and for `--min-age-days` effective-age checks, and is not calculated as a merge base.
+Details and limits are in
 `docs/incremental-backtrace.md`.

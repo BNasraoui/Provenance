@@ -4,8 +4,8 @@ use crate::state_store::{
     CreateQuestionInput, CreateResolutionInput, CreateSourceInput, CreateTopicInput, StateStore,
 };
 use provenance_core::{
-    QuestionStatus, ResolutionInput, ResolutionInputType, ResolutionMethod, ResolutionStatus,
-    SourceType, TopicStatus,
+    Edge, EdgeType, NodeType, QuestionStatus, RepoPathPrefix, ResolutionInput, ResolutionInputType,
+    ResolutionMethod, ResolutionStatus, SchemaVersion, Scope, ScopeId, SourceType, TopicStatus,
 };
 
 #[tokio::test]
@@ -186,4 +186,72 @@ async fn materialize_state_caches_commit_pin_and_confidence_scores() {
     );
     assert_eq!(confidence, Some(0.83));
     assert!(payload.contains(r#""confidence":0.87"#));
+}
+
+#[tokio::test]
+async fn materialize_state_loads_the_complete_global_edge_set_once() {
+    let (_dir, layout, scope) = empty_layout();
+    let store = StateStore::new(layout.clone());
+    let mut manifest = store.manifest().unwrap();
+    manifest.scopes.push(Scope {
+        id: ScopeId::new("secondary").unwrap(),
+        path_prefix: RepoPathPrefix::new("secondary"),
+    });
+    std::fs::write(
+        layout.manifest_path(),
+        serde_json::to_string(&manifest).unwrap(),
+    )
+    .unwrap();
+    let edges = [
+        Edge {
+            schema_version: SchemaVersion(1),
+            scope_id: scope,
+            id: sid("edge_manifest_scope"),
+            edge_type: EdgeType::DependsOn,
+            from_type: NodeType::Requirement,
+            from_id: sid("req_one"),
+            to_type: NodeType::Requirement,
+            to_id: sid("req_two"),
+            label: None,
+        },
+        Edge {
+            schema_version: SchemaVersion(1),
+            scope_id: ScopeId::new("discovered").unwrap(),
+            id: sid("edge_discovered_scope"),
+            edge_type: EdgeType::DependsOn,
+            from_type: NodeType::Requirement,
+            from_id: sid("req_three"),
+            to_type: NodeType::Requirement,
+            to_id: sid("req_four"),
+            label: None,
+        },
+    ];
+    let path = crate::shards::edges_path(&layout);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(
+        path,
+        edges
+            .iter()
+            .map(|edge| serde_json::to_string(edge).unwrap())
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n",
+    )
+    .unwrap();
+
+    materialize_state(&layout).await.unwrap();
+    let pool = open_cache(&layout).await.unwrap();
+    let loaded: Vec<(String, i64)> =
+        sqlx::query_as("SELECT id, COUNT(*) FROM edges GROUP BY id ORDER BY id")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+
+    assert_eq!(
+        loaded,
+        vec![
+            ("edge_discovered_scope".into(), 1),
+            ("edge_manifest_scope".into(), 1),
+        ]
+    );
 }

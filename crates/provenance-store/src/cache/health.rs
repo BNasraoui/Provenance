@@ -1,4 +1,3 @@
-use crate::cache::find_gaps;
 use crate::layout::ProvenanceLayout;
 use crate::state_store::StateStore;
 use provenance_core::{EdgeType, NodeType, RequirementStatus};
@@ -35,14 +34,10 @@ pub fn coverage_health(
     layout: &ProvenanceLayout,
     scope: &provenance_core::ScopeId,
 ) -> anyhow::Result<HealthView> {
-    let store = StateStore::new(layout.clone());
-    let requirements = store.list_requirements(scope)?;
-    let rules = store.list_rules(scope)?;
-    let edges: Vec<_> = store
-        .list_edges()?
-        .into_iter()
-        .filter(|edge| edge.scope_id == *scope)
-        .collect();
+    let snapshot = StateStore::new(layout.clone()).scope_snapshot(scope)?;
+    let requirements = &snapshot.requirements;
+    let rules = &snapshot.rules;
+    let edges = &snapshot.edges;
     let source_linked_requirements = requirements
         .iter()
         .filter(|req| {
@@ -70,10 +65,10 @@ pub fn coverage_health(
             })
         })
         .count();
-    let orphan_count = orphan_rules(layout, scope)?.len();
+    let orphan_count = orphan_rules_in_snapshot(&snapshot).len();
     let with_complete_traceability = rules.len().saturating_sub(orphan_count);
-    let stale = crate::cache::find_stale(layout, scope)?.len();
-    let gaps = find_gaps(layout, scope)?.len();
+    let stale = crate::cache::stale::find_stale_in_current_snapshot(&snapshot)?.len();
+    let gaps = crate::cache::gaps::find_gaps_in_snapshot(&snapshot).len();
     Ok(HealthView {
         requirements: CountMetric {
             total: requirements.len(),
@@ -94,15 +89,15 @@ pub fn orphan_rules(
     layout: &ProvenanceLayout,
     scope: &provenance_core::ScopeId,
 ) -> anyhow::Result<Vec<OrphanRuleItem>> {
-    let store = StateStore::new(layout.clone());
-    let edges: Vec<_> = store
-        .list_edges()?
-        .into_iter()
-        .filter(|edge| edge.scope_id == *scope)
-        .collect();
-    Ok(store
-        .list_rules(scope)?
-        .into_iter()
+    let snapshot = StateStore::new(layout.clone()).scope_snapshot(scope)?;
+    Ok(orphan_rules_in_snapshot(&snapshot))
+}
+
+fn orphan_rules_in_snapshot(snapshot: &crate::state_store::ScopeSnapshot) -> Vec<OrphanRuleItem> {
+    let edges = &snapshot.edges;
+    snapshot
+        .rules
+        .iter()
         .filter_map(|rule| {
             let has_requirement = edges.iter().any(|edge| {
                 edge.edge_type == EdgeType::Produces
@@ -133,5 +128,5 @@ pub fn orphan_rules(
                 missing,
             })
         })
-        .collect())
+        .collect()
 }

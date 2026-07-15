@@ -1,16 +1,15 @@
 use super::index::CheckIndex;
 use super::references::node_type_name;
 use provenance_core::edge_validation::validate_edge_endpoint;
-use provenance_store::state_store::StateStore;
 use std::collections::BTreeSet;
 
 pub(super) fn validate(
-    store: &StateStore,
+    edges: &[provenance_core::Edge],
     manifest_scopes: &BTreeSet<String>,
     index: &CheckIndex,
     dangling: &mut Vec<String>,
-) -> anyhow::Result<()> {
-    for edge in store.list_edges()? {
+) {
+    for edge in edges {
         if !manifest_scopes.contains(edge.scope_id.as_str()) {
             dangling.push(format!(
                 "edge {} is in unknown scope {}",
@@ -41,5 +40,4 @@ pub(super) fn validate(
             ));
         }
     }
-    Ok(())
 }

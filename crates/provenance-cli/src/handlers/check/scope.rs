@@ -1,6 +1,6 @@
 use super::index::CheckIndex;
-use provenance_core::{Scope, ScopeId, StableId};
-use provenance_store::state_store::StateStore;
+use provenance_core::{ScopeId, StableId};
+use provenance_store::state_store::ScopeSnapshot;
 
 mod collaboration;
 mod core;
@@ -14,13 +14,16 @@ struct ScopeRecords {
 }
 
 impl ScopeRecords {
-    fn load(store: &StateStore, scope_id: &ScopeId) -> anyhow::Result<Self> {
-        Ok(Self {
-            scope_id: scope_id.clone(),
-            core: core::Records::load(store, scope_id)?,
-            collaboration: collaboration::Records::load(store, scope_id)?,
-            ideation: ideation::Records::load(store, scope_id)?,
-        })
+    fn load(mut snapshot: ScopeSnapshot) -> Self {
+        let scope_id = snapshot.scope.clone();
+        let collaboration = collaboration::Records::load(&mut snapshot);
+        let ideation = ideation::Records::load(&mut snapshot);
+        Self {
+            scope_id,
+            collaboration,
+            ideation,
+            core: core::Records::load(snapshot),
+        }
     }
 
     fn validate_scope_ownership(&self, findings: &mut Vec<String>) {
@@ -50,15 +53,14 @@ fn check_scope_ownership(
 }
 
 pub(super) fn validate(
-    store: &StateStore,
-    scopes: &[Scope],
+    snapshots: Vec<ScopeSnapshot>,
     index: &mut CheckIndex,
     dangling: &mut Vec<String>,
 ) -> anyhow::Result<()> {
-    let records = scopes
-        .iter()
-        .map(|scope| ScopeRecords::load(store, &scope.id))
-        .collect::<anyhow::Result<Vec<_>>>()?;
+    let records = snapshots
+        .into_iter()
+        .map(ScopeRecords::load)
+        .collect::<Vec<_>>();
 
     let mut ownership_findings = Vec::new();
     for scope in &records {

@@ -1,4 +1,4 @@
-use crate::cache::{find_gaps, GapItem};
+use crate::cache::GapItem;
 use crate::layout::ProvenanceLayout;
 use crate::state_store::StateStore;
 use provenance_core::{Edge, EdgeType, Message, Requirement, Rule, Source, Thread};
@@ -31,15 +31,16 @@ pub fn prime_context(
     scope: &provenance_core::ScopeId,
     include_threads: bool,
 ) -> anyhow::Result<PrimeContextView> {
-    let store = StateStore::new(layout.clone());
+    let snapshot = StateStore::new(layout.clone()).scope_snapshot(scope)?;
+    let gaps = crate::cache::gaps::find_gaps_in_snapshot(&snapshot);
     let threads = if include_threads {
-        let messages = store.list_messages(scope)?;
-        store
-            .list_threads(scope)?
+        snapshot
+            .threads
             .into_iter()
             .filter(|thread| thread.status == provenance_core::ThreadStatus::Active)
             .map(|thread| PrimeThreadView {
-                messages: messages
+                messages: snapshot
+                    .messages
                     .iter()
                     .filter(|message| message.thread_id == thread.id)
                     .cloned()
@@ -52,8 +53,8 @@ pub fn prime_context(
     };
     Ok(PrimeContextView {
         scope_id: scope.as_str().to_string(),
-        rules: store.list_rules(scope)?,
-        gaps: find_gaps(layout, scope)?,
+        gaps,
+        rules: snapshot.rules,
         threads,
     })
 }
@@ -93,27 +94,24 @@ pub fn get_requirement_graph(
     scope: &provenance_core::ScopeId,
     requirement_id: &provenance_core::StableId,
 ) -> anyhow::Result<RequirementGraphView> {
-    let store = StateStore::new(layout.clone());
-    let requirement = store
-        .list_requirements(scope)?
+    let snapshot = StateStore::new(layout.clone()).scope_snapshot(scope)?;
+    let requirement = snapshot
+        .requirements
         .into_iter()
         .find(|requirement| requirement.id == *requirement_id)
         .ok_or_else(|| anyhow::anyhow!("requirement not found"))?;
-    let edges: Vec<_> = store
-        .list_edges()?
+    let edges: Vec<_> = snapshot
+        .edges
         .into_iter()
-        .filter(|edge| {
-            edge.scope_id == *scope
-                && (edge.to_id == *requirement_id || edge.from_id == *requirement_id)
-        })
+        .filter(|edge| edge.to_id == *requirement_id || edge.from_id == *requirement_id)
         .collect();
     let source_ids: BTreeSet<_> = edges
         .iter()
         .filter(|edge| edge.edge_type == EdgeType::References && edge.to_id == *requirement_id)
         .map(|edge| edge.from_id.as_str().to_string())
         .collect();
-    let sources = store
-        .list_sources(scope)?
+    let sources = snapshot
+        .sources
         .into_iter()
         .filter(|source| source_ids.contains(source.id.as_str()))
         .collect();

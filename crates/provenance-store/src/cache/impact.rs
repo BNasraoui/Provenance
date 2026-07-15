@@ -40,11 +40,10 @@ pub fn analyze_impact(
     origin_id: &StableId,
     options: ImpactOptions,
 ) -> anyhow::Result<ImpactView> {
-    let store = StateStore::new(layout.clone());
-    let edges: Vec<_> = store
-        .list_edges()?
+    let edges: Vec<_> = StateStore::new(layout.clone())
+        .scope_snapshot(scope)?
+        .edges
         .into_iter()
-        .filter(|edge| edge.scope_id == *scope)
         .filter(|edge| {
             options.follow_indirect
                 || !matches!(

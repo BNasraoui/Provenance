@@ -3,7 +3,7 @@ use crate::handlers::check::references::{check_ideation_target, check_scoped_ref
 use provenance_core::{
     Contribution, PromotionDecisionRecord, ProposalCard, ScopeId, SynthesisPacket,
 };
-use provenance_store::state_store::StateStore;
+use provenance_store::state_store::ScopeSnapshot;
 
 pub(super) struct Records {
     contributions: Vec<Contribution>,
@@ -13,13 +13,13 @@ pub(super) struct Records {
 }
 
 impl Records {
-    pub(super) fn load(store: &StateStore, scope_id: &ScopeId) -> anyhow::Result<Self> {
-        Ok(Self {
-            contributions: store.list_contributions(scope_id)?,
-            synthesis_packets: store.list_synthesis_packets(scope_id)?,
-            proposal_cards: store.list_proposal_cards(scope_id)?,
-            promotion_decisions: store.list_promotion_decisions(scope_id)?,
-        })
+    pub(super) fn load(snapshot: &mut ScopeSnapshot) -> Self {
+        Self {
+            contributions: std::mem::take(&mut snapshot.contributions),
+            synthesis_packets: std::mem::take(&mut snapshot.synthesis_packets),
+            proposal_cards: std::mem::take(&mut snapshot.proposals),
+            promotion_decisions: std::mem::take(&mut snapshot.promotion_decisions),
+        }
     }
 
     pub(super) fn validate_scope_ownership(

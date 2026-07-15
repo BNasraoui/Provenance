@@ -263,7 +263,7 @@ impl StateStore {
             canonical_artifact,
         };
         anyhow::ensure!(
-            self.list_proposal_cards(&scope_id)?
+            self.list_proposal_cards_unlocked(&scope_id)?
                 .iter()
                 .any(|proposal| proposal.id == proposal_id),
             "proposal does not exist"
@@ -316,8 +316,18 @@ impl StateStore {
         scope_id: &ScopeId,
         proposal_id: &StableId,
     ) -> anyhow::Result<()> {
+        self.read_generation(|| {
+            self.ensure_proposal_card_replaceable_unlocked(scope_id, proposal_id)
+        })
+    }
+
+    fn ensure_proposal_card_replaceable_unlocked(
+        &self,
+        scope_id: &ScopeId,
+        proposal_id: &StableId,
+    ) -> anyhow::Result<()> {
         if let Some(existing) = self
-            .list_proposal_cards(scope_id)?
+            .list_proposal_cards_unlocked(scope_id)?
             .into_iter()
             .find(|proposal| proposal.id.as_str() == proposal_id.as_str())
         {
@@ -332,7 +342,7 @@ impl StateStore {
         existing: &ProposalCard,
     ) -> anyhow::Result<()> {
         let decisions = self
-            .list_promotion_decisions(scope_id)?
+            .list_promotion_decisions_unlocked(scope_id)?
             .into_iter()
             .filter(|decision| decision.proposal_id.as_str() == existing.id.as_str())
             .collect::<Vec<_>>();

@@ -179,6 +179,18 @@ fn proposal_ownership(
         return None;
     }
     if proposal.traceability.target.artifact_type == IdeationTargetType::Source {
+        if let [source_id] = proposal.traceability.source_ids.as_slice() {
+            let target_id = &proposal.traceability.target.artifact_id;
+            if source_id != target_id {
+                diagnostics.push(format!(
+                    "proposal {} targets source {} but its sole source_id is {}; its evidence sites were rejected",
+                    proposal.id.as_str(),
+                    target_id.as_str(),
+                    source_id.as_str()
+                ));
+                return None;
+            }
+        }
         return Some(RequirementOwnership::ProposalCandidate {
             proposal_id: proposal.id.clone(),
         });

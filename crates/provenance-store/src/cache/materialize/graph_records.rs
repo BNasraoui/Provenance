@@ -1,25 +1,22 @@
-use crate::{cache::serde_name, state_store::StateStore};
-use provenance_core::ScopeId;
+use crate::{cache::serde_name, state_store::ScopeSnapshot};
 use sqlx::{Sqlite, Transaction};
 
 pub(super) async fn load_scope(
     tx: &mut Transaction<'_, Sqlite>,
-    store: &StateStore,
-    scope: &ScopeId,
+    snapshot: &ScopeSnapshot,
 ) -> anyhow::Result<u64> {
-    let mut loaded = load_requirement_records(tx, store, scope).await?;
-    loaded += load_decision_records(tx, store, scope).await?;
-    loaded += load_service_records(tx, store, scope).await?;
+    let mut loaded = load_requirement_records(tx, snapshot).await?;
+    loaded += load_decision_records(tx, snapshot).await?;
+    loaded += load_service_records(tx, snapshot).await?;
     Ok(loaded)
 }
 
 async fn load_requirement_records(
     tx: &mut Transaction<'_, Sqlite>,
-    store: &StateStore,
-    scope: &ScopeId,
+    snapshot: &ScopeSnapshot,
 ) -> anyhow::Result<u64> {
     let mut loaded = 0;
-    for source in store.list_sources(scope)? {
+    for source in snapshot.sources.clone() {
         sqlx::query("INSERT INTO sources (scope_id, id, name, source_type, url, reference, commit_pin, effective_date, review_date, superseded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(source.scope_id.as_str()).bind(source.id.as_str()).bind(source.name)
             .bind(serde_name(&source.source_type)?).bind(source.url).bind(source.reference)
@@ -28,7 +25,7 @@ async fn load_requirement_records(
             .execute(&mut **tx).await?;
         loaded += 1;
     }
-    for requirement in store.list_requirements(scope)? {
+    for requirement in snapshot.requirements.clone() {
         sqlx::query("INSERT INTO requirements (scope_id, id, statement, status, domain_id, fog) VALUES (?, ?, ?, ?, ?, ?)")
             .bind(requirement.scope_id.as_str()).bind(requirement.id.as_str())
             .bind(requirement.statement).bind(serde_name(&requirement.status)?)
@@ -36,7 +33,7 @@ async fn load_requirement_records(
             .bind(requirement.fog).execute(&mut **tx).await?;
         loaded += 1;
     }
-    for domain in store.list_domains(scope)? {
+    for domain in snapshot.domains.clone() {
         sqlx::query(
             "INSERT INTO domains (scope_id, id, name, description, color) VALUES (?, ?, ?, ?, ?)",
         )
@@ -49,7 +46,7 @@ async fn load_requirement_records(
         .await?;
         loaded += 1;
     }
-    for boundary in store.list_boundaries(scope)? {
+    for boundary in snapshot.boundaries.clone() {
         let source_id = boundary
             .source_ref
             .as_ref()
@@ -69,11 +66,10 @@ async fn load_requirement_records(
 
 async fn load_decision_records(
     tx: &mut Transaction<'_, Sqlite>,
-    store: &StateStore,
-    scope: &ScopeId,
+    snapshot: &ScopeSnapshot,
 ) -> anyhow::Result<u64> {
     let mut loaded = 0;
-    for topic in store.list_topics(scope)? {
+    for topic in snapshot.topics.clone() {
         sqlx::query("INSERT INTO topics (scope_id, id, requirement_id, title, status, claimed_by, claimed_at, links) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(topic.scope_id.as_str()).bind(topic.id.as_str()).bind(topic.requirement_id.as_str())
             .bind(topic.title).bind(serde_name(&topic.status)?).bind(topic.claimed_by)
@@ -81,7 +77,7 @@ async fn load_decision_records(
             .execute(&mut **tx).await?;
         loaded += 1;
     }
-    for question in store.list_questions(scope)? {
+    for question in snapshot.questions.clone() {
         sqlx::query("INSERT INTO questions (scope_id, id, topic_id, requirement_id, question, resolution_method, status, claimed_by, claimed_at, answer, links, resolution_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(question.scope_id.as_str()).bind(question.id.as_str()).bind(question.topic_id.as_str())
             .bind(question.requirement_id.as_str()).bind(question.question)
@@ -92,7 +88,7 @@ async fn load_decision_records(
             .execute(&mut **tx).await?;
         loaded += 1;
     }
-    for resolution in store.list_resolutions(scope)? {
+    for resolution in snapshot.resolutions.clone() {
         sqlx::query("INSERT INTO resolutions (scope_id, id, title, position, rationale, status, review_on, review_triggers, context, enforcement, confidence, inputs, made_by, approved_by, approved_at, superseded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(resolution.scope_id.as_str()).bind(resolution.id.as_str()).bind(resolution.title)
             .bind(resolution.position).bind(resolution.rationale).bind(serde_name(&resolution.status)?)
@@ -104,7 +100,7 @@ async fn load_decision_records(
             .execute(&mut **tx).await?;
         loaded += 1;
     }
-    for rule in store.list_rules(scope)? {
+    for rule in snapshot.rules.clone() {
         sqlx::query("INSERT INTO rules (scope_id, id, rule_code, statement, status, severity, expression, inputs) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(rule.scope_id.as_str()).bind(rule.id.as_str()).bind(rule.rule_code)
             .bind(rule.statement).bind(serde_name(&rule.status)?).bind(serde_name(&rule.severity)?)
@@ -117,11 +113,10 @@ async fn load_decision_records(
 
 async fn load_service_records(
     tx: &mut Transaction<'_, Sqlite>,
-    store: &StateStore,
-    scope: &ScopeId,
+    snapshot: &ScopeSnapshot,
 ) -> anyhow::Result<u64> {
     let mut loaded = 0;
-    for service in store.list_services(scope)? {
+    for service in snapshot.services.clone() {
         sqlx::query("INSERT INTO services (scope_id, id, name, description, owner, repository, environment, tier, external_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(service.scope_id.as_str()).bind(service.id.as_str()).bind(service.name)
             .bind(service.description).bind(service.owner).bind(service.repository)
@@ -130,7 +125,7 @@ async fn load_service_records(
             .bind(serde_name(&service.status)?).execute(&mut **tx).await?;
         loaded += 1;
     }
-    for binding in store.list_service_bindings(scope)? {
+    for binding in snapshot.service_bindings.clone() {
         sqlx::query("INSERT INTO service_bindings (scope_id, id, rule_id, service_id, binding_type) VALUES (?, ?, ?, ?, ?)")
             .bind(binding.scope_id.as_str()).bind(binding.id.as_str()).bind(binding.rule_id.as_str())
             .bind(binding.service_id.as_str()).bind(serde_name(&binding.binding_type)?)
@@ -142,10 +137,10 @@ async fn load_service_records(
 
 pub(super) async fn load_edges(
     tx: &mut Transaction<'_, Sqlite>,
-    store: &StateStore,
+    edges: &[provenance_core::Edge],
 ) -> anyhow::Result<u64> {
     let mut loaded = 0;
-    for edge in store.list_edges()? {
+    for edge in edges {
         sqlx::query("INSERT INTO edges (scope_id, id, edge_type, from_type, from_id, to_type, to_id) VALUES (?, ?, ?, ?, ?, ?, ?)")
             .bind(edge.scope_id.as_str()).bind(edge.id.as_str()).bind(serde_name(&edge.edge_type)?)
             .bind(serde_name(&edge.from_type)?).bind(edge.from_id.as_str())

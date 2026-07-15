@@ -37,7 +37,7 @@ impl StateStore {
         let confidence = validate_optional_confidence_score(confidence)?;
         if let Some(requirement_id) = &requirement_id {
             anyhow::ensure!(
-                self.list_requirements(&scope_id)?
+                self.list_requirements_unlocked(&scope_id)?
                     .iter()
                     .any(|requirement| &requirement.id == requirement_id),
                 "requirement does not exist"
@@ -133,7 +133,7 @@ impl StateStore {
         let confidence = validate_optional_confidence_score(confidence)?;
         if let Some(requirement_id) = &requirement_id {
             anyhow::ensure!(
-                self.list_requirements(&scope_id)?
+                self.list_requirements_unlocked(&scope_id)?
                     .iter()
                     .any(|requirement| &requirement.id == requirement_id),
                 "requirement does not exist"
@@ -141,7 +141,7 @@ impl StateStore {
         }
         if let Some(resolution_id) = &resolution_id {
             anyhow::ensure!(
-                self.list_resolutions(&scope_id)?
+                self.list_resolutions_unlocked(&scope_id)?
                     .iter()
                     .any(|resolution| &resolution.id == resolution_id),
                 "resolution does not exist"

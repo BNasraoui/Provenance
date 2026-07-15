@@ -98,6 +98,18 @@ fn find_stale_in_snapshot(
         .collect()
 }
 
+pub(super) fn find_stale_in_current_snapshot(
+    snapshot: &ScopeSnapshot,
+) -> anyhow::Result<Vec<StaleResolution>> {
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?;
+    let now = UnixMillis(u64::try_from(now.as_millis())?);
+    Ok(find_stale_in_snapshot(
+        snapshot,
+        &StaleResolutionPolicy::default(),
+        now,
+    ))
+}
+
 fn old_enough(approved_at: Option<i64>, min_age_days: u32, now: UnixMillis) -> bool {
     if min_age_days == 0 {
         return true;

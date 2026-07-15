@@ -5,7 +5,7 @@ use crate::handlers::check::references::{
 use provenance_core::{
     Boundary, Domain, Question, Requirement, Resolution, Rule, ScopeId, Source, Topic,
 };
-use provenance_store::state_store::StateStore;
+use provenance_store::state_store::ScopeSnapshot;
 
 pub(super) struct Records {
     sources: Vec<Source>,
@@ -19,17 +19,17 @@ pub(super) struct Records {
 }
 
 impl Records {
-    pub(super) fn load(store: &StateStore, scope_id: &ScopeId) -> anyhow::Result<Self> {
-        Ok(Self {
-            sources: store.list_sources(scope_id)?,
-            domains: store.list_domains(scope_id)?,
-            requirements: store.list_requirements(scope_id)?,
-            boundaries: store.list_boundaries(scope_id)?,
-            topics: store.list_topics(scope_id)?,
-            questions: store.list_questions(scope_id)?,
-            resolutions: store.list_resolutions(scope_id)?,
-            rules: store.list_rules(scope_id)?,
-        })
+    pub(super) fn load(snapshot: ScopeSnapshot) -> Self {
+        Self {
+            sources: snapshot.sources,
+            domains: snapshot.domains,
+            requirements: snapshot.requirements,
+            boundaries: snapshot.boundaries,
+            topics: snapshot.topics,
+            questions: snapshot.questions,
+            resolutions: snapshot.resolutions,
+            rules: snapshot.rules,
+        }
     }
 
     pub(super) fn validate_scope_ownership(

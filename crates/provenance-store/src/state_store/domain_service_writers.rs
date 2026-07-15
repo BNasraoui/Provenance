@@ -87,35 +87,37 @@ impl StateStore {
             service_id,
             binding_type,
         } = input;
-        anyhow::ensure!(
-            self.list_rules(&scope_id)?
-                .iter()
-                .any(|rule| rule.id == rule_id),
-            "rule does not exist"
-        );
-        anyhow::ensure!(
-            self.list_services(&scope_id)?
-                .iter()
-                .any(|service| service.id == service_id),
-            "service does not exist"
-        );
         let path = shards::service_bindings_path(&self.layout, &scope_id);
-        self.mutate_jsonl_records(&path, |records: &mut Vec<ServiceBinding>| {
-            let binding = ServiceBinding {
-                schema_version: SchemaVersion(1),
-                scope_id: scope_id.clone(),
-                id: ServiceBinding::stable_id(&rule_id, &service_id, binding_type)?,
-                rule_id,
-                service_id,
-                binding_type,
-            };
+        self.write_transaction(|transaction| {
             anyhow::ensure!(
-                !records.iter().any(|record| record.id == binding.id),
-                "service binding already exists"
+                self.list_rules_unlocked(&scope_id)?
+                    .iter()
+                    .any(|rule| rule.id == rule_id),
+                "rule does not exist"
             );
-            records.push(binding.clone());
-            records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-            Ok(binding)
+            anyhow::ensure!(
+                self.list_services_unlocked(&scope_id)?
+                    .iter()
+                    .any(|service| service.id == service_id),
+                "service does not exist"
+            );
+            transaction.mutate_jsonl(&path, |records: &mut Vec<ServiceBinding>| {
+                let binding = ServiceBinding {
+                    schema_version: SchemaVersion(1),
+                    scope_id: scope_id.clone(),
+                    id: ServiceBinding::stable_id(&rule_id, &service_id, binding_type)?,
+                    rule_id,
+                    service_id,
+                    binding_type,
+                };
+                anyhow::ensure!(
+                    !records.iter().any(|record| record.id == binding.id),
+                    "service binding already exists"
+                );
+                records.push(binding.clone());
+                records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+                Ok(binding)
+            })
         })
     }
 }

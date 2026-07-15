@@ -5,4 +5,4 @@ pub mod merge;
 pub mod migrations;
 pub mod shards;
 pub mod state_store;
-pub mod transaction;
+mod transaction;

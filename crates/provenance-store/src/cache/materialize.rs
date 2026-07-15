@@ -19,17 +19,16 @@ pub async fn materialize_empty_state(
 pub async fn materialize_state(layout: &ProvenanceLayout) -> anyhow::Result<MaterializeReport> {
     let pool = open_cache(layout).await?;
     let migrations_applied = migrations::run_migrations(&pool).await?;
-    let store = StateStore::new(layout.clone());
-    let manifest = store.manifest()?;
+    let snapshot = StateStore::new(layout.clone()).repository_snapshot()?;
     let mut tx = pool.begin().await?;
     clear_cache(&mut tx).await?;
 
     let mut records_loaded = 0;
-    for scope in &manifest.scopes {
-        records_loaded += graph_records::load_scope(&mut tx, &store, &scope.id).await?;
-        records_loaded += collaboration_records::load_scope(&mut tx, &store, &scope.id).await?;
+    for scope in &snapshot.scopes {
+        records_loaded += graph_records::load_scope(&mut tx, scope).await?;
+        records_loaded += collaboration_records::load_scope(&mut tx, scope).await?;
     }
-    records_loaded += graph_records::load_edges(&mut tx, &store).await?;
+    records_loaded += graph_records::load_edges(&mut tx, &snapshot.edges).await?;
     tx.commit().await?;
 
     Ok(MaterializeReport {

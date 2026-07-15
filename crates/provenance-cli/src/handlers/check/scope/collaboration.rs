@@ -1,7 +1,7 @@
 use crate::handlers::check::index::CheckIndex;
 use crate::handlers::check::references::{check_scoped_reference, node_type_name};
 use provenance_core::{Message, ScopeId, Service, ServiceBinding, Thread};
-use provenance_store::state_store::StateStore;
+use provenance_store::state_store::ScopeSnapshot;
 
 pub(super) struct Records {
     services: Vec<Service>,
@@ -11,13 +11,13 @@ pub(super) struct Records {
 }
 
 impl Records {
-    pub(super) fn load(store: &StateStore, scope_id: &ScopeId) -> anyhow::Result<Self> {
-        Ok(Self {
-            services: store.list_services(scope_id)?,
-            service_bindings: store.list_service_bindings(scope_id)?,
-            threads: store.list_threads(scope_id)?,
-            messages: store.list_messages(scope_id)?,
-        })
+    pub(super) fn load(snapshot: &mut ScopeSnapshot) -> Self {
+        Self {
+            services: std::mem::take(&mut snapshot.services),
+            service_bindings: std::mem::take(&mut snapshot.service_bindings),
+            threads: std::mem::take(&mut snapshot.threads),
+            messages: std::mem::take(&mut snapshot.messages),
+        }
     }
 
     pub(super) fn validate_scope_ownership(

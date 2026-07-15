@@ -1,28 +1,30 @@
 mod domain_service_writers;
 mod ideation_writers;
+mod readers;
 mod rule_writers;
+mod scope_replacement;
 mod shaping_writers;
 mod snapshot;
 mod thread_writers;
 mod writers;
 
-use crate::{layout::ProvenanceLayout, shards};
-use anyhow::Context;
-use camino::{Utf8Path, Utf8PathBuf};
+use crate::layout::ProvenanceLayout;
+use camino::Utf8Path;
 use provenance_core::{
-    ArtifactLink, Boundary, CanonicalArtifact, ClaimChallenge, ConsensusFinding, ContestedClaim,
-    Contribution, ContributionStance, Domain, Edge, EdgeType, EvidenceGap,
-    IdeationEvidenceReference, IdeationTarget, Manifest, MaterialClaim, Message, MessageRole,
-    MinorityObjection, NodeType, PromotionActor, PromotionDecision, PromotionDecisionRecord,
-    PromotionState, ProposalCard, ProposalTraceability, ProposalType, Question, QuestionStatus,
-    RequiredHumanDecision, Requirement, RequirementStatus, Resolution, ResolutionInput,
-    ResolutionMethod, ResolutionStatus, Rule, RuleModality, RuleSeverity, RuleStatus, RuleType,
-    ScopeId, Service, ServiceBinding, ServiceBindingType, ServiceEnvironment, ServiceStatus,
-    ServiceTier, Source, SourceReference, SourceType, StableId, SuggestedArtifact,
-    SuggestedArtifactChange, SynthesisPacket, Thread, ThreadParent, Topic, TopicStatus,
+    ArtifactLink, CanonicalArtifact, ClaimChallenge, ConsensusFinding, ContestedClaim,
+    ContributionStance, EdgeType, EvidenceGap, IdeationEvidenceReference, IdeationTarget,
+    MaterialClaim, Message, MessageRole, MinorityObjection, NodeType, PromotionActor,
+    PromotionDecision, PromotionState, ProposalTraceability, ProposalType, QuestionStatus,
+    RequiredHumanDecision, RequirementStatus, ResolutionInput, ResolutionMethod, ResolutionStatus,
+    RuleModality, RuleSeverity, RuleStatus, RuleType, ScopeId, ServiceBindingType,
+    ServiceEnvironment, ServiceStatus, ServiceTier, SourceReference, SourceType, StableId,
+    SuggestedArtifact, SuggestedArtifactChange, Thread, ThreadParent, TopicStatus,
     UncertaintyRating, UnsupportedRecommendation, UnsupportedSpeculation,
 };
 use serde::{de::DeserializeOwned, Serialize};
+
+#[cfg(test)]
+use provenance_core::ProposalCard;
 
 #[derive(Debug, Clone)]
 pub struct StateStore {
@@ -31,7 +33,8 @@ pub struct StateStore {
     test_fail_commit_after: Option<usize>,
 }
 
-pub use snapshot::ScopeSnapshot;
+pub use scope_replacement::ScopeReplacement;
+pub use snapshot::{RepositorySnapshot, ScopeSnapshot};
 
 pub struct CreateSourceInput {
     pub scope_id: ScopeId,
@@ -260,87 +263,7 @@ impl StateStore {
             test_fail_commit_after: None,
         }
     }
-    pub fn manifest(&self) -> anyhow::Result<Manifest> {
-        Ok(serde_json::from_str(&std::fs::read_to_string(
-            self.layout.manifest_path(),
-        )?)?)
-    }
-
-    pub fn list_scope_directories(&self) -> anyhow::Result<Vec<String>> {
-        let scopes_dir = self.layout.scopes_dir();
-        if !scopes_dir.exists() {
-            return Ok(Vec::new());
-        }
-
-        let mut scope_directories = Vec::new();
-        for entry in std::fs::read_dir(scopes_dir)? {
-            let entry = entry?;
-            if entry.file_type()?.is_dir() {
-                scope_directories.push(entry.file_name().into_string().map_err(|name| {
-                    anyhow::anyhow!("non-UTF-8 scope directory name: {}", name.to_string_lossy())
-                })?);
-            }
-        }
-        scope_directories.sort();
-        Ok(scope_directories)
-    }
-
-    pub fn list_sources(&self, scope: &ScopeId) -> anyhow::Result<Vec<Source>> {
-        read_jsonl(&shards::sources_path(&self.layout, scope))
-    }
-    pub fn list_requirements(&self, scope: &ScopeId) -> anyhow::Result<Vec<Requirement>> {
-        read_jsonl(&shards::requirements_path(&self.layout, scope))
-    }
-    pub fn list_domains(&self, scope: &ScopeId) -> anyhow::Result<Vec<Domain>> {
-        read_jsonl(&shards::domains_path(&self.layout, scope))
-    }
-    pub fn list_boundaries(&self, scope: &ScopeId) -> anyhow::Result<Vec<Boundary>> {
-        read_jsonl(&shards::boundaries_path(&self.layout, scope))
-    }
-    pub fn list_topics(&self, scope: &ScopeId) -> anyhow::Result<Vec<Topic>> {
-        read_jsonl(&shards::topics_path(&self.layout, scope))
-    }
-    pub fn list_questions(&self, scope: &ScopeId) -> anyhow::Result<Vec<Question>> {
-        read_jsonl(&shards::questions_path(&self.layout, scope))
-    }
-    pub fn list_edges(&self) -> anyhow::Result<Vec<Edge>> {
-        read_edge_shards(&self.layout)
-    }
-    pub fn list_resolutions(&self, scope: &ScopeId) -> anyhow::Result<Vec<Resolution>> {
-        read_jsonl(&shards::resolutions_path(&self.layout, scope))
-    }
-    pub fn list_rules(&self, scope: &ScopeId) -> anyhow::Result<Vec<Rule>> {
-        read_jsonl(&shards::rules_path(&self.layout, scope))
-    }
-    pub fn list_services(&self, scope: &ScopeId) -> anyhow::Result<Vec<Service>> {
-        read_jsonl(&shards::services_path(&self.layout, scope))
-    }
-    pub fn list_service_bindings(&self, scope: &ScopeId) -> anyhow::Result<Vec<ServiceBinding>> {
-        read_jsonl(&shards::service_bindings_path(&self.layout, scope))
-    }
-    pub fn list_threads(&self, scope: &ScopeId) -> anyhow::Result<Vec<Thread>> {
-        read_jsonl(&shards::threads_path(&self.layout, scope))
-    }
-    pub fn list_messages(&self, scope: &ScopeId) -> anyhow::Result<Vec<Message>> {
-        read_message_shards(&self.layout, scope)
-    }
-    pub fn list_contributions(&self, scope: &ScopeId) -> anyhow::Result<Vec<Contribution>> {
-        read_jsonl(&shards::contributions_path(&self.layout, scope))
-    }
-    pub fn list_synthesis_packets(&self, scope: &ScopeId) -> anyhow::Result<Vec<SynthesisPacket>> {
-        read_jsonl(&shards::synthesis_packets_path(&self.layout, scope))
-    }
-    pub fn list_proposal_cards(&self, scope: &ScopeId) -> anyhow::Result<Vec<ProposalCard>> {
-        read_jsonl(&shards::proposal_cards_path(&self.layout, scope))
-    }
-    pub fn list_promotion_decisions(
-        &self,
-        scope: &ScopeId,
-    ) -> anyhow::Result<Vec<PromotionDecisionRecord>> {
-        read_jsonl(&shards::promotion_decisions_path(&self.layout, scope))
-    }
-
-    pub fn write_transaction<R>(
+    pub(crate) fn write_transaction<R>(
         &self,
         write: impl FnOnce(&mut crate::transaction::StateTransaction) -> anyhow::Result<R>,
     ) -> anyhow::Result<R> {
@@ -359,7 +282,7 @@ impl StateStore {
         Ok(result)
     }
 
-    pub fn read_generation<R>(
+    pub(crate) fn read_generation<R>(
         &self,
         read: impl FnOnce() -> anyhow::Result<R>,
     ) -> anyhow::Result<R> {
@@ -394,96 +317,6 @@ pub(crate) fn serde_name<T: serde::Serialize>(value: &T) -> anyhow::Result<Strin
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("expected string enum serialization"))?
         .to_string())
-}
-
-fn read_jsonl<T: DeserializeOwned>(path: &camino::Utf8Path) -> anyhow::Result<Vec<T>> {
-    if !path.exists() {
-        return Ok(Vec::new());
-    }
-    std::fs::read_to_string(path)?
-        .lines()
-        .map(|line| Ok(serde_json::from_str(line)?))
-        .collect()
-}
-
-fn read_jsonl_shards<T: DeserializeOwned>(
-    shard_paths: Vec<Utf8PathBuf>,
-    shard_kind: &str,
-) -> anyhow::Result<Vec<T>> {
-    let mut records = Vec::new();
-    for path in shard_paths {
-        let contents = std::fs::read_to_string(&path)
-            .with_context(|| format!("failed to read {shard_kind} shard {}", path.as_str()))?;
-        for (index, line) in contents.lines().enumerate() {
-            records.push(serde_json::from_str(line).with_context(|| {
-                format!(
-                    "failed to parse {shard_kind} shard {} line {}",
-                    path.as_str(),
-                    index + 1
-                )
-            })?);
-        }
-    }
-    Ok(records)
-}
-
-fn read_message_shards(layout: &ProvenanceLayout, scope: &ScopeId) -> anyhow::Result<Vec<Message>> {
-    let threads_dir = shards::threads_path(layout, scope)
-        .parent()
-        .expect("threads path must have a parent")
-        .to_path_buf();
-    if !threads_dir.exists() {
-        return Ok(Vec::new());
-    }
-
-    let mut shard_paths = Vec::new();
-    for entry in std::fs::read_dir(&threads_dir)? {
-        let entry = entry?;
-        if entry.file_type()?.is_file() {
-            let path = Utf8PathBuf::from_path_buf(entry.path()).map_err(|path| {
-                anyhow::anyhow!("non-UTF-8 message shard path: {}", path.display())
-            })?;
-            if is_message_month_shard(&path) {
-                shard_paths.push(path);
-            }
-        }
-    }
-    shard_paths.sort();
-    read_jsonl_shards(shard_paths, "message")
-}
-
-fn is_message_month_shard(path: &Utf8Path) -> bool {
-    let Some(file_name) = path.file_name() else {
-        return false;
-    };
-    let bytes = file_name.as_bytes();
-    bytes.len() == "2026-07.jsonl".len()
-        && bytes[0..4].iter().all(u8::is_ascii_digit)
-        && bytes[4] == b'-'
-        && bytes[5..7].iter().all(u8::is_ascii_digit)
-        && &bytes[7..] == b".jsonl"
-}
-
-fn read_edge_shards(layout: &ProvenanceLayout) -> anyhow::Result<Vec<Edge>> {
-    let edges_dir = layout.edges_dir();
-    if !edges_dir.exists() {
-        return Ok(Vec::new());
-    }
-
-    let mut shard_paths = Vec::new();
-    for entry in std::fs::read_dir(&edges_dir)? {
-        let entry = entry?;
-        if entry.file_type()?.is_file() {
-            let path = Utf8PathBuf::from_path_buf(entry.path())
-                .map_err(|path| anyhow::anyhow!("non-UTF-8 edge shard path: {}", path.display()))?;
-            if path.extension() == Some("jsonl") {
-                shard_paths.push(path);
-            }
-        }
-    }
-    shard_paths.sort();
-
-    read_jsonl_shards(shard_paths, "edge")
 }
 
 #[cfg(test)]

@@ -16,17 +16,13 @@ pub fn trace_rule(
     scope: &provenance_core::ScopeId,
     rule_id: &provenance_core::StableId,
 ) -> anyhow::Result<TraceabilityView> {
-    let store = StateStore::new(layout.clone());
-    let rule = store
-        .list_rules(scope)?
+    let snapshot = StateStore::new(layout.clone()).scope_snapshot(scope)?;
+    let rule = snapshot
+        .rules
         .into_iter()
         .find(|rule| rule.id == *rule_id)
         .ok_or_else(|| anyhow::anyhow!("rule not found"))?;
-    let edges: Vec<Edge> = store
-        .list_edges()?
-        .into_iter()
-        .filter(|edge| edge.scope_id == *scope)
-        .collect();
+    let edges: Vec<Edge> = snapshot.edges;
     let resolution_ids: Vec<_> = edges
         .iter()
         .filter(|edge| {
@@ -59,18 +55,18 @@ pub fn trace_rule(
         })
         .map(|edge| edge.from_id.clone())
         .collect();
-    let resolutions = store
-        .list_resolutions(scope)?
+    let resolutions = snapshot
+        .resolutions
         .into_iter()
         .filter(|resolution| resolution_ids.iter().any(|id| id == &resolution.id))
         .collect();
-    let requirements = store
-        .list_requirements(scope)?
+    let requirements = snapshot
+        .requirements
         .into_iter()
         .filter(|requirement| requirement_ids.iter().any(|id| id == &requirement.id))
         .collect();
-    let sources = store
-        .list_sources(scope)?
+    let sources = snapshot
+        .sources
         .into_iter()
         .filter(|source| source_ids.iter().any(|id| id == &source.id))
         .collect();

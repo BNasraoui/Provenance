@@ -2,6 +2,7 @@ use super::{
     CreateBoundaryInput, CreateQuestionInput, CreateTopicInput, StateStore, UpdateQuestionInput,
 };
 use crate::shards;
+use crate::transaction::StateTransaction;
 use provenance_core::{
     ArtifactLink, ArtifactLinkTargetType, Boundary, Question, QuestionStatus, SchemaVersion,
     ScopeId, StableId, Topic, TopicStatus,
@@ -16,37 +17,39 @@ impl StateStore {
             statement,
             source_ref,
         } = input;
-        anyhow::ensure!(
-            self.list_requirements(&scope_id)?
-                .iter()
-                .any(|requirement| requirement.id == requirement_id),
-            "requirement does not exist"
-        );
-        if let Some(source_ref) = &source_ref {
-            anyhow::ensure!(
-                self.list_sources(&scope_id)?
-                    .iter()
-                    .any(|source| source.id == source_ref.source_id),
-                "source does not exist"
-            );
-        }
         let path = shards::boundaries_path(&self.layout, &scope_id);
-        self.mutate_jsonl_records(&path, |records: &mut Vec<Boundary>| {
-            let boundary = Boundary {
-                schema_version: SchemaVersion(1),
-                scope_id: scope_id.clone(),
-                id,
-                requirement_id,
-                statement,
-                source_ref,
-            };
+        self.write_transaction(|transaction| {
             anyhow::ensure!(
-                !records.iter().any(|record| record.id == boundary.id),
-                "boundary already exists"
+                self.list_requirements_unlocked(&scope_id)?
+                    .iter()
+                    .any(|requirement| requirement.id == requirement_id),
+                "requirement does not exist"
             );
-            records.push(boundary.clone());
-            records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-            Ok(boundary)
+            if let Some(source_ref) = &source_ref {
+                anyhow::ensure!(
+                    self.list_sources_unlocked(&scope_id)?
+                        .iter()
+                        .any(|source| source.id == source_ref.source_id),
+                    "source does not exist"
+                );
+            }
+            transaction.mutate_jsonl(&path, |records: &mut Vec<Boundary>| {
+                let boundary = Boundary {
+                    schema_version: SchemaVersion(1),
+                    scope_id: scope_id.clone(),
+                    id,
+                    requirement_id,
+                    statement,
+                    source_ref,
+                };
+                anyhow::ensure!(
+                    !records.iter().any(|record| record.id == boundary.id),
+                    "boundary already exists"
+                );
+                records.push(boundary.clone());
+                records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+                Ok(boundary)
+            })
         })
     }
 
@@ -59,34 +62,36 @@ impl StateStore {
             status,
             mut links,
         } = input;
-        anyhow::ensure!(
-            self.list_requirements(&scope_id)?
-                .iter()
-                .any(|requirement| requirement.id == requirement_id),
-            "requirement does not exist"
-        );
-        self.validate_artifact_links(&scope_id, &links)?;
         sort_artifact_links(&mut links);
         let path = shards::topics_path(&self.layout, &scope_id);
-        self.mutate_jsonl_records(&path, |records: &mut Vec<Topic>| {
-            let topic = Topic {
-                schema_version: SchemaVersion(1),
-                scope_id: scope_id.clone(),
-                id,
-                requirement_id,
-                title,
-                status,
-                claimed_by: None,
-                claimed_at: None,
-                links,
-            };
+        self.write_transaction(|transaction| {
             anyhow::ensure!(
-                !records.iter().any(|record| record.id == topic.id),
-                "topic already exists"
+                self.list_requirements_unlocked(&scope_id)?
+                    .iter()
+                    .any(|requirement| requirement.id == requirement_id),
+                "requirement does not exist"
             );
-            records.push(topic.clone());
-            records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-            Ok(topic)
+            self.validate_artifact_links_locked(&scope_id, &links)?;
+            transaction.mutate_jsonl(&path, |records: &mut Vec<Topic>| {
+                let topic = Topic {
+                    schema_version: SchemaVersion(1),
+                    scope_id: scope_id.clone(),
+                    id,
+                    requirement_id,
+                    title,
+                    status,
+                    claimed_by: None,
+                    claimed_at: None,
+                    links,
+                };
+                anyhow::ensure!(
+                    !records.iter().any(|record| record.id == topic.id),
+                    "topic already exists"
+                );
+                records.push(topic.clone());
+                records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+                Ok(topic)
+            })
         })
     }
 
@@ -102,45 +107,47 @@ impl StateStore {
             mut links,
             resolution_id,
         } = input;
-        let topic = self
-            .list_topics(&scope_id)?
-            .into_iter()
-            .find(|topic| topic.id == topic_id)
-            .ok_or_else(|| anyhow::anyhow!("topic does not exist"))?;
-        if let Some(resolution_id) = &resolution_id {
-            anyhow::ensure!(
-                self.list_resolutions(&scope_id)?
-                    .iter()
-                    .any(|resolution| &resolution.id == resolution_id),
-                "resolution does not exist"
-            );
-        }
-        self.validate_artifact_links(&scope_id, &links)?;
         sort_artifact_links(&mut links);
         let path = shards::questions_path(&self.layout, &scope_id);
-        self.mutate_jsonl_records(&path, |records: &mut Vec<Question>| {
-            let question = Question {
-                schema_version: SchemaVersion(1),
-                scope_id: scope_id.clone(),
-                id,
-                topic_id,
-                requirement_id: topic.requirement_id,
-                question,
-                resolution_method,
-                status,
-                claimed_by: None,
-                claimed_at: None,
-                answer,
-                links,
-                resolution_id,
-            };
-            anyhow::ensure!(
-                !records.iter().any(|record| record.id == question.id),
-                "question already exists"
-            );
-            records.push(question.clone());
-            records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-            Ok(question)
+        self.write_transaction(|transaction| {
+            let topic = self
+                .list_topics_unlocked(&scope_id)?
+                .into_iter()
+                .find(|topic| topic.id == topic_id)
+                .ok_or_else(|| anyhow::anyhow!("topic does not exist"))?;
+            if let Some(resolution_id) = &resolution_id {
+                anyhow::ensure!(
+                    self.list_resolutions_unlocked(&scope_id)?
+                        .iter()
+                        .any(|resolution| &resolution.id == resolution_id),
+                    "resolution does not exist"
+                );
+            }
+            self.validate_artifact_links_locked(&scope_id, &links)?;
+            transaction.mutate_jsonl(&path, |records: &mut Vec<Question>| {
+                let question = Question {
+                    schema_version: SchemaVersion(1),
+                    scope_id: scope_id.clone(),
+                    id,
+                    topic_id,
+                    requirement_id: topic.requirement_id,
+                    question,
+                    resolution_method,
+                    status,
+                    claimed_by: None,
+                    claimed_at: None,
+                    answer,
+                    links,
+                    resolution_id,
+                };
+                anyhow::ensure!(
+                    !records.iter().any(|record| record.id == question.id),
+                    "question already exists"
+                );
+                records.push(question.clone());
+                records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+                Ok(question)
+            })
         })
     }
 
@@ -242,23 +249,25 @@ impl StateStore {
         resolution_id: Option<StableId>,
     ) -> anyhow::Result<Question> {
         anyhow::ensure!(!answer.trim().is_empty(), "answer must not be empty");
-        if let Some(resolution_id) = &resolution_id {
-            anyhow::ensure!(
-                self.list_resolutions(scope_id)?
-                    .iter()
-                    .any(|resolution| &resolution.id == resolution_id),
-                "resolution does not exist"
-            );
-        }
-        self.mutate_question(scope_id, id, |question| {
-            question.status = QuestionStatus::Answered;
-            question.answer = Some(answer);
-            if resolution_id.is_some() {
-                question.resolution_id = resolution_id;
+        self.write_transaction(|transaction| {
+            if let Some(resolution_id) = &resolution_id {
+                anyhow::ensure!(
+                    self.list_resolutions_unlocked(scope_id)?
+                        .iter()
+                        .any(|resolution| &resolution.id == resolution_id),
+                    "resolution does not exist"
+                );
             }
-            question.claimed_by = None;
-            question.claimed_at = None;
-            Ok(())
+            self.mutate_question_locked(transaction, scope_id, id, |question| {
+                question.status = QuestionStatus::Answered;
+                question.answer = Some(answer);
+                if resolution_id.is_some() {
+                    question.resolution_id = resolution_id;
+                }
+                question.claimed_by = None;
+                question.claimed_at = None;
+                Ok(())
+            })
         })
     }
 
@@ -278,40 +287,44 @@ impl StateStore {
                 || resolution_id.is_some(),
             "at least one question field must be updated"
         );
-        if let Some(resolution_id) = &resolution_id {
-            anyhow::ensure!(
-                self.list_resolutions(&scope_id)?
-                    .iter()
-                    .any(|resolution| &resolution.id == resolution_id),
-                "resolution does not exist"
-            );
-        }
         if let Some(links) = &mut links {
-            self.validate_artifact_links(&scope_id, links)?;
             sort_artifact_links(links);
         }
-        self.mutate_question(&scope_id, &id, |question| {
-            if let Some(resolution_method) = resolution_method {
-                question.resolution_method = resolution_method;
-            }
-            if let Some(status) = status {
+        self.write_transaction(|transaction| {
+            if let Some(resolution_id) = &resolution_id {
                 anyhow::ensure!(
-                    status != QuestionStatus::Answered || question.answer.is_some(),
-                    "use questions answer --answer to answer a question"
+                    self.list_resolutions_unlocked(&scope_id)?
+                        .iter()
+                        .any(|resolution| &resolution.id == resolution_id),
+                    "resolution does not exist"
                 );
-                question.status = status;
-                if status != QuestionStatus::Open {
-                    question.claimed_by = None;
-                    question.claimed_at = None;
+            }
+            if let Some(links) = &links {
+                self.validate_artifact_links_locked(&scope_id, links)?;
+            }
+            self.mutate_question_locked(transaction, &scope_id, &id, |question| {
+                if let Some(resolution_method) = resolution_method {
+                    question.resolution_method = resolution_method;
                 }
-            }
-            if let Some(links) = links {
-                question.links = links;
-            }
-            if let Some(resolution_id) = resolution_id {
-                question.resolution_id = Some(resolution_id);
-            }
-            Ok(())
+                if let Some(status) = status {
+                    anyhow::ensure!(
+                        status != QuestionStatus::Answered || question.answer.is_some(),
+                        "use questions answer --answer to answer a question"
+                    );
+                    question.status = status;
+                    if status != QuestionStatus::Open {
+                        question.claimed_by = None;
+                        question.claimed_at = None;
+                    }
+                }
+                if let Some(links) = links {
+                    question.links = links;
+                }
+                if let Some(resolution_id) = resolution_id {
+                    question.resolution_id = Some(resolution_id);
+                }
+                Ok(())
+            })
         })
     }
 
@@ -338,8 +351,20 @@ impl StateStore {
         id: &StableId,
         mutate: impl FnOnce(&mut Question) -> anyhow::Result<()>,
     ) -> anyhow::Result<Question> {
+        self.write_transaction(|transaction| {
+            self.mutate_question_locked(transaction, scope_id, id, mutate)
+        })
+    }
+
+    fn mutate_question_locked(
+        &self,
+        transaction: &mut StateTransaction,
+        scope_id: &ScopeId,
+        id: &StableId,
+        mutate: impl FnOnce(&mut Question) -> anyhow::Result<()>,
+    ) -> anyhow::Result<Question> {
         let path = shards::questions_path(&self.layout, scope_id);
-        self.mutate_jsonl_records(&path, |records: &mut Vec<Question>| {
+        transaction.mutate_jsonl(&path, |records: &mut Vec<Question>| {
             let question = records
                 .iter_mut()
                 .find(|question| &question.id == id)
@@ -349,7 +374,7 @@ impl StateStore {
         })
     }
 
-    fn validate_artifact_links(
+    fn validate_artifact_links_locked(
         &self,
         scope_id: &ScopeId,
         links: &[ArtifactLink],
@@ -357,19 +382,19 @@ impl StateStore {
         for link in links {
             let exists = match link.target_type {
                 ArtifactLinkTargetType::Source => self
-                    .list_sources(scope_id)?
+                    .list_sources_unlocked(scope_id)?
                     .iter()
                     .any(|source| source.id == link.target_id),
                 ArtifactLinkTargetType::Requirement => self
-                    .list_requirements(scope_id)?
+                    .list_requirements_unlocked(scope_id)?
                     .iter()
                     .any(|requirement| requirement.id == link.target_id),
                 ArtifactLinkTargetType::Resolution => self
-                    .list_resolutions(scope_id)?
+                    .list_resolutions_unlocked(scope_id)?
                     .iter()
                     .any(|resolution| resolution.id == link.target_id),
                 ArtifactLinkTargetType::Rule => self
-                    .list_rules(scope_id)?
+                    .list_rules_unlocked(scope_id)?
                     .iter()
                     .any(|rule| rule.id == link.target_id),
             };

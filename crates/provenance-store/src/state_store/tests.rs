@@ -61,7 +61,9 @@ fn seeded_source_requirement_store() -> (tempfile::TempDir, StateStore, ScopeId)
     (dir, store, scope)
 }
 
+mod crash_recovery;
 mod edges;
+mod generation_readers;
 mod ideation;
 mod proposals;
 mod shaping;

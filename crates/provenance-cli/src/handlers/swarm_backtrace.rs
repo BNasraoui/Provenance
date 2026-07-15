@@ -251,19 +251,20 @@ fn preflight_land(
         return Ok(());
     }
 
-    let existing_contributions = store.list_contributions(scope_id)?;
+    let snapshot = store.scope_snapshot(scope_id)?;
+    let existing_contributions = snapshot.contributions;
     ensure_no_existing_ids(
         "contribution",
         existing_contributions.iter().map(|record| &record.id),
         contributions.iter().map(|record| &record.id),
     )?;
-    let existing_synthesis_packets = store.list_synthesis_packets(scope_id)?;
+    let existing_synthesis_packets = snapshot.synthesis_packets;
     ensure_no_existing_ids(
         "synthesis packet",
         existing_synthesis_packets.iter().map(|record| &record.id),
         synthesis_packets.iter().map(|record| &record.id),
     )?;
-    let existing_proposals = store.list_proposal_cards(scope_id)?;
+    let existing_proposals = snapshot.proposals;
     ensure_no_existing_ids(
         "proposal",
         existing_proposals.iter().map(|record| &record.id),

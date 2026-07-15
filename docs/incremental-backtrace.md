@@ -23,8 +23,10 @@ pin) and permits an otherwise unpinned source to participate.
 
 Both commands expose equivalent policy flags, but apply them to their own result type:
 
-- `--min-age-days N` requires the approved resolution (`stale`) or pinned source commit
-  (`evidence-review`) to be at least `N` days old.
+- `--min-age-days N` requires the approved resolution (`stale`) or effective comparison
+  base (`evidence-review`) to be at least `N` days old. The effective base is the pinned
+  Source commit normally, but an explicit `--base` replaces it for both the diff and
+  this age calculation.
 - `--rule-severities high,critical` retains requirement evidence and resolutions with a
   downstream rule at one of those severities.
 - `--min-downstream-rules N` requires at least `N` downstream rules after severity
@@ -32,8 +34,11 @@ Both commands expose equivalent policy flags, but apply them to their own result
 
 Without requirement/rule filters, normal proposed `requirement_candidate` proposals
 targeting their commit-pinned Source retain proposal-owned evidence and report no
-fabricated `requirement_id`. Filters that inspect downstream requirements or rules
-necessarily retain only evidence with canonical or explicit Requirement ownership.
+fabricated `requirement_id`. This ownership requires exact ID equality: the proposal
+target Source must be the sole entry in `traceability.source_ids`; a site naming a
+different sole source is excluded with a diagnostic rather than assigned that owner. Filters that inspect
+downstream requirements or rules necessarily retain only evidence with canonical or
+explicit Requirement ownership.
 
 Review dates are compared with the actual UTC day. Superseded approved resolutions use
 their `superseded_by` field; the report no longer relies on an impossible

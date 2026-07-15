@@ -44,10 +44,13 @@ on intersecting paths. Exact cited lines are reported as `verified`, `moved`, `v
 or `unverifiable`; a vanished citation owned by an accepted requirement proposal is also
 reported under `contradictions` for human semantic review. Proposed requirement
 candidates targeting a Source remain proposal-owned evidence with no invented
-requirement ID unless a promotion decision establishes canonical ownership. Use
-`--base <revision>` to use that exact revision as the common old side of every diff
-(it overrides source pins and does not compute a merge base), and `--head <revision>`
-to select the new side. `--min-age-days`,
+requirement ID unless a promotion decision establishes canonical ownership. For this
+proposal-owned case, the target Source ID must exactly equal the sole `source_ids`
+entry; mismatched evidence sites are excluded with a diagnostic. Use `--base <revision>`
+to use that exact revision as
+the common old side of every diff (it overrides source pins, controls the age checked
+by `--min-age-days`, and does not compute a merge base), and `--head <revision>` to
+select the new side. `--min-age-days`,
 `--rule-severities low,medium,high,critical`, and `--min-downstream-rules` are available
 on both commands but apply to their distinct result types; requirement/rule filters
 exclude proposal-only evidence because it has no canonical Requirement. Evidence-review JSON includes

@@ -1,11 +1,12 @@
 use super::{initialized_store, seeded_requirement_store};
 use crate::state_store::{
-    CreatePromotionDecisionInput, CreateProposalCardInput, CreateResolutionInput,
+    CreateDomainInput, CreatePromotionDecisionInput, CreateProposalCardInput,
+    CreateRequirementInput, CreateResolutionInput,
 };
 use provenance_core::{
     IdeationTarget, IdeationTargetType, IdentityType, PromotionActor, PromotionDecision,
-    PromotionState, ProposalTraceability, ProposalType, ResolutionStatus, SchemaVersion, Source,
-    SourceType, StableId,
+    PromotionDecisionRecord, PromotionState, ProposalTraceability, ProposalType, RequirementStatus,
+    ResolutionStatus, SchemaVersion, Source, SourceType, StableId,
 };
 use std::sync::mpsc;
 use std::time::Duration;
@@ -158,4 +159,158 @@ fn snapshots_wait_for_and_observe_one_complete_generation() {
     reader_handle.join().unwrap();
     assert_eq!(snapshot.sources[0].id.as_str(), "source_new");
     assert_eq!(snapshot.requirements[0].statement, "new generation");
+}
+
+#[test]
+fn public_proposal_replaceability_check_reads_under_generation_lock() {
+    let (_dir, store, scope) = initialized_store();
+    let proposal_id = StableId::new("proposal_locked").unwrap();
+    store
+        .create_proposal_card(CreateProposalCardInput {
+            scope_id: scope.clone(),
+            id: proposal_id.clone(),
+            proposal_key: "locked".into(),
+            proposal_type: ProposalType::RequirementCandidate,
+            title: "Locked proposal".into(),
+            summary: "Original generation".into(),
+            confidence: None,
+            traceability: ProposalTraceability {
+                target: IdeationTarget {
+                    artifact_type: IdeationTargetType::Source,
+                    artifact_id: StableId::new("source_code").unwrap(),
+                },
+                source_ids: Vec::new(),
+                evidence_references: Vec::new(),
+                supporting_claim_ids: Vec::new(),
+            },
+            promotion_state: PromotionState::Proposed,
+            duplicate_of: None,
+            superseded_by: None,
+        })
+        .unwrap();
+    let (staged_tx, staged_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let writer = store.clone();
+    let writer_scope = scope.clone();
+    let writer_proposal_id = proposal_id.clone();
+    let writer_handle = std::thread::spawn(move || {
+        writer
+            .write_transaction(|transaction| {
+                transaction.mutate_jsonl(
+                    &crate::shards::proposal_cards_path(&writer.layout, &writer_scope),
+                    |proposals: &mut Vec<provenance_core::ProposalCard>| {
+                        proposals[0].promotion_state = PromotionState::Accepted;
+                        Ok(())
+                    },
+                )?;
+                transaction.replace_jsonl(
+                    &crate::shards::promotion_decisions_path(&writer.layout, &writer_scope),
+                    &[PromotionDecisionRecord {
+                        schema_version: SchemaVersion(1),
+                        scope_id: writer_scope.clone(),
+                        id: StableId::new("decision_locked").unwrap(),
+                        proposal_id: writer_proposal_id,
+                        decision: PromotionDecision::Accepted,
+                        rationale: "Committed together".into(),
+                        actor: PromotionActor {
+                            identity_type: IdentityType::Human,
+                            id: "reviewer".into(),
+                            name: None,
+                        },
+                        canonical_artifact: None,
+                    }],
+                )?;
+                staged_tx.send(()).unwrap();
+                release_rx.recv().unwrap();
+                Ok(())
+            })
+            .unwrap();
+    });
+    staged_rx.recv().unwrap();
+
+    let reader = store;
+    let (result_tx, result_rx) = mpsc::channel();
+    let reader_handle = std::thread::spawn(move || {
+        result_tx
+            .send(
+                reader
+                    .ensure_proposal_card_replaceable(&scope, &proposal_id)
+                    .map_err(|error| error.to_string()),
+            )
+            .unwrap();
+    });
+    let early = result_rx.recv_timeout(Duration::from_millis(100));
+    let blocked = early.is_err();
+    release_tx.send(()).unwrap();
+    let result = early.unwrap_or_else(|_| result_rx.recv_timeout(Duration::from_secs(2)).unwrap());
+    writer_handle.join().unwrap();
+    reader_handle.join().unwrap();
+
+    assert!(blocked, "replaceability check did not take the lock");
+    assert!(result.unwrap_err().contains("decision_locked"));
+}
+
+#[test]
+fn dependent_writer_revalidates_after_concurrent_scope_replacement() {
+    let (_dir, store, scope) = initialized_store();
+    let domain_id = StableId::new("domain_replaced").unwrap();
+    store
+        .create_domain(CreateDomainInput {
+            scope_id: scope.clone(),
+            id: domain_id.clone(),
+            name: "Replaced domain".into(),
+            description: None,
+            color: None,
+        })
+        .unwrap();
+
+    let (staged_tx, staged_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let replacer = store.clone();
+    let replacer_scope = scope.clone();
+    let replacer_handle = std::thread::spawn(move || {
+        replacer
+            .write_transaction(|transaction| {
+                transaction.replace_jsonl::<provenance_core::Domain>(
+                    &crate::shards::domains_path(&replacer.layout, &replacer_scope),
+                    &[],
+                )?;
+                staged_tx.send(()).unwrap();
+                release_rx.recv().unwrap();
+                Ok(())
+            })
+            .unwrap();
+    });
+    staged_rx.recv().unwrap();
+
+    let writer = store.clone();
+    let writer_scope = scope.clone();
+    let (result_tx, result_rx) = mpsc::channel();
+    let writer_handle = std::thread::spawn(move || {
+        result_tx
+            .send(
+                writer
+                    .create_requirement(CreateRequirementInput {
+                        scope_id: writer_scope,
+                        id: StableId::new("req_dangling").unwrap(),
+                        statement: "Must retain its domain".into(),
+                        description: None,
+                        status: RequirementStatus::Active,
+                        domain_id: Some(domain_id),
+                        origin_thread: None,
+                        origin_message: None,
+                    })
+                    .map_err(|error| error.to_string()),
+            )
+            .unwrap();
+    });
+
+    assert!(result_rx.recv_timeout(Duration::from_millis(100)).is_err());
+    release_tx.send(()).unwrap();
+    let result = result_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    replacer_handle.join().unwrap();
+    writer_handle.join().unwrap();
+
+    assert_eq!(result.unwrap_err(), "domain does not exist");
+    assert!(store.list_requirements(&scope).unwrap().is_empty());
 }

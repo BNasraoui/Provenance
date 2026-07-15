@@ -8,6 +8,7 @@ mod state_adapter;
 pub use graph_query::GapGraph;
 pub use model::{node_type_word, GapItem, GapKind};
 pub use state_adapter::find_gaps;
+pub(in crate::cache) use state_adapter::find_gaps_in_snapshot;
 
 use graph_query::GraphQuery;
 

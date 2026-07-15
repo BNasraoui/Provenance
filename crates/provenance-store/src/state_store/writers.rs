@@ -63,36 +63,38 @@ impl StateStore {
             origin_thread,
             origin_message,
         } = input;
-        if let Some(domain_id) = &domain_id {
-            anyhow::ensure!(
-                self.list_domains(&scope_id)?
-                    .iter()
-                    .any(|domain| &domain.id == domain_id),
-                "domain does not exist"
-            );
-        }
         let path = shards::requirements_path(&self.layout, &scope_id);
-        self.mutate_jsonl_records(&path, |records: &mut Vec<Requirement>| {
-            let requirement = Requirement {
-                schema_version: SchemaVersion(1),
-                scope_id: scope_id.clone(),
-                id,
-                statement,
-                description,
-                fog: None,
-                status,
-                domain_id,
-                source_refs: Vec::new(),
-                origin_thread,
-                origin_message,
-            };
-            anyhow::ensure!(
-                !records.iter().any(|record| record.id == requirement.id),
-                "requirement already exists"
-            );
-            records.push(requirement.clone());
-            records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-            Ok(requirement)
+        self.write_transaction(|transaction| {
+            if let Some(domain_id) = &domain_id {
+                anyhow::ensure!(
+                    self.list_domains_unlocked(&scope_id)?
+                        .iter()
+                        .any(|domain| &domain.id == domain_id),
+                    "domain does not exist"
+                );
+            }
+            transaction.mutate_jsonl(&path, |records: &mut Vec<Requirement>| {
+                let requirement = Requirement {
+                    schema_version: SchemaVersion(1),
+                    scope_id: scope_id.clone(),
+                    id,
+                    statement,
+                    description,
+                    fog: None,
+                    status,
+                    domain_id,
+                    source_refs: Vec::new(),
+                    origin_thread,
+                    origin_message,
+                };
+                anyhow::ensure!(
+                    !records.iter().any(|record| record.id == requirement.id),
+                    "requirement already exists"
+                );
+                records.push(requirement.clone());
+                records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+                Ok(requirement)
+            })
         })
     }
 
@@ -139,7 +141,7 @@ impl StateStore {
             NodeType::Requirement,
         )?;
         anyhow::ensure!(
-            self.list_sources(&scope_id)?
+            self.list_sources_unlocked(&scope_id)?
                 .iter()
                 .any(|source| source.id == source_id),
             "source does not exist"
