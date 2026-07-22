@@ -100,34 +100,37 @@ impl GraphReference {
             serde_json::from_slice(bytes).map_err(|error| GraphReferenceError::Incomplete {
                 detail: format!("reference JSON is invalid: {error}"),
             })?;
-        if reference.schema_version != 1 {
+        reference.validate()?;
+        Ok(reference)
+    }
+
+    fn validate(&self) -> Result<(), GraphReferenceError> {
+        if self.schema_version != 1 {
             return Err(GraphReferenceError::Incomplete {
                 detail: format!(
                     "unsupported schema_version {}; expected 1",
-                    reference.schema_version
+                    self.schema_version
                 ),
             });
         }
-        validate_prefixed_hash("reference_id", &reference.reference_id, "grf1_", 64)?;
-        validate_prefixed_hash("repository_id", &reference.repository_id, "git1_", 64)?;
-        if reference.store_path != STORE_PATH {
+        validate_prefixed_hash("reference_id", &self.reference_id, "grf1_", 64)?;
+        validate_prefixed_hash("repository_id", &self.repository_id, "git1_", 64)?;
+        if self.store_path != STORE_PATH {
             return Err(GraphReferenceError::Incomplete {
                 detail: format!("store_path must be '{STORE_PATH}'"),
             });
         }
-        provenance_core::ScopeId::new(reference.scope_id.clone()).map_err(incomplete)?;
-        if !matches!(reference.commit.len(), 40 | 64)
-            || !reference.commit.bytes().all(is_lower_hex_digit)
-        {
+        provenance_core::ScopeId::new(self.scope_id.clone()).map_err(incomplete)?;
+        if !matches!(self.commit.len(), 40 | 64) || !self.commit.bytes().all(is_lower_hex_digit) {
             return Err(GraphReferenceError::Incomplete {
                 detail: "commit must be a full 40- or 64-character hexadecimal object ID".into(),
             });
         }
-        validate_prefixed_hash("graph_digest", &reference.graph_digest, "sha256:", 64)?;
-        if let Some(correlation) = &reference.correlation {
+        validate_prefixed_hash("graph_digest", &self.graph_digest, "sha256:", 64)?;
+        if let Some(correlation) = &self.correlation {
             validate_correlation(correlation)?;
         }
-        Ok(reference)
+        Ok(())
     }
 }
 
@@ -234,9 +237,7 @@ impl GraphReferences {
         &self,
         reference: &GraphReference,
     ) -> Result<GraphExport, GraphReferenceError> {
-        if reference.store_path != STORE_PATH {
-            return mismatch("store_path", STORE_PATH, &reference.store_path);
-        }
+        reference.validate()?;
         let commit = self.repository.resolve_commit(&reference.commit)?;
         if commit != reference.commit {
             return mismatch("commit", &reference.commit, &commit);
