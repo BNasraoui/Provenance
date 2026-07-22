@@ -271,7 +271,17 @@ impl ExactExport {
             graph: GraphExport,
         }
 
-        let document: Document = serde_json::from_slice(bytes).map_err(incomplete)?;
+        let mut unknown = None;
+        let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+        let document: Document = serde_ignored::deserialize(&mut deserializer, |path| {
+            if unknown.is_none() {
+                unknown = Some(path.to_string());
+            }
+        })
+        .map_err(incomplete)?;
+        if let Some(path) = unknown {
+            return Err(incomplete(format!("unknown field `{path}`")));
+        }
         if document.schema_version != 1 || document.operation != "exact-export" {
             return Err(GraphReferenceError::Incomplete {
                 detail: "exact export must use schema_version 1 and operation 'exact-export'"

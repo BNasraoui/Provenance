@@ -31,7 +31,7 @@ pub(super) fn load_projection(
 ) -> Result<GraphExport, GraphReferenceError> {
     let scope_id = ScopeId::new(scope.to_string()).map_err(incomplete)?;
     let store = StateStore::new(ProvenanceLayout::new(repository.to_path_buf()));
-    let manifest = store.manifest().map_err(|error| {
+    let manifest = store.closed_manifest().map_err(|error| {
         let detail = error.to_string();
         if repository.join(".provenance/state/manifest.json").exists() {
             incomplete(detail)
@@ -58,18 +58,20 @@ pub(super) fn load_projection(
     let mut graph = GraphExport {
         schema_version: 1,
         scope: selected_scope,
-        sources: store.list_sources(&scope_id).map_err(incomplete)?,
-        domains: store.list_domains(&scope_id).map_err(incomplete)?,
-        requirements: store.list_requirements(&scope_id).map_err(incomplete)?,
-        boundaries: store.list_boundaries(&scope_id).map_err(incomplete)?,
-        topics: store.list_topics(&scope_id).map_err(incomplete)?,
-        questions: store.list_questions(&scope_id).map_err(incomplete)?,
-        resolutions: store.list_resolutions(&scope_id).map_err(incomplete)?,
-        rules: store.list_rules(&scope_id).map_err(incomplete)?,
-        services: store.list_services(&scope_id).map_err(incomplete)?,
-        service_bindings: store.list_service_bindings(&scope_id).map_err(incomplete)?,
+        sources: store.closed_sources(&scope_id).map_err(incomplete)?,
+        domains: store.closed_domains(&scope_id).map_err(incomplete)?,
+        requirements: store.closed_requirements(&scope_id).map_err(incomplete)?,
+        boundaries: store.closed_boundaries(&scope_id).map_err(incomplete)?,
+        topics: store.closed_topics(&scope_id).map_err(incomplete)?,
+        questions: store.closed_questions(&scope_id).map_err(incomplete)?,
+        resolutions: store.closed_resolutions(&scope_id).map_err(incomplete)?,
+        rules: store.closed_rules(&scope_id).map_err(incomplete)?,
+        services: store.closed_services(&scope_id).map_err(incomplete)?,
+        service_bindings: store
+            .closed_service_bindings(&scope_id)
+            .map_err(incomplete)?,
         edges: store
-            .list_edges()
+            .closed_edges()
             .map_err(incomplete)?
             .into_iter()
             .filter(|edge| edge.scope_id == scope_id)

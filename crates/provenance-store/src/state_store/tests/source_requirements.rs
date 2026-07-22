@@ -1,4 +1,4 @@
-use super::{initialized_store, seeded_requirement_store};
+use super::{initialized_store, seeded_requirement_store, seeded_source_requirement_store};
 use crate::state_store::{AddSourceReferenceInput, CreateRequirementInput, CreateSourceInput};
 use provenance_core::{EdgeType, RequirementStatus, SourceType, StableId};
 
@@ -49,6 +49,27 @@ fn source_requirement_records_are_written_deterministically() {
         store.list_edges().unwrap()[0].edge_type,
         EdgeType::References
     );
+}
+
+#[test]
+fn canonical_state_readers_tolerate_unknown_extension_fields() {
+    let (_dir, store, scope) = seeded_source_requirement_store();
+    let source_path = store
+        .layout
+        .scopes_dir()
+        .join(scope.as_str())
+        .join("sources/source.jsonl");
+    let source = std::fs::read_to_string(&source_path).unwrap();
+    std::fs::write(
+        source_path,
+        source.replace(
+            "\"name\":\"SCHADS Award\"",
+            "\"name\":\"SCHADS Award\",\"extension\":true",
+        ),
+    )
+    .unwrap();
+
+    assert_eq!(store.list_sources(&scope).unwrap()[0].name, "SCHADS Award");
 }
 
 #[test]

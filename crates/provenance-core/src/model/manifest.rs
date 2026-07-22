@@ -17,14 +17,12 @@ impl RepoPathPrefix {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Scope {
     pub id: ScopeId,
     pub path_prefix: RepoPathPrefix,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Manifest {
     pub schema_version: SchemaVersion,
     pub scopes: Vec<Scope>,

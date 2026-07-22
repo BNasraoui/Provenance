@@ -75,7 +75,6 @@ impl EdgeType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Edge {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,

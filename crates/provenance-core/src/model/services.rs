@@ -88,7 +88,6 @@ impl ServiceBindingType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Domain {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,
@@ -101,7 +100,6 @@ pub struct Domain {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Service {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,
@@ -123,7 +121,6 @@ pub struct Service {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct ServiceBinding {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,
