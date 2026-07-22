@@ -242,3 +242,56 @@ fn validate_rejects_forbidden_graph_reference_export_fields() {
             .failure();
     }
 }
+
+#[test]
+fn validate_rejects_graph_reference_export_records_from_another_scope() {
+    let dir = tempfile::tempdir().unwrap();
+    let export = json!({
+        "schema_version": 1,
+        "operation": "exact-export",
+        "reference_id": format!("grf1_{}", "0".repeat(64)),
+        "graph": {
+            "schema_version": 1,
+            "scope": {"id": "default", "path_prefix": "."},
+            "sources": [{
+                "schema_version": 1,
+                "scope_id": "other",
+                "id": "source_policy",
+                "name": "Policy",
+                "source_type": "policy",
+                "url": null
+            }],
+            "domains": [],
+            "requirements": [],
+            "boundaries": [],
+            "topics": [],
+            "questions": [],
+            "resolutions": [],
+            "rules": [],
+            "services": [],
+            "service_bindings": [],
+            "edges": []
+        }
+    });
+    let path = write_json(
+        &dir,
+        "cross-scope-export.json",
+        &serde_json::to_string(&export).unwrap(),
+    );
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "validate",
+            "graph-reference-export",
+            "--input",
+            &path,
+            "--format",
+            "json",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "source 'source_policy' belongs to scope 'other', not 'default'",
+        ));
+}

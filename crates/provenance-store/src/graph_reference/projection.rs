@@ -174,7 +174,7 @@ fn sort_records(graph: &mut GraphExport) {
     graph.edges.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
 }
 
-fn validate_scope_ownership(
+pub(super) fn validate_scope_ownership(
     graph: &GraphExport,
     scope: &ScopeId,
 ) -> Result<(), GraphReferenceError> {

@@ -113,10 +113,7 @@ impl GraphReference {
         }
         provenance_core::ScopeId::new(reference.scope_id.clone()).map_err(incomplete)?;
         if !matches!(reference.commit.len(), 40 | 64)
-            || !reference
-                .commit
-                .bytes()
-                .all(|byte| byte.is_ascii_hexdigit())
+            || !reference.commit.bytes().all(is_lower_hex_digit)
         {
             return Err(GraphReferenceError::Incomplete {
                 detail: "commit must be a full 40- or 64-character hexadecimal object ID".into(),
@@ -288,6 +285,7 @@ impl ExactExport {
             });
         }
         document.graph.validate_schema_versions()?;
+        projection::validate_scope_ownership(&document.graph, &document.graph.scope.id)?;
         Ok(Self {
             schema_version: 1,
             operation: "exact-export",
@@ -347,12 +345,16 @@ fn validate_prefixed_hash(
             detail: format!("{field} must start with '{prefix}'"),
         });
     };
-    if hash.len() != digits || !hash.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+    if hash.len() != digits || !hash.bytes().all(is_lower_hex_digit) {
         return Err(GraphReferenceError::Incomplete {
             detail: format!("{field} must contain {digits} hexadecimal characters"),
         });
     }
     Ok(())
+}
+
+const fn is_lower_hex_digit(byte: u8) -> bool {
+    byte.is_ascii_digit() || matches!(byte, b'a'..=b'f')
 }
 
 fn reference_identity(

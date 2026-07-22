@@ -15,15 +15,15 @@ pub(in crate::handlers::schema) fn reference_schema() -> Value {
             "repository_id": {"type": "string", "pattern": "^git1_[0-9a-f]{64}$"},
             "store_path": {"const": ".provenance/state"},
             "scope_id": {"type": "string", "pattern": "^[a-z0-9_-]+$"},
-            "commit": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
+            "commit": {"type": "string", "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"},
             "graph_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
             "correlation": {
                 "type": "object",
                 "additionalProperties": false,
                 "required": ["system", "key"],
                 "properties": {
-                    "system": {"type": "string", "minLength": 1},
-                    "key": {"type": "string", "minLength": 1}
+                    "system": {"type": "string", "pattern": "\\S"},
+                    "key": {"type": "string", "pattern": "\\S"}
                 }
             }
         }
