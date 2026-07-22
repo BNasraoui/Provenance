@@ -2,8 +2,8 @@ use super::GraphReferenceError;
 use crate::{layout::ProvenanceLayout, state_store::StateStore};
 use camino::Utf8Path;
 use provenance_core::{
-    Boundary, Domain, Edge, Question, Requirement, Resolution, Rule, Scope, ScopeId, Service,
-    ServiceBinding, Source, Topic,
+    Boundary, Domain, Edge, Question, Requirement, Resolution, Rule, SchemaVersion, Scope, ScopeId,
+    Service, ServiceBinding, Source, Topic,
 };
 use serde::{Deserialize, Serialize};
 
@@ -75,9 +75,71 @@ pub(super) fn load_projection(
             .filter(|edge| edge.scope_id == scope_id)
             .collect(),
     };
+    graph.validate_schema_versions()?;
     validate_scope_ownership(&graph, &scope_id)?;
+    strip_collaboration_fields(&mut graph);
     sort_records(&mut graph);
     Ok(graph)
+}
+
+impl GraphExport {
+    pub(super) fn validate_schema_versions(&self) -> Result<(), GraphReferenceError> {
+        macro_rules! require_v1 {
+            ($records:expr, $kind:literal) => {
+                for record in $records {
+                    if record.schema_version != SchemaVersion(1) {
+                        return Err(GraphReferenceError::Incomplete {
+                            detail: format!(
+                                "{} '{}' has unsupported schema_version {}; expected 1",
+                                $kind,
+                                record.id.as_str(),
+                                record.schema_version.0
+                            ),
+                        });
+                    }
+                }
+            };
+        }
+        require_v1!(&self.sources, "source");
+        require_v1!(&self.domains, "domain");
+        require_v1!(&self.requirements, "requirement");
+        require_v1!(&self.boundaries, "boundary");
+        require_v1!(&self.topics, "topic");
+        require_v1!(&self.questions, "question");
+        require_v1!(&self.resolutions, "resolution");
+        require_v1!(&self.rules, "rule");
+        require_v1!(&self.services, "service");
+        require_v1!(&self.service_bindings, "service binding");
+        require_v1!(&self.edges, "edge");
+        Ok(())
+    }
+}
+
+fn strip_collaboration_fields(graph: &mut GraphExport) {
+    for source in &mut graph.sources {
+        source.origin_thread = None;
+        source.origin_message = None;
+    }
+    for requirement in &mut graph.requirements {
+        requirement.origin_thread = None;
+        requirement.origin_message = None;
+    }
+    for topic in &mut graph.topics {
+        topic.claimed_by = None;
+        topic.claimed_at = None;
+    }
+    for question in &mut graph.questions {
+        question.claimed_by = None;
+        question.claimed_at = None;
+    }
+    for resolution in &mut graph.resolutions {
+        resolution.origin_thread = None;
+        resolution.origin_message = None;
+    }
+    for rule in &mut graph.rules {
+        rule.origin_thread = None;
+        rule.origin_message = None;
+    }
 }
 
 fn sort_records(graph: &mut GraphExport) {

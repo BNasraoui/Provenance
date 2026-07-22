@@ -11,7 +11,7 @@ use provenance_core::{
     ArtifactChangeType, ContributionStance, EvidenceQuality, IdeationEvidenceType,
     IdeationTargetType, PromotionState, ProposalType, SpeculationMarker, UncertaintyLevel,
 };
-use serde_json::Value;
+use serde_json::{json, Value};
 
 fn enum_values_at(schema: &Value, pointer: &str) -> Vec<String> {
     schema
@@ -233,4 +233,87 @@ fn schema_show_enum_values_match_model_serialization() {
         enum_values_at(&proposal, "/schema/properties/promotion_state/enum"),
         promotion_states
     );
+}
+
+fn minimal_exact_export() -> Value {
+    json!({
+        "schema_version": 1,
+        "operation": "exact-export",
+        "reference_id": format!("grf1_{}", "0".repeat(64)),
+        "graph": {
+            "schema_version": 1,
+            "scope": {"id": "default", "path_prefix": "."},
+            "sources": [{
+                "schema_version": 1, "scope_id": "default", "id": "source_policy",
+                "name": "Policy", "source_type": "policy", "url": null
+            }],
+            "domains": [],
+            "requirements": [{
+                "schema_version": 1, "scope_id": "default", "id": "req_policy",
+                "statement": "Follow policy", "status": "active",
+                "source_refs": [{"source_id": "source_policy", "clause": "1.1"}]
+            }],
+            "boundaries": [],
+            "topics": [{
+                "schema_version": 1, "scope_id": "default", "id": "topic_policy",
+                "requirement_id": "req_policy", "title": "Policy details", "status": "open",
+                "links": [{"target_type": "source", "target_id": "source_policy"}]
+            }],
+            "questions": [],
+            "resolutions": [{
+                "schema_version": 1, "scope_id": "default", "id": "resolution_policy",
+                "title": "Apply policy", "position": "Apply it", "rationale": "Required",
+                "status": "approved", "inputs": [{
+                    "input_type": "source_material", "reference": "source_policy", "summary": "Policy"
+                }], "review_on": null, "review_triggers": []
+            }],
+            "rules": [],
+            "services": [], "service_bindings": [], "edges": []
+        }
+    })
+}
+
+#[test]
+fn graph_reference_export_schema_validates_record_structure() {
+    let shown = schema_for(IdeationArtifactKind::GraphReferenceExport);
+    let schema = shown.get("schema").unwrap();
+    let validator = jsonschema::JSONSchema::compile(schema).unwrap();
+    let valid = minimal_exact_export();
+    assert!(validator.is_valid(&valid));
+
+    let malformed_cases = [
+        {
+            let mut value = minimal_exact_export();
+            value["graph"]["sources"] = json!([{}]);
+            value
+        },
+        {
+            let mut value = minimal_exact_export();
+            value["graph"]["sources"] = json!([{
+                "schema_version": 2, "scope_id": "default", "id": "source_policy",
+                "name": "Policy", "source_type": "policy", "url": null
+            }]);
+            value
+        },
+        {
+            let mut value = minimal_exact_export();
+            value["graph"]["sources"] = json!([{
+                "schema_version": 1, "scope_id": "default", "id": "source_policy",
+                "name": "Policy", "source_type": "policy", "url": null,
+                "origin_thread": "thread_private"
+            }]);
+            value
+        },
+        {
+            let mut value = minimal_exact_export();
+            value["graph"]["scope"]["workflow_id"] = json!("workflowd-123");
+            value
+        },
+    ];
+    for malformed in malformed_cases {
+        assert!(
+            !validator.is_valid(&malformed),
+            "schema accepted {malformed}"
+        );
+    }
 }

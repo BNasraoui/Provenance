@@ -287,6 +287,7 @@ impl ExactExport {
                 detail: "graph schema_version must be 1".into(),
             });
         }
+        document.graph.validate_schema_versions()?;
         Ok(Self {
             schema_version: 1,
             operation: "exact-export",
