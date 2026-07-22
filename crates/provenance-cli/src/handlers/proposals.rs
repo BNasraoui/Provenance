@@ -7,7 +7,7 @@ use provenance_core::{
 };
 use provenance_store::{
     layout::ProvenanceLayout,
-    state_store::{CreateProposalCardInput, StateStore},
+    state_store::{CreateProposalCardInput, ProposalDemand, StateStore},
 };
 
 pub(super) fn handle(command: ProposalsCommand, quiet: bool) -> anyhow::Result<()> {
@@ -71,6 +71,28 @@ pub(super) fn handle(command: ProposalsCommand, quiet: bool) -> anyhow::Result<(
             let proposals = StateStore::new(ProvenanceLayout::new(repo))
                 .list_proposal_cards(&ScopeId::new(scope)?)?;
             output::print(format, &proposals)?;
+        }
+        ProposalsCommand::Surface {
+            repo,
+            scope,
+            changed_path,
+            target_type,
+            target_id,
+            format,
+        } => {
+            warn_if_skills_missing(&repo, quiet)?;
+            let targets = match (target_type, target_id) {
+                (Some(target_type), Some(target_id)) => {
+                    vec![ideation_target(&target_type, target_id)?]
+                }
+                (None, None) => Vec::new(),
+                _ => anyhow::bail!("--target-type and --target-id must be provided together"),
+            };
+            let surfaced = StateStore::new(ProvenanceLayout::new(repo)).surface_proposals(
+                &ScopeId::new(scope)?,
+                &ProposalDemand::new(changed_path, targets),
+            )?;
+            output::print(format, &surfaced)?;
         }
     }
     Ok(())

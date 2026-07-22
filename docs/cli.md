@@ -36,6 +36,23 @@ protection by default; pass `--replace` to intentionally upsert the same stable 
 Swarm backtrace runs can land durable run outputs with
 `provenance swarm-backtrace land --scope <scope> --run-dir <run-dir> --format json`.
 
+Demand-driven proposal review uses `provenance proposals surface`. Pass one or more exact,
+repository-relative `--changed-path` values to surface undisposed proposals whose own
+evidence sites are touched. Pass `--target-type <type> --target-id <id>` when current work
+already names an explicit proposal territory; both target flags are required together and
+may be combined with changed paths. Results include every matching proposal and the
+`evidence_site` or `territory` reasons it surfaced. `topics claim` returns the claimed topic
+plus proposals targeting that topic, its anchor requirement, or its explicit artifact
+links. This is a read-time view and writes no queue or trigger state.
+
+An accepted `promotion-decisions create` record may link a human's action to the canonical
+source, requirement, resolution, or rule it produced using `--canonical-artifact-type` and
+`--canonical-artifact-id`. Use that existing link for ratification-through-action; commits
+and external issue IDs are not canonical artifact types. The writer records this reference
+but does not currently verify the artifact's existence, so the caller must create and check
+the canonical record. Provenance currently has no bug record or issue adapter, so bug filing
+can trigger surfacing only when the caller supplies the bug's already-known typed target.
+
 Graph edge commands: `edges create --type references|refines_into|depends_on|contradicts|supersedes|needs|resolves|spawns|produces --from-type source|requirement|resolution|rule --from-id <id> --to-type source|requirement|resolution|rule --to-id <id>`, `edges list`, and `edges delete --id <edge-id>`. Creation validates edge type/endpoints and requires both endpoint records to exist.
 
 Shaping turn-state commands: `questions create` requires `--method` (grill, prototype, research, verify, or task); `topics claim/release/close` and `questions claim/release/answer` manage claim state (claiming an already-claimed item fails and reports the holder; closing a topic or answering a question clears its claim); `requirements fog set/show/clear` manages the deliberately unstructured fog text on an anchor requirement.

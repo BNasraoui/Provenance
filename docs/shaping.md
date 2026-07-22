@@ -169,6 +169,37 @@ land their candidates through the same durable shapes (ported from the Convex
   `proposed → accepted/rejected/deferred/duplicate/superseded` by explicit human
   **promotion decisions**.
 
+### Dispose on demand
+
+The proposal shard is evidence-backed context, not a batch-review inbox. Undisposed
+proposals surface when current work enters territory they already name:
+
+- a diff touches an exact repository-relative `file_path` in the proposal's evidence;
+- a shaping session claims the proposal's target topic, the topic's anchor requirement,
+  or one of the topic's explicit artifact links; or
+- an external work item such as a bug explicitly identifies one of those typed targets.
+
+Use `provenance proposals surface --changed-path <path>` for changed files. Topic claims
+surface their matching proposals in the claim result. Integrations that already know a
+typed territory can use `provenance proposals surface --target-type <type> --target-id
+<id>`; Provenance does not infer territory from issue text, titles, graph proximity, or
+similar filenames.
+
+Review all proposals together only when a small set jointly blocks the work: competing
+fork proposals, explicitly contested synthesis claims, or conflicting backtrace findings.
+Do not turn the complete backtrace output into a disposal queue.
+
+When a human action both resolves the problem and produces an existing canonical artifact
+(source, requirement, resolution, or rule), record one accepted promotion decision with
+that human actor and `canonical_artifact`. The action is then the ratification evidence;
+do not require a second ceremonial review. A commit or bug ID alone is not a canonical
+artifact in the current model and must not be disguised as one. The current writer records
+but does not verify that artifact reference, so create and verify the canonical record first.
+
+The current lifecycle still uses `proposed` as the undisposed state. The permanent
+observed-but-not-ratified resting state described by `provenance-134` is not yet available,
+so this release does not claim that all swarm assertions have that stronger status.
+
 The run-status machinery of the original (queued/running/failed_retryable…) is *not*
 ported — skills and workflows own execution; only durable outputs enter state.
 
@@ -178,8 +209,9 @@ The backtrace (`provenance-qho`) is charting in reverse: agents partition an exi
 codebase, extract candidate requirements ("what must be true for this code to be
 correct"), dedup keeping *all* evidence sites, and land everything as `proposed` — never
 `active` — with the codebase source carrying a validated `commit_pin`. Proposals and
-material claims may carry `0.0`-`1.0` confidence scores. Its output feeds the shaping loop:
-a human confirms "intentional" or discovers surprises, question by question.
+material claims may carry `0.0`-`1.0` confidence scores. Its output becomes consultable
+context and surfaces for disposition only when later work enters its explicit territory,
+apart from small contested or conflicting sets that already block a decision.
 
 ## Beyond "shaped"
 
