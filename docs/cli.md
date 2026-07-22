@@ -17,6 +17,50 @@ provenance check --format json
 
 Agent-facing commands support JSON output for deterministic parsing.
 
+## Immutable graph references
+
+Use the commit-then-issue handoff when another system needs an immutable graph input:
+
+```sh
+# 1. Finish and validate canonical graph changes.
+provenance check --repo . --format json
+git add .provenance/state
+git commit -m "Update provenance graph"
+
+# 2. Issue a reference. Omitted --commit means HEAD and requires the selected
+#    scope's relevant canonical state to match both the index and working tree.
+provenance graph-reference issue --repo . --scope default > graph-reference.json
+
+# 3. Attach graph-reference.json to any external work item. Correlation is
+#    generic and does not change deterministic reference identity.
+provenance graph-reference issue --repo . --scope default \
+  --correlation-system github --correlation-key owner/repo#42
+
+# 4. Consumers verify and read only the pinned Git revision.
+provenance graph-reference show --repo . --reference graph-reference.json
+provenance graph-reference verify --repo . --reference graph-reference.json
+provenance graph-reference exact-export --repo . --reference graph-reference.json
+```
+
+Pass `--commit <revision>` to `issue` to pin an explicit commit; names and abbreviated
+IDs are resolved to a full commit immediately. Explicit pins and all read operations
+ignore working-tree graph changes. Implicit `HEAD` permits unrelated source, cache, and
+other-scope changes but rejects selected-scope graph changes until they are committed.
+
+All four operations emit versioned JSON. Reference identity is idempotently derived
+from the Git repository roots, `.provenance/state`, scope, full commit ID, and canonical
+graph digest. Exact exports include only graph-bearing sources, domains, requirements,
+boundaries, topics, questions, resolutions, rules, services, bindings, and edges; they
+do not add proposal, promotion, collaboration, or workflow-specific fields. Failures
+are typed as `missing`, `mismatched`, or `incomplete` in their error text.
+
+Inspect the closed JSON Schema contracts with:
+
+```sh
+provenance schema show graph-reference --format json
+provenance schema show graph-reference-export --format json
+```
+
 Skill distribution commands embed the top-level `skills/*/SKILL.md` product skills in the
 binary: `provenance skills list --format json`,
 `provenance skills show provenance-fork-tournament`, and

@@ -63,6 +63,10 @@ pub enum Command {
         #[command(subcommand)]
         command: graph::EdgesCommand,
     },
+    GraphReference {
+        #[command(subcommand)]
+        command: graph::GraphReferenceCommand,
+    },
     Domains {
         #[command(subcommand)]
         command: knowledge::DomainsCommand,

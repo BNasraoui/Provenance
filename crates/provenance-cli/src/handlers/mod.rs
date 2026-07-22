@@ -11,6 +11,7 @@ mod edges;
 mod export;
 mod gaps;
 mod graph;
+mod graph_reference;
 mod health;
 mod impact;
 mod import;
@@ -73,6 +74,9 @@ pub(super) async fn dispatch(command: Command, quiet: bool) -> anyhow::Result<()
         }
         Command::Edges { command } => {
             edges::handle(command)?;
+        }
+        Command::GraphReference { command } => {
+            graph_reference::handle(command)?;
         }
         Command::Domains { command } => {
             domains::handle(command)?;

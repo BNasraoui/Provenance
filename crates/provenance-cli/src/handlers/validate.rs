@@ -8,6 +8,7 @@ use provenance_core::{
     validate_optional_confidence_score, Contribution, PromotionState, ProposalCard, SchemaVersion,
     SynthesisPacket,
 };
+use provenance_store::graph_reference::{ExactExport, GraphReference};
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -50,6 +51,12 @@ pub(super) fn validate_file(
         IdeationArtifactKind::Proposal => {
             let proposal: ProposalCard = serde_json::from_str(&json)?;
             validate_proposal_card_record(&proposal)?;
+        }
+        IdeationArtifactKind::GraphReference => {
+            GraphReference::from_json(json.as_bytes())?;
+        }
+        IdeationArtifactKind::GraphReferenceExport => {
+            ExactExport::from_json(json.as_bytes())?;
         }
     }
     Ok(())
