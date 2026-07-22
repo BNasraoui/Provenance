@@ -14,7 +14,7 @@ pub(in crate::handlers::schema) fn reference_schema() -> Value {
             "reference_id": {"type": "string", "pattern": "^grf1_[0-9a-f]{64}$"},
             "repository_id": {"type": "string", "pattern": "^git1_[0-9a-f]{64}$"},
             "store_path": {"const": ".provenance/state"},
-            "scope_id": {"$ref": "#/$defs/scopeId"},
+            "scope_id": {"type": "string", "pattern": "^[a-z0-9_-]+$"},
             "commit": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
             "graph_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
             "correlation": {

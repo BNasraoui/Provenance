@@ -286,6 +286,24 @@ fn graph_reference_schemas_are_exposed() {
 }
 
 #[test]
+fn emitted_graph_reference_schema_validates_an_issued_reference() {
+    let temp = committed_store();
+    let reference = issue(temp.path(), &[]);
+    let output = provenance(temp.path())
+        .args(["schema", "show", "graph-reference", "--format", "json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let shown: Value = serde_json::from_slice(&output).unwrap();
+    let schema = shown.get("schema").unwrap();
+    let validator = jsonschema::JSONSchema::compile(schema).unwrap();
+
+    assert!(validator.is_valid(&reference));
+}
+
+#[test]
 fn explicit_commit_issues_from_pin_despite_relevant_staged_and_worktree_changes() {
     let temp = committed_store();
     let head = std::process::Command::new("git")
@@ -503,4 +521,51 @@ fn issue_rejects_unsupported_pinned_record_schema_versions() {
         .stderr(predicate::str::contains(
             "source 'source_v2' has unsupported schema_version 2",
         ));
+}
+
+#[test]
+fn issue_rejects_unknown_fields_in_pinned_graph_records() {
+    let temp = committed_store();
+    provenance(temp.path())
+        .args([
+            "sources",
+            "create",
+            "--repo",
+            ".",
+            "--scope",
+            "default",
+            "--id",
+            "source_typo",
+            "--name",
+            "Typo source",
+        ])
+        .assert()
+        .success();
+    let source_path = temp
+        .path()
+        .join(".provenance/state/scopes/default/sources/source.jsonl");
+    let source = std::fs::read_to_string(&source_path).unwrap();
+    std::fs::write(
+        &source_path,
+        source.replace(
+            "\"name\":\"Typo source\"",
+            "\"name\":\"Typo source\",\"naem\":\"lost\"",
+        ),
+    )
+    .unwrap();
+    git(temp.path(), &["add", ".provenance/state"]);
+    git(temp.path(), &["commit", "-qm", "add malformed source"]);
+
+    provenance(temp.path())
+        .args([
+            "graph-reference",
+            "issue",
+            "--repo",
+            ".",
+            "--scope",
+            "default",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unknown field"));
 }

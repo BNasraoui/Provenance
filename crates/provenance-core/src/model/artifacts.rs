@@ -245,6 +245,7 @@ fn empty_object() -> serde_json::Value {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Source {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,
@@ -291,6 +292,7 @@ pub struct Source {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SourceReference {
     #[serde(alias = "sourceId")]
     pub source_id: StableId,
@@ -299,6 +301,7 @@ pub struct SourceReference {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Requirement {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,
@@ -330,6 +333,7 @@ pub struct Requirement {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ResolutionInput {
     #[serde(alias = "inputType")]
     pub input_type: ResolutionInputType,
@@ -338,6 +342,7 @@ pub struct ResolutionInput {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Resolution {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,
@@ -389,6 +394,7 @@ pub struct Resolution {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Rule {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,

@@ -102,6 +102,7 @@ impl ResolutionMethod {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ArtifactLink {
     #[serde(alias = "targetType")]
     pub target_type: ArtifactLinkTargetType,
@@ -110,6 +111,7 @@ pub struct ArtifactLink {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Boundary {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,
@@ -122,6 +124,7 @@ pub struct Boundary {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Topic {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,
@@ -139,6 +142,7 @@ pub struct Topic {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Question {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,
