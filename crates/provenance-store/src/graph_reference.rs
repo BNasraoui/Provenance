@@ -29,7 +29,11 @@ pub struct GraphReference {
     pub scope_id: String,
     pub commit: String,
     pub graph_digest: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_correlation",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub correlation: Option<ExternalCorrelation>,
 }
 
@@ -343,6 +347,13 @@ fn validate_correlation(correlation: &ExternalCorrelation) -> Result<(), GraphRe
         });
     }
     Ok(())
+}
+
+fn deserialize_correlation<'de, D>(deserializer: D) -> Result<Option<ExternalCorrelation>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    ExternalCorrelation::deserialize(deserializer).map(Some)
 }
 
 fn validate_prefixed_hash(

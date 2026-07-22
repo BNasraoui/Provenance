@@ -328,6 +328,11 @@ fn graph_reference_schema_and_runtime_reject_the_same_boundary_values() {
             malformed["commit"] = Value::String("A".repeat(40));
             malformed
         }),
+        ("null-correlation", {
+            let mut malformed = reference.clone();
+            malformed["correlation"] = Value::Null;
+            malformed
+        }),
         ("whitespace-correlation", {
             let mut malformed = reference;
             malformed["correlation"] = serde_json::json!({"system": "   ", "key": "key"});
