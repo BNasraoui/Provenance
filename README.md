@@ -36,6 +36,7 @@ provenance prime
 | `provenance graph <requirement>` | Show the neighbourhood of a requirement |
 | `provenance graph-reference issue\|show\|verify\|exact-export` | Hand off an immutable pinned graph |
 | `provenance traceability <rule>` | Walk a rule back to the decision and requirement behind it |
+| `provenance proposals surface --scope default --changed-path <path>` | Surface undisposed proposals when current work touches their evidence or explicit territory |
 | `provenance coverage scan --path .` | Match `@provenance` code annotations against rules |
 | `provenance skills install` | Install the bundled agent skills (`provenance-shaping`, `provenance-fork-tournament`, `provenance-swarm-backtrace`, `provenance-grounded-writing`) |
 

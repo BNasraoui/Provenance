@@ -1,9 +1,12 @@
 mod domain_service_writers;
 mod ideation_writers;
+mod proposal_surfaces;
 mod rule_writers;
 mod shaping_writers;
 mod thread_writers;
 mod writers;
+
+pub use proposal_surfaces::{ProposalDemand, ProposalSurfaceReason, SurfacedProposal};
 
 use crate::{layout::ProvenanceLayout, shards};
 use anyhow::Context;

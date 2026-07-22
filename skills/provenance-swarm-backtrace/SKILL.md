@@ -15,8 +15,9 @@ keeping **all** evidence sites, challenge every candidate, and land everything a
 
 1. **Proposals only.** Every candidate lands with `promotion_state=proposed` — never as
    an active requirement, never pre-accepted. Extracted claims describe *current
-   behavior*; the code may be wrong — that's half the point. The human confirms
-   "intentional" or discovers surprises via the shaping loop, question by question.
+   behavior*; the code may be wrong — that's half the point. Preserve enough territory
+   and evidence for the proposal to surface when later work makes it relevant; do not
+   create a batch-disposal obligation.
 2. **Pin the commit.** All evidence is meaningless against a moving target. Record the
    exact commit in the Source; if the target repo changes mid-run, the run is against
    the pinned commit, not HEAD.
@@ -206,7 +207,9 @@ but silently dropped a partition is worse than one that says where it didn't loo
 ### 6. Hand off to shaping
 
 The backtrace's output *feeds* the shaping loop; it does not finish anything. Tell the
-human what landed (`provenance proposals list --scope <scope>`), what's contested, and
-what surprised the refuters — then the shaping loop (docs/shaping.md, "Invocation")
-takes over: `provenance prime`, and the human disposes of proposals question by
-question via `promotion-decisions create`. Do not make promotion decisions yourself.
+human how many proposals landed, what's contested, and what surprised the refuters. Bring
+forward only a small set that is already contested or conflicting and blocks a decision.
+The rest remain discoverable by `provenance proposals surface`: exact evidence paths for
+diff-driven work, and explicit topic/requirement/artifact targets for shaping work. Do not
+ask the human to dispose of the complete output, and do not make promotion decisions
+yourself.

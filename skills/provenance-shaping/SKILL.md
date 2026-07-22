@@ -42,7 +42,6 @@ by question; expensive methods claim one question and often stop at a phase boun
    provenance topics list --scope <scope> --format json
    provenance questions list --scope <scope> --format json
    provenance boundaries list --scope <scope> --format json
-   provenance proposals list --scope <scope> --format json
    ```
 
 3. Treat the map as an index, not a store. Keep only gists in your working context and
@@ -150,8 +149,8 @@ frontier.
 
 Load the map low-res with the commands from **Start every session**. `provenance prime`
 supplies rules and computed gaps (plus active threads only with `--include-threads`); load
-the anchor graph, fog, boundaries, topics, questions, and proposals with their separate
-commands. The shaping-focused subset of the computed graph frontier includes:
+the anchor graph, fog, boundaries, topics, and questions with their separate commands. The
+shaping-focused subset of the computed graph frontier includes:
 
 - requirements with neither a valid source reference nor a valid `references` edge;
 - unresolved `contradicts` pairs;
@@ -159,8 +158,12 @@ commands. The shaping-focused subset of the computed graph frontier includes:
   rule, and approved resolutions with no produced rule;
 - open or `blocked_on_human` questions and open topics.
 
-Proposals are not part of the computed graph frontier. List them separately and treat cards
-whose `promotion_state` is `proposed` as awaiting human disposal.
+Proposals are not part of the computed graph frontier and are not a batch-review inbox.
+Claiming a topic returns undisposed proposals targeting the topic, its anchor requirement,
+or its explicit artifact links. For diff-driven work, run `provenance proposals surface
+--scope <scope> --changed-path <repo-relative-path> --format json` (repeat the path flag).
+Review only those surfaced proposals. Use a complete list only for a deliberately bounded
+set of competing, contested, or conflicting proposals that jointly blocks the turn.
 
 Do not hand-wire a private frontier in chat. If the graph says a different thing than your
 notes, fix the graph or trust the graph.
@@ -179,6 +182,10 @@ Claim before work so concurrent sessions skip what you are touching.
 
 If claim fails, do not work that item. Pick another frontier item or hand off that it is
 already held.
+
+On a successful topic claim, inspect `surfaced_proposals` before resolving the first
+question. They are context that has become decision-relevant because the turn entered its
+explicit territory; do not infer further territory from titles or graph proximity.
 
 ### 3. Resolve and land as you go
 

@@ -199,6 +199,24 @@ pub enum ProposalsCommand {
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },
+    /// Surface undisposed proposals when current work enters their territory.
+    Surface {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long)]
+        scope: String,
+        /// Repository-relative path touched by the current diff. Repeat for multiple paths.
+        #[arg(long)]
+        changed_path: Vec<String>,
+        /// Explicit existing territory type, paired with --target-id.
+        #[arg(long)]
+        target_type: Option<String>,
+        /// Explicit existing territory ID, paired with --target-type.
+        #[arg(long)]
+        target_id: Option<String>,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
 }
 
 #[derive(Subcommand)]

@@ -4,8 +4,15 @@ use crate::output;
 use provenance_core::{ArtifactLink, ScopeId, StableId, TopicStatus};
 use provenance_store::{
     layout::ProvenanceLayout,
-    state_store::{CreateTopicInput, StateStore},
+    state_store::{CreateTopicInput, ProposalDemand, StateStore, SurfacedProposal},
 };
+
+#[derive(serde::Serialize)]
+struct TopicClaimResult {
+    #[serde(flatten)]
+    topic: provenance_core::Topic,
+    surfaced_proposals: Vec<SurfacedProposal>,
+}
 
 pub(super) fn handle(command: TopicsCommand) -> anyhow::Result<()> {
     match command {
@@ -46,12 +53,24 @@ pub(super) fn handle(command: TopicsCommand) -> anyhow::Result<()> {
             actor,
             format,
         } => {
-            let topic = StateStore::new(ProvenanceLayout::new(repo)).claim_topic(
-                &ScopeId::new(scope)?,
-                &StableId::new(id)?,
-                &actor,
+            let store = StateStore::new(ProvenanceLayout::new(repo));
+            let scope = ScopeId::new(scope)?;
+            let topic_id = StableId::new(id)?;
+            let current_topic = store
+                .list_topics(&scope)?
+                .into_iter()
+                .find(|topic| topic.id == topic_id)
+                .ok_or_else(|| anyhow::anyhow!("topic does not exist"))?;
+            let surfaced_proposals =
+                store.surface_proposals(&scope, &ProposalDemand::for_topic(&current_topic))?;
+            let topic = store.claim_topic(&scope, &topic_id, &actor)?;
+            output::print(
+                format,
+                &TopicClaimResult {
+                    topic,
+                    surfaced_proposals,
+                },
             )?;
-            output::print(format, &topic)?;
         }
         TopicsCommand::Release {
             repo,
