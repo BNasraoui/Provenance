@@ -23,6 +23,8 @@ pub enum IdeationArtifactKind {
     Contribution,
     SynthesisPacket,
     Proposal,
+    GraphReference,
+    GraphReferenceExport,
 }
 
 impl IdeationArtifactKind {
@@ -31,6 +33,8 @@ impl IdeationArtifactKind {
             Self::Contribution => "contribution",
             Self::SynthesisPacket => "synthesis-packet",
             Self::Proposal => "proposal",
+            Self::GraphReference => "graph-reference",
+            Self::GraphReferenceExport => "graph-reference-export",
         }
     }
 }

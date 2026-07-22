@@ -1,4 +1,5 @@
 pub mod cache;
+pub mod graph_reference;
 pub mod jsonl;
 pub mod layout;
 pub mod merge;
