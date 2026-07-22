@@ -306,6 +306,11 @@ fn graph_reference_export_schema_validates_record_structure() {
         },
         {
             let mut value = minimal_exact_export();
+            value["graph"]["sources"][0]["commit_pin"] = json!("not-a-commit");
+            value
+        },
+        {
+            let mut value = minimal_exact_export();
             value["graph"]["scope"]["workflow_id"] = json!("workflowd-123");
             value
         },

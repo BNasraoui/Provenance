@@ -107,6 +107,35 @@ impl GraphExport {
         require_v1!(&self.edges, "edge");
         Ok(())
     }
+
+    pub(super) fn validate_no_collaboration_fields(&self) -> Result<(), GraphReferenceError> {
+        macro_rules! reject_field {
+            ($records:expr, $field:ident) => {
+                if $records.iter().any(|record| record.$field.is_some()) {
+                    return Err(GraphReferenceError::Incomplete {
+                        detail: format!(
+                            "exact export must not contain collaboration field '{}'",
+                            stringify!($field)
+                        ),
+                    });
+                }
+            };
+        }
+
+        reject_field!(&self.sources, origin_thread);
+        reject_field!(&self.sources, origin_message);
+        reject_field!(&self.requirements, origin_thread);
+        reject_field!(&self.requirements, origin_message);
+        reject_field!(&self.topics, claimed_by);
+        reject_field!(&self.topics, claimed_at);
+        reject_field!(&self.questions, claimed_by);
+        reject_field!(&self.questions, claimed_at);
+        reject_field!(&self.resolutions, origin_thread);
+        reject_field!(&self.resolutions, origin_message);
+        reject_field!(&self.rules, origin_thread);
+        reject_field!(&self.rules, origin_message);
+        Ok(())
+    }
 }
 
 fn strip_collaboration_fields(graph: &mut GraphExport) {

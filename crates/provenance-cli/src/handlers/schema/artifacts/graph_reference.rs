@@ -111,7 +111,11 @@ fn export_definitions() -> Value {
                 "name": string.clone(),
                 "source_type": {"enum": ["policy", "document", "legislation", "company_agreement", "system_state", "external_integration", "domain_knowledge", "project_artifact", "incident", "api_spec"]},
                 "url": {"type": ["string", "null"]}, "reference": string.clone(),
-                "commit_pin": string.clone(), "effective_date": {"type": "integer"},
+                "commit_pin": {
+                    "type": "string", "minLength": 7, "maxLength": 64,
+                    "pattern": "^[0-9A-Fa-f]+$"
+                },
+                "effective_date": {"type": "integer"},
                 "review_date": {"type": "integer"}, "superseded_by": id.clone()
             })
         ),

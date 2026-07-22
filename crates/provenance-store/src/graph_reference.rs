@@ -295,6 +295,7 @@ impl ExactExport {
             });
         }
         document.graph.validate_schema_versions()?;
+        document.graph.validate_no_collaboration_fields()?;
         projection::validate_scope_ownership(&document.graph, &document.graph.scope.id)?;
         Ok(Self {
             schema_version: 1,

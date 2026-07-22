@@ -57,3 +57,39 @@ fn exact_export_rejects_unsupported_record_schema_versions() {
     assert!(error.to_string().contains("source 'source_policy'"));
     assert!(error.to_string().contains("schema_version 2"));
 }
+
+#[test]
+fn exact_export_rejects_collaboration_metadata() {
+    let document = json!({
+        "schema_version": 1,
+        "operation": "exact-export",
+        "reference_id": format!("grf1_{}", "0".repeat(64)),
+        "graph": {
+            "schema_version": 1,
+            "scope": {"id": "default", "path_prefix": "."},
+            "sources": [{
+                "schema_version": 1,
+                "scope_id": "default",
+                "id": "source_policy",
+                "name": "Policy",
+                "source_type": "policy",
+                "url": null,
+                "origin_thread": "thread_private"
+            }],
+            "domains": [],
+            "requirements": [],
+            "boundaries": [],
+            "topics": [],
+            "questions": [],
+            "resolutions": [],
+            "rules": [],
+            "services": [],
+            "service_bindings": [],
+            "edges": []
+        }
+    });
+
+    let error = ExactExport::from_json(&serde_json::to_vec(&document).unwrap()).unwrap_err();
+    assert!(matches!(error, GraphReferenceError::Incomplete { .. }));
+    assert!(error.to_string().contains("origin_thread"));
+}
