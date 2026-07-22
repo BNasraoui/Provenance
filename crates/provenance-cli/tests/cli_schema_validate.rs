@@ -1,4 +1,5 @@
 use assert_cmd::Command;
+use serde_json::json;
 
 fn write_json(dir: &tempfile::TempDir, name: &str, json: &str) -> String {
     let path = dir.path().join(name);
@@ -181,5 +182,63 @@ fn validate_rejects_nested_invalid_stable_ids() {
             .assert()
             .failure()
             .stderr(predicates::str::contains("stable id"));
+    }
+}
+
+#[test]
+fn validate_rejects_forbidden_graph_reference_export_fields() {
+    let dir = tempfile::tempdir().unwrap();
+    let export = json!({
+        "schema_version": 1,
+        "operation": "exact-export",
+        "reference_id": format!("grf1_{}", "0".repeat(64)),
+        "graph": {
+            "schema_version": 1,
+            "scope": {"id": "default", "path_prefix": "."},
+            "sources": [{
+                "schema_version": 1,
+                "scope_id": "default",
+                "id": "source_policy",
+                "name": "Policy",
+                "source_type": "policy",
+                "url": null
+            }],
+            "domains": [],
+            "requirements": [],
+            "boundaries": [],
+            "topics": [],
+            "questions": [],
+            "resolutions": [],
+            "rules": [],
+            "services": [],
+            "service_bindings": [],
+            "edges": []
+        }
+    });
+
+    for (name, field, value) in [
+        ("collaboration", "origin_thread", json!("thread_private")),
+        ("unknown", "unexpected", json!(true)),
+    ] {
+        let mut malformed = export.clone();
+        malformed["graph"]["sources"][0][field] = value;
+        let path = write_json(
+            &dir,
+            &format!("{name}-export.json"),
+            &serde_json::to_string(&malformed).unwrap(),
+        );
+
+        Command::cargo_bin("provenance")
+            .unwrap()
+            .args([
+                "validate",
+                "graph-reference-export",
+                "--input",
+                &path,
+                "--format",
+                "json",
+            ])
+            .assert()
+            .failure();
     }
 }

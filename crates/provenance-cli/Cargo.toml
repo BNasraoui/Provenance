@@ -15,6 +15,7 @@ anyhow.workspace = true
 axum.workspace = true
 camino.workspace = true
 clap.workspace = true
+jsonschema.workspace = true
 pulldown-cmark.workspace = true
 provenance-core = { path = "../provenance-core" }
 provenance-scanner = { path = "../provenance-scanner" }

@@ -56,6 +56,8 @@ pub(super) fn validate_file(
             GraphReference::from_json(json.as_bytes())?;
         }
         IdeationArtifactKind::GraphReferenceExport => {
+            let value = serde_json::from_str(&json)?;
+            super::schema::validate_graph_reference_export(&value)?;
             ExactExport::from_json(json.as_bytes())?;
         }
     }
