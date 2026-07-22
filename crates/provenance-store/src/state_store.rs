@@ -16,12 +16,19 @@ use provenance_core::{
     PromotionState, ProposalCard, ProposalTraceability, ProposalType, Question, QuestionStatus,
     RequiredHumanDecision, Requirement, RequirementStatus, Resolution, ResolutionInput,
     ResolutionMethod, ResolutionStatus, Rule, RuleModality, RuleSeverity, RuleStatus, RuleType,
-    ScopeId, Service, ServiceBinding, ServiceBindingType, ServiceEnvironment, ServiceStatus,
-    ServiceTier, Source, SourceReference, SourceType, StableId, SuggestedArtifact,
+    SchemaVersion, Scope, ScopeId, Service, ServiceBinding, ServiceBindingType, ServiceEnvironment,
+    ServiceStatus, ServiceTier, Source, SourceReference, SourceType, StableId, SuggestedArtifact,
     SuggestedArtifactChange, SynthesisPacket, Thread, ThreadParent, Topic, TopicStatus,
     UncertaintyRating, UnsupportedRecommendation, UnsupportedSpeculation,
 };
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ManifestProjection {
+    schema_version: SchemaVersion,
+    scopes: Vec<serde_json::Value>,
+}
 
 #[derive(Debug, Clone)]
 pub struct StateStore {
@@ -257,8 +264,21 @@ impl StateStore {
         )?)?)
     }
 
-    pub(crate) fn closed_manifest(&self) -> anyhow::Result<Manifest> {
-        deserialize_closed(&std::fs::read_to_string(self.layout.manifest_path())?)
+    pub(crate) fn closed_manifest_scope(
+        &self,
+        scope: &ScopeId,
+    ) -> anyhow::Result<(SchemaVersion, Option<Scope>)> {
+        let manifest: ManifestProjection =
+            deserialize_closed(&std::fs::read_to_string(self.layout.manifest_path())?)?;
+        let selected = manifest
+            .scopes
+            .into_iter()
+            .find(|candidate| {
+                candidate.get("id").and_then(serde_json::Value::as_str) == Some(scope.as_str())
+            })
+            .map(|candidate| deserialize_closed(&serde_json::to_string(&candidate)?))
+            .transpose()?;
+        Ok((manifest.schema_version, selected))
     }
 
     pub fn list_scope_directories(&self) -> anyhow::Result<Vec<String>> {
@@ -299,7 +319,7 @@ impl StateStore {
         read_jsonl(&shards::questions_path(&self.layout, scope))
     }
     pub fn list_edges(&self) -> anyhow::Result<Vec<Edge>> {
-        read_edge_shards(&self.layout, false)
+        read_edge_shards(&self.layout, None)
     }
     pub fn list_resolutions(&self, scope: &ScopeId) -> anyhow::Result<Vec<Resolution>> {
         read_jsonl(&shards::resolutions_path(&self.layout, scope))
@@ -346,8 +366,8 @@ impl StateStore {
     ) -> anyhow::Result<Vec<ServiceBinding>> {
         read_jsonl_closed(&shards::service_bindings_path(&self.layout, scope))
     }
-    pub(crate) fn closed_edges(&self) -> anyhow::Result<Vec<Edge>> {
-        read_edge_shards(&self.layout, true)
+    pub(crate) fn closed_edges(&self, scope: &ScopeId) -> anyhow::Result<Vec<Edge>> {
+        read_edge_shards(&self.layout, Some(scope))
     }
     pub fn list_threads(&self, scope: &ScopeId) -> anyhow::Result<Vec<Thread>> {
         read_jsonl(&shards::threads_path(&self.layout, scope))
@@ -483,7 +503,10 @@ fn is_message_month_shard(path: &Utf8Path) -> bool {
         && &bytes[7..] == b".jsonl"
 }
 
-fn read_edge_shards(layout: &ProvenanceLayout, closed: bool) -> anyhow::Result<Vec<Edge>> {
+fn read_edge_shards(
+    layout: &ProvenanceLayout,
+    closed_scope: Option<&ScopeId>,
+) -> anyhow::Result<Vec<Edge>> {
     let edges_dir = layout.edges_dir();
     if !edges_dir.exists() {
         return Ok(Vec::new());
@@ -502,12 +525,23 @@ fn read_edge_shards(layout: &ProvenanceLayout, closed: bool) -> anyhow::Result<V
     }
     shard_paths.sort();
 
-    if closed {
+    if let Some(scope) = closed_scope {
         let mut records = Vec::new();
         for path in shard_paths {
             let contents = std::fs::read_to_string(&path)
                 .with_context(|| format!("failed to read edge shard {}", path.as_str()))?;
             for (index, line) in contents.lines().enumerate() {
+                let value: serde_json::Value = serde_json::from_str(line).with_context(|| {
+                    format!(
+                        "failed to parse edge shard {} line {}",
+                        path.as_str(),
+                        index + 1
+                    )
+                })?;
+                if value.get("scope_id").and_then(serde_json::Value::as_str) != Some(scope.as_str())
+                {
+                    continue;
+                }
                 records.push(deserialize_closed(line).with_context(|| {
                     format!(
                         "failed to parse edge shard {} line {}",

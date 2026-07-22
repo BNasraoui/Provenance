@@ -31,29 +31,26 @@ pub(super) fn load_projection(
 ) -> Result<GraphExport, GraphReferenceError> {
     let scope_id = ScopeId::new(scope.to_string()).map_err(incomplete)?;
     let store = StateStore::new(ProvenanceLayout::new(repository.to_path_buf()));
-    let manifest = store.closed_manifest().map_err(|error| {
-        let detail = error.to_string();
-        if repository.join(".provenance/state/manifest.json").exists() {
-            incomplete(detail)
-        } else {
-            GraphReferenceError::Missing {
-                detail: "canonical manifest is absent".into(),
+    let (manifest_version, selected_scope) =
+        store.closed_manifest_scope(&scope_id).map_err(|error| {
+            let detail = error.to_string();
+            if repository.join(".provenance/state/manifest.json").exists() {
+                incomplete(detail)
+            } else {
+                GraphReferenceError::Missing {
+                    detail: "canonical manifest is absent".into(),
+                }
             }
-        }
-    })?;
-    if manifest.schema_version.0 != 1 {
+        })?;
+    if manifest_version.0 != 1 {
         return Err(incomplete(format!(
             "unsupported manifest schema_version {}",
-            manifest.schema_version.0
+            manifest_version.0
         )));
     }
-    let selected_scope = manifest
-        .scopes
-        .into_iter()
-        .find(|candidate| candidate.id == scope_id)
-        .ok_or_else(|| GraphReferenceError::Missing {
-            detail: format!("scope '{scope}' is absent from the pinned manifest"),
-        })?;
+    let selected_scope = selected_scope.ok_or_else(|| GraphReferenceError::Missing {
+        detail: format!("scope '{scope}' is absent from the pinned manifest"),
+    })?;
 
     let mut graph = GraphExport {
         schema_version: 1,
@@ -70,12 +67,7 @@ pub(super) fn load_projection(
         service_bindings: store
             .closed_service_bindings(&scope_id)
             .map_err(incomplete)?,
-        edges: store
-            .closed_edges()
-            .map_err(incomplete)?
-            .into_iter()
-            .filter(|edge| edge.scope_id == scope_id)
-            .collect(),
+        edges: store.closed_edges(&scope_id).map_err(incomplete)?,
     };
     graph.validate_schema_versions()?;
     validate_scope_ownership(&graph, &scope_id)?;
