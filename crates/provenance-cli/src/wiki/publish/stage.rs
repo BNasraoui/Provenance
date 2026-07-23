@@ -1,5 +1,5 @@
 use super::manifest::OwnershipManifest;
-use super::transaction::{replace_output, OutputState, StageIdentity, TransactionPaths};
+use super::transaction::{replace_output, OutputState, StageIdentity, TransactionDirectory};
 use super::{
     PublicationOutput, PublishError, PublishReport, PublishedPage, GENERATOR, MANIFEST_VERSION,
     OWNERSHIP_MANIFEST,
@@ -10,35 +10,18 @@ use camino::Utf8Path;
 use std::fs::File;
 use std::io::Write;
 
-#[cfg(unix)]
-use rustix::fs::{mkdirat, openat, Mode, OFlags};
-
 pub(super) struct StageDirectory {
     root: File,
     identity: StageIdentity,
 }
 
 impl StageDirectory {
-    pub(super) fn open(path: &Utf8Path) -> Result<Self, PublishError> {
-        #[cfg(unix)]
-        let root = File::from(
-            openat(
-                rustix::fs::CWD,
-                path.as_std_path(),
-                OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
-                Mode::empty(),
-            )
-            .map_err(|error| PublishError::io("open staging directory", path, error.into()))?,
-        );
-        #[cfg(not(unix))]
-        let root = File::open(path)
-            .map_err(|error| PublishError::io("open staging directory", path, error))?;
+    pub(super) fn from_file(root: File, path: &Utf8Path) -> Result<Self, PublishError> {
         let identity = StageIdentity::from_file(&root)
             .map_err(|error| PublishError::io("record staging directory identity", path, error))?;
         Ok(Self { root, identity })
     }
 
-    #[cfg(unix)]
     fn write_file(
         &self,
         relative: &[&str],
@@ -49,70 +32,45 @@ impl StageDirectory {
             PublishError::io("clone staging directory handle", display_path, error)
         })?;
         for segment in &relative[..relative.len() - 1] {
-            match mkdirat(&directory, *segment, Mode::from_raw_mode(0o755)) {
-                Ok(()) => {}
-                Err(error) if error == rustix::io::Errno::EXIST => {}
+            directory = match fs_at::OpenOptions::default().mkdir_at(&directory, *segment) {
+                Ok(created) => created,
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    let mut options = fs_at::OpenOptions::default();
+                    options.read(true).follow(false);
+                    options.open_dir_at(&directory, *segment).map_err(|error| {
+                        PublishError::io("open staged directory", display_path, error)
+                    })?
+                }
                 Err(error) => {
                     return Err(PublishError::io(
                         "create staged directory",
                         display_path,
-                        error.into(),
-                    ));
+                        error,
+                    ))
                 }
-            }
-            directory = File::from(
-                openat(
-                    &directory,
-                    *segment,
-                    OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
-                    Mode::empty(),
-                )
-                .map_err(|error| {
-                    PublishError::io("open staged directory", display_path, error.into())
-                })?,
-            );
+            };
         }
-        let mut file = File::from(
-            openat(
-                &directory,
-                relative[relative.len() - 1],
-                OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW | OFlags::CLOEXEC,
-                Mode::from_raw_mode(0o644),
-            )
-            .map_err(|error| PublishError::io("create staged file", display_path, error.into()))?,
-        );
+        let mut options = fs_at::OpenOptions::default();
+        options
+            .write(fs_at::OpenOptionsWriteMode::Write)
+            .create_new(true)
+            .follow(false);
+        let mut file = options
+            .open_at(&directory, relative[relative.len() - 1])
+            .map_err(|error| PublishError::io("create staged file", display_path, error))?;
         file.write_all(contents)
             .map_err(|error| PublishError::io("write staged file", display_path, error))
-    }
-
-    #[cfg(not(unix))]
-    fn write_file(
-        &self,
-        relative: &[&str],
-        contents: &[u8],
-        display_path: &Utf8Path,
-    ) -> Result<(), PublishError> {
-        let root = display_path
-            .ancestors()
-            .nth(relative.len())
-            .expect("display path contains every relative component");
-        let path = relative
-            .iter()
-            .fold(root.to_path_buf(), |path, segment| path.join(segment));
-        std::fs::create_dir_all(path.parent().expect("staged file has a parent"))
-            .map_err(|error| PublishError::io("create staged directory", &path, error))?;
-        std::fs::write(&path, contents)
-            .map_err(|error| PublishError::io("write staged file", &path, error))
     }
 }
 
 pub(super) fn generate_and_replace(
     corpus: &WikiCorpus,
     output: PublicationOutput,
-    paths: &TransactionPaths,
+    transaction: &TransactionDirectory,
     output_state: OutputState,
     stage: &StageDirectory,
 ) -> Result<PublishReport, PublishError> {
+    let paths = &transaction.paths;
     let pages = render::render_corpus(corpus);
     for page in &pages {
         write_page_in(stage, &paths.stage, &page.route, &page.html)?;
@@ -130,11 +88,15 @@ pub(super) fn generate_and_replace(
     .expect("ownership manifest is always serializable");
     let manifest_path = paths.stage.join(OWNERSHIP_MANIFEST);
     stage.write_file(&[OWNERSHIP_MANIFEST], &manifest, &manifest_path)?;
-    super::manifest::validate_output(&output.path, output.policy)?;
+    transaction.validate_output(
+        output.path.file_name().expect("validated output leaf"),
+        &output.path,
+        output.policy,
+    )?;
     let cleanup_warnings = replace_output(
         &output.path,
         output.policy,
-        paths,
+        transaction,
         output_state,
         &stage.identity,
     )?;
@@ -157,7 +119,9 @@ pub(super) fn generate_and_replace(
 
 #[cfg(test)]
 pub(super) fn write_page(stage: &Utf8Path, route: &str, html: &str) -> Result<(), PublishError> {
-    let stage_directory = StageDirectory::open(stage)?;
+    let root = File::open(stage)
+        .map_err(|error| PublishError::io("open staging directory", stage, error))?;
+    let stage_directory = StageDirectory::from_file(root, stage)?;
     write_page_in(&stage_directory, stage, route, html)
 }
 

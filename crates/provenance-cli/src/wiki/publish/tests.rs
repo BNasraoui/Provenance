@@ -248,6 +248,31 @@ fn stage_creation_race_preserves_the_foreign_tree() {
     assert!(!output.exists());
 }
 
+#[test]
+fn parent_replacement_does_not_redirect_the_transaction() {
+    let temp = tempfile::tempdir().unwrap();
+    let parent = utf8(temp.path().join("site"));
+    let displaced_parent = utf8(temp.path().join("original-site"));
+    let output = parent.join("wiki");
+    std::fs::create_dir(&parent).unwrap();
+
+    let report = publish_with(
+        &empty_corpus(),
+        PublicationOutput::custom(output.clone()),
+        |_| {
+            std::fs::rename(&parent, &displaced_parent)?;
+            std::fs::create_dir(&parent)?;
+            Ok(())
+        },
+    )
+    .unwrap();
+
+    assert_eq!(report.status, "ok");
+    assert!(displaced_parent.join("wiki/index.html").is_file());
+    assert!(!output.exists());
+    assert!(std::fs::read_dir(&parent).unwrap().next().is_none());
+}
+
 #[cfg(unix)]
 #[test]
 fn staged_child_symlink_cannot_redirect_generated_writes() {
@@ -264,6 +289,35 @@ fn staged_child_symlink_cannot_redirect_generated_writes() {
         |stage| symlink(&external, stage.join("assets")),
     )
     .unwrap_err();
+
+    assert!(matches!(
+        error,
+        PublishError::CleanupFailed { primary, .. }
+            if matches!(*primary, PublishError::Io { .. })
+    ));
+    assert!(!external.join("provenance-wiki.css").exists());
+    assert!(!output.exists());
+}
+
+#[cfg(windows)]
+#[test]
+fn staged_child_reparse_point_cannot_redirect_generated_writes() {
+    use std::os::windows::fs::symlink_dir;
+
+    let temp = tempfile::tempdir().unwrap();
+    let output = utf8(temp.path().join("wiki"));
+    let external = utf8(temp.path().join("external"));
+    std::fs::create_dir(&external).unwrap();
+
+    let result = publish_with(
+        &empty_corpus(),
+        PublicationOutput::custom(output.clone()),
+        |stage| symlink_dir(&external, stage.join("assets")),
+    );
+    let error = match result {
+        Err(error) => error,
+        Ok(_) => panic!("publication followed a staged reparse point"),
+    };
 
     assert!(matches!(
         error,

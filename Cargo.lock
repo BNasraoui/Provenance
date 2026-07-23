@@ -1383,6 +1383,7 @@ dependencies = [
  "axum",
  "camino",
  "clap",
+ "fs_at",
  "insta",
  "jsonschema",
  "predicates",
@@ -1398,6 +1399,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "walkdir",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

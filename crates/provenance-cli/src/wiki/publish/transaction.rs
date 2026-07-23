@@ -1,8 +1,7 @@
 use super::{manifest, CleanupWarning, PublicationOutput, PublishError};
 use camino::{Utf8Path, Utf8PathBuf};
-#[cfg(unix)]
 use remove_dir_all::RemoveDir;
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::Write;
 
 pub(super) enum OutputState {
@@ -18,10 +17,6 @@ impl StageIdentity {
     pub(super) fn from_file(file: &File) -> std::io::Result<Self> {
         same_file::Handle::from_file(file.try_clone()?).map(Self)
     }
-
-    fn matches_path(&self, path: &Utf8Path) -> std::io::Result<bool> {
-        Ok(same_file::Handle::from_path(path)? == self.0)
-    }
 }
 
 pub(super) struct PublicationLock {
@@ -30,11 +25,12 @@ pub(super) struct PublicationLock {
 }
 
 impl PublicationLock {
-    pub(super) fn cleanup(self, paths: &TransactionPaths) -> std::io::Result<()> {
-        rename_no_replace(&paths.lock, &paths.lock_cleanup)?;
-        if same_file::Handle::from_path(&paths.lock_cleanup)? != self.identity {
+    pub(super) fn cleanup(self, transaction: &TransactionDirectory) -> std::io::Result<()> {
+        transaction.rename(&transaction.lock_leaf, &transaction.lock_cleanup_leaf)?;
+        if transaction.child_identity(&transaction.lock_cleanup_leaf)? != self.identity {
             let mismatch = std::io::Error::other("publication lock path changed before cleanup");
-            return match rename_no_replace(&paths.lock_cleanup, &paths.lock) {
+            return match transaction.rename(&transaction.lock_cleanup_leaf, &transaction.lock_leaf)
+            {
                 Ok(()) => Err(mismatch),
                 Err(restore) => Err(std::io::Error::other(format!(
                     "{mismatch}; restoring the replacement lock path also failed: {restore}"
@@ -42,8 +38,165 @@ impl PublicationLock {
             };
         }
         drop(self);
-        std::fs::remove_file(&paths.lock_cleanup)
+        transaction.remove_file(&transaction.lock_cleanup_leaf)
     }
+}
+
+pub(super) struct TransactionDirectory {
+    parent: File,
+    pub paths: TransactionPaths,
+    output_leaf: String,
+    lock_leaf: String,
+    lock_cleanup_leaf: String,
+    stage_leaf: String,
+    backup_leaf: String,
+}
+
+impl TransactionDirectory {
+    pub(super) fn open(output: &Utf8Path) -> Result<Self, PublishError> {
+        let paths = TransactionPaths::new(output)?;
+        let parent_path = output
+            .parent()
+            .filter(|path| !path.as_str().is_empty())
+            .unwrap_or_else(|| Utf8Path::new("."));
+        ensure_real_directory(parent_path, output)?;
+        let parent = open_directory_no_follow(parent_path).map_err(|error| {
+            PublishError::io("open output parent directory", parent_path, error)
+        })?;
+        let output_leaf = output
+            .file_name()
+            .expect("validated output leaf")
+            .to_string();
+        let leaf = |role: &str| format!(".{output_leaf}.provenance-wiki.{role}");
+        Ok(Self {
+            parent,
+            paths,
+            lock_leaf: leaf("lock"),
+            lock_cleanup_leaf: leaf("lock.cleanup"),
+            stage_leaf: leaf("stage"),
+            backup_leaf: leaf("backup"),
+            output_leaf,
+        })
+    }
+
+    pub(super) fn create_stage(&self) -> std::io::Result<File> {
+        fs_at::OpenOptions::default().mkdir_at(&self.parent, &self.stage_leaf)
+    }
+
+    pub(super) fn validate_output(
+        &self,
+        leaf: &str,
+        display: &Utf8Path,
+        policy: super::OutputPolicy,
+    ) -> Result<(), PublishError> {
+        let directory = match self.open_dir(leaf) {
+            Ok(directory) => Some(directory),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(PublishError::io("open wiki output", display, error)),
+        };
+        manifest::validate_output_handle(directory, display, policy)
+    }
+
+    fn create_file(&self, leaf: &str) -> std::io::Result<File> {
+        let mut options = fs_at::OpenOptions::default();
+        options
+            .write(fs_at::OpenOptionsWriteMode::Write)
+            .create_new(true)
+            .follow(false);
+        options.open_at(&self.parent, leaf)
+    }
+
+    fn open_dir(&self, leaf: &str) -> std::io::Result<File> {
+        open_child_directory_no_follow(&self.parent, leaf)
+    }
+
+    fn child_identity(&self, leaf: &str) -> std::io::Result<same_file::Handle> {
+        let file = if leaf == self.lock_leaf || leaf == self.lock_cleanup_leaf {
+            let mut options = fs_at::OpenOptions::default();
+            options.read(true).follow(false);
+            options.open_at(&self.parent, leaf)?
+        } else {
+            self.open_dir(leaf)?
+        };
+        same_file::Handle::from_file(file)
+    }
+
+    fn child_exists(&self, leaf: &str) -> std::io::Result<bool> {
+        child_kind(&self.parent, leaf).map(|kind| kind.is_some())
+    }
+
+    fn rename(&self, from: &str, to: &str) -> std::io::Result<()> {
+        rename_no_replace_at(&self.parent, from, to)
+    }
+
+    fn remove_file(&self, leaf: &str) -> std::io::Result<()> {
+        fs_at::OpenOptions::default().unlink_at(&self.parent, leaf)
+    }
+
+    pub(super) fn remove_stage(&self) -> std::io::Result<()> {
+        fs_at::OpenOptions::default().rmdir_at(&self.parent, &self.stage_leaf)
+    }
+}
+
+#[cfg(unix)]
+fn open_child_directory_no_follow(parent: &File, leaf: &str) -> std::io::Result<File> {
+    rustix::fs::openat(
+        parent,
+        leaf,
+        rustix::fs::OFlags::RDONLY
+            | rustix::fs::OFlags::DIRECTORY
+            | rustix::fs::OFlags::NOFOLLOW
+            | rustix::fs::OFlags::CLOEXEC,
+        rustix::fs::Mode::empty(),
+    )
+    .map(File::from)
+    .map_err(std::io::Error::from)
+}
+
+#[cfg(not(unix))]
+fn open_child_directory_no_follow(parent: &File, leaf: &str) -> std::io::Result<File> {
+    fs_at::OpenOptions::default().open_dir_at(parent, leaf)
+}
+
+#[cfg(unix)]
+fn open_directory_no_follow(path: &Utf8Path) -> std::io::Result<File> {
+    rustix::fs::openat(
+        rustix::fs::CWD,
+        path.as_std_path(),
+        rustix::fs::OFlags::RDONLY
+            | rustix::fs::OFlags::DIRECTORY
+            | rustix::fs::OFlags::NOFOLLOW
+            | rustix::fs::OFlags::CLOEXEC,
+        rustix::fs::Mode::empty(),
+    )
+    .map(File::from)
+    .map_err(std::io::Error::from)
+}
+
+#[cfg(windows)]
+fn open_directory_no_follow(path: &Utf8Path) -> std::io::Result<File> {
+    use std::os::windows::fs::MetadataExt;
+    use std::os::windows::fs::OpenOptionsExt;
+    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    let directory = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(0x1 | 0x2 | 0x4)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)?;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
+    if directory.metadata()?.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "output parent is a reparse point",
+        ));
+    }
+    Ok(directory)
+}
+
+#[cfg(not(any(unix, windows)))]
+fn open_directory_no_follow(path: &Utf8Path) -> std::io::Result<File> {
+    File::open(path)
 }
 
 pub(super) struct TransactionPaths {
@@ -74,11 +227,12 @@ impl TransactionPaths {
     }
 }
 
-pub(super) fn acquire_lock(paths: &TransactionPaths) -> Result<PublicationLock, PublishError> {
-    let lock = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&paths.lock)
+pub(super) fn acquire_lock(
+    transaction: &TransactionDirectory,
+) -> Result<PublicationLock, PublishError> {
+    let paths = &transaction.paths;
+    let lock = transaction
+        .create_file(&transaction.lock_leaf)
         .map_err(|error| PublishError::io("create publication lock", &paths.lock, error))?;
     let identity_file = lock
         .try_clone()
@@ -100,7 +254,7 @@ pub(super) fn acquire_lock(paths: &TransactionPaths) -> Result<PublicationLock, 
                 .map_err(|error| PublishError::io("sync publication lock", &paths.lock, error))
         });
     if let Err(primary) = initialization {
-        return match lock.cleanup(paths) {
+        return match lock.cleanup(transaction) {
             Ok(()) => Err(primary),
             Err(cleanup) => Err(PublishError::CleanupFailed {
                 primary: Box::new(primary),
@@ -114,20 +268,31 @@ pub(super) fn acquire_lock(paths: &TransactionPaths) -> Result<PublicationLock, 
 
 pub(super) fn preflight(
     output: &PublicationOutput,
-    paths: &TransactionPaths,
+    transaction: &TransactionDirectory,
 ) -> Result<OutputState, PublishError> {
-    let parent = output
-        .path
-        .parent()
-        .filter(|path| !path.as_str().is_empty())
-        .unwrap_or_else(|| Utf8Path::new("."));
-    ensure_real_directory(parent, &output.path)?;
+    let paths = &transaction.paths;
+    match child_kind(&transaction.parent, &transaction.output_leaf)
+        .map_err(|error| PublishError::io("inspect wiki output", &output.path, error))?
+    {
+        Some(ChildKind::Symlink) => {
+            return Err(PublishError::OutputSymlink {
+                path: output.path.clone(),
+            })
+        }
+        Some(ChildKind::File | ChildKind::Other) => {
+            return Err(PublishError::OutputNotDirectory {
+                path: output.path.clone(),
+            })
+        }
+        _ => {}
+    }
+    let output_state = transaction.output_identity(&transaction.output_leaf, &output.path)?;
+    transaction.validate_output(&transaction.output_leaf, &output.path, output.policy)?;
 
-    let output_state = output_identity(&output.path)?;
-    manifest::validate_output(&output.path, output.policy)?;
-
-    if let Ok(metadata) = paths.lock.symlink_metadata() {
-        if metadata.file_type().is_symlink() || !metadata.is_file() {
+    if let Some(kind) = child_kind(&transaction.parent, &transaction.lock_leaf)
+        .map_err(|error| PublishError::io("inspect publication lock", &paths.lock, error))?
+    {
+        if kind != ChildKind::File {
             return Err(PublishError::UnsafeLockPath {
                 path: paths.lock.clone(),
             });
@@ -136,17 +301,93 @@ pub(super) fn preflight(
             paths: vec![paths.lock.clone()],
         });
     }
-    let ambiguous: Vec<_> = [&paths.lock_cleanup, &paths.stage, &paths.backup]
-        .into_iter()
-        .filter(|path| path.symlink_metadata().is_ok())
-        .cloned()
-        .collect();
+    let mut ambiguous = Vec::new();
+    for (leaf, path) in [
+        (&transaction.lock_cleanup_leaf, &paths.lock_cleanup),
+        (&transaction.stage_leaf, &paths.stage),
+        (&transaction.backup_leaf, &paths.backup),
+    ] {
+        if transaction.child_exists(leaf).unwrap_or(true) {
+            ambiguous.push(path.clone());
+        }
+    }
     if !ambiguous.is_empty() {
         return Err(PublishError::AmbiguousArtifacts { paths: ambiguous });
     }
     Ok(output_state)
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ChildKind {
+    Directory,
+    File,
+    Symlink,
+    Other,
+}
+
+#[cfg(unix)]
+fn child_kind(parent: &File, leaf: &str) -> std::io::Result<Option<ChildKind>> {
+    let stat = match rustix::fs::statat(parent, leaf, rustix::fs::AtFlags::SYMLINK_NOFOLLOW) {
+        Ok(stat) => stat,
+        Err(rustix::io::Errno::NOENT) => return Ok(None),
+        Err(error) => return Err(error.into()),
+    };
+    let kind = rustix::fs::FileType::from_raw_mode(stat.st_mode);
+    Ok(Some(if kind.is_dir() {
+        ChildKind::Directory
+    } else if kind.is_file() {
+        ChildKind::File
+    } else if kind.is_symlink() {
+        ChildKind::Symlink
+    } else {
+        ChildKind::Other
+    }))
+}
+
+#[cfg(not(unix))]
+fn child_kind(parent: &File, leaf: &str) -> std::io::Result<Option<ChildKind>> {
+    #[cfg(windows)]
+    use std::os::windows::fs::MetadataExt;
+    let file = match fs_at::OpenOptions::default().open_path_at(parent, leaf) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    let metadata = file.metadata()?;
+    let file_type = metadata.file_type();
+    #[cfg(windows)]
+    let is_symlink = metadata.file_attributes() & 0x0000_0400 != 0;
+    #[cfg(not(windows))]
+    let is_symlink = file_type.is_symlink();
+    Ok(Some(if is_symlink {
+        ChildKind::Symlink
+    } else if file_type.is_dir() {
+        ChildKind::Directory
+    } else if file_type.is_file() {
+        ChildKind::File
+    } else {
+        ChildKind::Other
+    }))
+}
+
+impl TransactionDirectory {
+    fn output_identity(&self, leaf: &str, display: &Utf8Path) -> Result<OutputState, PublishError> {
+        match self.open_dir(leaf) {
+            Ok(file) => same_file::Handle::from_file(file)
+                .map(OutputIdentity)
+                .map(OutputState::Existing)
+                .map_err(|error| PublishError::io("open wiki output identity", display, error)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(OutputState::Absent),
+            Err(error) => Err(PublishError::io(
+                "inspect wiki output identity",
+                display,
+                error,
+            )),
+        }
+    }
+}
+
+#[cfg(test)]
 fn output_identity(output: &Utf8Path) -> Result<OutputState, PublishError> {
     match output.symlink_metadata() {
         Ok(_) => {}
@@ -209,18 +450,18 @@ fn ensure_real_directory(parent: &Utf8Path, output: &Utf8Path) -> Result<(), Pub
 pub(super) fn replace_output(
     output: &Utf8Path,
     policy: super::OutputPolicy,
-    paths: &TransactionPaths,
+    transaction: &TransactionDirectory,
     output_state: OutputState,
     stage_identity: &StageIdentity,
 ) -> Result<Vec<CleanupWarning>, PublishError> {
     replace_output_with_validation(
         output,
-        paths,
+        transaction,
         output_state,
         stage_identity,
         |_, _| Ok(()),
         |_| Ok(()),
-        |backup| manifest::validate_output(backup, policy),
+        |backup| transaction.validate_output(&transaction.backup_leaf, backup, policy),
     )
 }
 
@@ -231,6 +472,7 @@ pub(super) fn replace_output_with(
     before_rename: impl FnMut(&Utf8Path, &Utf8Path) -> std::io::Result<()>,
     before_cleanup: impl FnMut(&Utf8Path) -> std::io::Result<()>,
 ) -> Result<Vec<CleanupWarning>, PublishError> {
+    let transaction = TransactionDirectory::open(output)?;
     let output_state = output_identity(output)?;
     let stage = File::open(&paths.stage).map_err(|error| {
         PublishError::io("open staging directory identity", &paths.stage, error)
@@ -240,7 +482,7 @@ pub(super) fn replace_output_with(
     })?;
     replace_output_with_validation(
         output,
-        paths,
+        &transaction,
         output_state,
         &stage_identity,
         before_rename,
@@ -251,27 +493,32 @@ pub(super) fn replace_output_with(
 
 fn replace_output_with_validation(
     output: &Utf8Path,
-    paths: &TransactionPaths,
+    transaction: &TransactionDirectory,
     output_state: OutputState,
     stage_identity: &StageIdentity,
     mut before_rename: impl FnMut(&Utf8Path, &Utf8Path) -> std::io::Result<()>,
     mut before_cleanup: impl FnMut(&Utf8Path) -> std::io::Result<()>,
     validate_backup: impl FnOnce(&Utf8Path) -> Result<(), PublishError>,
 ) -> Result<Vec<CleanupWarning>, PublishError> {
+    let paths = &transaction.paths;
     verify_stage_identity(
         stage_identity,
+        transaction,
+        &transaction.stage_leaf,
         &paths.stage,
         "staging directory was replaced during generation",
     )?;
     let mut rename = |from: &Utf8Path, to: &Utf8Path| {
         before_rename(from, to)?;
-        rename_no_replace(from, to)
+        let from_leaf = from.file_name().expect("transaction path has leaf");
+        let to_leaf = to.file_name().expect("transaction path has leaf");
+        transaction.rename(from_leaf, to_leaf)
     };
     if let OutputState::Existing(expected_identity) = output_state {
         rename(output, &paths.backup)
             .map_err(|error| PublishError::io("move previous output to backup", output, error))?;
-        let validation =
-            validate_backup(&paths.backup).and_then(|()| match output_identity(&paths.backup)? {
+        let validation = validate_backup(&paths.backup).and_then(|()| {
+            match transaction.output_identity(&transaction.backup_leaf, &paths.backup)? {
                 OutputState::Existing(actual_identity)
                     if actual_identity.0 == expected_identity.0 =>
                 {
@@ -282,7 +529,8 @@ fn replace_output_with_validation(
                     detail: "filesystem identity no longer matches the preflight output"
                         .to_string(),
                 }),
-            });
+            }
+        });
         if let Err(validation) = validation {
             return match rename(&paths.backup, output) {
                 Ok(()) => Err(PublishError::OutputChanged {
@@ -311,8 +559,8 @@ fn replace_output_with_validation(
                 }),
             };
         }
-        verify_installed_stage_with_backup(stage_identity, output, paths, &mut rename)?;
-        let cleanup = cleanup_backup(&paths.backup, &mut before_cleanup);
+        verify_installed_stage_with_backup(stage_identity, output, transaction, &mut rename)?;
+        let cleanup = cleanup_backup(transaction, &mut before_cleanup);
         if let Err(error) = cleanup {
             return Ok(vec![CleanupWarning {
                 path: paths.backup.clone(),
@@ -333,6 +581,8 @@ fn replace_output_with_validation(
         })?;
         if let Err(validation) = verify_stage_identity(
             stage_identity,
+            transaction,
+            &transaction.output_leaf,
             output,
             "installed output does not match the generated staging directory",
         ) {
@@ -348,11 +598,14 @@ fn replace_output_with_validation(
 fn verify_installed_stage_with_backup(
     stage_identity: &StageIdentity,
     output: &Utf8Path,
-    paths: &TransactionPaths,
+    transaction: &TransactionDirectory,
     rename: &mut impl FnMut(&Utf8Path, &Utf8Path) -> std::io::Result<()>,
 ) -> Result<(), PublishError> {
+    let paths = &transaction.paths;
     let Err(validation) = verify_stage_identity(
         stage_identity,
+        transaction,
+        &transaction.output_leaf,
         output,
         "installed output does not match the generated staging directory",
     ) else {
@@ -380,12 +633,15 @@ fn verify_installed_stage_with_backup(
 
 fn verify_stage_identity(
     expected: &StageIdentity,
+    transaction: &TransactionDirectory,
+    leaf: &str,
     path: &Utf8Path,
     detail: &'static str,
 ) -> Result<(), PublishError> {
-    if expected
-        .matches_path(path)
+    if transaction
+        .child_identity(leaf)
         .map_err(|error| PublishError::io("verify staging directory identity", path, error))?
+        == expected.0
     {
         Ok(())
     } else {
@@ -396,50 +652,31 @@ fn verify_stage_identity(
     }
 }
 
-#[cfg(unix)]
 fn cleanup_backup(
-    backup_path: &Utf8Path,
+    transaction: &TransactionDirectory,
     before_cleanup: &mut impl FnMut(&Utf8Path) -> std::io::Result<()>,
 ) -> std::io::Result<()> {
-    let mut backup = File::open(backup_path)?;
+    let backup_path = &transaction.paths.backup;
+    let mut backup = transaction.open_dir(&transaction.backup_leaf)?;
     let expected_identity = same_file::Handle::from_file(backup.try_clone()?)?;
     before_cleanup(backup_path)?;
-    if same_file::Handle::from_path(backup_path)? != expected_identity {
+    if transaction.child_identity(&transaction.backup_leaf)? != expected_identity {
         return Err(std::io::Error::other("backup path changed before cleanup"));
     }
 
     backup.remove_dir_contents(Some(backup_path.as_std_path()))?;
     drop(backup);
-    std::fs::remove_dir(backup_path)
-}
-
-#[cfg(not(unix))]
-fn cleanup_backup(
-    backup_path: &Utf8Path,
-    before_cleanup: &mut impl FnMut(&Utf8Path) -> std::io::Result<()>,
-) -> std::io::Result<()> {
-    let expected_identity = same_file::Handle::from_path(backup_path)?;
-    before_cleanup(backup_path)?;
-    if same_file::Handle::from_path(backup_path)? != expected_identity {
-        return Err(std::io::Error::other("backup path changed before cleanup"));
-    }
-    remove_dir_all::remove_dir_all(backup_path)
+    fs_at::OpenOptions::default().rmdir_at(&transaction.parent, &transaction.backup_leaf)
 }
 
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
-fn rename_no_replace(from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
-    rustix::fs::renameat_with(
-        rustix::fs::CWD,
-        from.as_std_path(),
-        rustix::fs::CWD,
-        to.as_std_path(),
-        rustix::fs::RenameFlags::NOREPLACE,
-    )
-    .map_err(std::io::Error::from)
+fn rename_no_replace_at(parent: &File, from: &str, to: &str) -> std::io::Result<()> {
+    rustix::fs::renameat_with(parent, from, parent, to, rustix::fs::RenameFlags::NOREPLACE)
+        .map_err(std::io::Error::from)
 }
 
 #[cfg(target_os = "macos")]
-fn rename_no_replace(from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+fn rename_no_replace_at(parent: &File, from: &str, to: &str) -> std::io::Result<()> {
     use std::ffi::CString;
     use std::os::raw::{c_char, c_int, c_uint};
     use std::os::unix::ffi::OsStrExt;
@@ -454,12 +691,21 @@ fn rename_no_replace(from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
         ) -> c_int;
     }
 
-    let from = CString::new(from.as_std_path().as_os_str().as_bytes())
+    use std::os::fd::AsRawFd;
+    let from = CString::new(from.as_bytes())
         .map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
-    let to = CString::new(to.as_std_path().as_os_str().as_bytes())
+    let to = CString::new(to.as_bytes())
         .map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
     // Darwin's renameatx_np with RENAME_EXCL atomically refuses an existing destination.
-    let result = unsafe { renameatx_np(-2, from.as_ptr(), -2, to.as_ptr(), 0x0000_0004) };
+    let result = unsafe {
+        renameatx_np(
+            parent.as_raw_fd(),
+            from.as_ptr(),
+            parent.as_raw_fd(),
+            to.as_ptr(),
+            0x0000_0004,
+        )
+    };
     if result == 0 {
         Ok(())
     } else {
@@ -468,34 +714,55 @@ fn rename_no_replace(from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
 }
 
 #[cfg(windows)]
-fn rename_no_replace(from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
-    use std::os::raw::c_int;
-    use std::os::windows::ffi::OsStrExt;
+fn rename_no_replace_at(parent: &File, from: &str, to: &str) -> std::io::Result<()> {
+    use fs_at::os::windows::OpenOptionsExt;
+    use std::ffi::OsStr;
+    use std::mem::size_of;
+    use std::os::windows::{ffi::OsStrExt, io::AsRawHandle};
+    use windows_sys::Win32::Foundation::HANDLE;
+    use windows_sys::Win32::Storage::FileSystem::{
+        FileRenameInfoEx, SetFileInformationByHandle, FILE_RENAME_INFO, FILE_RENAME_INFO_0,
+    };
 
-    #[link(name = "kernel32")]
-    extern "system" {
-        fn MoveFileExW(from: *const u16, to: *const u16, flags: u32) -> c_int;
+    const DELETE_ACCESS: u32 = 0x0001_0000;
+    let mut options = fs_at::OpenOptions::default();
+    options.desired_access(DELETE_ACCESS).follow(false);
+    let source = options.open_path_at(parent, from)?;
+    let name: Vec<u16> = OsStr::new(to).encode_wide().collect();
+    let name_bytes = name
+        .len()
+        .checked_mul(size_of::<u16>())
+        .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
+    let buffer_size = size_of::<FILE_RENAME_INFO>()
+        .checked_add(name_bytes)
+        .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
+    let mut storage = vec![0_usize; buffer_size.div_ceil(size_of::<usize>())];
+    let info = storage.as_mut_ptr().cast::<FILE_RENAME_INFO>();
+    unsafe {
+        info.write(FILE_RENAME_INFO {
+            Anonymous: FILE_RENAME_INFO_0 { Flags: 0 },
+            RootDirectory: parent.as_raw_handle() as HANDLE,
+            FileNameLength: u32::try_from(name_bytes)
+                .map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput))?,
+            FileName: [0],
+        });
+        std::ptr::copy_nonoverlapping(
+            name.as_ptr(),
+            std::ptr::addr_of_mut!((*info).FileName).cast::<u16>(),
+            name.len(),
+        );
+        if SetFileInformationByHandle(
+            source.as_raw_handle() as HANDLE,
+            FileRenameInfoEx,
+            info.cast(),
+            u32::try_from(buffer_size)
+                .map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput))?,
+        ) == 0
+        {
+            return Err(std::io::Error::last_os_error());
+        }
     }
-
-    let from: Vec<_> = from
-        .as_std_path()
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect();
-    let to: Vec<_> = to
-        .as_std_path()
-        .as_os_str()
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect();
-    // Omitting MOVEFILE_REPLACE_EXISTING atomically refuses an existing destination.
-    let result = unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), 0) };
-    if result != 0 {
-        Ok(())
-    } else {
-        Err(std::io::Error::last_os_error())
-    }
+    Ok(())
 }
 
 #[cfg(not(any(
@@ -505,7 +772,7 @@ fn rename_no_replace(from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
     target_os = "macos",
     windows
 )))]
-fn rename_no_replace(_from: &Utf8Path, _to: &Utf8Path) -> std::io::Result<()> {
+fn rename_no_replace_at(_parent: &File, _from: &str, _to: &str) -> std::io::Result<()> {
     Err(std::io::Error::new(
         std::io::ErrorKind::Unsupported,
         "atomic no-replace rename is unavailable on this platform",
@@ -564,7 +831,11 @@ mod tests {
         std::fs::create_dir(&stage).unwrap();
         std::fs::write(stage.join("generated"), "new").unwrap();
 
-        let error = rename_no_replace(&stage, &output).unwrap_err();
+        let parent = open_directory_no_follow(
+            Utf8Path::from_path(temp.path()).expect("temporary path is UTF-8"),
+        )
+        .unwrap();
+        let error = rename_no_replace_at(&parent, "stage", "wiki").unwrap_err();
 
         assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
         assert_eq!(

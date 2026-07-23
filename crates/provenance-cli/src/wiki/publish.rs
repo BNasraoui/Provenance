@@ -15,7 +15,9 @@ use stage::write_page;
 use stage::{generate_and_replace, StageDirectory};
 #[cfg(test)]
 use transaction::replace_output_with;
-use transaction::{acquire_lock, preflight, TransactionPaths};
+#[cfg(test)]
+use transaction::TransactionPaths;
+use transaction::{acquire_lock, preflight, TransactionDirectory};
 
 pub const OWNERSHIP_MANIFEST: &str = ".provenance-wiki-output.json";
 
@@ -86,16 +88,17 @@ fn publish_with(
     output: PublicationOutput,
     after_stage_opened: impl FnOnce(&Utf8Path) -> std::io::Result<()>,
 ) -> Result<PublishReport, PublishError> {
-    let paths = TransactionPaths::new(&output.path)?;
-    let output_state = preflight(&output, &paths)?;
-    let lock = acquire_lock(&paths)?;
-    let (stage_created, result) = match std::fs::create_dir(&paths.stage) {
-        Ok(()) => {
-            let result = StageDirectory::open(&paths.stage).and_then(|stage| {
+    let transaction = TransactionDirectory::open(&output.path)?;
+    let output_state = preflight(&output, &transaction)?;
+    let lock = acquire_lock(&transaction)?;
+    let paths = &transaction.paths;
+    let (stage_created, result) = match transaction.create_stage() {
+        Ok(stage_root) => {
+            let result = StageDirectory::from_file(stage_root, &paths.stage).and_then(|stage| {
                 after_stage_opened(&paths.stage).map_err(|error| {
                     PublishError::io("prepare staging directory", &paths.stage, error)
                 })?;
-                generate_and_replace(corpus, output, &paths, output_state, &stage)
+                generate_and_replace(corpus, output, &transaction, output_state, &stage)
             });
             (true, result)
         }
@@ -111,38 +114,38 @@ fn publish_with(
     match result {
         Err(error @ PublishError::RollbackFailed { .. }) => Err(error),
         Err(error) => {
-            if stage_created && paths.stage.exists() {
+            if stage_created {
                 // Never recursively remove through a mutable artifact pathname: a
                 // replacement tree may have been installed there after staging.
-                if let Err(cleanup) = std::fs::remove_dir(&paths.stage) {
+                if let Err(cleanup) = transaction.remove_stage() {
                     let error = PublishError::CleanupFailed {
                         primary: Box::new(error),
                         path: paths.stage.clone(),
                         cleanup,
                     };
-                    return match lock.cleanup(&paths) {
+                    return match lock.cleanup(&transaction) {
                         Ok(()) => Err(error),
                         Err(cleanup) => Err(PublishError::CleanupFailed {
                             primary: Box::new(error),
-                            path: paths.lock,
+                            path: paths.lock.clone(),
                             cleanup,
                         }),
                     };
                 }
             }
-            if let Err(cleanup) = lock.cleanup(&paths) {
+            if let Err(cleanup) = lock.cleanup(&transaction) {
                 return Err(PublishError::CleanupFailed {
                     primary: Box::new(error),
-                    path: paths.lock,
+                    path: paths.lock.clone(),
                     cleanup,
                 });
             }
             Err(error)
         }
         Ok(mut report) => {
-            if let Err(error) = lock.cleanup(&paths) {
+            if let Err(error) = lock.cleanup(&transaction) {
                 report.cleanup_warnings.push(CleanupWarning {
-                    path: paths.lock,
+                    path: paths.lock.clone(),
                     action: "remove committed publication lock",
                     error: error.to_string(),
                 });
