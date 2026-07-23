@@ -17,6 +17,38 @@ provenance check --format json
 
 Agent-facing commands support JSON output for deterministic parsing.
 
+## Wiki publication safety
+
+`provenance wiki build` renders the complete corpus into a sibling staging
+directory and installs that directory only after every page, asset, and
+ownership marker has been written. The default `.provenance/wiki` directory is
+generator-owned. An explicit `--out` is adopted only when it is absent, empty,
+or contains the recognized `.provenance-wiki-output.json` marker. A recognized
+marker grants Provenance ownership of the entire directory; do not put
+caller-owned files in a marked output.
+
+Publication refuses symlink and non-directory output roots, unsafe lock paths,
+unknown marker versions, and unexplained stage, backup, or lock artifacts. It
+does not treat a transaction-looking filename, parseable journal, or nonce as
+proof of ownership. These failures leave the inspected output and ambiguous
+artifacts untouched and report the paths requiring operator attention.
+
+For ordinary errors before installation, the old output is unchanged. If the
+old directory has already moved aside and installation returns an error, the
+publisher restores it before returning the typed error. A rollback failure is
+reported explicitly and leaves all evidence in place rather than guessing.
+Once the completed stage is installed, cleanup failures are reported as
+`ok_with_cleanup_required` warnings, not as a rolled-back failure, because
+recursive backup cleanup may already be partial.
+
+This is an ordinary-error transaction, not a claim of crash atomicity. Process
+termination or power loss can leave the fixed sibling lock, stage, or backup;
+the next build fails closed and never automatically deletes or restores those
+paths. An operator must inspect them and explicitly choose which generation to
+keep. Renames are same-filesystem because staging is a sibling, but durability
+still depends on the filesystem and storage honoring successful writes and
+renames.
+
 ## Immutable graph references
 
 Use the commit-then-issue handoff when another system needs an immutable graph input:

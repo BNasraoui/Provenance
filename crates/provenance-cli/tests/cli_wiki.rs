@@ -38,6 +38,7 @@ fn wiki_build_writes_static_pages_and_stylesheet() {
 
     let stylesheet = std::fs::read_to_string(out.join("assets/provenance-wiki.css")).unwrap();
     assert!(stylesheet.contains("--pv-"), "stylesheet missing tokens");
+    assert!(out.join(".provenance-wiki-output.json").is_file());
 
     let requirement = std::fs::read_to_string(out.join("requirements/req_sah/index.html")).unwrap();
     assert!(
@@ -100,15 +101,14 @@ fn wiki_build_default_format_prints_a_concise_summary_not_a_page_dump() {
 }
 
 #[test]
-fn wiki_build_reports_per_page_write_failures_without_aborting_the_rest() {
+fn wiki_build_refuses_an_unrecognized_custom_tree_without_partial_writes() {
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path().join("repo");
     let repo = repo.to_string_lossy().to_string();
     let out = dir.path().join("site");
     seed_state(dir.path(), &repo);
 
-    // Collide with the directory `req_sah`'s page needs to create, forcing
-    // that one page's write to fail while the rest of the build proceeds.
+    // This is caller-owned content because no ownership marker recognizes it.
     std::fs::create_dir_all(out.join("requirements")).unwrap();
     std::fs::write(out.join("requirements/req_sah"), "blocking file").unwrap();
 
@@ -124,21 +124,17 @@ fn wiki_build_reports_per_page_write_failures_without_aborting_the_rest() {
         ])
         .assert()
         .failure()
-        .stderr(predicates::str::contains("req_sah"));
+        .stderr(predicates::str::contains(
+            "refusing nonempty custom wiki output",
+        ));
 
-    // Unaffected pages were still written, including ones ordered after the
-    // failing page (resolutions/rules/sources come after requirements) --
-    // proving the failure didn't abort the rest of the build.
-    let gapped = std::fs::read_to_string(out.join("requirements/req_gap/index.html")).unwrap();
-    assert!(gapped.contains("citation gap"), "{gapped}");
-    let index = std::fs::read_to_string(out.join("index.html")).unwrap();
-    assert!(index.contains("Provenance Wiki"), "{index}");
-    let resolution = std::fs::read_to_string(out.join("resolutions/res_sah/index.html")).unwrap();
-    assert!(resolution.contains("SAH extraction"), "{resolution}");
-    let rule = std::fs::read_to_string(out.join("rules/rule_sah_001/index.html")).unwrap();
-    assert!(rule.contains("SAH rule"), "{rule}");
-    let source = std::fs::read_to_string(out.join("sources/source_sah/index.html")).unwrap();
-    assert!(source.contains("Support at Home"), "{source}");
+    assert_eq!(
+        std::fs::read_to_string(out.join("requirements/req_sah")).unwrap(),
+        "blocking file"
+    );
+    assert!(!out.join("index.html").exists());
+    assert!(!out.join("requirements/req_gap").exists());
+    assert!(!out.join("assets").exists());
 }
 
 #[test]
@@ -196,6 +192,23 @@ fn wiki_build_with_an_explicit_out_does_not_touch_gitignore() {
         !std::path::Path::new(&repo).join(".gitignore").exists(),
         "explicit --out must not create or edit .gitignore"
     );
+}
+
+#[test]
+fn wiki_build_accepts_an_absent_relative_custom_output() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    let repo = repo.to_string_lossy().to_string();
+    seed_state(dir.path(), &repo);
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .current_dir(dir.path())
+        .args(["wiki", "build", "--repo", &repo, "--out", "site"])
+        .assert()
+        .success();
+
+    assert!(dir.path().join("site/index.html").is_file());
 }
 
 #[test]
