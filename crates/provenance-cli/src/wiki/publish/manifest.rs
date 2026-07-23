@@ -3,6 +3,8 @@ use camino::Utf8Path;
 use serde::{Deserialize, Serialize};
 use std::io::Read;
 
+const MAX_MANIFEST_BYTES: u64 = 4096;
+
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct OwnershipManifest<'a> {
@@ -23,7 +25,7 @@ pub(super) fn validate_output_handle(
     let mut options = fs_at::OpenOptions::default();
     options.read(true).follow(false);
     match options.open_at(&directory, OWNERSHIP_MANIFEST) {
-        Ok(mut file) => {
+        Ok(file) => {
             if !file
                 .metadata()
                 .map_err(|error| {
@@ -37,8 +39,15 @@ pub(super) fn validate_output_handle(
                 });
             }
             let mut bytes = Vec::new();
-            file.read_to_end(&mut bytes)
+            file.take(MAX_MANIFEST_BYTES + 1)
+                .read_to_end(&mut bytes)
                 .map_err(|error| PublishError::io("read", &manifest_path, error))?;
+            if bytes.len() as u64 > MAX_MANIFEST_BYTES {
+                return Err(PublishError::InvalidManifest {
+                    path: manifest_path,
+                    detail: format!("marker is too large (maximum {MAX_MANIFEST_BYTES} bytes)"),
+                });
+            }
             validate_manifest_bytes(&manifest_path, &bytes)
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {

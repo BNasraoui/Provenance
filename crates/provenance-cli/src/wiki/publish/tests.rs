@@ -139,6 +139,27 @@ fn rejects_a_malformed_manifest_without_mutation() {
 }
 
 #[test]
+fn rejects_an_oversized_manifest_without_mutation() {
+    let temp = tempfile::tempdir().unwrap();
+    let output = utf8(temp.path().join("wiki"));
+    std::fs::create_dir(&output).unwrap();
+    let marker = vec![b' '; 64 * 1024];
+    std::fs::write(output.join(OWNERSHIP_MANIFEST), &marker).unwrap();
+
+    let error = publish(&empty_corpus(), PublicationOutput::custom(output.clone())).unwrap_err();
+
+    assert!(matches!(
+        error,
+        PublishError::InvalidManifest { detail, .. } if detail.contains("too large")
+    ));
+    assert_eq!(
+        std::fs::read(output.join(OWNERSHIP_MANIFEST)).unwrap(),
+        marker
+    );
+    assert_no_transaction_artifacts(&output);
+}
+
+#[test]
 fn rejects_a_non_directory_output_root_without_mutation() {
     let temp = tempfile::tempdir().unwrap();
     let output = utf8(temp.path().join("wiki"));
@@ -167,6 +188,28 @@ fn rejects_a_symlink_output_root_without_mutation() {
 
     assert!(matches!(error, PublishError::OutputSymlink { .. }));
     assert!(output.symlink_metadata().unwrap().file_type().is_symlink());
+    assert_eq!(
+        std::fs::read_to_string(target.join("caller.txt")).unwrap(),
+        "keep me"
+    );
+    assert_no_transaction_artifacts(&output);
+}
+
+#[cfg(windows)]
+#[test]
+fn rejects_an_output_root_reparse_point_without_mutation() {
+    use std::os::windows::fs::symlink_dir;
+
+    let temp = tempfile::tempdir().unwrap();
+    let target = utf8(temp.path().join("target"));
+    let output = utf8(temp.path().join("wiki"));
+    std::fs::create_dir(&target).unwrap();
+    std::fs::write(target.join("caller.txt"), "keep me").unwrap();
+    symlink_dir(&target, &output).unwrap();
+
+    let error = publish(&empty_corpus(), PublicationOutput::custom(output.clone())).unwrap_err();
+
+    assert!(matches!(error, PublishError::OutputSymlink { .. }));
     assert_eq!(
         std::fs::read_to_string(target.join("caller.txt")).unwrap(),
         "keep me"

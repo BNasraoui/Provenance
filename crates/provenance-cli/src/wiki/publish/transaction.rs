@@ -3,6 +3,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use remove_dir_all::RemoveDir;
 use std::fs::File;
 use std::io::Write;
+use std::path::{Component, Path, PathBuf};
 
 pub(super) enum OutputState {
     Absent,
@@ -59,10 +60,7 @@ impl TransactionDirectory {
             .parent()
             .filter(|path| !path.as_str().is_empty())
             .unwrap_or_else(|| Utf8Path::new("."));
-        ensure_real_directory(parent_path, output)?;
-        let parent = open_directory_no_follow(parent_path).map_err(|error| {
-            PublishError::io("open output parent directory", parent_path, error)
-        })?;
+        let parent = open_or_create_parent(parent_path, output)?;
         let output_leaf = output
             .file_name()
             .expect("validated output leaf")
@@ -153,16 +151,34 @@ fn open_child_directory_no_follow(parent: &File, leaf: &str) -> std::io::Result<
     .map_err(std::io::Error::from)
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
 fn open_child_directory_no_follow(parent: &File, leaf: &str) -> std::io::Result<File> {
-    fs_at::OpenOptions::default().open_dir_at(parent, leaf)
+    use std::os::windows::fs::MetadataExt;
+
+    let mut options = fs_at::OpenOptions::default();
+    options.follow(false);
+    let directory = options.open_dir_at(parent, leaf)?;
+    if directory.metadata()?.file_attributes() & 0x0000_0400 != 0 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "directory is a reparse point",
+        ));
+    }
+    Ok(directory)
+}
+
+#[cfg(not(any(unix, windows)))]
+fn open_child_directory_no_follow(parent: &File, leaf: &str) -> std::io::Result<File> {
+    let mut options = fs_at::OpenOptions::default();
+    options.follow(false);
+    options.open_dir_at(parent, leaf)
 }
 
 #[cfg(unix)]
-fn open_directory_no_follow(path: &Utf8Path) -> std::io::Result<File> {
+fn open_directory_no_follow(path: &Path) -> std::io::Result<File> {
     rustix::fs::openat(
         rustix::fs::CWD,
-        path.as_std_path(),
+        path,
         rustix::fs::OFlags::RDONLY
             | rustix::fs::OFlags::DIRECTORY
             | rustix::fs::OFlags::NOFOLLOW
@@ -174,7 +190,7 @@ fn open_directory_no_follow(path: &Utf8Path) -> std::io::Result<File> {
 }
 
 #[cfg(windows)]
-fn open_directory_no_follow(path: &Utf8Path) -> std::io::Result<File> {
+fn open_directory_no_follow(path: &Path) -> std::io::Result<File> {
     use std::os::windows::fs::MetadataExt;
     use std::os::windows::fs::OpenOptionsExt;
     const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
@@ -195,7 +211,7 @@ fn open_directory_no_follow(path: &Utf8Path) -> std::io::Result<File> {
 }
 
 #[cfg(not(any(unix, windows)))]
-fn open_directory_no_follow(path: &Utf8Path) -> std::io::Result<File> {
+fn open_directory_no_follow(path: &Path) -> std::io::Result<File> {
     File::open(path)
 }
 
@@ -348,7 +364,9 @@ fn child_kind(parent: &File, leaf: &str) -> std::io::Result<Option<ChildKind>> {
 fn child_kind(parent: &File, leaf: &str) -> std::io::Result<Option<ChildKind>> {
     #[cfg(windows)]
     use std::os::windows::fs::MetadataExt;
-    let file = match fs_at::OpenOptions::default().open_path_at(parent, leaf) {
+    let mut options = fs_at::OpenOptions::default();
+    options.follow(false);
+    let file = match options.open_path_at(parent, leaf) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error),
@@ -407,44 +425,85 @@ fn output_identity(output: &Utf8Path) -> Result<OutputState, PublishError> {
     Ok(OutputState::Existing(OutputIdentity(identity)))
 }
 
-fn ensure_real_directory(parent: &Utf8Path, output: &Utf8Path) -> Result<(), PublishError> {
-    let mut ancestors: Vec<_> = parent
-        .ancestors()
-        .filter(|path| !path.as_str().is_empty())
-        .collect();
-    ancestors.reverse();
+fn open_or_create_parent(parent: &Utf8Path, output: &Utf8Path) -> Result<File, PublishError> {
+    let mut components = parent.as_std_path().components().peekable();
+    let mut current_path = PathBuf::new();
+    let mut current = match components.peek().copied() {
+        Some(Component::Prefix(prefix)) => {
+            current_path.push(prefix.as_os_str());
+            components.next();
+            if matches!(components.peek(), Some(Component::RootDir)) {
+                current_path.push(std::path::MAIN_SEPARATOR_STR);
+                components.next();
+            } else {
+                return Err(PublishError::InvalidOutputPath {
+                    path: output.to_path_buf(),
+                    detail: "drive-relative output paths are unsupported".to_string(),
+                });
+            }
+            open_directory_no_follow(&current_path)
+                .map_err(|error| PublishError::io("open output parent root", parent, error))?
+        }
+        Some(Component::RootDir) => {
+            current_path.push(std::path::MAIN_SEPARATOR_STR);
+            components.next();
+            open_directory_no_follow(&current_path)
+                .map_err(|error| PublishError::io("open output parent root", parent, error))?
+        }
+        _ => {
+            current_path.push(".");
+            open_directory_no_follow(&current_path)
+                .map_err(|error| PublishError::io("open current directory", parent, error))?
+        }
+    };
 
-    for directory in ancestors {
-        let metadata = match directory.symlink_metadata() {
-            Ok(metadata) => metadata,
+    for component in components {
+        let leaf = match component {
+            Component::CurDir => continue,
+            Component::ParentDir => "..",
+            Component::Normal(leaf) => leaf.to_str().expect("UTF-8 output parent component"),
+            Component::Prefix(_) | Component::RootDir => {
+                return Err(PublishError::InvalidOutputPath {
+                    path: output.to_path_buf(),
+                    detail: "output parent contains an invalid path component".to_string(),
+                })
+            }
+        };
+        current_path.push(leaf);
+        match open_child_directory_no_follow(&current, leaf) {
+            Ok(next) => current = next,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                match std::fs::create_dir(directory) {
-                    Ok(()) => {}
+                match fs_at::OpenOptions::default().mkdir_at(&current, leaf) {
+                    Ok(_) => {}
                     Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
                     Err(error) => {
                         return Err(PublishError::io(
                             "create output parent directory",
-                            directory,
+                            Utf8Path::from_path(&current_path).expect("UTF-8 output parent"),
                             error,
                         ));
                     }
                 }
-                directory.symlink_metadata().map_err(|error| {
-                    PublishError::io("inspect created output parent", directory, error)
-                })?
+                current = open_child_directory_no_follow(&current, leaf).map_err(|error| {
+                    PublishError::io(
+                        "open created output parent directory",
+                        Utf8Path::from_path(&current_path).expect("UTF-8 output parent"),
+                        error,
+                    )
+                })?;
             }
-            Err(error) => {
-                return Err(PublishError::io("inspect output parent", directory, error));
+            Err(_) => {
+                return Err(PublishError::InvalidOutputPath {
+                    path: output.to_path_buf(),
+                    detail: format!(
+                        "output parent ancestor {} must be a real directory",
+                        current_path.display()
+                    ),
+                });
             }
-        };
-        if !metadata.is_dir() || metadata.file_type().is_symlink() {
-            return Err(PublishError::InvalidOutputPath {
-                path: output.to_path_buf(),
-                detail: format!("output parent ancestor {directory} must be a real directory"),
-            });
         }
     }
-    Ok(())
+    Ok(current)
 }
 
 pub(super) fn replace_output(
@@ -831,10 +890,7 @@ mod tests {
         std::fs::create_dir(&stage).unwrap();
         std::fs::write(stage.join("generated"), "new").unwrap();
 
-        let parent = open_directory_no_follow(
-            Utf8Path::from_path(temp.path()).expect("temporary path is UTF-8"),
-        )
-        .unwrap();
+        let parent = open_directory_no_follow(temp.path()).unwrap();
         let error = rename_no_replace_at(&parent, "stage", "wiki").unwrap_err();
 
         assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
