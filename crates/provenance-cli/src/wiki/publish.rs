@@ -120,7 +120,8 @@ fn publish_with(
             if let Some(stage) = stage {
                 // Never recursively remove through a mutable artifact pathname: a
                 // replacement tree may have been installed there after staging.
-                if let Err(cleanup) = transaction.remove_stage(stage.identity()) {
+                let (root, identity) = stage.into_parts();
+                if let Err(cleanup) = transaction.remove_stage(root, &identity) {
                     let error = PublishError::CleanupFailed {
                         primary: Box::new(error),
                         path: paths.stage.clone(),

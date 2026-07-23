@@ -133,7 +133,11 @@ impl TransactionDirectory {
         fs_at::OpenOptions::default().unlink_at(&self.parent, leaf)
     }
 
-    pub(super) fn remove_stage(&self, expected: &StageIdentity) -> std::io::Result<()> {
+    pub(super) fn remove_stage(
+        &self,
+        mut stage: File,
+        expected: &StageIdentity,
+    ) -> std::io::Result<()> {
         self.rename(&self.stage_leaf, &self.stage_cleanup_leaf)?;
         if self.child_identity(&self.stage_cleanup_leaf)? != expected.0 {
             let mismatch = std::io::Error::other("staging directory path changed before cleanup");
@@ -144,6 +148,8 @@ impl TransactionDirectory {
                 ))),
             };
         }
+        stage.remove_dir_contents(Some(self.paths.stage_cleanup.as_std_path()))?;
+        drop(stage);
         match fs_at::OpenOptions::default().rmdir_at(&self.parent, &self.stage_cleanup_leaf) {
             Ok(()) => Ok(()),
             Err(cleanup) => match self.rename(&self.stage_cleanup_leaf, &self.stage_leaf) {
@@ -412,6 +418,35 @@ fn child_kind(parent: &File, leaf: &str) -> std::io::Result<Option<ChildKind>> {
 }
 
 impl TransactionDirectory {
+    fn verify_requested_parent(&self, output: &Utf8Path) -> Result<(), PublishError> {
+        let parent_path = output
+            .parent()
+            .filter(|path| !path.as_str().is_empty())
+            .unwrap_or_else(|| Utf8Path::new("."));
+        let expected =
+            same_file::Handle::from_file(self.parent.try_clone().map_err(|error| {
+                PublishError::io("clone output parent handle", parent_path, error)
+            })?)
+            .map_err(|error| {
+                PublishError::io("record output parent identity", parent_path, error)
+            })?;
+        let current = open_directory_no_follow(parent_path.as_std_path())
+            .and_then(same_file::Handle::from_file)
+            .map_err(|error| PublishError::OutputChanged {
+                path: output.to_path_buf(),
+                detail: format!("output parent cannot be verified: {error}"),
+            })?;
+        if current == expected {
+            Ok(())
+        } else {
+            Err(PublishError::OutputChanged {
+                path: output.to_path_buf(),
+                detail: "output parent no longer matches the opened transaction directory"
+                    .to_string(),
+            })
+        }
+    }
+
     fn output_identity(&self, leaf: &str, display: &Utf8Path) -> Result<OutputState, PublishError> {
         match self.open_dir(leaf) {
             Ok(file) => same_file::Handle::from_file(file)
@@ -583,6 +618,7 @@ fn replace_output_with_validation(
     validate_backup: impl FnOnce(&Utf8Path) -> Result<(), PublishError>,
 ) -> Result<Vec<CleanupWarning>, PublishError> {
     let paths = &transaction.paths;
+    transaction.verify_requested_parent(output)?;
     verify_stage_identity(
         stage_identity,
         transaction,

@@ -22,8 +22,8 @@ impl StageDirectory {
         Ok(Self { root, identity })
     }
 
-    pub(super) const fn identity(&self) -> &StageIdentity {
-        &self.identity
+    pub(super) fn into_parts(self) -> (File, StageIdentity) {
+        (self.root, self.identity)
     }
 
     fn write_file(

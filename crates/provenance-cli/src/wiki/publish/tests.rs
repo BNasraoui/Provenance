@@ -263,7 +263,7 @@ fn leaves_ambiguous_interruption_artifacts_untouched() {
 }
 
 #[test]
-fn stage_creation_race_preserves_the_foreign_tree() {
+fn staging_callback_failure_removes_the_owned_tree() {
     let temp = tempfile::tempdir().unwrap();
     let output = utf8(temp.path().join("wiki"));
     let stage = artifact(&output, "stage");
@@ -278,15 +278,8 @@ fn stage_creation_race_preserves_the_foreign_tree() {
     )
     .unwrap_err();
 
-    assert!(matches!(
-        error,
-        PublishError::CleanupFailed { primary, .. }
-            if matches!(*primary, PublishError::Io { .. })
-    ));
-    assert_eq!(
-        std::fs::read_to_string(stage.join("caller")).unwrap(),
-        "keep me"
-    );
+    assert!(matches!(error, PublishError::Io { .. }));
+    assert!(!stage.exists());
     assert!(!artifact(&output, "lock").exists());
     assert!(!output.exists());
 }
@@ -299,7 +292,7 @@ fn parent_replacement_does_not_redirect_the_transaction() {
     let output = parent.join("wiki");
     std::fs::create_dir(&parent).unwrap();
 
-    let report = publish_with(
+    let error = publish_with(
         &empty_corpus(),
         PublicationOutput::custom(output.clone()),
         |_| {
@@ -308,10 +301,10 @@ fn parent_replacement_does_not_redirect_the_transaction() {
             Ok(())
         },
     )
-    .unwrap();
+    .unwrap_err();
 
-    assert_eq!(report.status, "ok");
-    assert!(displaced_parent.join("wiki/index.html").is_file());
+    assert!(matches!(error, PublishError::OutputChanged { .. }));
+    assert!(!displaced_parent.join("wiki").exists());
     assert!(!output.exists());
     assert!(std::fs::read_dir(&parent).unwrap().next().is_none());
 }
@@ -333,12 +326,9 @@ fn staged_child_symlink_cannot_redirect_generated_writes() {
     )
     .unwrap_err();
 
-    assert!(matches!(
-        error,
-        PublishError::CleanupFailed { primary, .. }
-            if matches!(*primary, PublishError::Io { .. })
-    ));
+    assert!(matches!(error, PublishError::Io { .. }));
     assert!(!external.join("provenance-wiki.css").exists());
+    assert!(!artifact(&output, "stage").exists());
     assert!(!output.exists());
 }
 
@@ -362,12 +352,9 @@ fn staged_child_reparse_point_cannot_redirect_generated_writes() {
         Ok(_) => panic!("publication followed a staged reparse point"),
     };
 
-    assert!(matches!(
-        error,
-        PublishError::CleanupFailed { primary, .. }
-            if matches!(*primary, PublishError::Io { .. })
-    ));
+    assert!(matches!(error, PublishError::Io { .. }));
     assert!(!external.join("provenance-wiki.css").exists());
+    assert!(!artifact(&output, "stage").exists());
     assert!(!output.exists());
 }
 
@@ -514,17 +501,13 @@ fn output_replacement_race_preserves_the_intervening_tree() {
     )
     .unwrap_err();
 
-    assert!(matches!(
-        error,
-        PublishError::CleanupFailed { primary, .. }
-            if matches!(*primary, PublishError::OutputChanged { .. })
-    ));
+    assert!(matches!(error, PublishError::OutputChanged { .. }));
     assert_eq!(
         std::fs::read_to_string(output.join("caller.txt")).unwrap(),
         "keep me"
     );
     assert!(original.join("index.html").is_file());
-    assert!(artifact(&output, "stage").is_dir());
+    assert!(!artifact(&output, "stage").exists());
 }
 
 #[test]
@@ -751,17 +734,17 @@ fn staging_failure_preserves_the_previous_complete_output() {
 
     let error = publish(&invalid, PublicationOutput::custom(output.clone())).unwrap_err();
 
-    assert!(matches!(
-        error,
-        PublishError::CleanupFailed { primary, .. }
-            if matches!(*primary, PublishError::InvalidRoute { .. })
-    ));
+    assert!(matches!(error, PublishError::InvalidRoute { .. }));
     assert_eq!(
         std::fs::read(output.join("index.html")).unwrap(),
         previous_index
     );
-    assert!(artifact(&output, "stage").is_dir());
+    assert!(!artifact(&output, "stage").exists());
+    assert!(!artifact(&output, "stage.cleanup").exists());
     assert!(!utf8(temp.path().join("escape")).exists());
+
+    publish(&empty_corpus(), PublicationOutput::custom(output.clone())).unwrap();
+    assert_no_transaction_artifacts(&output);
 }
 
 fn empty_corpus() -> WikiCorpus {
