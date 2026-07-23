@@ -305,6 +305,72 @@ fn replaced_stage_is_not_installed() {
 }
 
 #[test]
+fn stage_replaced_after_identity_check_is_not_installed() {
+    let temp = tempfile::tempdir().unwrap();
+    let output = utf8(temp.path().join("wiki"));
+    let paths = TransactionPaths::new(&output).unwrap();
+    let displaced_stage = utf8(temp.path().join("displaced-stage"));
+    std::fs::create_dir(&output).unwrap();
+    std::fs::write(output.join("generation"), "old").unwrap();
+    std::fs::create_dir(&paths.stage).unwrap();
+    std::fs::write(paths.stage.join("generation"), "generated").unwrap();
+    let mut rename_count = 0;
+
+    let error = replace_output_with(
+        &output,
+        &paths,
+        |_, _| {
+            rename_count += 1;
+            if rename_count == 1 {
+                std::fs::rename(&paths.stage, &displaced_stage)?;
+                std::fs::create_dir(&paths.stage)?;
+                std::fs::write(paths.stage.join("generation"), "foreign")?;
+            }
+            Ok(())
+        },
+        |_| Ok(()),
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, PublishError::OutputChanged { .. }));
+    assert_eq!(
+        std::fs::read_to_string(output.join("generation")).unwrap(),
+        "old"
+    );
+    assert_eq!(
+        std::fs::read_to_string(paths.stage.join("generation")).unwrap(),
+        "foreign"
+    );
+    assert_eq!(
+        std::fs::read_to_string(displaced_stage.join("generation")).unwrap(),
+        "generated"
+    );
+}
+
+#[test]
+fn lock_replacement_before_cleanup_is_preserved() {
+    let temp = tempfile::tempdir().unwrap();
+    let output = utf8(temp.path().join("wiki"));
+    let lock = artifact(&output, "lock");
+    let displaced_lock = utf8(temp.path().join("displaced-lock"));
+
+    let report = publish_with(
+        &empty_corpus(),
+        PublicationOutput::custom(output.clone()),
+        |_| {
+            std::fs::rename(&lock, &displaced_lock)?;
+            std::fs::write(&lock, "foreign lock")
+        },
+    )
+    .unwrap();
+
+    assert_eq!(report.status, "ok_with_cleanup_required");
+    assert_eq!(std::fs::read_to_string(lock).unwrap(), "foreign lock");
+    assert!(displaced_lock.is_file());
+    assert!(!artifact(&output, "lock.cleanup").exists());
+}
+
+#[test]
 fn output_replacement_race_preserves_the_intervening_tree() {
     let temp = tempfile::tempdir().unwrap();
     let output = utf8(temp.path().join("wiki"));
@@ -597,7 +663,7 @@ fn empty_corpus() -> WikiCorpus {
 }
 
 fn assert_no_transaction_artifacts(output: &camino::Utf8Path) {
-    for role in ["lock", "stage", "backup"] {
+    for role in ["lock", "lock.cleanup", "stage", "backup"] {
         assert!(!artifact(output, role).exists());
     }
 }

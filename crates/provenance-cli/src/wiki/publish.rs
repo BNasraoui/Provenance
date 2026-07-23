@@ -108,8 +108,6 @@ fn publish_with(
             )),
         ),
     };
-    drop(lock);
-
     match result {
         Err(error @ PublishError::RollbackFailed { .. }) => Err(error),
         Err(error) => {
@@ -117,15 +115,22 @@ fn publish_with(
                 // Never recursively remove through a mutable artifact pathname: a
                 // replacement tree may have been installed there after staging.
                 if let Err(cleanup) = std::fs::remove_dir(&paths.stage) {
-                    let _ = std::fs::remove_file(&paths.lock);
-                    return Err(PublishError::CleanupFailed {
+                    let error = PublishError::CleanupFailed {
                         primary: Box::new(error),
-                        path: paths.stage,
+                        path: paths.stage.clone(),
                         cleanup,
-                    });
+                    };
+                    return match lock.cleanup(&paths) {
+                        Ok(()) => Err(error),
+                        Err(cleanup) => Err(PublishError::CleanupFailed {
+                            primary: Box::new(error),
+                            path: paths.lock,
+                            cleanup,
+                        }),
+                    };
                 }
             }
-            if let Err(cleanup) = std::fs::remove_file(&paths.lock) {
+            if let Err(cleanup) = lock.cleanup(&paths) {
                 return Err(PublishError::CleanupFailed {
                     primary: Box::new(error),
                     path: paths.lock,
@@ -135,7 +140,7 @@ fn publish_with(
             Err(error)
         }
         Ok(mut report) => {
-            if let Err(error) = std::fs::remove_file(&paths.lock) {
+            if let Err(error) = lock.cleanup(&paths) {
                 report.cleanup_warnings.push(CleanupWarning {
                     path: paths.lock,
                     action: "remove committed publication lock",

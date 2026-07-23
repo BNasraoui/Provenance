@@ -24,8 +24,31 @@ impl StageIdentity {
     }
 }
 
+pub(super) struct PublicationLock {
+    file: File,
+    identity: same_file::Handle,
+}
+
+impl PublicationLock {
+    pub(super) fn cleanup(self, paths: &TransactionPaths) -> std::io::Result<()> {
+        rename_no_replace(&paths.lock, &paths.lock_cleanup)?;
+        if same_file::Handle::from_path(&paths.lock_cleanup)? != self.identity {
+            let mismatch = std::io::Error::other("publication lock path changed before cleanup");
+            return match rename_no_replace(&paths.lock_cleanup, &paths.lock) {
+                Ok(()) => Err(mismatch),
+                Err(restore) => Err(std::io::Error::other(format!(
+                    "{mismatch}; restoring the replacement lock path also failed: {restore}"
+                ))),
+            };
+        }
+        drop(self);
+        std::fs::remove_file(&paths.lock_cleanup)
+    }
+}
+
 pub(super) struct TransactionPaths {
     pub lock: Utf8PathBuf,
+    pub lock_cleanup: Utf8PathBuf,
     pub stage: Utf8PathBuf,
     pub backup: Utf8PathBuf,
 }
@@ -44,28 +67,40 @@ impl TransactionPaths {
             })?;
         Ok(Self {
             lock: parent.join(format!(".{leaf}.provenance-wiki.lock")),
+            lock_cleanup: parent.join(format!(".{leaf}.provenance-wiki.lock.cleanup")),
             stage: parent.join(format!(".{leaf}.provenance-wiki.stage")),
             backup: parent.join(format!(".{leaf}.provenance-wiki.backup")),
         })
     }
 }
 
-pub(super) fn acquire_lock(paths: &TransactionPaths) -> Result<File, PublishError> {
-    let mut lock = OpenOptions::new()
+pub(super) fn acquire_lock(paths: &TransactionPaths) -> Result<PublicationLock, PublishError> {
+    let lock = OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(&paths.lock)
         .map_err(|error| PublishError::io("create publication lock", &paths.lock, error))?;
+    let identity_file = lock
+        .try_clone()
+        .map_err(|error| PublishError::io("clone publication lock handle", &paths.lock, error))?;
+    let identity = same_file::Handle::from_file(identity_file).map_err(|error| {
+        PublishError::io("record publication lock identity", &paths.lock, error)
+    })?;
+    let mut lock = PublicationLock {
+        file: lock,
+        identity,
+    };
     let initialization = lock
+        .file
         .write_all(b"provenance wiki publication in progress\n")
         .map_err(|error| PublishError::io("write publication lock", &paths.lock, error))
         .and_then(|()| {
-            lock.sync_all()
+            lock.file
+                .sync_all()
                 .map_err(|error| PublishError::io("sync publication lock", &paths.lock, error))
         });
     if let Err(primary) = initialization {
-        drop(lock);
-        return match std::fs::remove_file(&paths.lock) {
+        return match lock.cleanup(paths) {
             Ok(()) => Err(primary),
             Err(cleanup) => Err(PublishError::CleanupFailed {
                 primary: Box::new(primary),
@@ -101,7 +136,7 @@ pub(super) fn preflight(
             paths: vec![paths.lock.clone()],
         });
     }
-    let ambiguous: Vec<_> = [&paths.stage, &paths.backup]
+    let ambiguous: Vec<_> = [&paths.lock_cleanup, &paths.stage, &paths.backup]
         .into_iter()
         .filter(|path| path.symlink_metadata().is_ok())
         .cloned()
@@ -178,18 +213,11 @@ pub(super) fn replace_output(
     output_state: OutputState,
     stage_identity: &StageIdentity,
 ) -> Result<Vec<CleanupWarning>, PublishError> {
-    if !stage_identity.matches_path(&paths.stage).map_err(|error| {
-        PublishError::io("verify staging directory identity", &paths.stage, error)
-    })? {
-        return Err(PublishError::OutputChanged {
-            path: paths.stage.clone(),
-            detail: "staging directory was replaced during generation".to_string(),
-        });
-    }
     replace_output_with_validation(
         output,
         paths,
         output_state,
+        stage_identity,
         |_, _| Ok(()),
         |_| Ok(()),
         |backup| manifest::validate_output(backup, policy),
@@ -204,10 +232,17 @@ pub(super) fn replace_output_with(
     before_cleanup: impl FnMut(&Utf8Path) -> std::io::Result<()>,
 ) -> Result<Vec<CleanupWarning>, PublishError> {
     let output_state = output_identity(output)?;
+    let stage = File::open(&paths.stage).map_err(|error| {
+        PublishError::io("open staging directory identity", &paths.stage, error)
+    })?;
+    let stage_identity = StageIdentity::from_file(&stage).map_err(|error| {
+        PublishError::io("record staging directory identity", &paths.stage, error)
+    })?;
     replace_output_with_validation(
         output,
         paths,
         output_state,
+        &stage_identity,
         before_rename,
         before_cleanup,
         |_| Ok(()),
@@ -218,10 +253,16 @@ fn replace_output_with_validation(
     output: &Utf8Path,
     paths: &TransactionPaths,
     output_state: OutputState,
+    stage_identity: &StageIdentity,
     mut before_rename: impl FnMut(&Utf8Path, &Utf8Path) -> std::io::Result<()>,
     mut before_cleanup: impl FnMut(&Utf8Path) -> std::io::Result<()>,
     validate_backup: impl FnOnce(&Utf8Path) -> Result<(), PublishError>,
 ) -> Result<Vec<CleanupWarning>, PublishError> {
+    verify_stage_identity(
+        stage_identity,
+        &paths.stage,
+        "staging directory was replaced during generation",
+    )?;
     let mut rename = |from: &Utf8Path, to: &Utf8Path| {
         before_rename(from, to)?;
         rename_no_replace(from, to)
@@ -270,6 +311,7 @@ fn replace_output_with_validation(
                 }),
             };
         }
+        verify_installed_stage_with_backup(stage_identity, output, paths, &mut rename)?;
         let cleanup = cleanup_backup(&paths.backup, &mut before_cleanup);
         if let Err(error) = cleanup {
             return Ok(vec![CleanupWarning {
@@ -289,8 +331,69 @@ fn replace_output_with_validation(
                 PublishError::io("install completed wiki", output, error)
             }
         })?;
+        if let Err(validation) = verify_stage_identity(
+            stage_identity,
+            output,
+            "installed output does not match the generated staging directory",
+        ) {
+            rename(output, &paths.stage).map_err(|error| {
+                PublishError::io("quarantine replaced staging directory", output, error)
+            })?;
+            return Err(validation);
+        }
     }
     Ok(Vec::new())
+}
+
+fn verify_installed_stage_with_backup(
+    stage_identity: &StageIdentity,
+    output: &Utf8Path,
+    paths: &TransactionPaths,
+    rename: &mut impl FnMut(&Utf8Path, &Utf8Path) -> std::io::Result<()>,
+) -> Result<(), PublishError> {
+    let Err(validation) = verify_stage_identity(
+        stage_identity,
+        output,
+        "installed output does not match the generated staging directory",
+    ) else {
+        return Ok(());
+    };
+    let install = std::io::Error::other(validation.to_string());
+    if let Err(quarantine) = rename(output, &paths.stage) {
+        return Err(PublishError::RollbackFailed {
+            output: output.to_path_buf(),
+            backup: paths.backup.clone(),
+            install,
+            rollback: quarantine,
+        });
+    }
+    match rename(&paths.backup, output) {
+        Ok(()) => Err(validation),
+        Err(rollback) => Err(PublishError::RollbackFailed {
+            output: output.to_path_buf(),
+            backup: paths.backup.clone(),
+            install,
+            rollback,
+        }),
+    }
+}
+
+fn verify_stage_identity(
+    expected: &StageIdentity,
+    path: &Utf8Path,
+    detail: &'static str,
+) -> Result<(), PublishError> {
+    if expected
+        .matches_path(path)
+        .map_err(|error| PublishError::io("verify staging directory identity", path, error))?
+    {
+        Ok(())
+    } else {
+        Err(PublishError::OutputChanged {
+            path: path.to_path_buf(),
+            detail: detail.to_string(),
+        })
+    }
 }
 
 #[cfg(unix)]
