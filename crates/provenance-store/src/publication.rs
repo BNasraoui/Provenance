@@ -92,6 +92,10 @@ pub fn recover_pending_publication(layout: &ProvenanceLayout) -> anyhow::Result<
         marker.schema_version == 1,
         "unsupported publication marker version"
     );
+    if matches!(marker.phase, PublicationPhase::Published) && !marker.transaction_dir.exists() {
+        validate_missing_transaction_dir(layout, &marker.transaction_dir)?;
+        return clear_publication_marker(layout);
+    }
     let transaction_dir = validated_transaction_dir(layout, &marker.transaction_dir)?;
     let backup = transaction_dir.join("backup-state");
     if !layout.state_dir().exists() {
@@ -127,6 +131,25 @@ fn validated_transaction_dir(
         "publication marker transaction is outside the repository cache"
     );
     Ok(canonical_transaction)
+}
+
+fn validate_missing_transaction_dir(
+    layout: &ProvenanceLayout,
+    transaction_dir: &Utf8Path,
+) -> anyhow::Result<()> {
+    let transactions = layout.import_transactions_dir();
+    let parent = transaction_dir.parent();
+    anyhow::ensure!(
+        parent == Some(transactions.as_path()),
+        "publication marker transaction is outside the repository cache"
+    );
+    let canonical_transactions = std::fs::canonicalize(&transactions)?;
+    let canonical_parent = std::fs::canonicalize(parent.expect("transaction parent was checked"))?;
+    anyhow::ensure!(
+        canonical_parent == canonical_transactions,
+        "publication marker transaction is outside the repository cache"
+    );
+    Ok(())
 }
 
 pub fn sync_directory(path: &Utf8Path) -> anyhow::Result<()> {
@@ -252,6 +275,31 @@ mod tests {
 
         assert!(error.contains("outside the repository cache"), "{error}");
         assert!(outside.join("sentinel").is_file());
+    }
+
+    #[test]
+    fn recovery_clears_published_marker_when_transaction_is_missing() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(directory.path().to_path_buf()).unwrap();
+        let layout = ProvenanceLayout::new(root);
+        std::fs::create_dir_all(layout.state_dir()).unwrap();
+        std::fs::create_dir_all(layout.import_transactions_dir()).unwrap();
+        let transaction = layout.import_transactions_dir().join("completed");
+        std::fs::write(
+            layout.publication_marker_path(),
+            serde_json::to_vec(&serde_json::json!({
+                "schema_version": 1,
+                "transaction_dir": transaction,
+                "phase": "published"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        recover_pending_publication(&layout).unwrap();
+
+        assert!(layout.state_dir().is_dir());
+        assert!(!layout.publication_marker_path().exists());
     }
 
     #[test]
