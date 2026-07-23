@@ -35,6 +35,8 @@ fn render_corpus_routes_every_page_under_its_page_id() {
         routes,
         vec![
             "/".to_string(),
+            "/domains/".to_string(),
+            "/search/".to_string(),
             "/requirements/req_saveinvoice_split/".to_string(),
             "/requirements/req_stuck/".to_string(),
             "/resolutions/res_split/".to_string(),

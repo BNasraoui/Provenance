@@ -1,4 +1,5 @@
 use crate::wiki::model::{PageKind, ResolutionPage};
+use crate::wiki::routes::WikiRoute;
 use std::fmt::Write as _;
 
 use super::super::chrome::{container_html, index_breadcrumb, page_shell, title_row};
@@ -92,7 +93,10 @@ pub fn render_resolution(scope: &str, page: &ResolutionPage) -> String {
     push_classification_block(&mut margin, &rows);
 
     let container = container_html(
-        Some((PageKind::Resolution, ("/".to_string(), scope.to_string()))),
+        Some((
+            PageKind::Resolution,
+            (WikiRoute::Index.path(), scope.to_string()),
+        )),
         &title_row(
             PageKind::Resolution,
             &page.title,

@@ -1,4 +1,4 @@
-use crate::wiki::model::{CorpusCounts, OrphanReport, PageId, PageKind, ScopeIndexPage};
+use crate::wiki::model::{CorpusCounts, OrphanReport, RecordKind, ScopeIndexPage};
 use provenance_core::RequirementStatus;
 
 use super::super::{
@@ -45,8 +45,8 @@ fn rule_page_links_evidence_but_leaves_prose_references_as_text() {
 fn rule_page_disambiguates_mixed_kind_producers_with_the_same_id() {
     let mut page = rule_fixture();
     page.produced_by = vec![
-        super::fixtures::link(PageKind::Resolution, "shared_id", "Shared producer"),
-        super::fixtures::link(PageKind::Requirement, "shared_id", "Shared producer"),
+        super::fixtures::link(RecordKind::Resolution, "shared_id", "Shared producer"),
+        super::fixtures::link(RecordKind::Requirement, "shared_id", "Shared producer"),
     ];
 
     let html = render_rule("default", &page);
@@ -127,7 +127,6 @@ fn index_page_keeps_unique_root_links_unchanged() {
 #[test]
 fn index_page_on_a_truly_empty_scope_shows_the_honest_empty_state() {
     let page = ScopeIndexPage {
-        id: PageId::new(PageKind::ScopeIndex, "default"),
         scope: "default".to_string(),
         title: "Provenance atlas — default".to_string(),
         counts: CorpusCounts::default(),

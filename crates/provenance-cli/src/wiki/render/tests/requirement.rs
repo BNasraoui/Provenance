@@ -1,4 +1,4 @@
-use crate::wiki::model::{LineageEntry, PageKind};
+use crate::wiki::model::{LineageEntry, RecordKind};
 
 use super::super::render_requirement;
 use super::fixtures::{gappy_requirement_fixture, link, requirement_fixture};
@@ -80,11 +80,11 @@ fn lineage_and_breadcrumb_disambiguate_collisions_including_current_text() {
     let mut page = requirement_fixture();
     page.lineage = vec![
         LineageEntry {
-            link: link(PageKind::Requirement, "req_shared_parent", "Shared title"),
+            link: link(RecordKind::Requirement, "req_shared_parent", "Shared title"),
             is_current: false,
         },
         LineageEntry {
-            link: link(PageKind::Requirement, "req_shared_child", "Shared title"),
+            link: link(RecordKind::Requirement, "req_shared_child", "Shared title"),
             is_current: true,
         },
     ];
@@ -130,12 +130,12 @@ fn requirement_page_renders_related_sibling_requirements_after_attribution() {
     let mut page = requirement_fixture();
     page.siblings = vec![
         link(
-            PageKind::Requirement,
+            RecordKind::Requirement,
             "req_budget_split",
             "Budget portions shall reconcile",
         ),
         link(
-            PageKind::Requirement,
+            RecordKind::Requirement,
             "req_zero_suppression",
             "Zero claim items shall be suppressed",
         ),

@@ -39,6 +39,26 @@ fn wiki_build_writes_static_pages_and_stylesheet() {
     let stylesheet = std::fs::read_to_string(out.join("assets/provenance-wiki.css")).unwrap();
     assert!(stylesheet.contains("--pv-"), "stylesheet missing tokens");
 
+    let domains = std::fs::read_to_string(out.join("domains/index.html")).unwrap();
+    assert!(domains.contains("Unassigned"), "{domains}");
+    assert!(
+        domains.contains("href=\"/requirements/req_sah/\""),
+        "{domains}"
+    );
+    assert!(
+        domains.contains("href=\"/rules/rule_sah_001/\""),
+        "{domains}"
+    );
+
+    let search = std::fs::read_to_string(out.join("search/index.html")).unwrap();
+    assert!(
+        search.contains("Support at Home shall be traceable"),
+        "{search}"
+    );
+    assert!(search.contains("Draft rule shall stay draft"), "{search}");
+    assert!(search.contains("data-search-entry"), "{search}");
+    assert!(!out.join("assets/search-index.json").exists());
+
     let requirement = std::fs::read_to_string(out.join("requirements/req_sah/index.html")).unwrap();
     assert!(
         requirement.contains("Support at Home shall be traceable"),
@@ -84,9 +104,9 @@ fn wiki_build_default_format_prints_a_concise_summary_not_a_page_dump() {
 
     assert!(!stdout.contains("\"pages\""), "{stdout}");
     assert!(!stdout.contains("\"route\""), "{stdout}");
-    // 1 index + 2 requirements + 1 resolution + 1 rule + 1 source = 6 pages.
+    // 3 singleton pages + 2 requirements + 1 resolution + 1 rule + 1 source = 8 pages.
     assert!(
-        stdout.contains("6 pages"),
+        stdout.contains("8 pages"),
         "expected the page count: {stdout}"
     );
     assert!(
@@ -224,6 +244,9 @@ fn wiki_serve_serves_pages_stylesheet_and_not_found() {
     let stylesheet = wait_for_http(port, "/assets/provenance-wiki.css");
     let requirement = wait_for_http(port, "/requirements/req_sah/");
     let bare_route = wait_for_http(port, "/requirements/req_sah");
+    let domains = wait_for_http(port, "/domains");
+    let search = wait_for_http(port, "/search/");
+    let no_json_index = wait_for_http(port, "/assets/search-index.json");
     let missing = wait_for_http(port, "/nope/");
     child.kill().ok();
     child.wait().ok();
@@ -247,6 +270,12 @@ fn wiki_serve_serves_pages_stylesheet_and_not_found() {
         bare_route.contains("Support at Home shall be traceable"),
         "{bare_route}"
     );
+
+    assert!(domains.contains("200 OK"), "{domains}");
+    assert!(domains.contains("Unassigned"), "{domains}");
+    assert!(search.contains("200 OK"), "{search}");
+    assert!(search.contains("id=\"wiki-search\""), "{search}");
+    assert!(no_json_index.contains("404 Not Found"), "{no_json_index}");
 
     assert!(missing.contains("404 Not Found"), "{missing}");
     assert!(missing.contains("Page not found"), "{missing}");
