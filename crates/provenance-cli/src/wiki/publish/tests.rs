@@ -229,19 +229,78 @@ fn stage_creation_race_preserves_the_foreign_tree() {
         &empty_corpus(),
         PublicationOutput::custom(output.clone()),
         |path| {
-            std::fs::create_dir(path)?;
             std::fs::write(path.join("caller"), "keep me").unwrap();
-            std::fs::create_dir(path)
+            Err(std::io::Error::other("injected staging failure"))
         },
     )
     .unwrap_err();
 
-    assert!(matches!(error, PublishError::Io { .. }));
+    assert!(matches!(
+        error,
+        PublishError::CleanupFailed { primary, .. }
+            if matches!(*primary, PublishError::Io { .. })
+    ));
     assert_eq!(
         std::fs::read_to_string(stage.join("caller")).unwrap(),
         "keep me"
     );
     assert!(!artifact(&output, "lock").exists());
+    assert!(!output.exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn staged_child_symlink_cannot_redirect_generated_writes() {
+    use std::os::unix::fs::symlink;
+
+    let temp = tempfile::tempdir().unwrap();
+    let output = utf8(temp.path().join("wiki"));
+    let external = utf8(temp.path().join("external"));
+    std::fs::create_dir(&external).unwrap();
+
+    let error = publish_with(
+        &empty_corpus(),
+        PublicationOutput::custom(output.clone()),
+        |stage| symlink(&external, stage.join("assets")),
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        PublishError::CleanupFailed { primary, .. }
+            if matches!(*primary, PublishError::Io { .. })
+    ));
+    assert!(!external.join("provenance-wiki.css").exists());
+    assert!(!output.exists());
+}
+
+#[test]
+fn replaced_stage_is_not_installed() {
+    let temp = tempfile::tempdir().unwrap();
+    let output = utf8(temp.path().join("wiki"));
+    let displaced = utf8(temp.path().join("displaced-stage"));
+
+    let error = publish_with(
+        &empty_corpus(),
+        PublicationOutput::custom(output.clone()),
+        |stage| {
+            std::fs::rename(stage, &displaced)?;
+            std::fs::create_dir(stage)?;
+            std::fs::write(stage.join("caller"), "keep me")
+        },
+    )
+    .unwrap_err();
+
+    assert!(matches!(
+        error,
+        PublishError::CleanupFailed { primary, .. }
+            if matches!(*primary, PublishError::OutputChanged { .. })
+    ));
+    assert_eq!(
+        std::fs::read_to_string(artifact(&output, "stage").join("caller")).unwrap(),
+        "keep me"
+    );
+    assert!(displaced.join("index.html").is_file());
     assert!(!output.exists());
 }
 
@@ -255,7 +314,7 @@ fn output_replacement_race_preserves_the_intervening_tree() {
     let error = publish_with(
         &empty_corpus(),
         PublicationOutput::custom(output.clone()),
-        |stage| {
+        |_stage| {
             std::fs::rename(&output, &original)?;
             std::fs::create_dir(&output)?;
             std::fs::copy(
@@ -263,7 +322,7 @@ fn output_replacement_race_preserves_the_intervening_tree() {
                 output.join(OWNERSHIP_MANIFEST),
             )?;
             std::fs::write(output.join("caller.txt"), "keep me")?;
-            std::fs::create_dir(stage)
+            Ok(())
         },
     )
     .unwrap_err();

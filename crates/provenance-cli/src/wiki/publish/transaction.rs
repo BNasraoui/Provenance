@@ -12,6 +12,18 @@ pub(super) enum OutputState {
 
 pub(super) struct OutputIdentity(same_file::Handle);
 
+pub(super) struct StageIdentity(same_file::Handle);
+
+impl StageIdentity {
+    pub(super) fn from_file(file: &File) -> std::io::Result<Self> {
+        same_file::Handle::from_file(file.try_clone()?).map(Self)
+    }
+
+    fn matches_path(&self, path: &Utf8Path) -> std::io::Result<bool> {
+        Ok(same_file::Handle::from_path(path)? == self.0)
+    }
+}
+
 pub(super) struct TransactionPaths {
     pub lock: Utf8PathBuf,
     pub stage: Utf8PathBuf,
@@ -164,7 +176,16 @@ pub(super) fn replace_output(
     policy: super::OutputPolicy,
     paths: &TransactionPaths,
     output_state: OutputState,
+    stage_identity: &StageIdentity,
 ) -> Result<Vec<CleanupWarning>, PublishError> {
+    if !stage_identity.matches_path(&paths.stage).map_err(|error| {
+        PublishError::io("verify staging directory identity", &paths.stage, error)
+    })? {
+        return Err(PublishError::OutputChanged {
+            path: paths.stage.clone(),
+            detail: "staging directory was replaced during generation".to_string(),
+        });
+    }
     replace_output_with_validation(
         output,
         paths,

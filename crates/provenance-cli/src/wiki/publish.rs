@@ -10,9 +10,9 @@ mod stage;
 mod transaction;
 
 pub use error::PublishError;
-use stage::generate_and_replace;
 #[cfg(test)]
 use stage::write_page;
+use stage::{generate_and_replace, StageDirectory};
 #[cfg(test)]
 use transaction::replace_output_with;
 use transaction::{acquire_lock, preflight, TransactionPaths};
@@ -78,22 +78,27 @@ pub fn publish(
     corpus: &WikiCorpus,
     output: PublicationOutput,
 ) -> Result<PublishReport, PublishError> {
-    publish_with(corpus, output, |path| std::fs::create_dir(path))
+    publish_with(corpus, output, |_| Ok(()))
 }
 
 fn publish_with(
     corpus: &WikiCorpus,
     output: PublicationOutput,
-    create_stage: impl FnOnce(&Utf8Path) -> std::io::Result<()>,
+    after_stage_opened: impl FnOnce(&Utf8Path) -> std::io::Result<()>,
 ) -> Result<PublishReport, PublishError> {
     let paths = TransactionPaths::new(&output.path)?;
     let output_state = preflight(&output, &paths)?;
     let lock = acquire_lock(&paths)?;
-    let (stage_created, result) = match create_stage(&paths.stage) {
-        Ok(()) => (
-            true,
-            generate_and_replace(corpus, output, &paths, output_state),
-        ),
+    let (stage_created, result) = match std::fs::create_dir(&paths.stage) {
+        Ok(()) => {
+            let result = StageDirectory::open(&paths.stage).and_then(|stage| {
+                after_stage_opened(&paths.stage).map_err(|error| {
+                    PublishError::io("prepare staging directory", &paths.stage, error)
+                })?;
+                generate_and_replace(corpus, output, &paths, output_state, &stage)
+            });
+            (true, result)
+        }
         Err(error) => (
             false,
             Err(PublishError::io(
@@ -112,6 +117,7 @@ fn publish_with(
                 // Never recursively remove through a mutable artifact pathname: a
                 // replacement tree may have been installed there after staging.
                 if let Err(cleanup) = std::fs::remove_dir(&paths.stage) {
+                    let _ = std::fs::remove_file(&paths.lock);
                     return Err(PublishError::CleanupFailed {
                         primary: Box::new(error),
                         path: paths.stage,
