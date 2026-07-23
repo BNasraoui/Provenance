@@ -277,6 +277,60 @@ fn proposal_projection_rejects_unlisted_disposition_actor() {
 }
 
 #[test]
+fn proposal_projection_uses_one_publication_snapshot() {
+    let (_dir, store, scope) = initialized_store();
+    store
+        .create_proposal_card(proposal_input(
+            &scope,
+            "proposal_overtime",
+            "Overtime",
+            PromotionState::Proposed,
+        ))
+        .unwrap();
+    let (validated_tx, validated_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let reader = {
+        let store = store.clone();
+        let scope = scope.clone();
+        std::thread::spawn(move || {
+            store.project_proposal_cards(&scope, || {
+                validated_tx.send(()).unwrap();
+                release_rx.recv().unwrap();
+                Ok(())
+            })
+        })
+    };
+    validated_rx.recv().unwrap();
+
+    let (published_tx, published_rx) = std::sync::mpsc::channel();
+    let publisher = {
+        let store = store.clone();
+        let scope = scope.clone();
+        std::thread::spawn(move || {
+            store
+                .with_repository_publication(|| {
+                    crate::jsonl::write_jsonl_atomic::<ProposalCard>(
+                        &crate::shards::proposal_cards_path(&store.layout, &scope),
+                        &[],
+                    )
+                })
+                .unwrap();
+            published_tx.send(()).unwrap();
+        })
+    };
+
+    assert!(published_rx
+        .recv_timeout(std::time::Duration::from_millis(100))
+        .is_err());
+    release_tx.send(()).unwrap();
+    let projected = reader.join().unwrap().unwrap();
+    publisher.join().unwrap();
+
+    assert_eq!(projected.len(), 1);
+    assert!(store.list_proposal_cards(&scope).unwrap().is_empty());
+}
+
+#[test]
 fn modern_proposal_is_immutable_even_when_upsert_is_requested() {
     let (_dir, store, scope) = initialized_store();
     store

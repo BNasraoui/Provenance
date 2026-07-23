@@ -436,21 +436,31 @@ impl StateStore {
         Ok(records)
     }
     pub fn list_proposal_cards(&self, scope: &ScopeId) -> anyhow::Result<Vec<ProposalCard>> {
-        self.validate_ideation_scope(scope)?;
-        let assertions = self.list_assertion_records(scope)?;
-        let dispositions = self.list_dispositions(scope)?;
-        Ok(self
-            .list_proposal_definitions(scope)?
-            .into_iter()
-            .map(|mut proposal| {
-                proposal.promotion_state = provenance_core::effective_proposal_state(
-                    &proposal,
-                    &assertions,
-                    &dispositions,
-                );
-                proposal
-            })
-            .collect())
+        self.project_proposal_cards(scope, || Ok(()))
+    }
+    fn project_proposal_cards(
+        &self,
+        scope: &ScopeId,
+        after_validation: impl FnOnce() -> anyhow::Result<()>,
+    ) -> anyhow::Result<Vec<ProposalCard>> {
+        self.with_repository_publication(|| {
+            self.validate_ideation_scope(scope)?;
+            after_validation()?;
+            let assertions = self.list_assertion_records(scope)?;
+            let dispositions = self.list_dispositions(scope)?;
+            Ok(self
+                .list_proposal_definitions(scope)?
+                .into_iter()
+                .map(|mut proposal| {
+                    proposal.promotion_state = provenance_core::effective_proposal_state(
+                        &proposal,
+                        &assertions,
+                        &dispositions,
+                    );
+                    proposal
+                })
+                .collect())
+        })
     }
     pub fn list_proposal_definitions(&self, scope: &ScopeId) -> anyhow::Result<Vec<ProposalCard>> {
         let mut records = read_jsonl(&shards::proposal_cards_path(&self.layout, scope))?;
