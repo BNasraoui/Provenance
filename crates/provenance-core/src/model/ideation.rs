@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 pub(super) mod contributions;
-pub(super) mod promotions;
+pub(super) mod dispositions;
+pub(super) mod lifecycle;
 pub(super) mod proposals;
 pub(super) mod synthesis;
 
@@ -217,6 +218,8 @@ impl ProposalType {
 pub enum PromotionState {
     #[serde(rename = "proposed")]
     Proposed,
+    #[serde(rename = "asserted")]
+    Asserted,
     #[serde(rename = "accepted")]
     Accepted,
     #[serde(rename = "rejected")]
@@ -233,20 +236,21 @@ impl PromotionState {
     pub fn parse(value: &str) -> anyhow::Result<Self> {
         match normalize_enum_value(value).as_str() {
             "proposed" => Ok(Self::Proposed),
+            "asserted" => Ok(Self::Asserted),
             "accepted" => Ok(Self::Accepted),
             "rejected" => Ok(Self::Rejected),
             "deferred" => Ok(Self::Deferred),
             "duplicate" => Ok(Self::Duplicate),
             "superseded" => Ok(Self::Superseded),
             _ => anyhow::bail!(
-                "promotion state must be proposed, accepted, rejected, deferred, duplicate, or superseded"
+                "promotion state must be proposed, asserted, accepted, rejected, deferred, duplicate, or superseded"
             ),
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum PromotionDecision {
+pub enum DispositionDecision {
     #[serde(rename = "accepted")]
     Accepted,
     #[serde(rename = "rejected")]
@@ -255,33 +259,31 @@ pub enum PromotionDecision {
     Deferred,
 }
 
-impl PromotionDecision {
+impl DispositionDecision {
     pub fn parse(value: &str) -> anyhow::Result<Self> {
         match normalize_enum_value(value).as_str() {
             "accepted" => Ok(Self::Accepted),
             "rejected" => Ok(Self::Rejected),
             "deferred" => Ok(Self::Deferred),
-            _ => anyhow::bail!("promotion decision must be accepted, rejected, or deferred"),
+            _ => anyhow::bail!("disposition decision must be accepted, rejected, or deferred"),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct IdeationTarget {
-    #[serde(alias = "artifactType")]
     pub artifact_type: IdeationTargetType,
-    #[serde(alias = "artifactId")]
     pub artifact_id: StableId,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct IdeationEvidenceReference {
-    #[serde(alias = "referenceId")]
     pub reference_id: StableId,
-    #[serde(alias = "evidenceType")]
     pub evidence_type: IdeationEvidenceType,
     pub summary: String,
-    #[serde(default, alias = "filePath", skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub line: Option<u32>,

@@ -2,7 +2,7 @@ mod collaboration_records;
 mod graph_records;
 
 use super::{open_cache, MaterializeReport};
-use crate::{layout::ProvenanceLayout, migrations, state_store::StateStore};
+use crate::{layout::ProvenanceLayout, migrations, publication, state_store::StateStore};
 use sqlx::{Sqlite, Transaction};
 
 pub async fn materialize_empty_state(
@@ -19,8 +19,12 @@ pub async fn materialize_empty_state(
 pub async fn materialize_state(layout: &ProvenanceLayout) -> anyhow::Result<MaterializeReport> {
     let pool = open_cache(layout).await?;
     let migrations_applied = migrations::run_migrations(&pool).await?;
-    let store = StateStore::new(layout.clone());
+    let snapshot = publication::snapshot_state(layout)?;
+    let store = StateStore::new(snapshot.layout().clone());
     let manifest = store.manifest()?;
+    for scope in &manifest.scopes {
+        store.validate_ideation_scope(&scope.id)?;
+    }
     let mut tx = pool.begin().await?;
     clear_cache(&mut tx).await?;
 
@@ -56,7 +60,8 @@ async fn clear_cache(tx: &mut Transaction<'_, Sqlite>) -> anyhow::Result<()> {
         "contributions",
         "synthesis_packets",
         "proposal_cards",
-        "promotion_decisions",
+        "assertion_records",
+        "dispositions",
     ] {
         sqlx::query(&format!("DELETE FROM {table}"))
             .execute(&mut **tx)

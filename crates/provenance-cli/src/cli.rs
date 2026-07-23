@@ -30,6 +30,9 @@ pub enum Command {
         scope: String,
         #[arg(long, default_value = ".")]
         path_prefix: Utf8PathBuf,
+        /// Repository-local actor ID allowed to attest proposal dispositions.
+        #[arg(long)]
+        disposition_actor_id: Vec<String>,
     },
     Check {
         #[arg(long, default_value = ".")]
@@ -141,9 +144,9 @@ pub enum Command {
         #[command(subcommand)]
         command: ideation::ProposalsCommand,
     },
-    PromotionDecisions {
+    Dispositions {
         #[command(subcommand)]
-        command: ideation::PromotionDecisionsCommand,
+        command: ideation::DispositionsCommand,
     },
     Prime {
         #[arg(long, default_value = ".")]

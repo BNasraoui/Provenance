@@ -5,6 +5,7 @@ use provenance_store::{layout::ProvenanceLayout, state_store::StateStore};
 use serde::Serialize;
 
 #[derive(Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ScopeExport {
     pub scope: String,
     pub sources: Vec<provenance_core::Source>,
@@ -33,35 +34,41 @@ pub struct ScopeExport {
     #[serde(default)]
     pub proposal_cards: Vec<provenance_core::ProposalCard>,
     #[serde(default)]
-    pub promotion_decisions: Vec<provenance_core::PromotionDecisionRecord>,
+    pub assertion_records: Vec<provenance_core::AssertionRecord>,
+    #[serde(default, alias = "promotion_decisions")]
+    pub dispositions: Vec<provenance_core::DispositionRecord>,
 }
 
 pub fn export_scope(repo: Utf8PathBuf, scope: String) -> anyhow::Result<ScopeExport> {
     let scope_id = ScopeId::new(scope.clone())?;
     let store = StateStore::new(ProvenanceLayout::new(repo));
-    Ok(ScopeExport {
-        scope,
-        sources: store.list_sources(&scope_id)?,
-        domains: store.list_domains(&scope_id)?,
-        requirements: store.list_requirements(&scope_id)?,
-        boundaries: store.list_boundaries(&scope_id)?,
-        topics: store.list_topics(&scope_id)?,
-        questions: store.list_questions(&scope_id)?,
-        resolutions: store.list_resolutions(&scope_id)?,
-        rules: store.list_rules(&scope_id)?,
-        services: store.list_services(&scope_id)?,
-        service_bindings: store.list_service_bindings(&scope_id)?,
-        edges: store
-            .list_edges()?
-            .into_iter()
-            .filter(|edge| edge.scope_id == scope_id)
-            .collect(),
-        threads: store.list_threads(&scope_id)?,
-        messages: store.list_messages(&scope_id)?,
-        contributions: store.list_contributions(&scope_id)?,
-        synthesis_packets: store.list_synthesis_packets(&scope_id)?,
-        proposal_cards: store.list_proposal_cards(&scope_id)?,
-        promotion_decisions: store.list_promotion_decisions(&scope_id)?,
+    store.with_repository_publication(|| {
+        store.validate_ideation_scope(&scope_id)?;
+        Ok(ScopeExport {
+            scope,
+            sources: store.list_sources(&scope_id)?,
+            domains: store.list_domains(&scope_id)?,
+            requirements: store.list_requirements(&scope_id)?,
+            boundaries: store.list_boundaries(&scope_id)?,
+            topics: store.list_topics(&scope_id)?,
+            questions: store.list_questions(&scope_id)?,
+            resolutions: store.list_resolutions(&scope_id)?,
+            rules: store.list_rules(&scope_id)?,
+            services: store.list_services(&scope_id)?,
+            service_bindings: store.list_service_bindings(&scope_id)?,
+            edges: store
+                .list_edges()?
+                .into_iter()
+                .filter(|edge| edge.scope_id == scope_id)
+                .collect(),
+            threads: store.list_threads(&scope_id)?,
+            messages: store.list_messages(&scope_id)?,
+            contributions: store.list_contributions(&scope_id)?,
+            synthesis_packets: store.list_synthesis_packets(&scope_id)?,
+            proposal_cards: store.list_proposal_definitions(&scope_id)?,
+            assertion_records: store.list_assertion_records(&scope_id)?,
+            dispositions: store.list_dispositions(&scope_id)?,
+        })
     })
 }
 

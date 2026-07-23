@@ -3,7 +3,7 @@
 Common local workflow:
 
 ```sh
-provenance init --path . --scope default --path-prefix .
+provenance init --path . --scope default --path-prefix . --disposition-actor-id reviewer
 provenance sources create --scope default --id source_policy --name "Policy"
 provenance domains create --scope default --id domain_policy --name "Policy"
 provenance requirements create --scope default --id req_policy --statement "Follow policy" --domain-id domain_policy
@@ -72,13 +72,28 @@ shaping/ideation commands emit a non-blocking stderr hint when skills are missin
 suppressible with `--quiet`.
 
 Ideation JSON flags accept inline JSON or `@path/to/payload.json`. Artifact helpers:
-`provenance schema show contribution|synthesis-packet|proposal --format json` prints
-canonical record schemas, and `provenance validate contribution|synthesis-packet|proposal
---input artifact.json --format json` validates full records, including nested stable IDs.
-`contributions create`, `synthesis-packets create`, and `proposals create` keep duplicate
-protection by default; pass `--replace` to intentionally upsert the same stable ID.
+`provenance schema show contribution|synthesis-packet|proposal|assertion|disposition --format json` prints
+canonical record schemas, and `provenance validate contribution|synthesis-packet|proposal|assertion|disposition
+--input artifact.json --format json` validates full closed records, including nested stable IDs,
+unknown-field rejection, and assertion evidence cardinality.
+Contributions and synthesis packets support intentional `--replace`. Proposal definitions,
+assertions, and dispositions are immutable; divergent duplicate IDs fail closed.
 Swarm backtrace runs can land durable run outputs with
 `provenance swarm-backtrace land --scope <scope> --run-dir <run-dir> --format json`.
+Every proposal whose synthesis has exact ownership, positive supporting claims, and no
+contested or blocking gate must include an immutable assertion. Missing or invalid evidence
+rejects the whole batch, and swarm merge output cannot contain dispositions. Qualification uses
+the complete existing plus incoming aggregate, so neither a proposal-only follow-up nor a later
+synthesis-only follow-up can bypass assertion requirements.
+
+Create a proposal with optional assertion lineage using repeatable `--builds-on
+<assertion-id>`. After synthesis has exact `proposal_id` ownership, positive owned evidence,
+and no contested claim or blocking gate, record `provenance proposals assert --id <id>
+--proposal-id <proposal> --synthesis-packet-id <packet> --supporting-claim-id <claim>`.
+Only then may `dispositions create` record accepted, rejected, or deferred state.
+The actor ID must appear in the manifest allowlist configured by repeatable
+`provenance init --disposition-actor-id`; this is local audit attestation, not cryptographic
+authentication.
 
 Demand-driven proposal review uses `provenance proposals surface`. Pass one or more exact,
 repository-relative `--changed-path` values to surface undisposed proposals whose own
@@ -89,13 +104,14 @@ may be combined with changed paths. Results include every matching proposal and 
 plus proposals targeting that topic, its anchor requirement, or its explicit artifact
 links. This is a read-time view and writes no queue or trigger state.
 
-An accepted `promotion-decisions create` record may link a human's action to the canonical
+An accepted `dispositions create` record may link a human's action to the canonical
 source, requirement, resolution, or rule it produced using `--canonical-artifact-type` and
 `--canonical-artifact-id`. Use that existing link for ratification-through-action; commits
 and external issue IDs are not canonical artifact types. The writer records this reference
 but does not currently verify the artifact's existence, so the caller must create and check
 the canonical record. Provenance currently has no bug record or issue adapter, so bug filing
 can trigger surfacing only when the caller supplies the bug's already-known typed target.
+Dispositions do not rewrite proposal definitions; `proposals list` derives effective state.
 
 Graph edge commands: `edges create --type references|refines_into|depends_on|contradicts|supersedes|needs|resolves|spawns|produces --from-type source|requirement|resolution|rule --from-id <id> --to-type source|requirement|resolution|rule --to-id <id>`, `edges list`, and `edges delete --id <edge-id>`. Creation validates edge type/endpoints and requires both endpoint records to exist.
 

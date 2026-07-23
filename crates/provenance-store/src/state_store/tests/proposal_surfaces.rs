@@ -40,6 +40,7 @@ fn proposal_input(
                 .collect(),
             supporting_claim_ids: Vec::new(),
         },
+        builds_on: Vec::new(),
         promotion_state,
         duplicate_of: None,
         superseded_by: None,
@@ -66,14 +67,6 @@ fn changed_paths_surface_only_undisposed_proposals_with_matching_evidence_sites(
             Some("src/leave.rs"),
             PromotionState::Proposed,
         ),
-        proposal_input(
-            &scope,
-            "proposal_disposed",
-            IdeationTargetType::Requirement,
-            "req_overtime",
-            Some("src/payroll.rs"),
-            PromotionState::Accepted,
-        ),
     ] {
         store.create_proposal_card(input).unwrap();
     }
@@ -90,6 +83,48 @@ fn changed_paths_surface_only_undisposed_proposals_with_matching_evidence_sites(
     assert_eq!(
         serde_json::to_value(&surfaced[0].reasons).unwrap(),
         serde_json::json!([{"trigger":"evidence_site","path":"src/payroll.rs"}])
+    );
+}
+
+#[test]
+fn asserted_proposal_still_surfaces_only_on_exact_demand_path() {
+    let (_dir, store, scope) = initialized_store();
+    store
+        .create_proposal_card(proposal_input(
+            &scope,
+            "proposal_asserted",
+            IdeationTargetType::Requirement,
+            "req_overtime",
+            Some("src/payroll.rs"),
+            PromotionState::Proposed,
+        ))
+        .unwrap();
+    crate::jsonl::write_jsonl_atomic(
+        &crate::shards::assertion_records_path(&store.layout, &scope),
+        &[provenance_core::AssertionRecord {
+            schema_version: provenance_core::SchemaVersion(1),
+            scope_id: scope.clone(),
+            id: provenance_core::AssertionId::new("assertion_a").unwrap(),
+            proposal_id: StableId::new("proposal_asserted").unwrap(),
+            synthesis_packet_id: StableId::new("synthesis_a").unwrap(),
+            supporting_claim_ids: Vec::new(),
+        }],
+    )
+    .unwrap();
+
+    assert!(store
+        .surface_proposals(&scope, &ProposalDemand::for_changed_paths(["src/other.rs"]),)
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        store
+            .surface_proposals(
+                &scope,
+                &ProposalDemand::for_changed_paths(["src/payroll.rs"]),
+            )
+            .unwrap()
+            .len(),
+        1
     );
 }
 

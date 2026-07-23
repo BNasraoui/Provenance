@@ -65,3 +65,32 @@ fn ideation_output_records_are_written_deterministically() {
         "contrib_a"
     );
 }
+
+#[test]
+fn invalid_lifecycle_batch_is_rejected_without_partial_writes() {
+    let (_dir, store, scope) = initialized_store();
+    let batch: crate::state_store::IdeationLandingBatch =
+        serde_json::from_value(serde_json::json!({
+            "contributions": [{
+                "schema_version": 1, "scope_id": "default", "id": "contribution_a",
+                "target": {"artifact_type": "requirement", "artifact_id": "req_a"},
+                "participant_slot": "extractor", "stance": "support", "strongest_finding": "Observed",
+                "evidence_references": [], "material_claims": [], "risks": [], "objections": [],
+                "challenges": [], "suggested_artifact_changes": [], "unsupported_recommendations": [],
+                "uncertainty": {"level": "low", "rationale": "Direct"}, "open_questions": []
+            }],
+            "synthesis_packets": [],
+            "proposals": [],
+            "assertions": [{
+                "schema_version": 1, "scope_id": "default", "id": "assertion_bad",
+                "proposal_id": "proposal_missing", "synthesis_packet_id": "synthesis_missing",
+                "supporting_claim_ids": []
+            }],
+            "dispositions": []
+        }))
+        .unwrap();
+
+    store.land_ideation_batch(&scope, batch, false).unwrap_err();
+    assert!(store.list_contributions(&scope).unwrap().is_empty());
+    assert!(store.list_assertion_records(&scope).unwrap().is_empty());
+}

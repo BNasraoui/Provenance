@@ -118,6 +118,10 @@ impl StateStore {
     }
 
     pub fn add_source_reference(&self, input: AddSourceReferenceInput) -> anyhow::Result<Edge> {
+        self.with_repository_publication(|| self.write_source_reference(input))
+    }
+
+    fn write_source_reference(&self, input: AddSourceReferenceInput) -> anyhow::Result<Edge> {
         let AddSourceReferenceInput {
             scope_id,
             source_id,

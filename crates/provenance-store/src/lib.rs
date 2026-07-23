@@ -4,5 +4,6 @@ pub mod jsonl;
 pub mod layout;
 pub mod merge;
 pub mod migrations;
+pub mod publication;
 pub mod shards;
 pub mod state_store;

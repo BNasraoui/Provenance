@@ -43,7 +43,28 @@ fn swarm_backtrace_land_writes_run_dir_outputs_end_to_end() {
         .stdout(predicates::str::contains(
             "prop_req_publish_requires_worker",
         ))
+        .stdout(predicates::str::contains(
+            "assertion_req_publish_requires_worker",
+        ))
         .stdout(predicates::str::contains(r#""confidence": 0.91"#));
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "proposals",
+            "list",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains(
+            r#""promotion_state": "asserted""#,
+        ));
 }
 
 #[test]

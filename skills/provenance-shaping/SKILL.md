@@ -254,7 +254,7 @@ Use the `provenance-fork-tournament` skill. This is two-phase work:
 1. Phase 1 spawns stance-based agents and lands proposals/contributions/synthesis.
 2. Mark the question `blocked-on-human` and stop the session.
 3. Phase 2 presents proposals, extracts reactions, lands the resolution, disposes of
-   proposals with promotion decisions, fans out rules/requirements, then continues or
+   proposals with dispositions, fans out rules/requirements, then continues or
    hands off.
 
 Do not present the artifacts in the same session that created them.
@@ -352,6 +352,10 @@ Before moving to the next question, verify the current answer has been handled:
 - spawned requirements are created and linked with `spawns` or `refines_into` edges;
 - boundaries/out-of-scope rejections are explicit;
 - source references and evidence are attached where they exist;
+- proposal definitions remain immutable `proposed` records; assertion lineage uses assertion
+  IDs, and only positive owned evidence with unblocked adjudication can create an assertion;
+- accepted, rejected, or deferred outcomes are disposition records by a manifest-allowlisted
+  actor ID. The ID is a repository-local audit attestation, not cryptographic identity;
 - fog is updated;
 - invalidated questions are answered or updated; a thread note can document the change but
   does not change question status;

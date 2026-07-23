@@ -153,6 +153,7 @@ pub(super) fn definitions() -> Value {
             "additionalProperties": false,
             "required": ["proposal_key", "proposal_type", "summary", "origin_participant_slots"],
             "properties": {
+                "proposal_id": {"$ref": "#/$defs/stableId"},
                 "proposal_key": {"type": "string", "minLength": 1},
                 "proposal_type": {"enum": enum_names(&PROPOSAL_TYPES)},
                 "summary": {"type": "string"},

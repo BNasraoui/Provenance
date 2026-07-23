@@ -43,6 +43,7 @@ pub fn create_source(repo: &str) {
         .success();
 }
 
+#[allow(clippy::too_many_lines)]
 pub fn write_run_dir(root: &std::path::Path, strongest_finding: &str) {
     let extractors = root.join("extractors");
     let refuters = root.join("refuters");
@@ -111,13 +112,13 @@ pub fn write_run_dir(root: &std::path::Path, strongest_finding: &str) {
             "target": {"artifact_type": "source", "artifact_id": "source_codebase"},
             "summary": "Extractor and refuter agree that publishing is guarded.",
             "consensus": [{"statement":"Publishing is guarded by worker assignment.","supporting_participant_slots":["extract_auth","refute_auth"],"evidence_reference_ids":["evidence_auth_guard"]}],
-            "contested_claims": [{"claim_id":"claim_auth_guard","statement":"Publishing requires an assigned worker.","supporting_participant_slots":["extract_auth"],"opposing_participant_slots":["refute_auth"],"evidence_quality":"strong"}],
-            "minority_objections": [{"participant_slot":"refute_auth","objection":"Intent still needs confirmation.","evidence_reference_ids":["evidence_auth_guard"]}],
+            "contested_claims": [],
+            "minority_objections": [],
             "evidence_gaps": [],
             "unsupported_speculation": [],
             "open_questions": [],
-            "suggested_artifacts": [{"proposal_key":"backtrace/auth/publish_requires_worker","proposal_type":"requirement_candidate","summary":"Review the candidate requirement.","origin_participant_slots":["extract_auth"]}],
-            "required_human_decisions": [{"decision_key":"decide_publish_guard","prompt":"Confirm this behavior is intentional.","blocks_promotion":true}]
+            "suggested_artifacts": [{"proposal_id":"prop_req_publish_requires_worker","proposal_key":"backtrace/auth/publish_requires_worker","proposal_type":"requirement_candidate","summary":"Review the candidate requirement.","origin_participant_slots":["extract_auth"]}],
+            "required_human_decisions": []
           },
           "proposals": [{
             "schema_version": 1,
@@ -135,6 +136,14 @@ pub fn write_run_dir(root: &std::path::Path, strongest_finding: &str) {
               "supporting_claim_ids": ["claim_auth_guard"]
             },
             "promotion_state": "proposed"
+          }],
+          "assertions": [{
+            "schema_version": 1,
+            "scope_id": "default",
+            "id": "assertion_req_publish_requires_worker",
+            "proposal_id": "prop_req_publish_requires_worker",
+            "synthesis_packet_id": "synth_backtrace_auth",
+            "supporting_claim_ids": ["claim_auth_guard"]
           }]
         }"#,
     )

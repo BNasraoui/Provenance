@@ -91,7 +91,12 @@ impl StateStore {
         Ok(self
             .list_proposal_cards(scope)?
             .into_iter()
-            .filter(|proposal| proposal.promotion_state == PromotionState::Proposed)
+            .filter(|proposal| {
+                matches!(
+                    proposal.promotion_state,
+                    PromotionState::Proposed | PromotionState::Asserted
+                )
+            })
             .filter_map(|proposal| {
                 let reasons = matching_reasons(&proposal, demand);
                 (!reasons.is_empty()).then_some(SurfacedProposal { proposal, reasons })

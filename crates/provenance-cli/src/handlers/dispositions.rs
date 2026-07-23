@@ -1,15 +1,15 @@
 use super::common::canonical_artifact;
-use crate::cli::ideation::PromotionDecisionsCommand;
+use crate::cli::ideation::DispositionsCommand;
 use crate::output;
-use provenance_core::{IdentityType, PromotionActor, PromotionDecision, ScopeId, StableId};
+use provenance_core::{DispositionActor, DispositionDecision, IdentityType, ScopeId, StableId};
 use provenance_store::{
     layout::ProvenanceLayout,
-    state_store::{CreatePromotionDecisionInput, StateStore},
+    state_store::{CreateDispositionInput, StateStore},
 };
 
-pub(super) fn handle(command: PromotionDecisionsCommand) -> anyhow::Result<()> {
+pub(super) fn handle(command: DispositionsCommand) -> anyhow::Result<()> {
     match command {
-        PromotionDecisionsCommand::Create {
+        DispositionsCommand::Create {
             repo,
             scope,
             id,
@@ -23,14 +23,14 @@ pub(super) fn handle(command: PromotionDecisionsCommand) -> anyhow::Result<()> {
             canonical_artifact_id,
             format,
         } => {
-            let promotion_decision = StateStore::new(ProvenanceLayout::new(repo))
-                .create_promotion_decision(CreatePromotionDecisionInput {
+            let disposition = StateStore::new(ProvenanceLayout::new(repo)).create_disposition(
+                CreateDispositionInput {
                     scope_id: ScopeId::new(scope)?,
                     id: StableId::new(id)?,
                     proposal_id: StableId::new(proposal_id)?,
-                    decision: PromotionDecision::parse(&decision)?,
+                    decision: DispositionDecision::parse(&decision)?,
                     rationale,
-                    actor: PromotionActor {
+                    actor: DispositionActor {
                         identity_type: IdentityType::parse(&actor_type)?,
                         id: actor_id,
                         name: actor_name,
@@ -39,17 +39,18 @@ pub(super) fn handle(command: PromotionDecisionsCommand) -> anyhow::Result<()> {
                         canonical_artifact_type,
                         canonical_artifact_id,
                     )?,
-                })?;
-            output::print(format, &promotion_decision)?;
+                },
+            )?;
+            output::print(format, &disposition)?;
         }
-        PromotionDecisionsCommand::List {
+        DispositionsCommand::List {
             repo,
             scope,
             format,
         } => {
-            let decisions = StateStore::new(ProvenanceLayout::new(repo))
-                .list_promotion_decisions(&ScopeId::new(scope)?)?;
-            output::print(format, &decisions)?;
+            let dispositions = StateStore::new(ProvenanceLayout::new(repo))
+                .list_dispositions(&ScopeId::new(scope)?)?;
+            output::print(format, &dispositions)?;
         }
     }
     Ok(())

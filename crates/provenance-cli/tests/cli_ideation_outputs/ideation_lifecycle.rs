@@ -17,6 +17,8 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
             "default",
             "--path-prefix",
             ".",
+            "--disposition-actor-id",
+            "ben",
         ])
         .assert()
         .success();
@@ -118,11 +120,11 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
             "--consensus-json",
             r#"[{"statement":"The requirement needs a source reference.","supporting_participant_slots":["reviewer"],"evidence_reference_ids":["evidence_code_line"]}]"#,
             "--evidence-gaps-json",
-            r#"[{"question":"Which agreement applies?","needed_evidence_type":"source","blocking_promotion":true}]"#,
+            r#"[{"question":"Which agreement applies?","needed_evidence_type":"source","blocking_promotion":false}]"#,
             "--suggested-artifacts-json",
-            r#"[{"proposal_key":"req-overtime-traceability","proposal_type":"requirement_candidate","summary":"Clarify source traceability.","origin_participant_slots":["reviewer"]}]"#,
+            r#"[{"proposal_id":"proposal_overtime_traceability","proposal_key":"req-overtime-traceability","proposal_type":"requirement_candidate","summary":"Clarify source traceability.","origin_participant_slots":["reviewer"]}]"#,
             "--required-human-decisions-json",
-            r#"[{"decision_key":"decide_agreement_scope","prompt":"Confirm the governing agreement.","blocks_promotion":true}]"#,
+            r#"[{"decision_key":"decide_agreement_scope","prompt":"Confirm the governing agreement.","blocks_promotion":false}]"#,
             "--format",
             "json",
         ])
@@ -174,7 +176,30 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
     Command::cargo_bin("provenance")
         .unwrap()
         .args([
-            "promotion-decisions",
+            "proposals",
+            "assert",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--id",
+            "assertion_overtime_traceability",
+            "--proposal-id",
+            "proposal_overtime_traceability",
+            "--synthesis-packet-id",
+            "synth_overtime_001",
+            "--supporting-claim-id",
+            "claim_overtime_threshold",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success();
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "dispositions",
             "create",
             "--repo",
             &repo,
@@ -210,7 +235,7 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
         .args(["materialize", "--repo", &repo, "--format", "json"])
         .assert()
         .success()
-        .stdout(predicates::str::contains(r#""records_loaded": 6"#));
+        .stdout(predicates::str::contains(r#""records_loaded": 7"#));
 
     Command::cargo_bin("provenance")
         .unwrap()
@@ -252,8 +277,13 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
     assert!(exported.contains(r#""proposal_cards""#));
     assert!(exported.contains(r#""confidence": 0.87"#));
     assert!(exported.contains(r#""confidence": 0.83"#));
-    assert!(exported.contains(r#""promotion_decisions""#));
+    assert!(exported.contains(r#""dispositions""#));
+    assert!(!exported.contains(r#""promotion_decisions""#));
+    assert!(std::path::Path::new(&repo)
+        .join(".provenance/state/scopes/default/ideation/dispositions.jsonl")
+        .is_file());
     assert!(exported.contains(r#""contributions""#));
     assert!(exported.contains(r#""synthesis_packets""#));
-    assert!(exported.contains(r#""blocking_promotion": true"#));
+    assert!(exported.contains(r#""assertion_records""#));
+    assert!(exported.contains(r#""blocking_promotion": false"#));
 }

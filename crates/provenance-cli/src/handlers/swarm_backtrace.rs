@@ -7,12 +7,13 @@ use crate::{
 };
 use anyhow::Context;
 use camino::{Utf8Path, Utf8PathBuf};
-use provenance_core::{Contribution, ProposalCard, ScopeId, StableId, SynthesisPacket};
+use provenance_core::{
+    AssertionRecord, Contribution, DispositionRecord, ProposalCard, ScopeId, StableId,
+    SynthesisPacket,
+};
 use provenance_store::{
     layout::ProvenanceLayout,
-    state_store::{
-        CreateContributionInput, CreateProposalCardInput, CreateSynthesisPacketInput, StateStore,
-    },
+    state_store::{IdeationLandingBatch, StateStore},
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
@@ -48,7 +49,18 @@ struct MergeOutput {
     synthesis_packets: Vec<SynthesisPacket>,
     #[serde(default, alias = "proposal_cards")]
     proposals: Vec<ProposalCard>,
+    #[serde(default)]
+    assertions: Vec<AssertionRecord>,
+    #[serde(default)]
+    dispositions: Vec<DispositionRecord>,
 }
+
+type MergeRecords = (
+    Vec<SynthesisPacket>,
+    Vec<ProposalCard>,
+    Vec<AssertionRecord>,
+    Vec<DispositionRecord>,
+);
 
 fn land(
     repo: Utf8PathBuf,
@@ -60,15 +72,18 @@ fn land(
     anyhow::ensure!(run_dir.is_dir(), "--run-dir must be an existing directory");
     let scope_id = ScopeId::new(scope)?;
     let contributions = read_contributions(run_dir)?;
-    let (synthesis_packets, proposals) = read_merge_outputs(run_dir)?;
+    let (synthesis_packets, proposals, assertions, dispositions) = read_merge_outputs(run_dir)?;
+    anyhow::ensure!(
+        dispositions.is_empty(),
+        "swarm merge output cannot contain dispositions"
+    );
 
     anyhow::ensure!(
-        !contributions.is_empty(),
-        "no contribution JSON files found under extractors/, refuters/, or contributions/"
-    );
-    anyhow::ensure!(
-        !synthesis_packets.is_empty(),
-        "no synthesis packet found in merge output"
+        !contributions.is_empty()
+            || !synthesis_packets.is_empty()
+            || !proposals.is_empty()
+            || !assertions.is_empty(),
+        "swarm run contains no landable records"
     );
 
     for contribution in &contributions {
@@ -93,6 +108,22 @@ fn land(
         validate_proposal_card_record(proposal)?;
         ensure_scope(&scope_id, &proposal.scope_id, "proposal", &proposal.id)?;
     }
+    for assertion in &assertions {
+        ensure_scope(
+            &scope_id,
+            &assertion.scope_id,
+            "assertion",
+            assertion.id.as_stable_id(),
+        )?;
+    }
+    for disposition in &dispositions {
+        ensure_scope(
+            &scope_id,
+            &disposition.scope_id,
+            "disposition",
+            &disposition.id,
+        )?;
+    }
 
     let contribution_count = contributions.len();
     let synthesis_count = synthesis_packets.len();
@@ -104,33 +135,21 @@ fn land(
         &contributions,
         &synthesis_packets,
         &proposals,
+        &assertions,
         replace,
     )?;
 
-    for contribution in contributions {
-        let input = contribution_input(&scope_id, contribution);
-        if replace {
-            store.upsert_contribution(input)?;
-        } else {
-            store.create_contribution(input)?;
-        }
-    }
-    for synthesis_packet in synthesis_packets {
-        let input = synthesis_packet_input(&scope_id, synthesis_packet);
-        if replace {
-            store.upsert_synthesis_packet(input)?;
-        } else {
-            store.create_synthesis_packet(input)?;
-        }
-    }
-    for proposal in proposals {
-        let input = proposal_input(&scope_id, proposal);
-        if replace {
-            store.upsert_proposal_card(input)?;
-        } else {
-            store.create_proposal_card(input)?;
-        }
-    }
+    store.land_ideation_batch(
+        &scope_id,
+        IdeationLandingBatch {
+            contributions,
+            synthesis_packets,
+            proposals,
+            assertions,
+            dispositions,
+        },
+        replace,
+    )?;
 
     output::print(
         format,
@@ -169,9 +188,7 @@ fn read_contribution_file(path: &Utf8Path) -> anyhow::Result<Vec<Contribution>> 
     deserialize_landing_value(path, "contribution", value).map(|contribution| vec![contribution])
 }
 
-fn read_merge_outputs(
-    run_dir: &Utf8Path,
-) -> anyhow::Result<(Vec<SynthesisPacket>, Vec<ProposalCard>)> {
+fn read_merge_outputs(run_dir: &Utf8Path) -> anyhow::Result<MergeRecords> {
     let mut paths = json_files(&run_dir.join("merge"))?;
     for file_name in ["merged.json", "merge.json"] {
         let path = run_dir.join(file_name);
@@ -184,6 +201,8 @@ fn read_merge_outputs(
 
     let mut synthesis_packets = Vec::new();
     let mut proposals = Vec::new();
+    let mut assertions = Vec::new();
+    let mut dispositions = Vec::new();
     for path in paths {
         let merge_output: MergeOutput = read_json(&path)?;
         if let Some(synthesis_packet) = merge_output.synthesis_packet {
@@ -191,8 +210,10 @@ fn read_merge_outputs(
         }
         synthesis_packets.extend(merge_output.synthesis_packets);
         proposals.extend(merge_output.proposals);
+        assertions.extend(merge_output.assertions);
+        dispositions.extend(merge_output.dispositions);
     }
-    Ok((synthesis_packets, proposals))
+    Ok((synthesis_packets, proposals, assertions, dispositions))
 }
 
 fn json_files(directory: &Utf8Path) -> anyhow::Result<Vec<Utf8PathBuf>> {
@@ -232,6 +253,7 @@ fn preflight_land(
     contributions: &[Contribution],
     synthesis_packets: &[SynthesisPacket],
     proposals: &[ProposalCard],
+    assertions: &[AssertionRecord],
     replace: bool,
 ) -> anyhow::Result<()> {
     ensure_unique_run_ids(
@@ -243,6 +265,40 @@ fn preflight_land(
         synthesis_packets.iter().map(|record| &record.id),
     )?;
     ensure_unique_run_ids("proposal", proposals.iter().map(|record| &record.id))?;
+    for proposal in proposals {
+        let qualifying = synthesis_packets.iter().any(|packet| {
+            packet.scope_id == proposal.scope_id
+                && packet.target == proposal.traceability.target
+                && packet.suggested_artifacts.iter().any(|suggestion| {
+                    suggestion.proposal_id.as_ref() == Some(&proposal.id)
+                        && suggestion.proposal_key == proposal.proposal_key
+                        && suggestion.proposal_type == proposal.proposal_type
+                })
+                && !packet
+                    .evidence_gaps
+                    .iter()
+                    .any(|gap| gap.blocking_promotion)
+                && !packet
+                    .required_human_decisions
+                    .iter()
+                    .any(|decision| decision.blocks_promotion)
+                && !proposal.traceability.supporting_claim_ids.is_empty()
+                && !packet.contested_claims.iter().any(|contested| {
+                    proposal
+                        .traceability
+                        .supporting_claim_ids
+                        .contains(&contested.claim_id)
+                })
+        });
+        anyhow::ensure!(
+            !qualifying
+                || assertions
+                    .iter()
+                    .any(|assertion| assertion.proposal_id == proposal.id),
+            "qualifying proposal {} requires an assertion",
+            proposal.id.as_str()
+        );
+    }
 
     if replace {
         for proposal in proposals {
@@ -323,104 +379,4 @@ fn ensure_scope(
         expected.as_str()
     );
     Ok(())
-}
-
-fn contribution_input(scope_id: &ScopeId, contribution: Contribution) -> CreateContributionInput {
-    let Contribution {
-        id,
-        target,
-        participant_slot,
-        stance,
-        strongest_finding,
-        evidence_references,
-        material_claims,
-        risks,
-        objections,
-        challenges,
-        suggested_artifact_changes,
-        unsupported_recommendations,
-        uncertainty,
-        open_questions,
-        ..
-    } = contribution;
-    CreateContributionInput {
-        scope_id: scope_id.clone(),
-        id,
-        target,
-        participant_slot,
-        stance,
-        strongest_finding,
-        evidence_references,
-        material_claims,
-        risks,
-        objections,
-        challenges,
-        suggested_artifact_changes,
-        unsupported_recommendations,
-        uncertainty,
-        open_questions,
-    }
-}
-
-fn synthesis_packet_input(
-    scope_id: &ScopeId,
-    synthesis_packet: SynthesisPacket,
-) -> CreateSynthesisPacketInput {
-    let SynthesisPacket {
-        id,
-        target,
-        summary,
-        consensus,
-        contested_claims,
-        minority_objections,
-        evidence_gaps,
-        unsupported_speculation,
-        open_questions,
-        suggested_artifacts,
-        required_human_decisions,
-        ..
-    } = synthesis_packet;
-    CreateSynthesisPacketInput {
-        scope_id: scope_id.clone(),
-        id,
-        target,
-        summary,
-        consensus,
-        contested_claims,
-        minority_objections,
-        evidence_gaps,
-        unsupported_speculation,
-        open_questions,
-        suggested_artifacts,
-        required_human_decisions,
-    }
-}
-
-fn proposal_input(scope_id: &ScopeId, proposal: ProposalCard) -> CreateProposalCardInput {
-    let ProposalCard {
-        id,
-        proposal_key,
-        proposal_type,
-        title,
-        summary,
-        confidence,
-        traceability,
-        promotion_state,
-        duplicate_of,
-        superseded_by,
-        ..
-    } = proposal;
-    CreateProposalCardInput {
-        scope_id: scope_id.clone(),
-        id,
-        proposal_key,
-        proposal_type,
-        title,
-        summary,
-        confidence,
-        traceability,
-        promotion_state,
-        duplicate_of,
-        superseded_by,
-    }
 }

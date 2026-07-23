@@ -184,7 +184,7 @@ The promotion gate, with a clock. This is a grill-shaped turn against the artifa
    artifact; losers rejected (rationale names the superseding resolution — see Gaps):
 
    ```sh
-   provenance promotion-decisions create --scope <scope> \
+   provenance dispositions create --scope <scope> \
      --id pd_<question>_<slot> \
      --proposal-id prop_<question>_<slot> \
      --decision accepted \
@@ -219,9 +219,11 @@ The promotion gate, with a clock. This is a grill-shaped turn against the artifa
   blocked-on-human` for the phase boundary, and `questions update --method prototype`
   if an existing question was minted with the wrong method. Keep the thread post because
   proposal ids are not question link targets.
-- **`promotion-decisions` supports only `accepted|rejected|deferred`** — `superseded`
-  and `duplicate` states are settable only at proposal creation. Convention: reject
-  losers with a rationale naming the superseding resolution.
+- **Proposal definitions are immutable and always `proposed`.** Before disposition, create an
+  assertion only when the exact proposal suggestion has positive owned evidence and no
+  contested claim or blocking adjudication. `dispositions` is the sole authority for
+  `accepted|rejected|deferred`; reject losers with rationale naming the winning resolution.
+  The actor ID must be repository-allowlisted and is an audit attestation, not a signature.
 - **Generic `edges create` is available** and requires existing endpoints. Relevant valid
   directions are `spawns` (resolution → requirement), `produces` (requirement or resolution
   → rule), and `supersedes` (requirement → requirement). Proposals are not graph edge
