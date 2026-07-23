@@ -214,9 +214,34 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
             "json",
         ])
         .assert()
-        .success()
-        .stdout(predicates::str::contains("proposal_overtime_traceability"))
-        .stdout(predicates::str::contains(r#""confidence": 0.83"#));
+        .failure()
+        .stderr(predicates::str::contains(
+            "qualifying proposal proposal_overtime_traceability requires an assertion",
+        ));
+    let proposal_path = std::path::Path::new(&repo)
+        .join(".provenance/state/scopes/default/ideation/proposal_cards.jsonl");
+    std::fs::write(
+        proposal_path,
+        serde_json::to_vec(&serde_json::json!({
+            "schema_version": 1,
+            "scope_id": "default",
+            "id": "proposal_overtime_traceability",
+            "proposal_key": "req-overtime-traceability",
+            "proposal_type": "requirement_candidate",
+            "title": "Clarify overtime traceability",
+            "summary": "Add source-backed threshold language.",
+            "confidence": 0.83,
+            "traceability": {
+                "target": {"artifact_type": "requirement", "artifact_id": "req_overtime"},
+                "source_ids": ["source_schads"],
+                "evidence_references": [{"reference_id":"evidence_code_line","evidence_type":"artifact","summary":"Existing payroll check","file_path":"src/payroll/overtime.rs","line":42}],
+                "supporting_claim_ids": ["claim_overtime_threshold"]
+            },
+            "promotion_state": "proposed"
+        }))
+        .unwrap(),
+    )
+    .unwrap();
 
     Command::cargo_bin("provenance")
         .unwrap()

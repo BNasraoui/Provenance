@@ -102,7 +102,6 @@ impl StateStore {
                 &incoming.dispositions,
                 |r| r.id.as_str(),
             )?;
-            ensure_qualifying_assertions(&proposals, &synthesis_packets, &assertions)?;
             for proposal in &incoming.proposals {
                 provenance_core::validate_proposal_intrinsic(proposal)?;
             }
@@ -246,48 +245,6 @@ pub(super) fn ensure_asserted_synthesis_unchanged(
         "synthesis packet {} is referenced by an assertion and cannot be replaced",
         existing.id.as_str()
     );
-    Ok(())
-}
-
-fn ensure_qualifying_assertions(
-    proposals: &[ProposalCard],
-    synthesis_packets: &[provenance_core::SynthesisPacket],
-    assertions: &[AssertionRecord],
-) -> anyhow::Result<()> {
-    for proposal in proposals {
-        let qualifying = synthesis_packets.iter().any(|packet| {
-            packet.scope_id == proposal.scope_id
-                && packet.target == proposal.traceability.target
-                && packet.suggested_artifacts.iter().any(|suggestion| {
-                    suggestion.proposal_id.as_ref() == Some(&proposal.id)
-                        && suggestion.proposal_key == proposal.proposal_key
-                        && suggestion.proposal_type == proposal.proposal_type
-                })
-                && !packet
-                    .evidence_gaps
-                    .iter()
-                    .any(|gap| gap.blocking_promotion)
-                && !packet
-                    .required_human_decisions
-                    .iter()
-                    .any(|decision| decision.blocks_promotion)
-                && !proposal.traceability.supporting_claim_ids.is_empty()
-                && !packet.contested_claims.iter().any(|contested| {
-                    proposal
-                        .traceability
-                        .supporting_claim_ids
-                        .contains(&contested.claim_id)
-                })
-        });
-        anyhow::ensure!(
-            !qualifying
-                || assertions
-                    .iter()
-                    .any(|assertion| assertion.proposal_id == proposal.id),
-            "qualifying proposal {} requires an assertion",
-            proposal.id.as_str()
-        );
-    }
     Ok(())
 }
 

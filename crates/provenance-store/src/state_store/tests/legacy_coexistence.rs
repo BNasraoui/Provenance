@@ -32,10 +32,11 @@ fn modern_lifecycle_coexists_with_frozen_shipped_records() {
         "risks": [], "objections": [], "challenges": [], "suggested_artifact_changes": [],
         "unsupported_recommendations": [], "uncertainty": {"level": "low", "rationale": "Direct"}, "open_questions": []
     })).unwrap();
-    let synthesis: provenance_core::SynthesisPacket = serde_json::from_value(serde_json::json!({
+    let mut synthesis: provenance_core::SynthesisPacket = serde_json::from_value(serde_json::json!({
         "schema_version": 1, "scope_id": "default", "id": "synthesis_modern",
         "target": {"artifact_type": "requirement", "artifact_id": "req_modern"}, "summary": "Adjudicated",
-        "consensus": [], "contested_claims": [], "minority_objections": [], "evidence_gaps": [],
+        "consensus": [], "contested_claims": [], "minority_objections": [],
+        "evidence_gaps": [{"question": "Unverified", "needed_evidence_type": "source", "blocking_promotion": true}],
         "unsupported_speculation": [], "open_questions": [],
         "suggested_artifacts": [{"proposal_id": "proposal_modern", "proposal_key": "modern", "proposal_type": "requirement_candidate", "summary": "Candidate", "origin_participant_slots": ["reviewer"]}],
         "required_human_decisions": []
@@ -47,7 +48,7 @@ fn modern_lifecycle_coexists_with_frozen_shipped_records() {
     .unwrap();
     crate::jsonl::write_jsonl_atomic(
         &crate::shards::synthesis_packets_path(&store.layout, &scope),
-        &[synthesis],
+        &[synthesis.clone()],
     )
     .unwrap();
     store
@@ -74,6 +75,12 @@ fn modern_lifecycle_coexists_with_frozen_shipped_records() {
             superseded_by: None,
         })
         .unwrap();
+    synthesis.evidence_gaps.clear();
+    crate::jsonl::write_jsonl_atomic(
+        &crate::shards::synthesis_packets_path(&store.layout, &scope),
+        &[synthesis],
+    )
+    .unwrap();
     store
         .assert_proposal(CreateAssertionInput {
             scope_id: scope.clone(),

@@ -88,6 +88,17 @@ fn import_cannot_omit_existing_modern_lifecycle_chain() {
         "schema_version": 1, "scope_id": "default", "id": "disposition_a", "proposal_id": "proposal_a",
         "decision": "accepted", "rationale": "Reviewed", "actor": {"identity_type": "human", "id": "reviewer"}
     }]);
+    let mut missing_assertion = lifecycle.clone();
+    missing_assertion["assertion_records"] = serde_json::json!([]);
+    missing_assertion["dispositions"] = serde_json::json!([]);
+    let invalid = dir.path().join("missing-assertion.json");
+    std::fs::write(&invalid, serde_json::to_vec(&missing_assertion).unwrap()).unwrap();
+    import(&repo, &invalid)
+        .failure()
+        .stderr(predicates::str::contains(
+            "qualifying proposal proposal_a requires an assertion",
+        ));
+
     std::fs::write(&baseline, serde_json::to_vec(&lifecycle).unwrap()).unwrap();
     import(&repo, &baseline).success();
     assert_import_rejects_asserted_evidence_changes(dir.path(), &repo, &lifecycle);

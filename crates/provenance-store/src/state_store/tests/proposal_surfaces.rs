@@ -98,10 +98,11 @@ fn asserted_proposal_still_surfaces_only_on_exact_demand_path() {
         "risks": [], "objections": [], "challenges": [], "suggested_artifact_changes": [],
         "unsupported_recommendations": [], "uncertainty": {"level": "low", "rationale": "Direct"}, "open_questions": []
     })).unwrap();
-    let synthesis: provenance_core::SynthesisPacket = serde_json::from_value(serde_json::json!({
+    let mut synthesis: provenance_core::SynthesisPacket = serde_json::from_value(serde_json::json!({
         "schema_version": 1, "scope_id": "default", "id": "synthesis_a",
         "target": {"artifact_type": "requirement", "artifact_id": "req_overtime"}, "summary": "Adjudicated",
-        "consensus": [], "contested_claims": [], "minority_objections": [], "evidence_gaps": [],
+        "consensus": [], "contested_claims": [], "minority_objections": [],
+        "evidence_gaps": [{"question": "Unverified", "needed_evidence_type": "source", "blocking_promotion": true}],
         "unsupported_speculation": [], "open_questions": [],
         "suggested_artifacts": [{"proposal_id": "proposal_asserted", "proposal_key": "proposal_asserted", "proposal_type": "requirement_candidate", "summary": "Candidate", "origin_participant_slots": ["reviewer"]}],
         "required_human_decisions": []
@@ -113,7 +114,7 @@ fn asserted_proposal_still_surfaces_only_on_exact_demand_path() {
     .unwrap();
     crate::jsonl::write_jsonl_atomic(
         &crate::shards::synthesis_packets_path(&store.layout, &scope),
-        &[synthesis],
+        &[synthesis.clone()],
     )
     .unwrap();
     let mut proposal = proposal_input(
@@ -126,6 +127,12 @@ fn asserted_proposal_still_surfaces_only_on_exact_demand_path() {
     );
     proposal.traceability.supporting_claim_ids = vec![StableId::new("claim_a").unwrap()];
     store.create_proposal_card(proposal).unwrap();
+    synthesis.evidence_gaps.clear();
+    crate::jsonl::write_jsonl_atomic(
+        &crate::shards::synthesis_packets_path(&store.layout, &scope),
+        &[synthesis],
+    )
+    .unwrap();
     crate::jsonl::write_jsonl_atomic(
         &crate::shards::assertion_records_path(&store.layout, &scope),
         &[provenance_core::AssertionRecord {
