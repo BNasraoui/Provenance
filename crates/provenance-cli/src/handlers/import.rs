@@ -59,6 +59,25 @@ pub(super) fn import_scope(
         dispositions: &exported.dispositions,
     })?;
     provenance_store::publication::with_repository_publication(&live_layout, || {
+        let store = StateStore::new(live_layout.clone());
+        ensure_immutable_records_preserved(
+            "proposal",
+            &store.list_proposal_definitions(&scope_id)?,
+            &exported.proposal_cards,
+            |record| record.id.as_str(),
+        )?;
+        ensure_immutable_records_preserved(
+            "assertion",
+            &store.list_assertion_records(&scope_id)?,
+            &exported.assertion_records,
+            |record| record.id.as_str(),
+        )?;
+        ensure_immutable_records_preserved(
+            "disposition",
+            &store.list_dispositions(&scope_id)?,
+            &exported.dispositions,
+            |record| record.id.as_str(),
+        )?;
         apply_import(&live_layout, &scope_id, &exported, dry_run)
     })?;
     Ok(ImportReport {
@@ -66,6 +85,28 @@ pub(super) fn import_scope(
         dry_run,
         records,
     })
+}
+
+fn ensure_immutable_records_preserved<T: Serialize>(
+    kind: &str,
+    existing: &[T],
+    incoming: &[T],
+    id: impl Fn(&T) -> &str,
+) -> anyhow::Result<()> {
+    for current in existing {
+        let record_id = id(current);
+        let replacement = incoming
+            .iter()
+            .find(|record| id(record) == record_id)
+            .ok_or_else(|| {
+                anyhow::anyhow!("immutable {kind} {record_id} must be preserved by import")
+            })?;
+        anyhow::ensure!(
+            serde_json::to_value(current)? == serde_json::to_value(replacement)?,
+            "immutable {kind} {record_id} must remain unchanged"
+        );
+    }
+    Ok(())
 }
 
 fn apply_import(

@@ -4,8 +4,9 @@ use super::{
 };
 use crate::shards;
 use provenance_core::{
-    validate_optional_confidence_score, AssertionRecord, Contribution, DispositionRecord,
-    PromotionState, ProposalCard, SchemaVersion, ScopeId, StableId, SynthesisPacket,
+    validate_optional_confidence_score, AssertionRecord, Contribution, DispositionDecision,
+    DispositionRecord, PromotionState, ProposalCard, SchemaVersion, ScopeId, StableId,
+    SynthesisPacket,
 };
 
 impl StateStore {
@@ -142,6 +143,11 @@ impl StateStore {
                 .position(|record| record.id == contribution.id)
             {
                 anyhow::ensure!(replace, "contribution already exists");
+                super::ideation_batches::ensure_asserted_contribution_unchanged(
+                    &records[index],
+                    &contribution,
+                    &self.list_assertion_records(&scope_id)?,
+                )?;
                 records[index] = contribution.clone();
             } else {
                 records.push(contribution.clone());
@@ -247,6 +253,11 @@ impl StateStore {
                 .position(|record| record.id == synthesis_packet.id)
             {
                 anyhow::ensure!(replace, "synthesis packet already exists");
+                super::ideation_batches::ensure_asserted_synthesis_unchanged(
+                    &records[index],
+                    &synthesis_packet,
+                    &self.list_assertion_records(&scope_id)?,
+                )?;
                 records[index] = synthesis_packet.clone();
             } else {
                 records.push(synthesis_packet.clone());
@@ -423,10 +434,12 @@ impl StateStore {
             "proposal does not exist"
         );
         anyhow::ensure!(
-            self.list_assertion_records(&scope_id)?
-                .iter()
-                .any(|assertion| assertion.proposal_id == proposal_id),
-            "proposal must be asserted before disposition"
+            disposition.decision != DispositionDecision::Accepted
+                || self
+                    .list_assertion_records(&scope_id)?
+                    .iter()
+                    .any(|assertion| assertion.proposal_id == proposal_id),
+            "accepted proposal must be asserted before disposition"
         );
         let mut dispositions = self.list_dispositions(&scope_id)?;
         anyhow::ensure!(

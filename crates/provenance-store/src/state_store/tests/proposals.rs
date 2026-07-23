@@ -42,7 +42,7 @@ fn direct_modern_proposal_write_rejects_terminal_ingress() {
 }
 
 #[test]
-fn disposition_requires_an_assertion() {
+fn accepted_disposition_requires_an_assertion() {
     let (_dir, store, scope) = initialized_store();
     let contribution: provenance_core::Contribution = serde_json::from_value(serde_json::json!({
         "schema_version": 1, "scope_id": "default", "id": "contribution_overtime",
@@ -98,6 +98,47 @@ fn disposition_requires_an_assertion() {
         .to_string();
 
     assert!(error.contains("must be asserted"), "{error}");
+}
+
+#[test]
+fn rejected_disposition_does_not_require_an_assertion() {
+    let (_dir, store, scope) = initialized_store();
+    let mut manifest = store.manifest().unwrap();
+    manifest.disposition_actor_ids.push("ben".into());
+    std::fs::write(
+        store.layout.manifest_path(),
+        serde_json::to_vec(&manifest).unwrap(),
+    )
+    .unwrap();
+    store
+        .create_proposal_card(proposal_input(
+            &scope,
+            "proposal_rejected",
+            "Rejected",
+            PromotionState::Proposed,
+        ))
+        .unwrap();
+
+    store
+        .create_disposition(CreateDispositionInput {
+            scope_id: scope.clone(),
+            id: StableId::new("disposition_rejected").unwrap(),
+            proposal_id: StableId::new("proposal_rejected").unwrap(),
+            decision: DispositionDecision::Rejected,
+            rationale: "Did not pass adjudication".into(),
+            actor: DispositionActor {
+                identity_type: IdentityType::Human,
+                id: "ben".into(),
+                name: None,
+            },
+            canonical_artifact: None,
+        })
+        .unwrap();
+
+    assert_eq!(
+        store.list_proposal_cards(&scope).unwrap()[0].promotion_state,
+        PromotionState::Rejected
+    );
 }
 
 #[test]

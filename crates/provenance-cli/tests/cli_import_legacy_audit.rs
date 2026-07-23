@@ -75,6 +75,51 @@ fn exact_shipped_promotion_decisions_export_is_accepted() {
 }
 
 #[test]
+fn import_cannot_omit_entire_existing_shipped_legacy_terminal_set() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut shipped = export_shipped(&dir);
+    let repo = dir.path().join("repo");
+    init(&repo);
+    let complete = dir.path().join("complete.json");
+    std::fs::write(&complete, serde_json::to_vec(&shipped).unwrap()).unwrap();
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "import",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--input",
+            complete.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    shipped["proposal_cards"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|proposal| proposal["promotion_state"].as_str() == Some("proposed"));
+    shipped["dispositions"] = serde_json::json!([]);
+    let omitted = dir.path().join("omitted-all.json");
+    std::fs::write(&omitted, serde_json::to_vec(&shipped).unwrap()).unwrap();
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "import",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--input",
+            omitted.to_str().unwrap(),
+        ])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("immutable proposal"));
+}
+
+#[test]
 fn ambiguous_or_unknown_export_fields_are_rejected() {
     let dir = tempfile::tempdir().unwrap();
     let baseline = export_shipped(&dir);

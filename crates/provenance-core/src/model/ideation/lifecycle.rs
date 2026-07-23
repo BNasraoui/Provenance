@@ -364,11 +364,12 @@ pub fn validate_ideation_aggregate(aggregate: IdeationAggregate<'_>) -> anyhow::
             continue;
         }
         anyhow::ensure!(
-            aggregate
-                .assertions
-                .iter()
-                .any(|assertion| assertion.proposal_id == proposal.id),
-            "proposal {} must be asserted before disposition",
+            disposition.decision != super::DispositionDecision::Accepted
+                || aggregate
+                    .assertions
+                    .iter()
+                    .any(|assertion| assertion.proposal_id == proposal.id),
+            "accepted proposal {} must be asserted before disposition",
             proposal.id.as_str()
         );
     }

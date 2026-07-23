@@ -159,6 +159,62 @@ fn direct_synthesis_create_and_replace_respect_landed_records() {
     assert_eq!(records[0].summary, "replacement");
 }
 
+#[test]
+fn direct_replacement_cannot_retarget_asserted_evidence() {
+    let (_dir, store, scope) = initialized_store();
+    let batch: IdeationLandingBatch = serde_json::from_value(serde_json::json!({
+        "contributions": [{
+            "schema_version": 1, "scope_id": "default", "id": "contribution_landed",
+            "target": {"artifact_type": "requirement", "artifact_id": "req_overtime"},
+            "participant_slot": "reviewer", "stance": "support", "strongest_finding": "Observed",
+            "evidence_references": [{"reference_id": "evidence_a", "evidence_type": "source", "summary": "Pinned"}],
+            "material_claims": [{"claim_id": "claim_a", "statement": "Observed", "evidence_type": "source", "evidence_reference_ids": ["evidence_a"]}],
+            "risks": [], "objections": [], "challenges": [], "suggested_artifact_changes": [],
+            "unsupported_recommendations": [], "uncertainty": {"level": "low", "rationale": "Direct"}, "open_questions": []
+        }],
+        "synthesis_packets": [{
+            "schema_version": 1, "scope_id": "default", "id": "synthesis_landed",
+            "target": {"artifact_type": "requirement", "artifact_id": "req_overtime"}, "summary": "Adjudicated",
+            "consensus": [], "contested_claims": [], "minority_objections": [], "evidence_gaps": [],
+            "unsupported_speculation": [], "open_questions": [],
+            "suggested_artifacts": [{"proposal_id": "proposal_a", "proposal_key": "proposal-a", "proposal_type": "requirement_candidate", "summary": "Candidate", "origin_participant_slots": ["reviewer"]}],
+            "required_human_decisions": []
+        }],
+        "proposals": [{
+            "schema_version": 1, "scope_id": "default", "id": "proposal_a", "proposal_key": "proposal-a",
+            "proposal_type": "requirement_candidate", "title": "Candidate", "summary": "Candidate",
+            "traceability": {"target": {"artifact_type": "requirement", "artifact_id": "req_overtime"}, "source_ids": [], "evidence_references": [], "supporting_claim_ids": ["claim_a"]},
+            "promotion_state": "proposed"
+        }],
+        "assertions": [{
+            "schema_version": 1, "scope_id": "default", "id": "assertion_a", "proposal_id": "proposal_a",
+            "synthesis_packet_id": "synthesis_landed", "supporting_claim_ids": ["claim_a"]
+        }],
+        "dispositions": []
+    }))
+    .unwrap();
+    store.land_ideation_batch(&scope, batch, false).unwrap();
+
+    let contribution_error = store
+        .upsert_contribution(contribution_input(&scope, "replacement"))
+        .unwrap_err()
+        .to_string();
+    assert!(contribution_error.contains("referenced by an assertion"));
+    let synthesis_error = store
+        .upsert_synthesis_packet(synthesis_input(&scope, "replacement"))
+        .unwrap_err()
+        .to_string();
+    assert!(synthesis_error.contains("referenced by an assertion"));
+    assert_eq!(
+        store.list_contributions(&scope).unwrap()[0].strongest_finding,
+        "Observed"
+    );
+    assert_eq!(
+        store.list_synthesis_packets(&scope).unwrap()[0].summary,
+        "Adjudicated"
+    );
+}
+
 fn contribution_input(scope: &provenance_core::ScopeId, finding: &str) -> CreateContributionInput {
     CreateContributionInput {
         scope_id: scope.clone(),

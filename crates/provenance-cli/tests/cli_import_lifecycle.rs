@@ -1,6 +1,122 @@
 use assert_cmd::Command;
 
 #[test]
+fn import_cannot_omit_existing_modern_lifecycle_chain() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "init",
+            "--path",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--disposition-actor-id",
+            "reviewer",
+        ])
+        .assert()
+        .success();
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "sources",
+            "create",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--id",
+            "source_a",
+            "--name",
+            "Source A",
+            "--source-type",
+            "system_state",
+            "--reference",
+            "git:a@abc1234",
+            "--commit-pin",
+            "abc1234",
+        ])
+        .assert()
+        .success();
+    let baseline = dir.path().join("baseline.json");
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "export",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--format",
+            "json",
+            "--output",
+            baseline.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    let mut lifecycle: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&baseline).unwrap()).unwrap();
+    lifecycle["contributions"] = serde_json::json!([{
+        "schema_version": 1, "scope_id": "default", "id": "contribution_a",
+        "target": {"artifact_type": "source", "artifact_id": "source_a"},
+        "participant_slot": "reviewer", "stance": "support", "strongest_finding": "Observed",
+        "evidence_references": [{"reference_id": "evidence_a", "evidence_type": "source", "summary": "Pinned"}],
+        "material_claims": [{"claim_id": "claim_a", "statement": "Observed", "evidence_type": "source", "evidence_reference_ids": ["evidence_a"]}],
+        "risks": [], "objections": [], "challenges": [], "suggested_artifact_changes": [],
+        "unsupported_recommendations": [], "uncertainty": {"level": "low", "rationale": "Direct"}, "open_questions": []
+    }]);
+    lifecycle["synthesis_packets"] = serde_json::json!([{
+        "schema_version": 1, "scope_id": "default", "id": "synthesis_a",
+        "target": {"artifact_type": "source", "artifact_id": "source_a"}, "summary": "Adjudicated",
+        "consensus": [], "contested_claims": [], "minority_objections": [], "evidence_gaps": [],
+        "unsupported_speculation": [], "open_questions": [],
+        "suggested_artifacts": [{"proposal_id": "proposal_a", "proposal_key": "proposal-a", "proposal_type": "requirement_candidate", "summary": "Candidate", "origin_participant_slots": ["reviewer"]}],
+        "required_human_decisions": []
+    }]);
+    lifecycle["proposal_cards"] = serde_json::json!([{
+        "schema_version": 1, "scope_id": "default", "id": "proposal_a", "proposal_key": "proposal-a",
+        "proposal_type": "requirement_candidate", "title": "Candidate", "summary": "Candidate",
+        "traceability": {"target": {"artifact_type": "source", "artifact_id": "source_a"}, "source_ids": ["source_a"], "evidence_references": [], "supporting_claim_ids": ["claim_a"]},
+        "promotion_state": "proposed"
+    }]);
+    lifecycle["assertion_records"] = serde_json::json!([{
+        "schema_version": 1, "scope_id": "default", "id": "assertion_a", "proposal_id": "proposal_a",
+        "synthesis_packet_id": "synthesis_a", "supporting_claim_ids": ["claim_a"]
+    }]);
+    lifecycle["dispositions"] = serde_json::json!([{
+        "schema_version": 1, "scope_id": "default", "id": "disposition_a", "proposal_id": "proposal_a",
+        "decision": "accepted", "rationale": "Reviewed", "actor": {"identity_type": "human", "id": "reviewer"}
+    }]);
+    std::fs::write(&baseline, serde_json::to_vec(&lifecycle).unwrap()).unwrap();
+    import(&repo, &baseline).success();
+
+    lifecycle["proposal_cards"] = serde_json::json!([]);
+    lifecycle["assertion_records"] = serde_json::json!([]);
+    lifecycle["dispositions"] = serde_json::json!([]);
+    let omitted = dir.path().join("omitted.json");
+    std::fs::write(&omitted, serde_json::to_vec(&lifecycle).unwrap()).unwrap();
+    import(&repo, &omitted)
+        .failure()
+        .stderr(predicates::str::contains("immutable proposal proposal_a"));
+}
+
+fn import(repo: &std::path::Path, input: &std::path::Path) -> assert_cmd::assert::Assert {
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "import",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--input",
+            input.to_str().unwrap(),
+        ])
+        .assert()
+}
+
+#[test]
 fn forged_terminal_import_fails_without_changing_live_scope() {
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path().join("repo");

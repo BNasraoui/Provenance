@@ -60,6 +60,25 @@ impl StateStore {
                 .iter()
                 .map(|record| record.id.as_str().to_owned())
                 .collect::<BTreeSet<_>>();
+            merge_immutable("proposal", &mut proposals, &incoming.proposals, |r| {
+                r.id.as_str()
+            })?;
+            for replacement in &incoming.contributions {
+                if let Some(existing) = contributions
+                    .iter()
+                    .find(|record| record.id == replacement.id)
+                {
+                    ensure_asserted_contribution_unchanged(existing, replacement, &assertions)?;
+                }
+            }
+            for replacement in &incoming.synthesis_packets {
+                if let Some(existing) = synthesis_packets
+                    .iter()
+                    .find(|record| record.id == replacement.id)
+                {
+                    ensure_asserted_synthesis_unchanged(existing, replacement, &assertions)?;
+                }
+            }
             merge_replaceable(
                 "contribution",
                 &mut contributions,
@@ -74,9 +93,6 @@ impl StateStore {
                 replace,
                 |r| r.id.as_str(),
             )?;
-            merge_immutable("proposal", &mut proposals, &incoming.proposals, |r| {
-                r.id.as_str()
-            })?;
             merge_immutable("assertion", &mut assertions, &incoming.assertions, |r| {
                 r.id.as_str()
             })?;
@@ -191,6 +207,46 @@ impl StateStore {
         })?;
         Ok(())
     }
+}
+
+pub(super) fn ensure_asserted_contribution_unchanged(
+    existing: &provenance_core::Contribution,
+    replacement: &provenance_core::Contribution,
+    assertions: &[AssertionRecord],
+) -> anyhow::Result<()> {
+    if serde_json::to_value(existing)? == serde_json::to_value(replacement)? {
+        return Ok(());
+    }
+    let referenced = assertions.iter().any(|assertion| {
+        existing
+            .material_claims
+            .iter()
+            .any(|claim| assertion.supporting_claim_ids.contains(&claim.claim_id))
+    });
+    anyhow::ensure!(
+        !referenced,
+        "contribution {} is referenced by an assertion and cannot be replaced",
+        existing.id.as_str()
+    );
+    Ok(())
+}
+
+pub(super) fn ensure_asserted_synthesis_unchanged(
+    existing: &provenance_core::SynthesisPacket,
+    replacement: &provenance_core::SynthesisPacket,
+    assertions: &[AssertionRecord],
+) -> anyhow::Result<()> {
+    if serde_json::to_value(existing)? == serde_json::to_value(replacement)? {
+        return Ok(());
+    }
+    anyhow::ensure!(
+        !assertions
+            .iter()
+            .any(|assertion| assertion.synthesis_packet_id == existing.id),
+        "synthesis packet {} is referenced by an assertion and cannot be replaced",
+        existing.id.as_str()
+    );
+    Ok(())
 }
 
 fn ensure_qualifying_assertions(

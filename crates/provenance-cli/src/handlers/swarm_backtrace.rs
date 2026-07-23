@@ -318,12 +318,6 @@ fn preflight_land(
         "synthesis packet",
         existing_synthesis_packets.iter().map(|record| &record.id),
         synthesis_packets.iter().map(|record| &record.id),
-    )?;
-    let existing_proposals = store.list_proposal_cards(scope_id)?;
-    ensure_no_existing_ids(
-        "proposal",
-        existing_proposals.iter().map(|record| &record.id),
-        proposals.iter().map(|record| &record.id),
     )
 }
 
