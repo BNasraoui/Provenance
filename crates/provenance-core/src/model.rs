@@ -20,16 +20,23 @@ pub use ideation::contributions::{
     ClaimChallenge, Contribution, MaterialClaim, SuggestedArtifactChange, UncertaintyRating,
     UnsupportedRecommendation,
 };
-pub use ideation::promotions::{CanonicalArtifact, PromotionActor, PromotionDecisionRecord};
-pub use ideation::proposals::{ProposalCard, ProposalTraceability};
+pub use ideation::dispositions::{
+    validate_disposition_intrinsic, CanonicalArtifact, DispositionActor, DispositionRecord,
+};
+pub use ideation::lifecycle::{
+    effective_proposal_state, validate_assertion_intrinsic, validate_ideation_aggregate,
+    validate_proposal_intrinsic, Assertion, AssertionId, AssertionRecord, IdeationAggregate,
+    LegacyProposalPolicy,
+};
+pub use ideation::proposals::{Proposal, ProposalCard, ProposalTraceability};
 pub use ideation::synthesis::{
     ConsensusFinding, ContestedClaim, EvidenceGap, MinorityObjection, RequiredHumanDecision,
     SuggestedArtifact, SynthesisPacket, UnsupportedSpeculation,
 };
 pub use ideation::{
-    ArtifactChangeType, CanonicalArtifactType, ContributionStance, EvidenceQuality,
-    IdeationEvidenceReference, IdeationEvidenceType, IdeationTarget, IdeationTargetType,
-    IdentityType, PromotionDecision, PromotionState, ProposalType, SpeculationMarker,
+    ArtifactChangeType, CanonicalArtifactType, ContributionStance, DispositionDecision,
+    EvidenceQuality, IdeationEvidenceReference, IdeationEvidenceType, IdeationTarget,
+    IdeationTargetType, IdentityType, PromotionState, ProposalType, SpeculationMarker,
     UncertaintyLevel,
 };
 pub use ids::{SchemaVersion, ScopeId, StableId};

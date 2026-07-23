@@ -21,6 +21,8 @@ fn schema_for(artifact: IdeationArtifactKind) -> Value {
         IdeationArtifactKind::Contribution => artifacts::contribution::schema(),
         IdeationArtifactKind::SynthesisPacket => artifacts::synthesis_packet::schema(),
         IdeationArtifactKind::Proposal => artifacts::proposal::schema(),
+        IdeationArtifactKind::Assertion => artifacts::lifecycle::assertion_schema(),
+        IdeationArtifactKind::Disposition => artifacts::lifecycle::disposition_schema(),
         IdeationArtifactKind::GraphReference => artifacts::graph_reference::reference_schema(),
         IdeationArtifactKind::GraphReferenceExport => artifacts::graph_reference::export_schema(),
     };

@@ -1,24 +1,23 @@
 use crate::handlers::check::index::CheckIndex;
 use crate::handlers::check::references::{check_ideation_target, check_scoped_reference};
-use provenance_core::{
-    Contribution, PromotionDecisionRecord, ProposalCard, ScopeId, SynthesisPacket,
-};
+use provenance_core::{Contribution, DispositionRecord, ProposalCard, ScopeId, SynthesisPacket};
 use provenance_store::state_store::StateStore;
 
 pub(super) struct Records {
     contributions: Vec<Contribution>,
     synthesis_packets: Vec<SynthesisPacket>,
     proposal_cards: Vec<ProposalCard>,
-    promotion_decisions: Vec<PromotionDecisionRecord>,
+    dispositions: Vec<DispositionRecord>,
 }
 
 impl Records {
     pub(super) fn load(store: &StateStore, scope_id: &ScopeId) -> anyhow::Result<Self> {
+        store.validate_ideation_scope(scope_id)?;
         Ok(Self {
             contributions: store.list_contributions(scope_id)?,
             synthesis_packets: store.list_synthesis_packets(scope_id)?,
             proposal_cards: store.list_proposal_cards(scope_id)?,
-            promotion_decisions: store.list_promotion_decisions(scope_id)?,
+            dispositions: store.list_dispositions(scope_id)?,
         })
     }
 
@@ -44,7 +43,7 @@ impl Records {
         check_records!(&self.contributions, "contribution");
         check_records!(&self.synthesis_packets, "synthesis packet");
         check_records!(&self.proposal_cards, "proposal");
-        check_records!(&self.promotion_decisions, "promotion decision");
+        check_records!(&self.dispositions, "disposition");
     }
 
     pub(super) fn add_to(&self, index: &mut CheckIndex) {
@@ -120,15 +119,15 @@ impl Records {
                 );
             }
         }
-        for promotion_decision in &self.promotion_decisions {
+        for disposition in &self.dispositions {
             check_scoped_reference(
                 index,
                 dangling,
                 scope_id,
-                &format!("promotion decision {}", promotion_decision.id.as_str()),
+                &format!("disposition {}", disposition.id.as_str()),
                 "proposal",
                 "proposal",
-                &promotion_decision.proposal_id,
+                &disposition.proposal_id,
             );
         }
     }

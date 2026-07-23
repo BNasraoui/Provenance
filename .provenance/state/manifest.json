@@ -1,5 +1,8 @@
 {
   "schema_version": 1,
+  "disposition_actor_ids": [
+    "codex-review-panel-gpt55-medium"
+  ],
   "scopes": [
     {
       "id": "default",

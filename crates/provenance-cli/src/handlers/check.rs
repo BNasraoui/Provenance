@@ -12,7 +12,16 @@ mod scope;
 use index::CheckIndex;
 
 pub(super) fn check(repo: Utf8PathBuf, format: OutputFormat) -> anyhow::Result<()> {
+    validate_repository(repo)?;
+    output::print(format, &Status { status: "ok" })
+}
+
+pub(super) fn validate_repository(repo: Utf8PathBuf) -> anyhow::Result<()> {
     let store = StateStore::new(ProvenanceLayout::new(repo));
+    store.with_repository_publication(|| validate_locked(&store))
+}
+
+fn validate_locked(store: &StateStore) -> anyhow::Result<()> {
     let manifest = store.manifest()?;
     anyhow::ensure!(
         !manifest.scopes.is_empty(),
@@ -33,8 +42,8 @@ pub(super) fn check(repo: Utf8PathBuf, format: OutputFormat) -> anyhow::Result<(
 
     let mut index = CheckIndex::default();
     let mut dangling = Vec::new();
-    scope::validate(&store, &manifest.scopes, &mut index, &mut dangling)?;
-    edges::validate(&store, &manifest_scopes, &index, &mut dangling)?;
+    scope::validate(store, &manifest.scopes, &mut index, &mut dangling)?;
+    edges::validate(store, &manifest_scopes, &index, &mut dangling)?;
 
     anyhow::ensure!(
         scope_directory_findings.is_empty(),
@@ -46,5 +55,5 @@ pub(super) fn check(repo: Utf8PathBuf, format: OutputFormat) -> anyhow::Result<(
         "dangling reference(s):\n- {}",
         dangling.join("\n- ")
     );
-    output::print(format, &Status { status: "ok" })
+    Ok(())
 }

@@ -9,6 +9,10 @@ use provenance_core::{
 
 impl StateStore {
     pub fn create_boundary(&self, input: CreateBoundaryInput) -> anyhow::Result<Boundary> {
+        self.with_repository_publication(|| self.write_boundary(input))
+    }
+
+    fn write_boundary(&self, input: CreateBoundaryInput) -> anyhow::Result<Boundary> {
         let CreateBoundaryInput {
             scope_id,
             id,
@@ -51,6 +55,10 @@ impl StateStore {
     }
 
     pub fn create_topic(&self, input: CreateTopicInput) -> anyhow::Result<Topic> {
+        self.with_repository_publication(|| self.write_topic(input))
+    }
+
+    fn write_topic(&self, input: CreateTopicInput) -> anyhow::Result<Topic> {
         let CreateTopicInput {
             scope_id,
             id,
@@ -91,6 +99,10 @@ impl StateStore {
     }
 
     pub fn create_question(&self, input: CreateQuestionInput) -> anyhow::Result<Question> {
+        self.with_repository_publication(|| self.write_question(input))
+    }
+
+    fn write_question(&self, input: CreateQuestionInput) -> anyhow::Result<Question> {
         let CreateQuestionInput {
             scope_id,
             id,
@@ -241,6 +253,18 @@ impl StateStore {
         answer: String,
         resolution_id: Option<StableId>,
     ) -> anyhow::Result<Question> {
+        self.with_repository_publication(|| {
+            self.write_question_answer(scope_id, id, answer, resolution_id)
+        })
+    }
+
+    fn write_question_answer(
+        &self,
+        scope_id: &ScopeId,
+        id: &StableId,
+        answer: String,
+        resolution_id: Option<StableId>,
+    ) -> anyhow::Result<Question> {
         anyhow::ensure!(!answer.trim().is_empty(), "answer must not be empty");
         if let Some(resolution_id) = &resolution_id {
             anyhow::ensure!(
@@ -263,6 +287,10 @@ impl StateStore {
     }
 
     pub fn update_question(&self, input: UpdateQuestionInput) -> anyhow::Result<Question> {
+        self.with_repository_publication(|| self.write_question_update(input))
+    }
+
+    fn write_question_update(&self, input: UpdateQuestionInput) -> anyhow::Result<Question> {
         let UpdateQuestionInput {
             scope_id,
             id,

@@ -66,13 +66,248 @@ fn swarm_backtrace_land_rejects_duplicate_run_ids_before_writing() {
     Command::cargo_bin("provenance")
         .unwrap()
         .args([
-            "export", "--repo", &repo, "--scope", "default", "--format", "json",
+            "proposals",
+            "list",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--format",
+            "json",
         ])
         .assert()
         .success()
         .stdout(predicates::str::contains("contrib_backtrace_extract_auth").not())
         .stdout(predicates::str::contains("synth_backtrace_auth").not())
         .stdout(predicates::str::contains("prop_req_publish_requires_worker").not());
+}
+
+#[test]
+fn qualifying_swarm_proposal_requires_an_assertion_before_any_write() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo").to_string_lossy().to_string();
+    let run_dir = dir.path().join("run");
+    init_repo(&repo);
+    create_source(&repo);
+    write_run_dir(&run_dir, "Publishing is guarded by worker assignment.");
+    let merge = run_dir.join("merge/merged.json");
+    let mut value: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&merge).unwrap()).unwrap();
+    value.as_object_mut().unwrap().remove("assertions");
+    std::fs::write(&merge, serde_json::to_vec(&value).unwrap()).unwrap();
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "swarm-backtrace",
+            "land",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--run-dir",
+            run_dir.to_str().unwrap(),
+            "--format",
+            "json",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "qualifying proposal prop_req_publish_requires_worker requires an assertion",
+        ));
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "proposals",
+            "list",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("synth_backtrace_auth").not())
+        .stdout(predicates::str::contains("prop_req_publish_requires_worker").not());
+}
+
+#[test]
+fn invalid_swarm_assertion_evidence_is_atomic() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo").to_string_lossy().to_string();
+    let run_dir = dir.path().join("run");
+    init_repo(&repo);
+    create_source(&repo);
+    write_run_dir(&run_dir, "Publishing is guarded by worker assignment.");
+    let merge = run_dir.join("merge/merged.json");
+    let contents = std::fs::read_to_string(&merge).unwrap().replace(
+        r#""supporting_claim_ids": ["claim_auth_guard"]"#,
+        r#""supporting_claim_ids": ["claim_missing"]"#,
+    );
+    std::fs::write(&merge, contents).unwrap();
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "swarm-backtrace",
+            "land",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--run-dir",
+            run_dir.to_str().unwrap(),
+            "--format",
+            "json",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "assertion claim claim_missing must have exactly one owner",
+        ));
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "export", "--repo", &repo, "--scope", "default", "--format", "json",
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("contrib_backtrace_extract_auth").not())
+        .stdout(predicates::str::contains("assertion_req_publish_requires_worker").not());
+}
+
+#[test]
+fn swarm_output_cannot_supply_disposition_authority() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo").to_string_lossy().to_string();
+    let run_dir = dir.path().join("run");
+    init_repo(&repo);
+    create_source(&repo);
+    write_run_dir(&run_dir, "Publishing is guarded by worker assignment.");
+    let merge = run_dir.join("merge/merged.json");
+    let mut value: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&merge).unwrap()).unwrap();
+    value["dispositions"] = serde_json::json!([{
+        "schema_version": 1,
+        "scope_id": "default",
+        "id": "disposition_forged",
+        "proposal_id": "prop_req_publish_requires_worker",
+        "decision": "accepted",
+        "rationale": "Swarm chose authority.",
+        "actor": {"identity_type": "agent", "id": "swarm"}
+    }]);
+    std::fs::write(&merge, serde_json::to_vec(&value).unwrap()).unwrap();
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "swarm-backtrace",
+            "land",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--run-dir",
+            run_dir.to_str().unwrap(),
+            "--format",
+            "json",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "swarm merge output cannot contain dispositions",
+        ));
+}
+
+#[test]
+fn existing_evidence_requires_and_supports_incoming_proposal_assertion() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo").to_string_lossy().to_string();
+    let run_dir = dir.path().join("run");
+    init_repo(&repo);
+    create_source(&repo);
+    write_run_dir(&run_dir, "Publishing is guarded by worker assignment.");
+    let merge = run_dir.join("merge/merged.json");
+    let original: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&merge).unwrap()).unwrap();
+    let mut evidence_only = original.clone();
+    evidence_only["proposals"] = serde_json::json!([]);
+    evidence_only["assertions"] = serde_json::json!([]);
+    std::fs::write(&merge, serde_json::to_vec(&evidence_only).unwrap()).unwrap();
+    land(&repo, &run_dir).success();
+
+    std::fs::remove_dir_all(run_dir.join("extractors")).unwrap();
+    std::fs::remove_dir_all(run_dir.join("refuters")).unwrap();
+    let proposal_only = serde_json::json!({
+        "proposals": original["proposals"],
+        "assertions": []
+    });
+    std::fs::write(&merge, serde_json::to_vec(&proposal_only).unwrap()).unwrap();
+    land(&repo, &run_dir)
+        .failure()
+        .stderr(predicates::str::contains(
+            "qualifying proposal prop_req_publish_requires_worker requires an assertion",
+        ));
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "proposals",
+            "list",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("prop_req_publish_requires_worker").not());
+
+    let asserted = serde_json::json!({
+        "proposals": original["proposals"],
+        "assertions": original["assertions"]
+    });
+    std::fs::write(&merge, serde_json::to_vec(&asserted).unwrap()).unwrap();
+    land(&repo, &run_dir).success();
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "proposals",
+            "list",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains(
+            r#""promotion_state": "asserted""#,
+        ));
+}
+
+fn land(repo: &str, run_dir: &std::path::Path) -> assert_cmd::assert::Assert {
+    let mut command = Command::cargo_bin("provenance").unwrap();
+    command.args([
+        "swarm-backtrace",
+        "land",
+        "--repo",
+        repo,
+        "--scope",
+        "default",
+        "--run-dir",
+        run_dir.to_str().unwrap(),
+        "--format",
+        "json",
+    ]);
+    command.assert()
 }
 
 #[test]
@@ -150,7 +385,7 @@ fn swarm_backtrace_land_rejects_existing_ids_before_writing() {
 }
 
 #[test]
-fn swarm_backtrace_land_refuses_to_replace_accepted_proposals() {
+fn swarm_backtrace_land_refuses_to_replace_immutable_proposals() {
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path().join("repo").to_string_lossy().to_string();
     let run_dir = dir.path().join("run");
@@ -175,33 +410,17 @@ fn swarm_backtrace_land_refuses_to_replace_accepted_proposals() {
         ])
         .assert()
         .success();
-    Command::cargo_bin("provenance")
-        .unwrap()
-        .args([
-            "promotion-decisions",
-            "create",
-            "--repo",
-            &repo,
-            "--scope",
-            "default",
-            "--id",
-            "decision_publish_requires_worker",
-            "--proposal-id",
-            "prop_req_publish_requires_worker",
-            "--decision",
-            "accepted",
-            "--rationale",
-            "Human accepted the proposal.",
-            "--actor-id",
-            "ben",
-            "--actor-type",
-            "human",
-            "--format",
-            "json",
-        ])
-        .assert()
-        .success();
     write_run_dir(&run_dir, "Updated extracted finding.");
+    let merge = run_dir.join("merge/merged.json");
+    let contents = std::fs::read_to_string(&merge).unwrap();
+    std::fs::write(
+        merge,
+        contents.replace(
+            "Publishing requires an assigned worker\"",
+            "Divergent forged proposal\"",
+        ),
+    )
+    .unwrap();
 
     Command::cargo_bin("provenance")
         .unwrap()
@@ -220,8 +439,7 @@ fn swarm_backtrace_land_refuses_to_replace_accepted_proposals() {
         ])
         .assert()
         .failure()
-        .stderr(predicates::str::contains("human disposition"))
-        .stderr(predicates::str::contains("accepted"));
+        .stderr(predicates::str::contains("immutable"));
 
     Command::cargo_bin("provenance")
         .unwrap()
@@ -232,7 +450,5 @@ fn swarm_backtrace_land_refuses_to_replace_accepted_proposals() {
         .success()
         .stdout(predicates::str::contains("Original extracted finding."))
         .stdout(predicates::str::contains("Updated extracted finding.").not())
-        .stdout(predicates::str::contains(
-            r#""promotion_state": "accepted""#,
-        ));
+        .stdout(predicates::str::contains("Divergent forged proposal").not());
 }

@@ -1,8 +1,8 @@
 use super::ideation::contributions::{Contribution, MaterialClaim};
-use super::ideation::promotions::PromotionDecisionRecord;
+use super::ideation::dispositions::DispositionRecord;
 use super::ideation::proposals::ProposalCard;
 use super::ideation::synthesis::SynthesisPacket;
-use super::ideation::{PromotionDecision, PromotionState, ProposalType};
+use super::ideation::{DispositionDecision, PromotionState};
 use super::ids::SchemaVersion;
 
 #[test]
@@ -130,7 +130,7 @@ fn ideation_output_records_roundtrip_without_schema_bump() {
     let contribution: Contribution = serde_json::from_value(contribution).unwrap();
     let synthesis: SynthesisPacket = serde_json::from_value(synthesis).unwrap();
     let proposal: ProposalCard = serde_json::from_value(proposal).unwrap();
-    let decision: PromotionDecisionRecord = serde_json::from_value(decision).unwrap();
+    let decision: DispositionRecord = serde_json::from_value(decision).unwrap();
 
     assert_eq!(contribution.schema_version, SchemaVersion(1));
     assert_eq!(
@@ -143,7 +143,7 @@ fn ideation_output_records_roundtrip_without_schema_bump() {
         "source_schads"
     );
     assert_eq!(proposal.promotion_state, PromotionState::Proposed);
-    assert_eq!(decision.decision, PromotionDecision::Accepted);
+    assert_eq!(decision.decision, DispositionDecision::Accepted);
 
     assert_eq!(
         serde_json::to_value(&contribution).unwrap()["schema_version"],
@@ -206,7 +206,7 @@ fn confidence_scores_must_be_in_unit_interval() {
 }
 
 #[test]
-fn proposal_and_promotion_decision_accept_convex_id_aliases() {
+fn public_lifecycle_models_reject_legacy_persisted_field_names() {
     let proposal = serde_json::json!({
         "schema_version": 1,
         "scope_id": "default",
@@ -240,15 +240,16 @@ fn proposal_and_promotion_decision_accept_convex_id_aliases() {
         "canonicalArtifact": {"artifactType": "requirement", "artifactId": "req_overtime"}
     });
 
-    let proposal: ProposalCard = serde_json::from_value(proposal).unwrap();
-    let decision: PromotionDecisionRecord = serde_json::from_value(decision).unwrap();
+    let proposal_error = serde_json::from_value::<ProposalCard>(proposal)
+        .unwrap_err()
+        .to_string();
+    let disposition_error = serde_json::from_value::<DispositionRecord>(decision)
+        .unwrap_err()
+        .to_string();
 
-    assert_eq!(proposal.id.as_str(), "proposal_overtime_traceability");
-    assert_eq!(proposal.proposal_type, ProposalType::RequirementCandidate);
-    assert_eq!(decision.id.as_str(), "decision_overtime_traceability");
-    assert_eq!(
-        decision.proposal_id.as_str(),
-        "proposal_overtime_traceability"
+    assert!(proposal_error.contains("unknown field"), "{proposal_error}");
+    assert!(
+        disposition_error.contains("unknown field"),
+        "{disposition_error}"
     );
-    assert_eq!(decision.actor.id, "ben");
 }

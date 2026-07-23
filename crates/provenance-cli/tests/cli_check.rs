@@ -125,20 +125,18 @@ fn check_rejects_record_whose_embedded_scope_differs_from_directory_scope() {
 }
 
 #[test]
-fn check_rejects_dangling_promotion_decision_proposal_id() {
+fn check_rejects_dangling_disposition_proposal_id() {
     let dir = tempfile::tempdir().unwrap();
     init(dir.path());
     let state = dir.path().join(".provenance/state");
     write_jsonl(
-        &state.join("scopes/default/ideation/promotion_decisions.jsonl"),
-        r#"{"schema_version":1,"scope_id":"default","promotionDecisionId":"decision_missing_proposal","proposalId":"proposal_missing","decision":"accepted","rationale":"Looks good.","decidedBy":{"identity_type":"human","id":"ben"}}"#,
+        &state.join("scopes/default/ideation/dispositions.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","id":"disposition_missing_proposal","proposal_id":"proposal_missing","decision":"accepted","rationale":"Looks good.","actor":{"identity_type":"human","id":"ben"}}"#,
     );
 
-    provenance(dir.path())
-        .failure()
-        .stderr(contains("dangling reference"))
-        .stderr(contains("promotion decision decision_missing_proposal"))
-        .stderr(contains("proposal proposal_missing"));
+    provenance(dir.path()).failure().stderr(contains(
+        "disposition proposal proposal_missing does not exist",
+    ));
 }
 
 #[test]

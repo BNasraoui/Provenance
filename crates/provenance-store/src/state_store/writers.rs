@@ -52,6 +52,10 @@ impl StateStore {
     }
 
     pub fn create_requirement(&self, input: CreateRequirementInput) -> anyhow::Result<Requirement> {
+        self.with_repository_publication(|| self.write_requirement(input))
+    }
+
+    fn write_requirement(&self, input: CreateRequirementInput) -> anyhow::Result<Requirement> {
         let CreateRequirementInput {
             scope_id,
             id,
@@ -118,6 +122,10 @@ impl StateStore {
     }
 
     pub fn add_source_reference(&self, input: AddSourceReferenceInput) -> anyhow::Result<Edge> {
+        self.with_repository_publication(|| self.write_source_reference(input))
+    }
+
+    fn write_source_reference(&self, input: AddSourceReferenceInput) -> anyhow::Result<Edge> {
         let AddSourceReferenceInput {
             scope_id,
             source_id,
@@ -197,6 +205,22 @@ impl StateStore {
     }
 
     pub fn create_edge(&self, input: CreateEdgeInput) -> anyhow::Result<Edge> {
+        self.create_edge_after_validation(input, || Ok(()))
+    }
+
+    pub(super) fn create_edge_after_validation(
+        &self,
+        input: CreateEdgeInput,
+        after_validation: impl FnOnce() -> anyhow::Result<()>,
+    ) -> anyhow::Result<Edge> {
+        self.with_repository_publication(|| self.write_edge(input, after_validation))
+    }
+
+    fn write_edge(
+        &self,
+        input: CreateEdgeInput,
+        after_validation: impl FnOnce() -> anyhow::Result<()>,
+    ) -> anyhow::Result<Edge> {
         let CreateEdgeInput {
             scope_id,
             edge_type,
@@ -208,6 +232,7 @@ impl StateStore {
         validate_edge_endpoint(edge_type, from_type, to_type)?;
         self.ensure_edge_endpoint_exists(&scope_id, from_type, &from_id, "from")?;
         self.ensure_edge_endpoint_exists(&scope_id, to_type, &to_id, "to")?;
+        after_validation()?;
         self.add_edge(scope_id, edge_type, from_type, from_id, to_type, to_id)
     }
 

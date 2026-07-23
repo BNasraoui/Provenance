@@ -1,6 +1,51 @@
 use assert_cmd::Command;
 
 #[test]
+fn dispositions_list_rejects_invalid_lifecycle_records() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "init",
+            "--path",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+        ])
+        .assert()
+        .success();
+    let dispositions = repo.join(".provenance/state/scopes/default/ideation/dispositions.jsonl");
+    std::fs::create_dir_all(dispositions.parent().unwrap()).unwrap();
+    std::fs::write(
+        dispositions,
+        concat!(
+            r#"{"schema_version":1,"scope_id":"default","id":"forged_disposition","proposal_id":"missing_proposal","decision":"accepted","rationale":"Forged","actor":{"identity_type":"human","id":"forger"}}"#,
+            "\n"
+        ),
+    )
+    .unwrap();
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "dispositions",
+            "list",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "disposition proposal missing_proposal does not exist",
+        ));
+}
+
+#[test]
 #[allow(clippy::too_many_lines)]
 fn cli_creates_materializes_and_exports_ideation_outputs() {
     let dir = tempfile::tempdir().unwrap();
@@ -17,6 +62,8 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
             "default",
             "--path-prefix",
             ".",
+            "--disposition-actor-id",
+            "ben",
         ])
         .assert()
         .success();
@@ -118,11 +165,11 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
             "--consensus-json",
             r#"[{"statement":"The requirement needs a source reference.","supporting_participant_slots":["reviewer"],"evidence_reference_ids":["evidence_code_line"]}]"#,
             "--evidence-gaps-json",
-            r#"[{"question":"Which agreement applies?","needed_evidence_type":"source","blocking_promotion":true}]"#,
+            r#"[{"question":"Which agreement applies?","needed_evidence_type":"source","blocking_promotion":false}]"#,
             "--suggested-artifacts-json",
-            r#"[{"proposal_key":"req-overtime-traceability","proposal_type":"requirement_candidate","summary":"Clarify source traceability.","origin_participant_slots":["reviewer"]}]"#,
+            r#"[{"proposal_id":"proposal_overtime_traceability","proposal_key":"req-overtime-traceability","proposal_type":"requirement_candidate","summary":"Clarify source traceability.","origin_participant_slots":["reviewer"]}]"#,
             "--required-human-decisions-json",
-            r#"[{"decision_key":"decide_agreement_scope","prompt":"Confirm the governing agreement.","blocks_promotion":true}]"#,
+            r#"[{"decision_key":"decide_agreement_scope","prompt":"Confirm the governing agreement.","blocks_promotion":false}]"#,
             "--format",
             "json",
         ])
@@ -161,20 +208,22 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
             r#"[{"reference_id":"evidence_code_line","evidence_type":"artifact","summary":"Existing payroll check","file_path":"src/payroll/overtime.rs","line":42}]"#,
             "--supporting-claim-id",
             "claim_overtime_threshold",
+            "--assertion-id",
+            "assertion_overtime_traceability",
+            "--synthesis-packet-id",
+            "synth_overtime_001",
             "--promotion-state",
             "proposed",
             "--format",
             "json",
         ])
         .assert()
-        .success()
-        .stdout(predicates::str::contains("proposal_overtime_traceability"))
-        .stdout(predicates::str::contains(r#""confidence": 0.83"#));
+        .success();
 
     Command::cargo_bin("provenance")
         .unwrap()
         .args([
-            "promotion-decisions",
+            "dispositions",
             "create",
             "--repo",
             &repo,
@@ -210,7 +259,7 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
         .args(["materialize", "--repo", &repo, "--format", "json"])
         .assert()
         .success()
-        .stdout(predicates::str::contains(r#""records_loaded": 6"#));
+        .stdout(predicates::str::contains(r#""records_loaded": 7"#));
 
     Command::cargo_bin("provenance")
         .unwrap()
@@ -252,8 +301,13 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
     assert!(exported.contains(r#""proposal_cards""#));
     assert!(exported.contains(r#""confidence": 0.87"#));
     assert!(exported.contains(r#""confidence": 0.83"#));
-    assert!(exported.contains(r#""promotion_decisions""#));
+    assert!(exported.contains(r#""dispositions""#));
+    assert!(!exported.contains(r#""promotion_decisions""#));
+    assert!(std::path::Path::new(&repo)
+        .join(".provenance/state/scopes/default/ideation/dispositions.jsonl")
+        .is_file());
     assert!(exported.contains(r#""contributions""#));
     assert!(exported.contains(r#""synthesis_packets""#));
-    assert!(exported.contains(r#""blocking_promotion": true"#));
+    assert!(exported.contains(r#""assertion_records""#));
+    assert!(exported.contains(r#""blocking_promotion": false"#));
 }

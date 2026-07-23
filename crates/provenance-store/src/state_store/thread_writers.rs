@@ -7,6 +7,10 @@ impl StateStore {
         &self,
         input: PostMessageInput,
     ) -> anyhow::Result<PostMessageResult> {
+        self.with_repository_publication(|| self.write_thread_message(input))
+    }
+
+    fn write_thread_message(&self, input: PostMessageInput) -> anyhow::Result<PostMessageResult> {
         let PostMessageInput {
             scope_id,
             parent,

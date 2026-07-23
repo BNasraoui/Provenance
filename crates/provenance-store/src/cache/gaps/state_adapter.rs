@@ -4,6 +4,10 @@ use provenance_core::ScopeId;
 
 pub fn find_gaps(layout: &ProvenanceLayout, scope: &ScopeId) -> anyhow::Result<Vec<GapItem>> {
     let store = StateStore::new(layout.clone());
+    store.with_repository_publication(|| find_gaps_locked(scope, &store))
+}
+
+fn find_gaps_locked(scope: &ScopeId, store: &StateStore) -> anyhow::Result<Vec<GapItem>> {
     let edges = store.list_edges()?;
     let sources = store.list_sources(scope)?;
     let requirements = store.list_requirements(scope)?;

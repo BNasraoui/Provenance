@@ -1,6 +1,8 @@
 mod domain_service_writers;
+mod ideation_batches;
 mod ideation_writers;
 mod proposal_surfaces;
+mod readers;
 mod rule_writers;
 mod shaping_writers;
 mod thread_writers;
@@ -9,13 +11,12 @@ mod writers;
 pub use proposal_surfaces::{ProposalDemand, ProposalSurfaceReason, SurfacedProposal};
 
 use crate::{layout::ProvenanceLayout, shards};
-use anyhow::Context;
-use camino::{Utf8Path, Utf8PathBuf};
+use ideation_batches::overlay_records;
 use provenance_core::{
-    ArtifactLink, Boundary, CanonicalArtifact, ClaimChallenge, ConsensusFinding, ContestedClaim,
-    Contribution, ContributionStance, Domain, Edge, EdgeType, EvidenceGap,
-    IdeationEvidenceReference, IdeationTarget, Manifest, MaterialClaim, Message, MessageRole,
-    MinorityObjection, NodeType, PromotionActor, PromotionDecision, PromotionDecisionRecord,
+    ArtifactLink, AssertionRecord, Boundary, CanonicalArtifact, ClaimChallenge, ConsensusFinding,
+    ContestedClaim, Contribution, ContributionStance, DispositionActor, DispositionDecision,
+    DispositionRecord, Domain, Edge, EdgeType, EvidenceGap, IdeationEvidenceReference,
+    IdeationTarget, Manifest, MaterialClaim, Message, MessageRole, MinorityObjection, NodeType,
     PromotionState, ProposalCard, ProposalTraceability, ProposalType, Question, QuestionStatus,
     RequiredHumanDecision, Requirement, RequirementStatus, Resolution, ResolutionInput,
     ResolutionMethod, ResolutionStatus, Rule, RuleModality, RuleSeverity, RuleStatus, RuleType,
@@ -24,13 +25,19 @@ use provenance_core::{
     SuggestedArtifactChange, SynthesisPacket, Thread, ThreadParent, Topic, TopicStatus,
     UncertaintyRating, UnsupportedRecommendation, UnsupportedSpeculation,
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use readers::{
+    deserialize_closed, read_edge_shards, read_jsonl, read_jsonl_closed, read_legacy_dispositions,
+    read_message_shards,
+};
+use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ManifestProjection {
     schema_version: SchemaVersion,
     scopes: Vec<serde_json::Value>,
+    #[serde(default, rename = "disposition_actor_ids")]
+    _disposition_actor_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -236,19 +243,42 @@ pub struct CreateProposalCardInput {
     pub summary: String,
     pub confidence: Option<f64>,
     pub traceability: ProposalTraceability,
+    pub builds_on: Vec<provenance_core::AssertionId>,
     pub promotion_state: PromotionState,
     pub duplicate_of: Option<StableId>,
     pub superseded_by: Option<StableId>,
 }
 
-pub struct CreatePromotionDecisionInput {
+pub struct CreateDispositionInput {
     pub scope_id: ScopeId,
     pub id: StableId,
     pub proposal_id: StableId,
-    pub decision: PromotionDecision,
+    pub decision: DispositionDecision,
     pub rationale: String,
-    pub actor: PromotionActor,
+    pub actor: DispositionActor,
     pub canonical_artifact: Option<CanonicalArtifact>,
+}
+
+pub struct CreateAssertionInput {
+    pub scope_id: ScopeId,
+    pub id: provenance_core::AssertionId,
+    pub proposal_id: StableId,
+    pub synthesis_packet_id: StableId,
+    pub supporting_claim_ids: Vec<StableId>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IdeationLandingBatch {
+    #[serde(default)]
+    pub contributions: Vec<Contribution>,
+    #[serde(default)]
+    pub synthesis_packets: Vec<SynthesisPacket>,
+    #[serde(default)]
+    pub proposals: Vec<ProposalCard>,
+    #[serde(default)]
+    pub assertions: Vec<AssertionRecord>,
+    #[serde(default)]
+    pub dispositions: Vec<DispositionRecord>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -262,45 +292,54 @@ impl StateStore {
         Self { layout }
     }
     pub fn manifest(&self) -> anyhow::Result<Manifest> {
-        Ok(serde_json::from_str(&std::fs::read_to_string(
-            self.layout.manifest_path(),
-        )?)?)
+        self.with_repository_publication(|| {
+            Ok(serde_json::from_str(&std::fs::read_to_string(
+                self.layout.manifest_path(),
+            )?)?)
+        })
     }
 
     pub(crate) fn closed_manifest_scope(
         &self,
         scope: &ScopeId,
     ) -> anyhow::Result<(SchemaVersion, Option<Scope>)> {
-        let manifest: ManifestProjection =
-            deserialize_closed(&std::fs::read_to_string(self.layout.manifest_path())?)?;
-        let selected = manifest
-            .scopes
-            .into_iter()
-            .find(|candidate| {
-                candidate.get("id").and_then(serde_json::Value::as_str) == Some(scope.as_str())
-            })
-            .map(|candidate| deserialize_closed(&serde_json::to_string(&candidate)?))
-            .transpose()?;
-        Ok((manifest.schema_version, selected))
+        self.with_repository_publication(|| {
+            let manifest: ManifestProjection =
+                deserialize_closed(&std::fs::read_to_string(self.layout.manifest_path())?)?;
+            let selected = manifest
+                .scopes
+                .into_iter()
+                .find(|candidate| {
+                    candidate.get("id").and_then(serde_json::Value::as_str) == Some(scope.as_str())
+                })
+                .map(|candidate| deserialize_closed(&serde_json::to_string(&candidate)?))
+                .transpose()?;
+            Ok((manifest.schema_version, selected))
+        })
     }
 
     pub fn list_scope_directories(&self) -> anyhow::Result<Vec<String>> {
-        let scopes_dir = self.layout.scopes_dir();
-        if !scopes_dir.exists() {
-            return Ok(Vec::new());
-        }
-
-        let mut scope_directories = Vec::new();
-        for entry in std::fs::read_dir(scopes_dir)? {
-            let entry = entry?;
-            if entry.file_type()?.is_dir() {
-                scope_directories.push(entry.file_name().into_string().map_err(|name| {
-                    anyhow::anyhow!("non-UTF-8 scope directory name: {}", name.to_string_lossy())
-                })?);
+        self.with_repository_publication(|| {
+            let scopes_dir = self.layout.scopes_dir();
+            if !scopes_dir.exists() {
+                return Ok(Vec::new());
             }
-        }
-        scope_directories.sort();
-        Ok(scope_directories)
+
+            let mut scope_directories = Vec::new();
+            for entry in std::fs::read_dir(scopes_dir)? {
+                let entry = entry?;
+                if entry.file_type()?.is_dir() {
+                    scope_directories.push(entry.file_name().into_string().map_err(|name| {
+                        anyhow::anyhow!(
+                            "non-UTF-8 scope directory name: {}",
+                            name.to_string_lossy()
+                        )
+                    })?);
+                }
+            }
+            scope_directories.sort();
+            Ok(scope_directories)
+        })
     }
 
     pub fn list_sources(&self, scope: &ScopeId) -> anyhow::Result<Vec<Source>> {
@@ -379,31 +418,93 @@ impl StateStore {
         read_message_shards(&self.layout, scope)
     }
     pub fn list_contributions(&self, scope: &ScopeId) -> anyhow::Result<Vec<Contribution>> {
-        read_jsonl(&shards::contributions_path(&self.layout, scope))
+        self.list_contributions_after_direct_read(scope, || Ok(()))
     }
-    pub fn list_synthesis_packets(&self, scope: &ScopeId) -> anyhow::Result<Vec<SynthesisPacket>> {
-        read_jsonl(&shards::synthesis_packets_path(&self.layout, scope))
-    }
-    pub fn list_proposal_cards(&self, scope: &ScopeId) -> anyhow::Result<Vec<ProposalCard>> {
-        read_jsonl(&shards::proposal_cards_path(&self.layout, scope))
-    }
-    pub fn list_promotion_decisions(
+    fn list_contributions_after_direct_read(
         &self,
         scope: &ScopeId,
-    ) -> anyhow::Result<Vec<PromotionDecisionRecord>> {
-        read_jsonl(&shards::promotion_decisions_path(&self.layout, scope))
+        after_direct_read: impl FnOnce() -> anyhow::Result<()>,
+    ) -> anyhow::Result<Vec<Contribution>> {
+        self.with_repository_publication(|| {
+            let mut records = read_jsonl(&shards::contributions_path(&self.layout, scope))?;
+            after_direct_read()?;
+            for batch in self.list_ideation_landings(scope)? {
+                overlay_records(&mut records, batch.contributions, |record| {
+                    record.id.as_str()
+                });
+            }
+            Ok(records)
+        })
     }
-
-    pub(crate) fn mutate_jsonl_records<T, R>(
+    pub fn list_synthesis_packets(&self, scope: &ScopeId) -> anyhow::Result<Vec<SynthesisPacket>> {
+        self.with_repository_publication(|| {
+            let mut records = read_jsonl(&shards::synthesis_packets_path(&self.layout, scope))?;
+            for batch in self.list_ideation_landings(scope)? {
+                overlay_records(&mut records, batch.synthesis_packets, |record| {
+                    record.id.as_str()
+                });
+            }
+            Ok(records)
+        })
+    }
+    pub fn list_proposal_cards(&self, scope: &ScopeId) -> anyhow::Result<Vec<ProposalCard>> {
+        self.project_proposal_cards(scope, || Ok(()))
+    }
+    fn project_proposal_cards(
         &self,
-        path: &Utf8Path,
-        mutate: impl FnOnce(&mut Vec<T>) -> anyhow::Result<R>,
-    ) -> anyhow::Result<R>
-    where
-        T: DeserializeOwned + Serialize,
-    {
-        let lock_path = self.layout.state_shard_lock_path(path)?;
-        crate::jsonl::mutate_jsonl_locked(path, &lock_path, mutate)
+        scope: &ScopeId,
+        after_validation: impl FnOnce() -> anyhow::Result<()>,
+    ) -> anyhow::Result<Vec<ProposalCard>> {
+        self.with_repository_publication(|| {
+            self.validate_ideation_scope(scope)?;
+            after_validation()?;
+            let assertions = self.list_assertion_records(scope)?;
+            let dispositions = self.list_dispositions(scope)?;
+            Ok(self
+                .list_proposal_definitions(scope)?
+                .into_iter()
+                .map(|mut proposal| {
+                    proposal.promotion_state = provenance_core::effective_proposal_state(
+                        &proposal,
+                        &assertions,
+                        &dispositions,
+                    );
+                    proposal
+                })
+                .collect())
+        })
+    }
+    pub fn list_proposal_definitions(&self, scope: &ScopeId) -> anyhow::Result<Vec<ProposalCard>> {
+        self.with_repository_publication(|| {
+            let mut records = read_jsonl(&shards::proposal_cards_path(&self.layout, scope))?;
+            for batch in self.list_ideation_landings(scope)? {
+                overlay_records(&mut records, batch.proposals, |record| record.id.as_str());
+            }
+            Ok(records)
+        })
+    }
+    pub fn list_dispositions(&self, scope: &ScopeId) -> anyhow::Result<Vec<DispositionRecord>> {
+        self.with_repository_publication(|| {
+            let mut records = read_jsonl(&shards::dispositions_path(&self.layout, scope))?;
+            records.extend(read_legacy_dispositions(
+                &shards::legacy_promotion_decisions_path(&self.layout, scope),
+            )?);
+            for batch in self.list_ideation_landings(scope)? {
+                overlay_records(&mut records, batch.dispositions, |record| {
+                    record.id.as_str()
+                });
+            }
+            Ok(records)
+        })
+    }
+    pub fn list_assertion_records(&self, scope: &ScopeId) -> anyhow::Result<Vec<AssertionRecord>> {
+        self.with_repository_publication(|| {
+            let mut records = read_jsonl(&shards::assertion_records_path(&self.layout, scope))?;
+            for batch in self.list_ideation_landings(scope)? {
+                overlay_records(&mut records, batch.assertions, |record| record.id.as_str());
+            }
+            Ok(records)
+        })
     }
 }
 
@@ -412,152 +513,6 @@ pub(crate) fn serde_name<T: serde::Serialize>(value: &T) -> anyhow::Result<Strin
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("expected string enum serialization"))?
         .to_string())
-}
-
-fn read_jsonl<T: DeserializeOwned>(path: &camino::Utf8Path) -> anyhow::Result<Vec<T>> {
-    if !path.exists() {
-        return Ok(Vec::new());
-    }
-    std::fs::read_to_string(path)?
-        .lines()
-        .map(|line| Ok(serde_json::from_str(line)?))
-        .collect()
-}
-
-fn read_jsonl_closed<T: DeserializeOwned>(path: &camino::Utf8Path) -> anyhow::Result<Vec<T>> {
-    if !path.exists() {
-        return Ok(Vec::new());
-    }
-    std::fs::read_to_string(path)?
-        .lines()
-        .map(deserialize_closed)
-        .collect()
-}
-
-fn deserialize_closed<T: DeserializeOwned>(input: &str) -> anyhow::Result<T> {
-    let mut unknown = None;
-    let mut deserializer = serde_json::Deserializer::from_str(input);
-    let value = serde_ignored::deserialize(&mut deserializer, |path| {
-        if unknown.is_none() {
-            unknown = Some(path.to_string());
-        }
-    })?;
-    if let Some(path) = unknown {
-        anyhow::bail!("unknown field `{path}`");
-    }
-    Ok(value)
-}
-
-fn read_jsonl_shards<T: DeserializeOwned>(
-    shard_paths: Vec<Utf8PathBuf>,
-    shard_kind: &str,
-) -> anyhow::Result<Vec<T>> {
-    let mut records = Vec::new();
-    for path in shard_paths {
-        let contents = std::fs::read_to_string(&path)
-            .with_context(|| format!("failed to read {shard_kind} shard {}", path.as_str()))?;
-        for (index, line) in contents.lines().enumerate() {
-            records.push(serde_json::from_str(line).with_context(|| {
-                format!(
-                    "failed to parse {shard_kind} shard {} line {}",
-                    path.as_str(),
-                    index + 1
-                )
-            })?);
-        }
-    }
-    Ok(records)
-}
-
-fn read_message_shards(layout: &ProvenanceLayout, scope: &ScopeId) -> anyhow::Result<Vec<Message>> {
-    let threads_dir = shards::threads_path(layout, scope)
-        .parent()
-        .expect("threads path must have a parent")
-        .to_path_buf();
-    if !threads_dir.exists() {
-        return Ok(Vec::new());
-    }
-
-    let mut shard_paths = Vec::new();
-    for entry in std::fs::read_dir(&threads_dir)? {
-        let entry = entry?;
-        if entry.file_type()?.is_file() {
-            let path = Utf8PathBuf::from_path_buf(entry.path()).map_err(|path| {
-                anyhow::anyhow!("non-UTF-8 message shard path: {}", path.display())
-            })?;
-            if is_message_month_shard(&path) {
-                shard_paths.push(path);
-            }
-        }
-    }
-    shard_paths.sort();
-    read_jsonl_shards(shard_paths, "message")
-}
-
-fn is_message_month_shard(path: &Utf8Path) -> bool {
-    let Some(file_name) = path.file_name() else {
-        return false;
-    };
-    let bytes = file_name.as_bytes();
-    bytes.len() == "2026-07.jsonl".len()
-        && bytes[0..4].iter().all(u8::is_ascii_digit)
-        && bytes[4] == b'-'
-        && bytes[5..7].iter().all(u8::is_ascii_digit)
-        && &bytes[7..] == b".jsonl"
-}
-
-fn read_edge_shards(
-    layout: &ProvenanceLayout,
-    closed_scope: Option<&ScopeId>,
-) -> anyhow::Result<Vec<Edge>> {
-    let edges_dir = layout.edges_dir();
-    if !edges_dir.exists() {
-        return Ok(Vec::new());
-    }
-
-    let mut shard_paths = Vec::new();
-    for entry in std::fs::read_dir(&edges_dir)? {
-        let entry = entry?;
-        if entry.file_type()?.is_file() {
-            let path = Utf8PathBuf::from_path_buf(entry.path())
-                .map_err(|path| anyhow::anyhow!("non-UTF-8 edge shard path: {}", path.display()))?;
-            if path.extension() == Some("jsonl") {
-                shard_paths.push(path);
-            }
-        }
-    }
-    shard_paths.sort();
-
-    if let Some(scope) = closed_scope {
-        let mut records = Vec::new();
-        for path in shard_paths {
-            let contents = std::fs::read_to_string(&path)
-                .with_context(|| format!("failed to read edge shard {}", path.as_str()))?;
-            for (index, line) in contents.lines().enumerate() {
-                let value: serde_json::Value = serde_json::from_str(line).with_context(|| {
-                    format!(
-                        "failed to parse edge shard {} line {}",
-                        path.as_str(),
-                        index + 1
-                    )
-                })?;
-                if value.get("scope_id").and_then(serde_json::Value::as_str) != Some(scope.as_str())
-                {
-                    continue;
-                }
-                records.push(deserialize_closed(line).with_context(|| {
-                    format!(
-                        "failed to parse edge shard {} line {}",
-                        path.as_str(),
-                        index + 1
-                    )
-                })?);
-            }
-        }
-        Ok(records)
-    } else {
-        read_jsonl_shards(shard_paths, "edge")
-    }
 }
 
 #[cfg(test)]

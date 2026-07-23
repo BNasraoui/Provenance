@@ -1,5 +1,6 @@
 use super::support::{create_source, init_repo, write_run_dir};
 use assert_cmd::Command;
+use predicates::prelude::PredicateBooleanExt;
 
 #[test]
 fn swarm_backtrace_land_writes_run_dir_outputs_end_to_end() {
@@ -43,11 +44,32 @@ fn swarm_backtrace_land_writes_run_dir_outputs_end_to_end() {
         .stdout(predicates::str::contains(
             "prop_req_publish_requires_worker",
         ))
+        .stdout(predicates::str::contains(
+            "assertion_req_publish_requires_worker",
+        ))
         .stdout(predicates::str::contains(r#""confidence": 0.91"#));
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "proposals",
+            "list",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains(
+            r#""promotion_state": "asserted""#,
+        ));
 }
 
 #[test]
-fn swarm_backtrace_land_can_replace_existing_run_outputs() {
+fn swarm_backtrace_land_cannot_replace_asserted_run_outputs() {
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path().join("repo").to_string_lossy().to_string();
     let run_dir = dir.path().join("run");
@@ -89,8 +111,8 @@ fn swarm_backtrace_land_can_replace_existing_run_outputs() {
             "json",
         ])
         .assert()
-        .success()
-        .stdout(predicates::str::contains(r#""replace": true"#));
+        .failure()
+        .stderr(predicates::str::contains("referenced by an assertion"));
 
     Command::cargo_bin("provenance")
         .unwrap()
@@ -99,6 +121,60 @@ fn swarm_backtrace_land_can_replace_existing_run_outputs() {
         ])
         .assert()
         .success()
-        .stdout(predicates::str::contains("Updated extracted finding."))
+        .stdout(predicates::str::contains("Original extracted finding."))
+        .stdout(predicates::str::contains("Updated extracted finding.").not())
         .stdout(predicates::str::contains(r#""contributions""#));
+}
+
+#[test]
+fn identical_proposal_and_assertion_relanding_without_replace_is_idempotent() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo").to_string_lossy().to_string();
+    let run_dir = dir.path().join("run");
+    init_repo(&repo);
+    create_source(&repo);
+    write_run_dir(&run_dir, "Original extracted finding.");
+    let run_dir_arg = run_dir.to_string_lossy().to_string();
+
+    let land = || {
+        Command::cargo_bin("provenance")
+            .unwrap()
+            .args([
+                "swarm-backtrace",
+                "land",
+                "--repo",
+                &repo,
+                "--scope",
+                "default",
+                "--run-dir",
+                &run_dir_arg,
+                "--format",
+                "json",
+            ])
+            .assert()
+    };
+    land().success();
+    std::fs::remove_dir_all(run_dir.join("extractors")).unwrap();
+    std::fs::remove_dir_all(run_dir.join("refuters")).unwrap();
+    let merge_path = run_dir.join("merge/merged.json");
+    let mut merge: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&merge_path).unwrap()).unwrap();
+    merge.as_object_mut().unwrap().remove("synthesis_packet");
+    std::fs::write(&merge_path, serde_json::to_vec(&merge).unwrap()).unwrap();
+
+    land()
+        .success()
+        .stdout(predicates::str::contains(r#""replace": false"#));
+
+    let output = Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "export", "--repo", &repo, "--scope", "default", "--format", "json",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let export: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(export["proposal_cards"].as_array().unwrap().len(), 1);
+    assert_eq!(export["assertion_records"].as_array().unwrap().len(), 1);
 }

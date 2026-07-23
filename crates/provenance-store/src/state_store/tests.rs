@@ -63,6 +63,7 @@ fn seeded_source_requirement_store() -> (tempfile::TempDir, StateStore, ScopeId)
 
 mod edges;
 mod ideation;
+mod legacy_coexistence;
 mod proposal_surfaces;
 mod proposals;
 mod shaping;

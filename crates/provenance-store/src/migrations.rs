@@ -11,6 +11,8 @@ pub const RESOLUTION_SOURCE_ENRICHMENT_MIGRATION_ID: &str = "008";
 pub const DOMAINS_SERVICES_MIGRATION_ID: &str = "009";
 pub const SHAPING_TURN_STATE_MIGRATION_ID: &str = "010";
 pub const COMMIT_PIN_CONFIDENCE_MIGRATION_ID: &str = "011";
+pub const PROPOSAL_LIFECYCLE_MIGRATION_ID: &str = "012";
+pub const DISPOSITION_TERMINOLOGY_MIGRATION_ID: &str = "013";
 const INITIAL_SQL: &str = include_str!("../migrations/001_initial_cache.sql");
 const SOURCE_REQUIREMENT_SQL: &str =
     include_str!("../migrations/002_sources_requirements_edges.sql");
@@ -24,6 +26,9 @@ const RESOLUTION_SOURCE_ENRICHMENT_SQL: &str =
 const DOMAINS_SERVICES_SQL: &str = include_str!("../migrations/009_domains_services.sql");
 const SHAPING_TURN_STATE_SQL: &str = include_str!("../migrations/010_shaping_turn_state.sql");
 const COMMIT_PIN_CONFIDENCE_SQL: &str = include_str!("../migrations/011_commit_pin_confidence.sql");
+const PROPOSAL_LIFECYCLE_SQL: &str = include_str!("../migrations/012_proposal_lifecycle.sql");
+const DISPOSITION_TERMINOLOGY_SQL: &str =
+    include_str!("../migrations/013_disposition_terminology.sql");
 
 pub async fn run_migrations(pool: &SqlitePool) -> anyhow::Result<Vec<String>> {
     pool.execute("CREATE TABLE IF NOT EXISTS _schema_migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").await?;
@@ -46,6 +51,11 @@ pub async fn run_migrations(pool: &SqlitePool) -> anyhow::Result<Vec<String>> {
         (
             COMMIT_PIN_CONFIDENCE_MIGRATION_ID,
             COMMIT_PIN_CONFIDENCE_SQL,
+        ),
+        (PROPOSAL_LIFECYCLE_MIGRATION_ID, PROPOSAL_LIFECYCLE_SQL),
+        (
+            DISPOSITION_TERMINOLOGY_MIGRATION_ID,
+            DISPOSITION_TERMINOLOGY_SQL,
         ),
     ] {
         let already_applied: Option<String> =
@@ -84,12 +94,38 @@ mod tests {
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         assert_eq!(
             run_migrations(&pool).await.unwrap(),
-            vec!["001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011"]
+            vec![
+                "001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012",
+                "013"
+            ]
         );
         assert!(run_migrations(&pool).await.unwrap().is_empty());
         assert_eq!(
             applied_migrations(&pool).await.unwrap(),
-            vec!["001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011"]
+            vec![
+                "001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012",
+                "013"
+            ]
         );
+    }
+
+    #[tokio::test]
+    async fn lifecycle_migration_creates_assertion_cache() {
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+        run_migrations(&pool).await.unwrap();
+        let table: Option<String> = sqlx::query_scalar(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'assertion_records'",
+        )
+        .fetch_optional(&pool)
+        .await
+        .unwrap();
+        assert_eq!(table.as_deref(), Some("assertion_records"));
+        let dispositions: Option<String> = sqlx::query_scalar(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'dispositions'",
+        )
+        .fetch_optional(&pool)
+        .await
+        .unwrap();
+        assert_eq!(dispositions.as_deref(), Some("dispositions"));
     }
 }
