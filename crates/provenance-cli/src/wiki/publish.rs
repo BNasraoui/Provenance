@@ -87,12 +87,12 @@ fn publish_with(
     create_stage: impl FnOnce(&Utf8Path) -> std::io::Result<()>,
 ) -> Result<PublishReport, PublishError> {
     let paths = TransactionPaths::new(&output.path)?;
-    let output_existed = preflight(&output, &paths)?;
+    let output_state = preflight(&output, &paths)?;
     let lock = acquire_lock(&paths)?;
     let (stage_created, result) = match create_stage(&paths.stage) {
         Ok(()) => (
             true,
-            generate_and_replace(corpus, output, &paths, output_existed),
+            generate_and_replace(corpus, output, &paths, output_state),
         ),
         Err(error) => (
             false,

@@ -233,6 +233,38 @@ fn stage_creation_race_preserves_the_foreign_tree() {
 }
 
 #[test]
+fn output_replacement_race_preserves_the_intervening_tree() {
+    let temp = tempfile::tempdir().unwrap();
+    let output = utf8(temp.path().join("wiki"));
+    let original = utf8(temp.path().join("original-wiki"));
+    publish(&empty_corpus(), PublicationOutput::custom(output.clone())).unwrap();
+
+    let error = publish_with(
+        &empty_corpus(),
+        PublicationOutput::custom(output.clone()),
+        |stage| {
+            std::fs::rename(&output, &original)?;
+            std::fs::create_dir(&output)?;
+            std::fs::copy(
+                original.join(OWNERSHIP_MANIFEST),
+                output.join(OWNERSHIP_MANIFEST),
+            )?;
+            std::fs::write(output.join("caller.txt"), "keep me")?;
+            std::fs::create_dir(stage)
+        },
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, PublishError::OutputChanged { .. }));
+    assert_eq!(
+        std::fs::read_to_string(output.join("caller.txt")).unwrap(),
+        "keep me"
+    );
+    assert!(original.join("index.html").is_file());
+    assert_no_transaction_artifacts(&output);
+}
+
+#[test]
 fn does_not_infer_ownership_from_a_parseable_journal_or_nonce_names() {
     let temp = tempfile::tempdir().unwrap();
     let output = utf8(temp.path().join("wiki"));

@@ -1322,6 +1322,8 @@ dependencies = [
  "provenance-scanner",
  "provenance-store",
  "pulldown-cmark",
+ "rustix",
+ "same-file",
  "serde",
  "serde_json",
  "tempfile",

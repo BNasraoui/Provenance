@@ -1,5 +1,5 @@
 use super::manifest::OwnershipManifest;
-use super::transaction::{replace_output, TransactionPaths};
+use super::transaction::{replace_output, OutputState, TransactionPaths};
 use super::{
     PublicationOutput, PublishError, PublishReport, PublishedPage, GENERATOR, MANIFEST_VERSION,
     OWNERSHIP_MANIFEST,
@@ -12,7 +12,7 @@ pub(super) fn generate_and_replace(
     corpus: &WikiCorpus,
     output: PublicationOutput,
     paths: &TransactionPaths,
-    output_existed: bool,
+    output_state: OutputState,
 ) -> Result<PublishReport, PublishError> {
     let pages = render::render_corpus(corpus);
     for page in &pages {
@@ -39,13 +39,7 @@ pub(super) fn generate_and_replace(
     std::fs::write(&manifest_path, manifest)
         .map_err(|error| PublishError::io("write ownership marker", &manifest_path, error))?;
     super::manifest::validate_output(&output.path, output.policy)?;
-    if output.path.symlink_metadata().is_ok() != output_existed {
-        return Err(PublishError::OutputChanged {
-            path: output.path,
-            detail: "existence no longer matches the validated output".to_string(),
-        });
-    }
-    let cleanup_warnings = replace_output(&output.path, output.policy, paths)?;
+    let cleanup_warnings = replace_output(&output.path, output.policy, paths, output_state)?;
 
     Ok(PublishReport {
         status: "ok",

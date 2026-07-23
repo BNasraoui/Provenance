@@ -3,6 +3,13 @@ use camino::{Utf8Path, Utf8PathBuf};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 
+pub(super) enum OutputState {
+    Absent,
+    Existing(OutputIdentity),
+}
+
+pub(super) struct OutputIdentity(same_file::Handle);
+
 pub(super) struct TransactionPaths {
     pub lock: Utf8PathBuf,
     pub stage: Utf8PathBuf,
@@ -59,7 +66,7 @@ pub(super) fn acquire_lock(paths: &TransactionPaths) -> Result<File, PublishErro
 pub(super) fn preflight(
     output: &PublicationOutput,
     paths: &TransactionPaths,
-) -> Result<bool, PublishError> {
+) -> Result<OutputState, PublishError> {
     let parent = output
         .path
         .parent()
@@ -67,6 +74,7 @@ pub(super) fn preflight(
         .unwrap_or_else(|| Utf8Path::new("."));
     ensure_real_directory(parent, &output.path)?;
 
+    let output_state = output_identity(&output.path)?;
     manifest::validate_output(&output.path, output.policy)?;
 
     if let Ok(metadata) = paths.lock.symlink_metadata() {
@@ -87,7 +95,26 @@ pub(super) fn preflight(
     if !ambiguous.is_empty() {
         return Err(PublishError::AmbiguousArtifacts { paths: ambiguous });
     }
-    Ok(output.path.symlink_metadata().is_ok())
+    Ok(output_state)
+}
+
+fn output_identity(output: &Utf8Path) -> Result<OutputState, PublishError> {
+    match output.symlink_metadata() {
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(OutputState::Absent)
+        }
+        Err(error) => {
+            return Err(PublishError::io(
+                "inspect wiki output identity",
+                output,
+                error,
+            ))
+        }
+    }
+    let identity = same_file::Handle::from_path(output.as_std_path())
+        .map_err(|error| PublishError::io("open wiki output identity", output, error))?;
+    Ok(OutputState::Existing(OutputIdentity(identity)))
 }
 
 fn ensure_real_directory(parent: &Utf8Path, output: &Utf8Path) -> Result<(), PublishError> {
@@ -134,10 +161,12 @@ pub(super) fn replace_output(
     output: &Utf8Path,
     policy: super::OutputPolicy,
     paths: &TransactionPaths,
+    output_state: OutputState,
 ) -> Result<Vec<CleanupWarning>, PublishError> {
     replace_output_with_validation(
         output,
         paths,
+        output_state,
         |from, to| std::fs::rename(from, to),
         |path| std::fs::remove_dir_all(path),
         |backup| manifest::validate_output(backup, policy),
@@ -151,20 +180,35 @@ pub(super) fn replace_output_with(
     rename: impl FnMut(&Utf8Path, &Utf8Path) -> std::io::Result<()>,
     remove_tree: impl FnMut(&Utf8Path) -> std::io::Result<()>,
 ) -> Result<Vec<CleanupWarning>, PublishError> {
-    replace_output_with_validation(output, paths, rename, remove_tree, |_| Ok(()))
+    let output_state = output_identity(output)?;
+    replace_output_with_validation(output, paths, output_state, rename, remove_tree, |_| Ok(()))
 }
 
 fn replace_output_with_validation(
     output: &Utf8Path,
     paths: &TransactionPaths,
+    output_state: OutputState,
     mut rename: impl FnMut(&Utf8Path, &Utf8Path) -> std::io::Result<()>,
     mut remove_tree: impl FnMut(&Utf8Path) -> std::io::Result<()>,
     validate_backup: impl FnOnce(&Utf8Path) -> Result<(), PublishError>,
 ) -> Result<Vec<CleanupWarning>, PublishError> {
-    if output.exists() {
+    if let OutputState::Existing(expected_identity) = output_state {
         rename(output, &paths.backup)
             .map_err(|error| PublishError::io("move previous output to backup", output, error))?;
-        if let Err(validation) = validate_backup(&paths.backup) {
+        let validation =
+            validate_backup(&paths.backup).and_then(|()| match output_identity(&paths.backup)? {
+                OutputState::Existing(actual_identity)
+                    if actual_identity.0 == expected_identity.0 =>
+                {
+                    Ok(())
+                }
+                _ => Err(PublishError::OutputChanged {
+                    path: output.to_path_buf(),
+                    detail: "filesystem identity no longer matches the preflight output"
+                        .to_string(),
+                }),
+            });
+        if let Err(validation) = validation {
             return match rename(&paths.backup, output) {
                 Ok(()) => Err(PublishError::OutputChanged {
                     path: output.to_path_buf(),
@@ -200,10 +244,38 @@ fn replace_output_with_validation(
             }]);
         }
     } else {
-        rename(&paths.stage, output)
-            .map_err(|error| PublishError::io("install completed wiki", output, error))?;
+        install_output_no_replace(&paths.stage, output).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                PublishError::OutputChanged {
+                    path: output.to_path_buf(),
+                    detail: "output appeared after preflight".to_string(),
+                }
+            } else {
+                PublishError::io("install completed wiki", output, error)
+            }
+        })?;
     }
     Ok(Vec::new())
+}
+
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+fn install_output_no_replace(stage: &Utf8Path, output: &Utf8Path) -> std::io::Result<()> {
+    rustix::fs::renameat_with(
+        rustix::fs::CWD,
+        stage.as_std_path(),
+        rustix::fs::CWD,
+        output.as_std_path(),
+        rustix::fs::RenameFlags::NOREPLACE,
+    )
+    .map_err(std::io::Error::from)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "freebsd")))]
+fn install_output_no_replace(stage: &Utf8Path, output: &Utf8Path) -> std::io::Result<()> {
+    if output.symlink_metadata().is_ok() {
+        return Err(std::io::Error::from(std::io::ErrorKind::AlreadyExists));
+    }
+    std::fs::rename(stage, output)
 }
 
 #[cfg(test)]
@@ -244,6 +316,29 @@ mod tests {
         );
         assert_eq!(
             std::fs::read_to_string(paths.stage.join("generation")).unwrap(),
+            "new"
+        );
+    }
+
+    #[test]
+    fn no_replace_install_preserves_an_output_that_appeared() {
+        let temp = tempfile::tempdir().unwrap();
+        let output = Utf8PathBuf::from_path_buf(temp.path().join("wiki")).unwrap();
+        let stage = Utf8PathBuf::from_path_buf(temp.path().join("stage")).unwrap();
+        std::fs::create_dir(&output).unwrap();
+        std::fs::write(output.join("caller"), "keep me").unwrap();
+        std::fs::create_dir(&stage).unwrap();
+        std::fs::write(stage.join("generated"), "new").unwrap();
+
+        let error = install_output_no_replace(&stage, &output).unwrap_err();
+
+        assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+        assert_eq!(
+            std::fs::read_to_string(output.join("caller")).unwrap(),
+            "keep me"
+        );
+        assert_eq!(
+            std::fs::read_to_string(stage.join("generated")).unwrap(),
             "new"
         );
     }
