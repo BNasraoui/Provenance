@@ -50,6 +50,7 @@ pub(super) struct TransactionDirectory {
     lock_leaf: String,
     lock_cleanup_leaf: String,
     stage_leaf: String,
+    stage_cleanup_leaf: String,
     backup_leaf: String,
 }
 
@@ -72,6 +73,7 @@ impl TransactionDirectory {
             lock_leaf: leaf("lock"),
             lock_cleanup_leaf: leaf("lock.cleanup"),
             stage_leaf: leaf("stage"),
+            stage_cleanup_leaf: leaf("stage.cleanup"),
             backup_leaf: leaf("backup"),
             output_leaf,
         })
@@ -131,8 +133,26 @@ impl TransactionDirectory {
         fs_at::OpenOptions::default().unlink_at(&self.parent, leaf)
     }
 
-    pub(super) fn remove_stage(&self) -> std::io::Result<()> {
-        fs_at::OpenOptions::default().rmdir_at(&self.parent, &self.stage_leaf)
+    pub(super) fn remove_stage(&self, expected: &StageIdentity) -> std::io::Result<()> {
+        self.rename(&self.stage_leaf, &self.stage_cleanup_leaf)?;
+        if self.child_identity(&self.stage_cleanup_leaf)? != expected.0 {
+            let mismatch = std::io::Error::other("staging directory path changed before cleanup");
+            return match self.rename(&self.stage_cleanup_leaf, &self.stage_leaf) {
+                Ok(()) => Err(mismatch),
+                Err(restore) => Err(std::io::Error::other(format!(
+                    "{mismatch}; restoring the replacement staging directory also failed: {restore}"
+                ))),
+            };
+        }
+        match fs_at::OpenOptions::default().rmdir_at(&self.parent, &self.stage_cleanup_leaf) {
+            Ok(()) => Ok(()),
+            Err(cleanup) => match self.rename(&self.stage_cleanup_leaf, &self.stage_leaf) {
+                Ok(()) => Err(cleanup),
+                Err(restore) => Err(std::io::Error::other(format!(
+                    "{cleanup}; restoring the staging directory after cleanup failed: {restore}"
+                ))),
+            },
+        }
     }
 }
 
@@ -219,6 +239,7 @@ pub(super) struct TransactionPaths {
     pub lock: Utf8PathBuf,
     pub lock_cleanup: Utf8PathBuf,
     pub stage: Utf8PathBuf,
+    pub stage_cleanup: Utf8PathBuf,
     pub backup: Utf8PathBuf,
 }
 
@@ -238,6 +259,7 @@ impl TransactionPaths {
             lock: parent.join(format!(".{leaf}.provenance-wiki.lock")),
             lock_cleanup: parent.join(format!(".{leaf}.provenance-wiki.lock.cleanup")),
             stage: parent.join(format!(".{leaf}.provenance-wiki.stage")),
+            stage_cleanup: parent.join(format!(".{leaf}.provenance-wiki.stage.cleanup")),
             backup: parent.join(format!(".{leaf}.provenance-wiki.backup")),
         })
     }
@@ -321,6 +343,7 @@ pub(super) fn preflight(
     for (leaf, path) in [
         (&transaction.lock_cleanup_leaf, &paths.lock_cleanup),
         (&transaction.stage_leaf, &paths.stage),
+        (&transaction.stage_cleanup_leaf, &paths.stage_cleanup),
         (&transaction.backup_leaf, &paths.backup),
     ] {
         if transaction.child_exists(leaf).unwrap_or(true) {

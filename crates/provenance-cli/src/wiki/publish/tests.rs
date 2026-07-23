@@ -402,6 +402,30 @@ fn replaced_stage_is_not_installed() {
 }
 
 #[test]
+fn empty_replacement_stage_is_preserved() {
+    let temp = tempfile::tempdir().unwrap();
+    let output = utf8(temp.path().join("wiki"));
+    let displaced = utf8(temp.path().join("displaced-stage"));
+    let stage = artifact(&output, "stage");
+
+    let error = publish_with(
+        &empty_corpus(),
+        PublicationOutput::custom(output.clone()),
+        |stage| {
+            std::fs::rename(stage, &displaced)?;
+            std::fs::create_dir(stage)
+        },
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, PublishError::CleanupFailed { .. }));
+    assert!(stage.is_dir());
+    assert!(std::fs::read_dir(stage).unwrap().next().is_none());
+    assert!(displaced.join("index.html").is_file());
+    assert!(!output.exists());
+}
+
+#[test]
 fn stage_replaced_after_identity_check_is_not_installed() {
     let temp = tempfile::tempdir().unwrap();
     let output = utf8(temp.path().join("wiki"));
@@ -760,7 +784,7 @@ fn empty_corpus() -> WikiCorpus {
 }
 
 fn assert_no_transaction_artifacts(output: &camino::Utf8Path) {
-    for role in ["lock", "lock.cleanup", "stage", "backup"] {
+    for role in ["lock", "lock.cleanup", "stage", "stage.cleanup", "backup"] {
         assert!(!artifact(output, role).exists());
     }
 }

@@ -92,32 +92,35 @@ fn publish_with(
     let output_state = preflight(&output, &transaction)?;
     let lock = acquire_lock(&transaction)?;
     let paths = &transaction.paths;
-    let (stage_created, result) = match transaction.create_stage() {
-        Ok(stage_root) => {
-            let result = StageDirectory::from_file(stage_root, &paths.stage).and_then(|stage| {
-                after_stage_opened(&paths.stage).map_err(|error| {
-                    PublishError::io("prepare staging directory", &paths.stage, error)
-                })?;
-                generate_and_replace(corpus, output, &transaction, output_state, &stage)
-            });
-            (true, result)
-        }
-        Err(error) => (
-            false,
-            Err(PublishError::io(
-                "create staging directory",
-                &paths.stage,
-                error,
-            )),
-        ),
+    let mut stage = None;
+    let result = match transaction.create_stage() {
+        Ok(stage_root) => match StageDirectory::from_file(stage_root, &paths.stage) {
+            Ok(created_stage) => {
+                stage = Some(created_stage);
+                let stage = stage.as_ref().expect("staging directory was just stored");
+                after_stage_opened(&paths.stage)
+                    .map_err(|error| {
+                        PublishError::io("prepare staging directory", &paths.stage, error)
+                    })
+                    .and_then(|()| {
+                        generate_and_replace(corpus, output, &transaction, output_state, stage)
+                    })
+            }
+            Err(error) => Err(error),
+        },
+        Err(error) => Err(PublishError::io(
+            "create staging directory",
+            &paths.stage,
+            error,
+        )),
     };
     match result {
         Err(error @ PublishError::RollbackFailed { .. }) => Err(error),
         Err(error) => {
-            if stage_created {
+            if let Some(stage) = stage {
                 // Never recursively remove through a mutable artifact pathname: a
                 // replacement tree may have been installed there after staging.
-                if let Err(cleanup) = transaction.remove_stage() {
+                if let Err(cleanup) = transaction.remove_stage(stage.identity()) {
                     let error = PublishError::CleanupFailed {
                         primary: Box::new(error),
                         path: paths.stage.clone(),

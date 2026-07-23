@@ -22,6 +22,10 @@ impl StageDirectory {
         Ok(Self { root, identity })
     }
 
+    pub(super) const fn identity(&self) -> &StageIdentity {
+        &self.identity
+    }
+
     fn write_file(
         &self,
         relative: &[&str],
