@@ -436,6 +436,7 @@ impl StateStore {
         Ok(records)
     }
     pub fn list_proposal_cards(&self, scope: &ScopeId) -> anyhow::Result<Vec<ProposalCard>> {
+        self.validate_ideation_scope(scope)?;
         let assertions = self.list_assertion_records(scope)?;
         let dispositions = self.list_dispositions(scope)?;
         Ok(self

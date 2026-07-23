@@ -201,6 +201,41 @@ fn repository_actor_allowlist_rejects_unlisted_disposition_actor() {
 }
 
 #[test]
+fn proposal_projection_rejects_unlisted_disposition_actor() {
+    let (_dir, store, scope) = initialized_store();
+    store
+        .create_proposal_card(proposal_input(
+            &scope,
+            "proposal_overtime",
+            "Overtime",
+            PromotionState::Proposed,
+        ))
+        .unwrap();
+    crate::jsonl::write_jsonl_atomic(
+        &crate::shards::dispositions_path(&store.layout, &scope),
+        &[provenance_core::DispositionRecord {
+            schema_version: provenance_core::SchemaVersion(1),
+            scope_id: scope.clone(),
+            id: StableId::new("disposition_overtime").unwrap(),
+            proposal_id: StableId::new("proposal_overtime").unwrap(),
+            decision: DispositionDecision::Accepted,
+            rationale: "Forged review".into(),
+            actor: DispositionActor {
+                identity_type: IdentityType::Human,
+                id: "forged-reviewer".into(),
+                name: None,
+            },
+            canonical_artifact: None,
+        }],
+    )
+    .unwrap();
+
+    let error = store.list_proposal_cards(&scope).unwrap_err().to_string();
+
+    assert!(error.contains("repository allowlist"), "{error}");
+}
+
+#[test]
 fn modern_proposal_is_immutable_even_when_upsert_is_requested() {
     let (_dir, store, scope) = initialized_store();
     store

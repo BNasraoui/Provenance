@@ -89,16 +89,43 @@ fn changed_paths_surface_only_undisposed_proposals_with_matching_evidence_sites(
 #[test]
 fn asserted_proposal_still_surfaces_only_on_exact_demand_path() {
     let (_dir, store, scope) = initialized_store();
-    store
-        .create_proposal_card(proposal_input(
-            &scope,
-            "proposal_asserted",
-            IdeationTargetType::Requirement,
-            "req_overtime",
-            Some("src/payroll.rs"),
-            PromotionState::Proposed,
-        ))
-        .unwrap();
+    let contribution: provenance_core::Contribution = serde_json::from_value(serde_json::json!({
+        "schema_version": 1, "scope_id": "default", "id": "contribution_a",
+        "target": {"artifact_type": "requirement", "artifact_id": "req_overtime"},
+        "participant_slot": "reviewer", "stance": "support", "strongest_finding": "Observed",
+        "evidence_references": [{"reference_id": "evidence_a", "evidence_type": "source", "summary": "Pinned"}],
+        "material_claims": [{"claim_id": "claim_a", "statement": "Observed", "evidence_type": "source", "evidence_reference_ids": ["evidence_a"]}],
+        "risks": [], "objections": [], "challenges": [], "suggested_artifact_changes": [],
+        "unsupported_recommendations": [], "uncertainty": {"level": "low", "rationale": "Direct"}, "open_questions": []
+    })).unwrap();
+    let synthesis: provenance_core::SynthesisPacket = serde_json::from_value(serde_json::json!({
+        "schema_version": 1, "scope_id": "default", "id": "synthesis_a",
+        "target": {"artifact_type": "requirement", "artifact_id": "req_overtime"}, "summary": "Adjudicated",
+        "consensus": [], "contested_claims": [], "minority_objections": [], "evidence_gaps": [],
+        "unsupported_speculation": [], "open_questions": [],
+        "suggested_artifacts": [{"proposal_id": "proposal_asserted", "proposal_key": "proposal_asserted", "proposal_type": "requirement_candidate", "summary": "Candidate", "origin_participant_slots": ["reviewer"]}],
+        "required_human_decisions": []
+    })).unwrap();
+    crate::jsonl::write_jsonl_atomic(
+        &crate::shards::contributions_path(&store.layout, &scope),
+        &[contribution],
+    )
+    .unwrap();
+    crate::jsonl::write_jsonl_atomic(
+        &crate::shards::synthesis_packets_path(&store.layout, &scope),
+        &[synthesis],
+    )
+    .unwrap();
+    let mut proposal = proposal_input(
+        &scope,
+        "proposal_asserted",
+        IdeationTargetType::Requirement,
+        "req_overtime",
+        Some("src/payroll.rs"),
+        PromotionState::Proposed,
+    );
+    proposal.traceability.supporting_claim_ids = vec![StableId::new("claim_a").unwrap()];
+    store.create_proposal_card(proposal).unwrap();
     crate::jsonl::write_jsonl_atomic(
         &crate::shards::assertion_records_path(&store.layout, &scope),
         &[provenance_core::AssertionRecord {
@@ -107,7 +134,7 @@ fn asserted_proposal_still_surfaces_only_on_exact_demand_path() {
             id: provenance_core::AssertionId::new("assertion_a").unwrap(),
             proposal_id: StableId::new("proposal_asserted").unwrap(),
             synthesis_packet_id: StableId::new("synthesis_a").unwrap(),
-            supporting_claim_ids: Vec::new(),
+            supporting_claim_ids: vec![StableId::new("claim_a").unwrap()],
         }],
     )
     .unwrap();
