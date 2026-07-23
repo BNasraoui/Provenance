@@ -418,22 +418,34 @@ impl StateStore {
         read_message_shards(&self.layout, scope)
     }
     pub fn list_contributions(&self, scope: &ScopeId) -> anyhow::Result<Vec<Contribution>> {
-        let mut records = read_jsonl(&shards::contributions_path(&self.layout, scope))?;
-        for batch in self.list_ideation_landings(scope)? {
-            overlay_records(&mut records, batch.contributions, |record| {
-                record.id.as_str()
-            });
-        }
-        Ok(records)
+        self.list_contributions_after_direct_read(scope, || Ok(()))
+    }
+    fn list_contributions_after_direct_read(
+        &self,
+        scope: &ScopeId,
+        after_direct_read: impl FnOnce() -> anyhow::Result<()>,
+    ) -> anyhow::Result<Vec<Contribution>> {
+        self.with_repository_publication(|| {
+            let mut records = read_jsonl(&shards::contributions_path(&self.layout, scope))?;
+            after_direct_read()?;
+            for batch in self.list_ideation_landings(scope)? {
+                overlay_records(&mut records, batch.contributions, |record| {
+                    record.id.as_str()
+                });
+            }
+            Ok(records)
+        })
     }
     pub fn list_synthesis_packets(&self, scope: &ScopeId) -> anyhow::Result<Vec<SynthesisPacket>> {
-        let mut records = read_jsonl(&shards::synthesis_packets_path(&self.layout, scope))?;
-        for batch in self.list_ideation_landings(scope)? {
-            overlay_records(&mut records, batch.synthesis_packets, |record| {
-                record.id.as_str()
-            });
-        }
-        Ok(records)
+        self.with_repository_publication(|| {
+            let mut records = read_jsonl(&shards::synthesis_packets_path(&self.layout, scope))?;
+            for batch in self.list_ideation_landings(scope)? {
+                overlay_records(&mut records, batch.synthesis_packets, |record| {
+                    record.id.as_str()
+                });
+            }
+            Ok(records)
+        })
     }
     pub fn list_proposal_cards(&self, scope: &ScopeId) -> anyhow::Result<Vec<ProposalCard>> {
         self.project_proposal_cards(scope, || Ok(()))
@@ -463,30 +475,36 @@ impl StateStore {
         })
     }
     pub fn list_proposal_definitions(&self, scope: &ScopeId) -> anyhow::Result<Vec<ProposalCard>> {
-        let mut records = read_jsonl(&shards::proposal_cards_path(&self.layout, scope))?;
-        for batch in self.list_ideation_landings(scope)? {
-            overlay_records(&mut records, batch.proposals, |record| record.id.as_str());
-        }
-        Ok(records)
+        self.with_repository_publication(|| {
+            let mut records = read_jsonl(&shards::proposal_cards_path(&self.layout, scope))?;
+            for batch in self.list_ideation_landings(scope)? {
+                overlay_records(&mut records, batch.proposals, |record| record.id.as_str());
+            }
+            Ok(records)
+        })
     }
     pub fn list_dispositions(&self, scope: &ScopeId) -> anyhow::Result<Vec<DispositionRecord>> {
-        let mut records = read_jsonl(&shards::dispositions_path(&self.layout, scope))?;
-        records.extend(read_legacy_dispositions(
-            &shards::legacy_promotion_decisions_path(&self.layout, scope),
-        )?);
-        for batch in self.list_ideation_landings(scope)? {
-            overlay_records(&mut records, batch.dispositions, |record| {
-                record.id.as_str()
-            });
-        }
-        Ok(records)
+        self.with_repository_publication(|| {
+            let mut records = read_jsonl(&shards::dispositions_path(&self.layout, scope))?;
+            records.extend(read_legacy_dispositions(
+                &shards::legacy_promotion_decisions_path(&self.layout, scope),
+            )?);
+            for batch in self.list_ideation_landings(scope)? {
+                overlay_records(&mut records, batch.dispositions, |record| {
+                    record.id.as_str()
+                });
+            }
+            Ok(records)
+        })
     }
     pub fn list_assertion_records(&self, scope: &ScopeId) -> anyhow::Result<Vec<AssertionRecord>> {
-        let mut records = read_jsonl(&shards::assertion_records_path(&self.layout, scope))?;
-        for batch in self.list_ideation_landings(scope)? {
-            overlay_records(&mut records, batch.assertions, |record| record.id.as_str());
-        }
-        Ok(records)
+        self.with_repository_publication(|| {
+            let mut records = read_jsonl(&shards::assertion_records_path(&self.layout, scope))?;
+            for batch in self.list_ideation_landings(scope)? {
+                overlay_records(&mut records, batch.assertions, |record| record.id.as_str());
+            }
+            Ok(records)
+        })
     }
 }
 

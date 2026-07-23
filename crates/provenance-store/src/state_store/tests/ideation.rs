@@ -160,6 +160,71 @@ fn direct_synthesis_create_and_replace_respect_landed_records() {
 }
 
 #[test]
+fn composite_ideation_list_holds_publication_lock_between_reads() {
+    let (_dir, store, scope) = initialized_store();
+    crate::jsonl::write_jsonl_atomic(
+        &crate::shards::contributions_path(&store.layout, &scope),
+        &[contribution(&scope, "direct")],
+    )
+    .unwrap();
+    let (direct_read_tx, direct_read_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let reader = {
+        let store = store.clone();
+        let scope = scope.clone();
+        std::thread::spawn(move || {
+            store.list_contributions_after_direct_read(&scope, || {
+                direct_read_tx.send(()).unwrap();
+                release_rx.recv().unwrap();
+                Ok(())
+            })
+        })
+    };
+    direct_read_rx.recv().unwrap();
+
+    let (published_tx, published_rx) = std::sync::mpsc::channel();
+    let publisher = {
+        let store = store.clone();
+        let scope = scope.clone();
+        std::thread::spawn(move || {
+            store
+                .with_repository_publication(|| {
+                    crate::jsonl::write_jsonl_atomic::<Contribution>(
+                        &crate::shards::contributions_path(&store.layout, &scope),
+                        &[],
+                    )?;
+                    crate::jsonl::write_jsonl_atomic(
+                        &crate::shards::ideation_landings_path(&store.layout, &scope),
+                        &[IdeationLandingBatch {
+                            contributions: vec![contribution(&scope, "landed")],
+                            synthesis_packets: Vec::new(),
+                            proposals: Vec::new(),
+                            assertions: Vec::new(),
+                            dispositions: Vec::new(),
+                        }],
+                    )
+                })
+                .unwrap();
+            published_tx.send(()).unwrap();
+        })
+    };
+
+    assert!(published_rx
+        .recv_timeout(std::time::Duration::from_millis(100))
+        .is_err());
+    release_tx.send(()).unwrap();
+    let records = reader.join().unwrap().unwrap();
+    publisher.join().unwrap();
+
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].strongest_finding, "direct");
+    assert_eq!(
+        store.list_contributions(&scope).unwrap()[0].strongest_finding,
+        "landed"
+    );
+}
+
+#[test]
 fn direct_replacement_cannot_retarget_asserted_evidence() {
     let (_dir, store, scope) = initialized_store();
     let batch: IdeationLandingBatch = serde_json::from_value(serde_json::json!({
