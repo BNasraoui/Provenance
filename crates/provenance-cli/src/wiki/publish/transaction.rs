@@ -167,7 +167,7 @@ pub(super) fn replace_output(
         output,
         paths,
         output_state,
-        |from, to| std::fs::rename(from, to),
+        |_, _| Ok(()),
         |path| std::fs::remove_dir_all(path),
         |backup| manifest::validate_output(backup, policy),
     )
@@ -177,21 +177,32 @@ pub(super) fn replace_output(
 pub(super) fn replace_output_with(
     output: &Utf8Path,
     paths: &TransactionPaths,
-    rename: impl FnMut(&Utf8Path, &Utf8Path) -> std::io::Result<()>,
+    before_rename: impl FnMut(&Utf8Path, &Utf8Path) -> std::io::Result<()>,
     remove_tree: impl FnMut(&Utf8Path) -> std::io::Result<()>,
 ) -> Result<Vec<CleanupWarning>, PublishError> {
     let output_state = output_identity(output)?;
-    replace_output_with_validation(output, paths, output_state, rename, remove_tree, |_| Ok(()))
+    replace_output_with_validation(
+        output,
+        paths,
+        output_state,
+        before_rename,
+        remove_tree,
+        |_| Ok(()),
+    )
 }
 
 fn replace_output_with_validation(
     output: &Utf8Path,
     paths: &TransactionPaths,
     output_state: OutputState,
-    mut rename: impl FnMut(&Utf8Path, &Utf8Path) -> std::io::Result<()>,
+    mut before_rename: impl FnMut(&Utf8Path, &Utf8Path) -> std::io::Result<()>,
     mut remove_tree: impl FnMut(&Utf8Path) -> std::io::Result<()>,
     validate_backup: impl FnOnce(&Utf8Path) -> Result<(), PublishError>,
 ) -> Result<Vec<CleanupWarning>, PublishError> {
+    let mut rename = |from: &Utf8Path, to: &Utf8Path| {
+        before_rename(from, to)?;
+        rename_no_replace(from, to)
+    };
     if let OutputState::Existing(expected_identity) = output_state {
         rename(output, &paths.backup)
             .map_err(|error| PublishError::io("move previous output to backup", output, error))?;
@@ -244,7 +255,7 @@ fn replace_output_with_validation(
             }]);
         }
     } else {
-        install_output_no_replace(&paths.stage, output).map_err(|error| {
+        rename(&paths.stage, output).map_err(|error| {
             if error.kind() == std::io::ErrorKind::AlreadyExists {
                 PublishError::OutputChanged {
                     path: output.to_path_buf(),
@@ -259,23 +270,89 @@ fn replace_output_with_validation(
 }
 
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
-fn install_output_no_replace(stage: &Utf8Path, output: &Utf8Path) -> std::io::Result<()> {
+fn rename_no_replace(from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
     rustix::fs::renameat_with(
         rustix::fs::CWD,
-        stage.as_std_path(),
+        from.as_std_path(),
         rustix::fs::CWD,
-        output.as_std_path(),
+        to.as_std_path(),
         rustix::fs::RenameFlags::NOREPLACE,
     )
     .map_err(std::io::Error::from)
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "android", target_os = "freebsd")))]
-fn install_output_no_replace(stage: &Utf8Path, output: &Utf8Path) -> std::io::Result<()> {
-    if output.symlink_metadata().is_ok() {
-        return Err(std::io::Error::from(std::io::ErrorKind::AlreadyExists));
+#[cfg(target_os = "macos")]
+fn rename_no_replace(from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+    use std::ffi::CString;
+    use std::os::raw::{c_char, c_int, c_uint};
+    use std::os::unix::ffi::OsStrExt;
+
+    extern "C" {
+        fn renameatx_np(
+            from_dir: c_int,
+            from: *const c_char,
+            to_dir: c_int,
+            to: *const c_char,
+            flags: c_uint,
+        ) -> c_int;
     }
-    std::fs::rename(stage, output)
+
+    let from = CString::new(from.as_std_path().as_os_str().as_bytes())
+        .map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
+    let to = CString::new(to.as_std_path().as_os_str().as_bytes())
+        .map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput))?;
+    // Darwin's renameatx_np with RENAME_EXCL atomically refuses an existing destination.
+    let result = unsafe { renameatx_np(-2, from.as_ptr(), -2, to.as_ptr(), 0x0000_0004) };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+#[cfg(windows)]
+fn rename_no_replace(from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+    use std::os::raw::c_int;
+    use std::os::windows::ffi::OsStrExt;
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn MoveFileExW(from: *const u16, to: *const u16, flags: u32) -> c_int;
+    }
+
+    let from: Vec<_> = from
+        .as_std_path()
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let to: Vec<_> = to
+        .as_std_path()
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    // Omitting MOVEFILE_REPLACE_EXISTING atomically refuses an existing destination.
+    let result = unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), 0) };
+    if result != 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "freebsd",
+    target_os = "macos",
+    windows
+)))]
+fn rename_no_replace(_from: &Utf8Path, _to: &Utf8Path) -> std::io::Result<()> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "atomic no-replace rename is unavailable on this platform",
+    ))
 }
 
 #[cfg(test)]
@@ -296,12 +373,12 @@ mod tests {
         let error = replace_output_with(
             &output,
             &paths,
-            |from, to| {
+            |_, _| {
                 rename_count += 1;
                 if rename_count > 1 {
                     Err(std::io::Error::other("injected rename failure"))
                 } else {
-                    std::fs::rename(from, to)
+                    Ok(())
                 }
             },
             |path| std::fs::remove_dir_all(path),
@@ -321,7 +398,7 @@ mod tests {
     }
 
     #[test]
-    fn no_replace_install_preserves_an_output_that_appeared() {
+    fn no_replace_rename_preserves_an_output_that_appeared() {
         let temp = tempfile::tempdir().unwrap();
         let output = Utf8PathBuf::from_path_buf(temp.path().join("wiki")).unwrap();
         let stage = Utf8PathBuf::from_path_buf(temp.path().join("stage")).unwrap();
@@ -330,7 +407,7 @@ mod tests {
         std::fs::create_dir(&stage).unwrap();
         std::fs::write(stage.join("generated"), "new").unwrap();
 
-        let error = install_output_no_replace(&stage, &output).unwrap_err();
+        let error = rename_no_replace(&stage, &output).unwrap_err();
 
         assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
         assert_eq!(

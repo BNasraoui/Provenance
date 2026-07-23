@@ -324,12 +324,12 @@ fn a_returned_install_failure_restores_the_previous_output() {
     let error = replace_output_with(
         &output,
         &paths,
-        |from, to| {
+        |_, _| {
             rename_count += 1;
             if rename_count == 2 {
                 Err(std::io::Error::other("injected second rename failure"))
             } else {
-                std::fs::rename(from, to)
+                Ok(())
             }
         },
         |path| std::fs::remove_dir_all(path),
@@ -349,6 +349,43 @@ fn a_returned_install_failure_restores_the_previous_output() {
 }
 
 #[test]
+fn output_appearance_between_renames_preserves_every_tree() {
+    let temp = tempfile::tempdir().unwrap();
+    let output = utf8(temp.path().join("wiki"));
+    let paths = TransactionPaths::new(&output).unwrap();
+    std::fs::create_dir(&output).unwrap();
+    std::fs::write(output.join("generation"), "old").unwrap();
+    std::fs::create_dir(&paths.stage).unwrap();
+    std::fs::write(paths.stage.join("generation"), "new").unwrap();
+    let mut rename_count = 0;
+
+    let error = replace_output_with(
+        &output,
+        &paths,
+        |_, _| {
+            rename_count += 1;
+            if rename_count == 2 {
+                std::fs::create_dir(&output)?;
+            }
+            Ok(())
+        },
+        |path| std::fs::remove_dir_all(path),
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, PublishError::RollbackFailed { .. }));
+    assert!(output.is_dir());
+    assert_eq!(
+        std::fs::read_to_string(paths.backup.join("generation")).unwrap(),
+        "old"
+    );
+    assert_eq!(
+        std::fs::read_to_string(paths.stage.join("generation")).unwrap(),
+        "new"
+    );
+}
+
+#[test]
 fn committed_cleanup_failure_is_a_warning_not_a_returned_failure() {
     let temp = tempfile::tempdir().unwrap();
     let output = utf8(temp.path().join("wiki"));
@@ -361,7 +398,7 @@ fn committed_cleanup_failure_is_a_warning_not_a_returned_failure() {
     let warnings = replace_output_with(
         &output,
         &paths,
-        |from, to| std::fs::rename(from, to),
+        |_, _| Ok(()),
         |_path| Err(std::io::Error::other("injected cleanup failure")),
     )
     .unwrap();
