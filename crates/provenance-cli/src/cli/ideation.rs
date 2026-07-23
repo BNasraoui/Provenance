@@ -184,6 +184,12 @@ pub enum ProposalsCommand {
         evidence_json: String,
         #[arg(long)]
         supporting_claim_id: Vec<String>,
+        /// Create the proposal and its assertion atomically.
+        #[arg(long, requires = "synthesis_packet_id")]
+        assertion_id: Option<String>,
+        /// Synthesis packet used by the atomic assertion.
+        #[arg(long, requires = "assertion_id")]
+        synthesis_packet_id: Option<String>,
         /// Immutable assertion ID this proposal builds on. Repeatable.
         #[arg(long)]
         builds_on: Vec<String>,

@@ -10,6 +10,45 @@ use provenance_core::{
 };
 
 impl StateStore {
+    pub fn create_asserted_proposal(
+        &self,
+        proposal: CreateProposalCardInput,
+        assertion: CreateAssertionInput,
+    ) -> anyhow::Result<ProposalCard> {
+        anyhow::ensure!(
+            proposal.scope_id == assertion.scope_id,
+            "proposal and assertion scope_id must match"
+        );
+        anyhow::ensure!(
+            proposal.id == assertion.proposal_id,
+            "assertion proposal_id must match proposal id"
+        );
+        let scope = proposal.scope_id.clone();
+        self.with_lifecycle_lock(&scope, || {
+            let proposal = proposal_from_input(proposal)?;
+            let assertion = AssertionRecord {
+                schema_version: SchemaVersion(1),
+                scope_id: assertion.scope_id,
+                id: assertion.id,
+                proposal_id: assertion.proposal_id,
+                synthesis_packet_id: assertion.synthesis_packet_id,
+                supporting_claim_ids: assertion.supporting_claim_ids,
+            };
+            self.write_ideation_batch(
+                &scope,
+                super::IdeationLandingBatch {
+                    contributions: Vec::new(),
+                    synthesis_packets: Vec::new(),
+                    proposals: vec![proposal.clone()],
+                    assertions: vec![assertion],
+                    dispositions: Vec::new(),
+                },
+                false,
+            )?;
+            Ok(proposal)
+        })
+    }
+
     pub fn assert_proposal(&self, input: CreateAssertionInput) -> anyhow::Result<AssertionRecord> {
         let scope = input.scope_id.clone();
         self.with_lifecycle_lock(&scope, || self.write_assertion(input))
@@ -306,93 +345,29 @@ impl StateStore {
         input: CreateProposalCardInput,
         _replace: bool,
     ) -> anyhow::Result<ProposalCard> {
-        let CreateProposalCardInput {
-            scope_id,
-            id,
-            proposal_key,
-            proposal_type,
-            title,
-            summary,
-            confidence,
-            traceability,
-            builds_on,
-            promotion_state,
-            duplicate_of,
-            superseded_by,
-        } = input;
-        match promotion_state {
-            PromotionState::Duplicate => {
-                anyhow::ensure!(
-                    duplicate_of.is_some(),
-                    "duplicate proposals must set duplicate_of"
-                );
-            }
-            PromotionState::Superseded => {
-                anyhow::ensure!(
-                    superseded_by.is_some(),
-                    "superseded proposals must set superseded_by"
-                );
-            }
-            PromotionState::Proposed
-            | PromotionState::Asserted
-            | PromotionState::Accepted
-            | PromotionState::Rejected
-            | PromotionState::Deferred => {}
-        }
-        let confidence = validate_optional_confidence_score(confidence)?;
-        let candidate = ProposalCard {
-            schema_version: SchemaVersion(1),
-            scope_id: scope_id.clone(),
-            id: id.clone(),
-            proposal_key: proposal_key.clone(),
-            proposal_type,
-            title: title.clone(),
-            summary: summary.clone(),
-            confidence,
-            traceability: traceability.clone(),
-            promotion_state,
-            builds_on: builds_on.clone(),
-            duplicate_of: duplicate_of.clone(),
-            superseded_by: superseded_by.clone(),
-        };
-        provenance_core::validate_proposal_intrinsic(&candidate)?;
-        let mut proposals = self.list_proposal_definitions(&scope_id)?;
-        proposals.push(candidate);
+        let candidate = proposal_from_input(input)?;
+        let mut proposals = self.list_proposal_definitions(&candidate.scope_id)?;
+        proposals.push(candidate.clone());
         provenance_core::validate_ideation_aggregate(provenance_core::IdeationAggregate {
             legacy_policy: provenance_core::LegacyProposalPolicy::ShippedV1,
             disposition_actor_ids: &self.manifest()?.disposition_actor_ids,
-            contributions: &self.list_contributions(&scope_id)?,
-            synthesis_packets: &self.list_synthesis_packets(&scope_id)?,
+            contributions: &self.list_contributions(&candidate.scope_id)?,
+            synthesis_packets: &self.list_synthesis_packets(&candidate.scope_id)?,
             proposals: &proposals,
-            assertions: &self.list_assertion_records(&scope_id)?,
-            dispositions: &self.list_dispositions(&scope_id)?,
+            assertions: &self.list_assertion_records(&candidate.scope_id)?,
+            dispositions: &self.list_dispositions(&candidate.scope_id)?,
         })?;
-        let path = shards::proposal_cards_path(&self.layout, &scope_id);
+        let path = shards::proposal_cards_path(&self.layout, &candidate.scope_id);
         self.mutate_jsonl_records(&path, |records: &mut Vec<ProposalCard>| {
-            let proposal = ProposalCard {
-                schema_version: SchemaVersion(1),
-                scope_id: scope_id.clone(),
-                id,
-                proposal_key,
-                proposal_type,
-                title,
-                summary,
-                confidence,
-                traceability,
-                promotion_state,
-                builds_on,
-                duplicate_of,
-                superseded_by,
-            };
-            if let Some(index) = records.iter().position(|record| record.id == proposal.id) {
+            if let Some(index) = records.iter().position(|record| record.id == candidate.id) {
                 anyhow::bail!(
                     "proposal {} already exists and is immutable",
                     records[index].id.as_str()
                 );
             }
-            records.push(proposal.clone());
+            records.push(candidate.clone());
             records.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-            Ok(proposal)
+            Ok(candidate)
         })
     }
 
@@ -521,4 +496,43 @@ impl StateStore {
             existing.id.as_str()
         );
     }
+}
+
+fn proposal_from_input(input: CreateProposalCardInput) -> anyhow::Result<ProposalCard> {
+    match input.promotion_state {
+        PromotionState::Duplicate => {
+            anyhow::ensure!(
+                input.duplicate_of.is_some(),
+                "duplicate proposals must set duplicate_of"
+            );
+        }
+        PromotionState::Superseded => {
+            anyhow::ensure!(
+                input.superseded_by.is_some(),
+                "superseded proposals must set superseded_by"
+            );
+        }
+        PromotionState::Proposed
+        | PromotionState::Asserted
+        | PromotionState::Accepted
+        | PromotionState::Rejected
+        | PromotionState::Deferred => {}
+    }
+    let proposal = ProposalCard {
+        schema_version: SchemaVersion(1),
+        scope_id: input.scope_id,
+        id: input.id,
+        proposal_key: input.proposal_key,
+        proposal_type: input.proposal_type,
+        title: input.title,
+        summary: input.summary,
+        confidence: validate_optional_confidence_score(input.confidence)?,
+        traceability: input.traceability,
+        promotion_state: input.promotion_state,
+        builds_on: input.builds_on,
+        duplicate_of: input.duplicate_of,
+        superseded_by: input.superseded_by,
+    };
+    provenance_core::validate_proposal_intrinsic(&proposal)?;
+    Ok(proposal)
 }

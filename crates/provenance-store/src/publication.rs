@@ -150,20 +150,17 @@ fn validate_missing_transaction_dir(
 }
 
 fn canonical_transactions_dir(layout: &ProvenanceLayout) -> anyhow::Result<Utf8PathBuf> {
-    let repository = layout
-        .provenance_dir()
-        .parent()
-        .expect("provenance directory has a repository parent")
-        .to_path_buf();
-    let canonical_repository = Utf8PathBuf::from_path_buf(std::fs::canonicalize(repository)?)
-        .map_err(|path| anyhow::anyhow!("repository path is not UTF-8: {}", path.display()))?;
+    let canonical_cache = Utf8PathBuf::from_path_buf(std::fs::canonicalize(layout.cache_dir())?)
+        .map_err(|path| {
+            anyhow::anyhow!("repository cache path is not UTF-8: {}", path.display())
+        })?;
     let canonical_transactions =
         Utf8PathBuf::from_path_buf(std::fs::canonicalize(layout.import_transactions_dir())?)
             .map_err(|path| {
                 anyhow::anyhow!("import transaction path is not UTF-8: {}", path.display())
             })?;
     anyhow::ensure!(
-        canonical_transactions.starts_with(&canonical_repository),
+        canonical_transactions == canonical_cache.join("import-transactions"),
         "publication marker transaction is outside the repository cache"
     );
     Ok(canonical_transactions)
@@ -325,6 +322,38 @@ mod tests {
 
         assert!(error.contains("outside the repository cache"), "{error}");
         assert!(outside.join("Documents/sentinel").is_file());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn recovery_rejects_symlinked_import_transactions_inside_repository() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(directory.path().join("repo")).unwrap();
+        let layout = ProvenanceLayout::new(root.clone());
+        let tracked = root.join("tracked");
+        std::fs::create_dir_all(layout.state_dir()).unwrap();
+        std::fs::create_dir_all(layout.cache_dir()).unwrap();
+        std::fs::create_dir_all(tracked.join("transaction")).unwrap();
+        std::fs::write(tracked.join("transaction/sentinel"), "keep").unwrap();
+        std::os::unix::fs::symlink(&tracked, layout.import_transactions_dir()).unwrap();
+        let transaction = layout.import_transactions_dir().join("transaction");
+        std::fs::write(
+            layout.publication_marker_path(),
+            serde_json::to_vec(&serde_json::json!({
+                "schema_version": 1,
+                "transaction_dir": transaction,
+                "phase": "published"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let error = recover_pending_publication(&layout)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("outside the repository cache"), "{error}");
+        assert!(tracked.join("transaction/sentinel").is_file());
     }
 
     #[test]
