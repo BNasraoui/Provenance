@@ -109,7 +109,9 @@ fn publish_with(
         Err(error @ PublishError::RollbackFailed { .. }) => Err(error),
         Err(error) => {
             if stage_created && paths.stage.exists() {
-                if let Err(cleanup) = std::fs::remove_dir_all(&paths.stage) {
+                // Never recursively remove through a mutable artifact pathname: a
+                // replacement tree may have been installed there after staging.
+                if let Err(cleanup) = std::fs::remove_dir(&paths.stage) {
                     return Err(PublishError::CleanupFailed {
                         primary: Box::new(error),
                         path: paths.stage,

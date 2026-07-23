@@ -168,7 +168,7 @@ pub(super) fn replace_output(
         paths,
         output_state,
         |_, _| Ok(()),
-        |path| std::fs::remove_dir_all(path),
+        |_| Ok(()),
         |backup| manifest::validate_output(backup, policy),
     )
 }
@@ -178,7 +178,7 @@ pub(super) fn replace_output_with(
     output: &Utf8Path,
     paths: &TransactionPaths,
     before_rename: impl FnMut(&Utf8Path, &Utf8Path) -> std::io::Result<()>,
-    remove_tree: impl FnMut(&Utf8Path) -> std::io::Result<()>,
+    before_cleanup: impl FnMut(&Utf8Path) -> std::io::Result<()>,
 ) -> Result<Vec<CleanupWarning>, PublishError> {
     let output_state = output_identity(output)?;
     replace_output_with_validation(
@@ -186,7 +186,7 @@ pub(super) fn replace_output_with(
         paths,
         output_state,
         before_rename,
-        remove_tree,
+        before_cleanup,
         |_| Ok(()),
     )
 }
@@ -196,7 +196,7 @@ fn replace_output_with_validation(
     paths: &TransactionPaths,
     output_state: OutputState,
     mut before_rename: impl FnMut(&Utf8Path, &Utf8Path) -> std::io::Result<()>,
-    mut remove_tree: impl FnMut(&Utf8Path) -> std::io::Result<()>,
+    mut before_cleanup: impl FnMut(&Utf8Path) -> std::io::Result<()>,
     validate_backup: impl FnOnce(&Utf8Path) -> Result<(), PublishError>,
 ) -> Result<Vec<CleanupWarning>, PublishError> {
     let mut rename = |from: &Utf8Path, to: &Utf8Path| {
@@ -247,7 +247,11 @@ fn replace_output_with_validation(
                 }),
             };
         }
-        if let Err(error) = remove_tree(&paths.backup) {
+        // Recursive path-based removal can be redirected to a replacement tree.
+        // Retain nonempty backups for explicit operator cleanup instead.
+        let cleanup =
+            before_cleanup(&paths.backup).and_then(|()| std::fs::remove_dir(&paths.backup));
+        if let Err(error) = cleanup {
             return Ok(vec![CleanupWarning {
                 path: paths.backup.clone(),
                 action: "remove previous output backup",
@@ -381,7 +385,7 @@ mod tests {
                     Ok(())
                 }
             },
-            |path| std::fs::remove_dir_all(path),
+            |_| Ok(()),
         )
         .unwrap_err();
 

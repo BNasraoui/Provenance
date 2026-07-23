@@ -255,13 +255,17 @@ fn output_replacement_race_preserves_the_intervening_tree() {
     )
     .unwrap_err();
 
-    assert!(matches!(error, PublishError::OutputChanged { .. }));
+    assert!(matches!(
+        error,
+        PublishError::CleanupFailed { primary, .. }
+            if matches!(*primary, PublishError::OutputChanged { .. })
+    ));
     assert_eq!(
         std::fs::read_to_string(output.join("caller.txt")).unwrap(),
         "keep me"
     );
     assert!(original.join("index.html").is_file());
-    assert_no_transaction_artifacts(&output);
+    assert!(artifact(&output, "stage").is_dir());
 }
 
 #[test]
@@ -332,7 +336,7 @@ fn a_returned_install_failure_restores_the_previous_output() {
                 Ok(())
             }
         },
-        |path| std::fs::remove_dir_all(path),
+        |_| Ok(()),
     )
     .unwrap_err();
 
@@ -369,7 +373,7 @@ fn output_appearance_between_renames_preserves_every_tree() {
             }
             Ok(())
         },
-        |path| std::fs::remove_dir_all(path),
+        |_| Ok(()),
     )
     .unwrap_err();
 
@@ -415,6 +419,40 @@ fn committed_cleanup_failure_is_a_warning_not_a_returned_failure() {
 }
 
 #[test]
+fn backup_cleanup_race_preserves_the_replacement_tree() {
+    let temp = tempfile::tempdir().unwrap();
+    let output = utf8(temp.path().join("wiki"));
+    let paths = TransactionPaths::new(&output).unwrap();
+    let displaced_backup = utf8(temp.path().join("displaced-backup"));
+    std::fs::create_dir(&output).unwrap();
+    std::fs::write(output.join("generation"), "old").unwrap();
+    std::fs::create_dir(&paths.stage).unwrap();
+    std::fs::write(paths.stage.join("generation"), "new").unwrap();
+
+    let warnings = replace_output_with(
+        &output,
+        &paths,
+        |_, _| Ok(()),
+        |path| {
+            std::fs::rename(path, &displaced_backup)?;
+            std::fs::create_dir(path)?;
+            std::fs::write(path.join("caller"), "keep me")
+        },
+    )
+    .unwrap();
+
+    assert_eq!(warnings.len(), 1);
+    assert_eq!(
+        std::fs::read_to_string(paths.backup.join("caller")).unwrap(),
+        "keep me"
+    );
+    assert_eq!(
+        std::fs::read_to_string(displaced_backup.join("generation")).unwrap(),
+        "old"
+    );
+}
+
+#[test]
 fn rejects_a_route_that_would_escape_the_stage() {
     let temp = tempfile::tempdir().unwrap();
     let stage = utf8(temp.path().join("stage"));
@@ -454,12 +492,16 @@ fn staging_failure_preserves_the_previous_complete_output() {
 
     let error = publish(&invalid, PublicationOutput::custom(output.clone())).unwrap_err();
 
-    assert!(matches!(error, PublishError::InvalidRoute { .. }));
+    assert!(matches!(
+        error,
+        PublishError::CleanupFailed { primary, .. }
+            if matches!(*primary, PublishError::InvalidRoute { .. })
+    ));
     assert_eq!(
         std::fs::read(output.join("index.html")).unwrap(),
         previous_index
     );
-    assert_no_transaction_artifacts(&output);
+    assert!(artifact(&output, "stage").is_dir());
     assert!(!utf8(temp.path().join("escape")).exists());
 }
 
