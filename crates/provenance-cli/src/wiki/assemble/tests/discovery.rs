@@ -70,6 +70,53 @@ fn domains_group_rules_through_canonical_requirement_relationships() {
 }
 
 #[test]
+fn domains_group_children_and_rules_by_their_root_requirement_domain() {
+    let mut state = empty_state();
+    state.domains = vec![domain("domain_default", "Invoicing")];
+    let root = requirement(
+        "req_root",
+        "Invoices shall identify the participant",
+        RequirementStatus::Active,
+        vec![],
+    );
+    let mut child = requirement(
+        "req_child",
+        "Invoice lines shall identify the participant",
+        RequirementStatus::Active,
+        vec![],
+    );
+    child.domain_id = None;
+    state.requirements = vec![root, child];
+    state.rules = vec![rule("rule_invoice", "INV-1", Some("Group invoices"))];
+    state.edges = vec![
+        edge(
+            EdgeType::RefinesInto,
+            (NodeType::Requirement, "req_root"),
+            (NodeType::Requirement, "req_child"),
+        ),
+        edge(
+            EdgeType::Produces,
+            (NodeType::Requirement, "req_child"),
+            (NodeType::Rule, "rule_invoice"),
+        ),
+    ];
+
+    let corpus = build_corpus(&state, &LinkResolver::new(None));
+    let group = &corpus.domains.groups[0];
+
+    assert_eq!(corpus.domains.groups.len(), 1);
+    assert_eq!(
+        group
+            .requirements
+            .iter()
+            .map(|link| link.target.record_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["req_root", "req_child"]
+    );
+    assert_eq!(group.rules[0].target.record_id, "rule_invoice");
+}
+
+#[test]
 fn domains_surface_defined_missing_and_unassigned_without_dropping_rules() {
     let mut state = empty_state();
     state.domains = vec![domain("domain_default", "Invoicing")];

@@ -3,6 +3,7 @@ use crate::wiki::model::{
     DomainGroup, DomainIndexPage, DomainState, PageId, PageLink, RequirementPage, RulePage,
     SearchEntry, SearchIndexPage,
 };
+use provenance_core::{EdgeType, NodeType};
 use std::collections::{BTreeMap, BTreeSet};
 
 struct RequirementRecord<'a> {
@@ -94,11 +95,12 @@ fn domain_index(
         });
     }
 
-    let missing_ids = requirements
-        .iter()
-        .filter_map(|requirement| requirement.domain_id)
+    let requirement_domains = effective_requirement_domains(state, requirements);
+    let missing_ids = requirement_domains
+        .values()
+        .flatten()
         .filter(|id| !positions.contains_key(*id))
-        .map(str::to_string)
+        .cloned()
         .collect::<BTreeSet<_>>();
     for id in missing_ids {
         positions.insert(id.clone(), groups.len());
@@ -109,19 +111,13 @@ fn domain_index(
         });
     }
 
-    let requirement_domains = requirements
-        .iter()
-        .map(|requirement| (requirement.id, requirement.domain_id))
-        .collect::<BTreeMap<_, _>>();
-    let needs_unassigned = requirements
-        .iter()
-        .any(|requirement| requirement.domain_id.is_none())
+    let needs_unassigned = requirement_domains.values().any(BTreeSet::is_empty)
         || rules.iter().any(|rule| {
             rule.requirement_ids.is_empty()
                 || rule
                     .requirement_ids
                     .iter()
-                    .any(|id| !matches!(requirement_domains.get(id), Some(Some(_))))
+                    .any(|id| requirement_domains.get(*id).is_none_or(BTreeSet::is_empty))
         });
     let unassigned_position = needs_unassigned.then(|| {
         let position = groups.len();
@@ -134,24 +130,33 @@ fn domain_index(
     });
 
     for requirement in requirements {
-        let position = requirement
-            .domain_id
-            .and_then(|id| positions.get(id).copied())
-            .or_else(|| unassigned_position.filter(|_| requirement.domain_id.is_none()));
-        if let Some(position) = position {
-            groups[position].requirements.push(requirement.link.clone());
+        if let Some(domain_ids) = requirement_domains.get(requirement.id) {
+            for domain_id in domain_ids {
+                if let Some(position) = positions.get(domain_id) {
+                    groups[*position]
+                        .requirements
+                        .push(requirement.link.clone());
+                }
+            }
+            if domain_ids.is_empty() {
+                if let Some(position) = unassigned_position {
+                    groups[position].requirements.push(requirement.link.clone());
+                }
+            }
         }
     }
     for rule in rules {
         let mut group_positions = BTreeSet::new();
         for requirement_id in &rule.requirement_ids {
-            match requirement_domains.get(requirement_id) {
-                Some(Some(domain_id)) => {
-                    if let Some(position) = positions.get(*domain_id) {
-                        group_positions.insert(*position);
+            match requirement_domains.get(*requirement_id) {
+                Some(domain_ids) if !domain_ids.is_empty() => {
+                    for domain_id in domain_ids {
+                        if let Some(position) = positions.get(domain_id) {
+                            group_positions.insert(*position);
+                        }
                     }
                 }
-                Some(None) | None => {
+                Some(_) | None => {
                     if let Some(position) = unassigned_position {
                         group_positions.insert(position);
                     }
@@ -173,6 +178,51 @@ fn domain_index(
         title: "Requirements and rules by domain".to_string(),
         groups,
     }
+}
+
+fn effective_requirement_domains(
+    state: &ScopeExport,
+    requirements: &[RequirementRecord<'_>],
+) -> BTreeMap<String, BTreeSet<String>> {
+    let records = requirements
+        .iter()
+        .map(|requirement| (requirement.id, requirement))
+        .collect::<BTreeMap<_, _>>();
+    let mut parents = BTreeMap::<&str, Vec<&str>>::new();
+    for edge in &state.edges {
+        if edge.edge_type == EdgeType::RefinesInto
+            && edge.from_type == NodeType::Requirement
+            && edge.to_type == NodeType::Requirement
+        {
+            parents
+                .entry(edge.to_id.as_str())
+                .or_default()
+                .push(edge.from_id.as_str());
+        }
+    }
+
+    requirements
+        .iter()
+        .map(|requirement| {
+            let mut domains = BTreeSet::new();
+            let mut visited = BTreeSet::new();
+            let mut pending = vec![requirement.id];
+            while let Some(id) = pending.pop() {
+                if !visited.insert(id) {
+                    continue;
+                }
+                if let Some(record) = records.get(id) {
+                    if let Some(domain_id) = record.domain_id {
+                        domains.insert(domain_id.to_string());
+                    }
+                }
+                if let Some(parent_ids) = parents.get(id) {
+                    pending.extend(parent_ids.iter().copied());
+                }
+            }
+            (requirement.id.to_string(), domains)
+        })
+        .collect()
 }
 
 fn page_link(id: &PageId, title: &str) -> PageLink {
