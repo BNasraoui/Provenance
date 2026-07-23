@@ -8,5 +8,6 @@ pub mod assemble;
 pub mod links;
 pub mod model;
 pub mod render;
+pub mod routes;
 pub mod site;
 pub mod theme;

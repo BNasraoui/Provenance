@@ -204,6 +204,31 @@ fn theme_script_persists_the_choice_to_local_storage() {
 }
 
 #[test]
+fn search_script_filters_rendered_nodes_without_html_injection_or_fetching() {
+    assert!(SEARCH_SCRIPT.contains("data-search-title"));
+    assert!(SEARCH_SCRIPT.contains("data-search-statement"));
+    assert!(SEARCH_SCRIPT.contains("terms.every"));
+    assert!(SEARCH_SCRIPT.contains("textContent"));
+    assert!(!SEARCH_SCRIPT.contains("innerHTML"));
+    assert!(!SEARCH_SCRIPT.contains("fetch("));
+}
+
+#[test]
+fn css_styles_domain_navigation_and_search_responsively() {
+    for selector in [
+        ".global-nav",
+        ".domain-group",
+        ".domain-records",
+        ".search-box",
+        ".search-results",
+        ".data-note",
+    ] {
+        assert!(WIKI_CSS.contains(selector), "missing selector: {selector}");
+    }
+    assert!(WIKI_CSS.contains("@media (max-width: 760px)"));
+}
+
+#[test]
 fn icon_defs_cover_the_symbols_the_renderer_uses() {
     for symbol in [
         "i-git-branch",

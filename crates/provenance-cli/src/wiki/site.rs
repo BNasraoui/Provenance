@@ -9,7 +9,8 @@
 use crate::gitignore;
 use crate::output::{self, OutputFormat};
 use crate::wiki::assemble;
-use crate::wiki::render::{self, RenderedPage, WIKI_CSS_ROUTE};
+use crate::wiki::render::{self, RenderedPage};
+use crate::wiki::routes::{normalize_request_path, static_page_path, WikiRoute, WIKI_CSS_ROUTE};
 use crate::wiki::theme;
 use anyhow::Context;
 use axum::{
@@ -199,13 +200,13 @@ impl WikiSite {
     }
 
     fn page_for_request_path(&self, path: &str) -> Option<&RenderedPage> {
-        self.page_by_route.get(&normalize_request_route(path))
+        self.page_by_route.get(&normalize_request_path(path))
     }
 }
 
 fn router(site: WikiSite) -> Router {
     Router::new()
-        .route(WIKI_CSS_ROUTE, get(stylesheet))
+        .route(&WikiRoute::Stylesheet.path(), get(stylesheet))
         .fallback(get(render_wiki_page))
         .with_state(Arc::new(site))
 }
@@ -229,63 +230,4 @@ async fn render_wiki_page(State(site): State<Arc<WikiSite>>, uri: Uri) -> impl I
         },
         |page| Html(page.html.clone()).into_response(),
     )
-}
-
-/// Maps a wiki route to its file in the static output tree: `/` becomes
-/// `<out>/index.html`, `/requirements/<id>/` becomes
-/// `<out>/requirements/<id>/index.html`.
-fn static_page_path(out: &Utf8PathBuf, route: &str) -> Utf8PathBuf {
-    let mut path = out.clone();
-    for segment in route.split('/').filter(|segment| !segment.is_empty()) {
-        path.push(segment);
-    }
-    path.push("index.html");
-    path
-}
-
-fn normalize_request_route(path: &str) -> String {
-    let mut route = String::from("/");
-    route.push_str(path.trim_matches('/'));
-    if !route.ends_with('/') {
-        route.push('/');
-    }
-    route
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{normalize_request_route, static_page_path};
-    use camino::Utf8PathBuf;
-
-    #[test]
-    fn static_page_path_maps_index_route_to_root_index_html() {
-        let out = Utf8PathBuf::from("site");
-        assert_eq!(
-            static_page_path(&out, "/"),
-            Utf8PathBuf::from("site/index.html")
-        );
-    }
-
-    #[test]
-    fn static_page_path_maps_nested_routes_to_directory_index_html() {
-        let out = Utf8PathBuf::from("site");
-        assert_eq!(
-            static_page_path(&out, "/requirements/req_sah/"),
-            Utf8PathBuf::from("site/requirements/req_sah/index.html")
-        );
-    }
-
-    #[test]
-    fn normalize_request_route_adds_missing_slashes() {
-        assert_eq!(
-            normalize_request_route("/requirements/req_sah"),
-            "/requirements/req_sah/"
-        );
-        assert_eq!(
-            normalize_request_route("requirements/req_sah/"),
-            "/requirements/req_sah/"
-        );
-        assert_eq!(normalize_request_route("/"), "/");
-        assert_eq!(normalize_request_route(""), "/");
-    }
 }

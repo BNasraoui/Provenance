@@ -1,3 +1,4 @@
+mod discovery;
 mod fixtures;
 mod index;
 mod load;

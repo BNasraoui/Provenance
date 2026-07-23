@@ -3,6 +3,8 @@ use crate::wiki::model::{PageId, PageLink};
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
+use crate::wiki::routes::WikiRoute;
+
 use super::labels::kind_label;
 
 pub(in crate::wiki::render) fn escape_html(text: &str) -> String {
@@ -18,7 +20,7 @@ pub(in crate::wiki::render) fn escape_attr(text: &str) -> String {
 pub(in crate::wiki::render) fn link_html(link: &PageLink) -> String {
     format!(
         "<a href=\"{}\">{}</a>",
-        escape_attr(&link.target.route()),
+        escape_attr(&WikiRoute::Record(&link.target).path()),
         escape_html(&link.title)
     )
 }
@@ -46,7 +48,7 @@ impl PageLinksRenderer {
         });
         format!(
             "<a{class} href=\"{}\">{}{}</a>",
-            escape_attr(&link.target.route()),
+            escape_attr(&WikiRoute::Record(&link.target).path()),
             escape_html(&link.title),
             self.collision_chip(link)
         )
@@ -67,7 +69,7 @@ impl PageLinksRenderer {
                 html,
                 " <span class=\"id-chip\">{}{}{}{}</span>",
                 if kind {
-                    kind_label(link.target.kind)
+                    kind_label(link.target.kind.into())
                 } else {
                     ""
                 },

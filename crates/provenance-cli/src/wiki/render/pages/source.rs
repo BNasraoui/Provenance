@@ -1,4 +1,5 @@
 use crate::wiki::model::{PageKind, SourcePage};
+use crate::wiki::routes::WikiRoute;
 use std::fmt::Write as _;
 
 use super::super::chrome::{container_html, index_breadcrumb, page_shell, title_row};
@@ -14,33 +15,7 @@ use super::super::labels::{format_date_ms, source_type_label, status_badge};
 /// Renders a source detail page.
 pub fn render_source(scope: &str, page: &SourcePage) -> String {
     let mut main = String::new();
-    push_section_open(&mut main, "sh-source", Some("i-book-open"), "Reference");
-    main.push_str("<ul class=\"link-list\">\n");
-    if let Some(url) = &page.url {
-        writeln!(
-            main,
-            "<li><a href=\"{}\">{}</a></li>",
-            escape_attr(url),
-            escape_html(url)
-        )
-        .expect("writing to a String should not fail");
-    }
-    if let Some(reference) = &page.reference {
-        writeln!(main, "<li>{}</li>", evidence_html(reference))
-            .expect("writing to a String should not fail");
-    }
-    if let Some(commit_pin) = &page.commit_pin {
-        writeln!(
-            main,
-            "<li>pinned to <code>{}</code></li>",
-            escape_html(commit_pin)
-        )
-        .expect("writing to a String should not fail");
-    }
-    if page.url.is_none() && page.reference.is_none() && page.commit_pin.is_none() {
-        main.push_str("<li>No reference recorded.</li>\n");
-    }
-    main.push_str("</ul>\n</section>\n");
+    push_reference(&mut main, page);
     if !page.referenced_requirements.is_empty() {
         push_section_open(
             &mut main,
@@ -96,7 +71,10 @@ pub fn render_source(scope: &str, page: &SourcePage) -> String {
         .as_ref()
         .map(|_| status_badge("superseded"));
     let container = container_html(
-        Some((PageKind::Source, ("/".to_string(), scope.to_string()))),
+        Some((
+            PageKind::Source,
+            (WikiRoute::Index.path(), scope.to_string()),
+        )),
         &title_row(
             PageKind::Source,
             &page.title,
@@ -115,4 +93,34 @@ pub fn render_source(scope: &str, page: &SourcePage) -> String {
         &container,
         &field_notes(&page.threads, &page.id),
     )
+}
+
+fn push_reference(main: &mut String, page: &SourcePage) {
+    push_section_open(main, "sh-source", Some("i-book-open"), "Reference");
+    main.push_str("<ul class=\"link-list\">\n");
+    if let Some(url) = &page.url {
+        writeln!(
+            main,
+            "<li><a href=\"{}\">{}</a></li>",
+            escape_attr(url),
+            escape_html(url)
+        )
+        .expect("writing to a String should not fail");
+    }
+    if let Some(reference) = &page.reference {
+        writeln!(main, "<li>{}</li>", evidence_html(reference))
+            .expect("writing to a String should not fail");
+    }
+    if let Some(commit_pin) = &page.commit_pin {
+        writeln!(
+            main,
+            "<li>pinned to <code>{}</code></li>",
+            escape_html(commit_pin)
+        )
+        .expect("writing to a String should not fail");
+    }
+    if page.url.is_none() && page.reference.is_none() && page.commit_pin.is_none() {
+        main.push_str("<li>No reference recorded.</li>\n");
+    }
+    main.push_str("</ul>\n</section>\n");
 }
