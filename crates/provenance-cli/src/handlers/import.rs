@@ -78,6 +78,7 @@ pub(super) fn import_scope(
             &exported.dispositions,
             |record| record.id.as_str(),
         )?;
+        ensure_asserted_evidence_preserved(&store, &scope_id, &exported)?;
         apply_import(&live_layout, &scope_id, &exported, dry_run)
     })?;
     Ok(ImportReport {
@@ -109,6 +110,52 @@ fn ensure_immutable_records_preserved<T: Serialize>(
     Ok(())
 }
 
+fn ensure_asserted_evidence_preserved(
+    store: &StateStore,
+    scope_id: &ScopeId,
+    incoming: &ScopeExport,
+) -> anyhow::Result<()> {
+    let assertions = store.list_assertion_records(scope_id)?;
+    for existing in store.list_contributions(scope_id)? {
+        let Some(replacement) = incoming
+            .contributions
+            .iter()
+            .find(|record| record.id == existing.id)
+        else {
+            continue;
+        };
+        if serde_json::to_value(&existing)? != serde_json::to_value(replacement)? {
+            anyhow::ensure!(
+                !assertions.iter().any(|assertion| existing
+                    .material_claims
+                    .iter()
+                    .any(|claim| assertion.supporting_claim_ids.contains(&claim.claim_id))),
+                "contribution {} is referenced by an assertion and cannot be replaced",
+                existing.id.as_str()
+            );
+        }
+    }
+    for existing in store.list_synthesis_packets(scope_id)? {
+        let Some(replacement) = incoming
+            .synthesis_packets
+            .iter()
+            .find(|record| record.id == existing.id)
+        else {
+            continue;
+        };
+        if serde_json::to_value(&existing)? != serde_json::to_value(replacement)? {
+            anyhow::ensure!(
+                !assertions
+                    .iter()
+                    .any(|assertion| assertion.synthesis_packet_id == existing.id),
+                "synthesis packet {} is referenced by an assertion and cannot be replaced",
+                existing.id.as_str()
+            );
+        }
+    }
+    Ok(())
+}
+
 fn apply_import(
     live_layout: &ProvenanceLayout,
     scope_id: &ScopeId,
@@ -122,6 +169,7 @@ fn apply_import(
             .duration_since(std::time::UNIX_EPOCH)?
             .as_nanos()
     ));
+    let _cleanup = TransactionCleanup::new(transaction.clone(), live_layout);
     let staged_repo = transaction.join("staged-repo");
     copy_directory(
         &live_layout.state_dir(),
@@ -176,6 +224,28 @@ fn apply_import(
     }
     std::fs::remove_dir_all(transaction)?;
     Ok(())
+}
+
+struct TransactionCleanup {
+    transaction: Utf8PathBuf,
+    publication_marker: Utf8PathBuf,
+}
+
+impl TransactionCleanup {
+    fn new(transaction: Utf8PathBuf, live_layout: &ProvenanceLayout) -> Self {
+        Self {
+            transaction,
+            publication_marker: live_layout.publication_marker_path(),
+        }
+    }
+}
+
+impl Drop for TransactionCleanup {
+    fn drop(&mut self) {
+        if !self.publication_marker.exists() && self.transaction.exists() {
+            let _ = std::fs::remove_dir_all(&self.transaction);
+        }
+    }
 }
 
 fn rollback_publication(

@@ -90,6 +90,7 @@ fn import_cannot_omit_existing_modern_lifecycle_chain() {
     }]);
     std::fs::write(&baseline, serde_json::to_vec(&lifecycle).unwrap()).unwrap();
     import(&repo, &baseline).success();
+    assert_import_rejects_asserted_evidence_changes(dir.path(), &repo, &lifecycle);
 
     lifecycle["proposal_cards"] = serde_json::json!([]);
     lifecycle["assertion_records"] = serde_json::json!([]);
@@ -114,6 +115,32 @@ fn import(repo: &std::path::Path, input: &std::path::Path) -> assert_cmd::assert
             input.to_str().unwrap(),
         ])
         .assert()
+}
+
+fn assert_import_rejects_asserted_evidence_changes(
+    directory: &std::path::Path,
+    repo: &std::path::Path,
+    lifecycle: &serde_json::Value,
+) {
+    let mut changed_contribution = lifecycle.clone();
+    changed_contribution["contributions"][0]["strongest_finding"] = serde_json::json!("Rewritten");
+    let input = directory.join("changed-contribution.json");
+    std::fs::write(&input, serde_json::to_vec(&changed_contribution).unwrap()).unwrap();
+    import(repo, &input)
+        .failure()
+        .stderr(predicates::str::contains(
+            "contribution contribution_a is referenced by an assertion and cannot be replaced",
+        ));
+
+    let mut changed_synthesis = lifecycle.clone();
+    changed_synthesis["synthesis_packets"][0]["summary"] = serde_json::json!("Rewritten");
+    let input = directory.join("changed-synthesis.json");
+    std::fs::write(&input, serde_json::to_vec(&changed_synthesis).unwrap()).unwrap();
+    import(repo, &input)
+        .failure()
+        .stderr(predicates::str::contains(
+            "synthesis packet synthesis_a is referenced by an assertion and cannot be replaced",
+        ));
 }
 
 #[test]
@@ -268,6 +295,11 @@ fn late_scope_validation_failure_is_atomic() {
         .assert()
         .success();
     assert_eq!(std::fs::read(after).unwrap(), before);
+    let transactions = repo.join(".provenance/cache/import-transactions");
+    assert!(
+        !transactions.exists() || std::fs::read_dir(transactions).unwrap().next().is_none(),
+        "failed import must remove its staged transaction"
+    );
 }
 
 #[test]
