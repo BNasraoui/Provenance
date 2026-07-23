@@ -65,15 +65,7 @@ pub(super) fn preflight(
         .parent()
         .filter(|path| !path.as_str().is_empty())
         .unwrap_or_else(|| Utf8Path::new("."));
-    let parent_metadata = parent
-        .symlink_metadata()
-        .map_err(|error| PublishError::io("inspect output parent", parent, error))?;
-    if !parent_metadata.is_dir() || parent_metadata.file_type().is_symlink() {
-        return Err(PublishError::InvalidOutputPath {
-            path: output.path.clone(),
-            detail: "parent must be an existing real directory".to_string(),
-        });
-    }
+    ensure_real_directory(parent, &output.path)?;
 
     manifest::validate_output(&output.path, output.policy)?;
 
@@ -96,6 +88,46 @@ pub(super) fn preflight(
         return Err(PublishError::AmbiguousArtifacts { paths: ambiguous });
     }
     Ok(output.path.symlink_metadata().is_ok())
+}
+
+fn ensure_real_directory(parent: &Utf8Path, output: &Utf8Path) -> Result<(), PublishError> {
+    let mut ancestors: Vec<_> = parent
+        .ancestors()
+        .filter(|path| !path.as_str().is_empty())
+        .collect();
+    ancestors.reverse();
+
+    for directory in ancestors {
+        let metadata = match directory.symlink_metadata() {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                match std::fs::create_dir(directory) {
+                    Ok(()) => {}
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                    Err(error) => {
+                        return Err(PublishError::io(
+                            "create output parent directory",
+                            directory,
+                            error,
+                        ));
+                    }
+                }
+                directory.symlink_metadata().map_err(|error| {
+                    PublishError::io("inspect created output parent", directory, error)
+                })?
+            }
+            Err(error) => {
+                return Err(PublishError::io("inspect output parent", directory, error));
+            }
+        };
+        if !metadata.is_dir() || metadata.file_type().is_symlink() {
+            return Err(PublishError::InvalidOutputPath {
+                path: output.to_path_buf(),
+                detail: format!("output parent ancestor {directory} must be a real directory"),
+            });
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn replace_output(

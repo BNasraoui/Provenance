@@ -212,6 +212,23 @@ fn wiki_build_accepts_an_absent_relative_custom_output() {
 }
 
 #[test]
+fn wiki_build_creates_an_absent_custom_output_parent() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    let repo = repo.to_string_lossy().to_string();
+    seed_state(dir.path(), &repo);
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .current_dir(dir.path())
+        .args(["wiki", "build", "--repo", &repo, "--out", "dist/wiki"])
+        .assert()
+        .success();
+
+    assert!(dir.path().join("dist/wiki/index.html").is_file());
+}
+
+#[test]
 fn wiki_serve_serves_pages_stylesheet_and_not_found() {
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path().join("repo");
