@@ -96,26 +96,47 @@ impl StateStore {
         for claim in &material_claims {
             validate_optional_confidence_score(claim.confidence)?;
         }
+        let contribution = Contribution {
+            schema_version: SchemaVersion(1),
+            scope_id: scope_id.clone(),
+            id,
+            target,
+            participant_slot,
+            stance,
+            strongest_finding,
+            evidence_references,
+            material_claims,
+            risks,
+            objections,
+            challenges,
+            suggested_artifact_changes,
+            unsupported_recommendations,
+            uncertainty,
+            open_questions,
+        };
+        let landed = self.list_ideation_landings(&scope_id)?.iter().any(|batch| {
+            batch
+                .contributions
+                .iter()
+                .any(|record| record.id == contribution.id)
+        });
+        if landed {
+            anyhow::ensure!(replace, "contribution already exists");
+            self.write_ideation_batch(
+                &scope_id,
+                super::IdeationLandingBatch {
+                    contributions: vec![contribution.clone()],
+                    synthesis_packets: Vec::new(),
+                    proposals: Vec::new(),
+                    assertions: Vec::new(),
+                    dispositions: Vec::new(),
+                },
+                true,
+            )?;
+            return Ok(contribution);
+        }
         let path = shards::contributions_path(&self.layout, &scope_id);
         self.mutate_jsonl_records(&path, |records: &mut Vec<Contribution>| {
-            let contribution = Contribution {
-                schema_version: SchemaVersion(1),
-                scope_id: scope_id.clone(),
-                id,
-                target,
-                participant_slot,
-                stance,
-                strongest_finding,
-                evidence_references,
-                material_claims,
-                risks,
-                objections,
-                challenges,
-                suggested_artifact_changes,
-                unsupported_recommendations,
-                uncertainty,
-                open_questions,
-            };
             if let Some(index) = records
                 .iter()
                 .position(|record| record.id == contribution.id)
@@ -183,23 +204,44 @@ impl StateStore {
             suggested_artifacts,
             required_human_decisions,
         } = input;
+        let synthesis_packet = SynthesisPacket {
+            schema_version: SchemaVersion(1),
+            scope_id: scope_id.clone(),
+            id,
+            target,
+            summary,
+            consensus,
+            contested_claims,
+            minority_objections,
+            evidence_gaps,
+            unsupported_speculation,
+            open_questions,
+            suggested_artifacts,
+            required_human_decisions,
+        };
+        let landed = self.list_ideation_landings(&scope_id)?.iter().any(|batch| {
+            batch
+                .synthesis_packets
+                .iter()
+                .any(|record| record.id == synthesis_packet.id)
+        });
+        if landed {
+            anyhow::ensure!(replace, "synthesis packet already exists");
+            self.write_ideation_batch(
+                &scope_id,
+                super::IdeationLandingBatch {
+                    contributions: Vec::new(),
+                    synthesis_packets: vec![synthesis_packet.clone()],
+                    proposals: Vec::new(),
+                    assertions: Vec::new(),
+                    dispositions: Vec::new(),
+                },
+                true,
+            )?;
+            return Ok(synthesis_packet);
+        }
         let path = shards::synthesis_packets_path(&self.layout, &scope_id);
         self.mutate_jsonl_records(&path, |records: &mut Vec<SynthesisPacket>| {
-            let synthesis_packet = SynthesisPacket {
-                schema_version: SchemaVersion(1),
-                scope_id: scope_id.clone(),
-                id,
-                target,
-                summary,
-                consensus,
-                contested_claims,
-                minority_objections,
-                evidence_gaps,
-                unsupported_speculation,
-                open_questions,
-                suggested_artifacts,
-                required_human_decisions,
-            };
             if let Some(index) = records
                 .iter()
                 .position(|record| record.id == synthesis_packet.id)

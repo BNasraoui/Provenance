@@ -86,6 +86,46 @@ fn import_replaces_only_target_scope_and_removes_all_stale_target_shards() {
         .success();
 }
 
+#[test]
+fn import_rejects_edge_owned_by_another_declared_scope() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    init(&repo);
+    add_other_scope(&repo);
+    create_source(&repo, "other", "source_other");
+    create_requirement(&repo, "other", "requirement_other");
+    create_edge(&repo, "other", "source_other", "requirement_other");
+
+    let other_export = dir.path().join("other.json");
+    export_scope(&repo, "other", &other_export);
+    let other: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&other_export).unwrap()).unwrap();
+
+    let target_export = dir.path().join("default.json");
+    export_scope(&repo, "default", &target_export);
+    let mut target: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&target_export).unwrap()).unwrap();
+    target["edges"] = other["edges"].clone();
+    std::fs::write(&target_export, serde_json::to_vec(&target).unwrap()).unwrap();
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "import",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--input",
+            target_export.to_str().unwrap(),
+        ])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "edge scope_id must match import scope",
+        ));
+}
+
 fn init(repo: &std::path::Path) {
     Command::cargo_bin("provenance")
         .unwrap()
@@ -181,6 +221,24 @@ fn create_edge(repo: &std::path::Path, scope: &str, source: &str, requirement: &
             requirement,
             "--format",
             "json",
+        ])
+        .assert()
+        .success();
+}
+
+fn export_scope(repo: &std::path::Path, scope: &str, output: &std::path::Path) {
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "export",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--scope",
+            scope,
+            "--format",
+            "json",
+            "--output",
+            output.to_str().unwrap(),
         ])
         .assert()
         .success();

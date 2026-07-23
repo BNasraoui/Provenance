@@ -1,8 +1,10 @@
 use super::initialized_store;
-use crate::state_store::CreateContributionInput;
+use crate::state_store::{
+    CreateContributionInput, CreateSynthesisPacketInput, IdeationLandingBatch,
+};
 use provenance_core::{
-    ContributionStance, IdeationTarget, IdeationTargetType, StableId, UncertaintyLevel,
-    UncertaintyRating,
+    Contribution, ContributionStance, IdeationTarget, IdeationTargetType, SchemaVersion, StableId,
+    SynthesisPacket, UncertaintyLevel, UncertaintyRating,
 };
 
 #[test]
@@ -93,4 +95,154 @@ fn invalid_lifecycle_batch_is_rejected_without_partial_writes() {
     store.land_ideation_batch(&scope, batch, false).unwrap_err();
     assert!(store.list_contributions(&scope).unwrap().is_empty());
     assert!(store.list_assertion_records(&scope).unwrap().is_empty());
+}
+
+#[test]
+fn direct_contribution_create_and_replace_respect_landed_records() {
+    let (_dir, store, scope) = initialized_store();
+    store
+        .land_ideation_batch(
+            &scope,
+            IdeationLandingBatch {
+                contributions: vec![contribution(&scope, "landed")],
+                synthesis_packets: Vec::new(),
+                proposals: Vec::new(),
+                assertions: Vec::new(),
+                dispositions: Vec::new(),
+            },
+            false,
+        )
+        .unwrap();
+
+    let error = store
+        .create_contribution(contribution_input(&scope, "direct"))
+        .unwrap_err();
+    assert!(error.to_string().contains("contribution already exists"));
+
+    store
+        .upsert_contribution(contribution_input(&scope, "replacement"))
+        .unwrap();
+    let records = store.list_contributions(&scope).unwrap();
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].strongest_finding, "replacement");
+}
+
+#[test]
+fn direct_synthesis_create_and_replace_respect_landed_records() {
+    let (_dir, store, scope) = initialized_store();
+    store
+        .land_ideation_batch(
+            &scope,
+            IdeationLandingBatch {
+                contributions: Vec::new(),
+                synthesis_packets: vec![synthesis_packet(&scope, "landed")],
+                proposals: Vec::new(),
+                assertions: Vec::new(),
+                dispositions: Vec::new(),
+            },
+            false,
+        )
+        .unwrap();
+
+    let error = store
+        .create_synthesis_packet(synthesis_input(&scope, "direct"))
+        .unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("synthesis packet already exists"));
+
+    store
+        .upsert_synthesis_packet(synthesis_input(&scope, "replacement"))
+        .unwrap();
+    let records = store.list_synthesis_packets(&scope).unwrap();
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].summary, "replacement");
+}
+
+fn contribution_input(scope: &provenance_core::ScopeId, finding: &str) -> CreateContributionInput {
+    CreateContributionInput {
+        scope_id: scope.clone(),
+        id: StableId::new("contribution_landed").unwrap(),
+        target: target(),
+        participant_slot: "reviewer".into(),
+        stance: ContributionStance::Support,
+        strongest_finding: finding.into(),
+        evidence_references: Vec::new(),
+        material_claims: Vec::new(),
+        risks: Vec::new(),
+        objections: Vec::new(),
+        challenges: Vec::new(),
+        suggested_artifact_changes: Vec::new(),
+        unsupported_recommendations: Vec::new(),
+        uncertainty: UncertaintyRating {
+            level: UncertaintyLevel::Low,
+            rationale: "Direct".into(),
+        },
+        open_questions: Vec::new(),
+    }
+}
+
+fn contribution(scope: &provenance_core::ScopeId, finding: &str) -> Contribution {
+    let input = contribution_input(scope, finding);
+    Contribution {
+        schema_version: SchemaVersion(1),
+        scope_id: input.scope_id,
+        id: input.id,
+        target: input.target,
+        participant_slot: input.participant_slot,
+        stance: input.stance,
+        strongest_finding: input.strongest_finding,
+        evidence_references: input.evidence_references,
+        material_claims: input.material_claims,
+        risks: input.risks,
+        objections: input.objections,
+        challenges: input.challenges,
+        suggested_artifact_changes: input.suggested_artifact_changes,
+        unsupported_recommendations: input.unsupported_recommendations,
+        uncertainty: input.uncertainty,
+        open_questions: input.open_questions,
+    }
+}
+
+fn synthesis_input(scope: &provenance_core::ScopeId, summary: &str) -> CreateSynthesisPacketInput {
+    CreateSynthesisPacketInput {
+        scope_id: scope.clone(),
+        id: StableId::new("synthesis_landed").unwrap(),
+        target: target(),
+        summary: summary.into(),
+        consensus: Vec::new(),
+        contested_claims: Vec::new(),
+        minority_objections: Vec::new(),
+        evidence_gaps: Vec::new(),
+        unsupported_speculation: Vec::new(),
+        open_questions: Vec::new(),
+        suggested_artifacts: Vec::new(),
+        required_human_decisions: Vec::new(),
+    }
+}
+
+fn synthesis_packet(scope: &provenance_core::ScopeId, summary: &str) -> SynthesisPacket {
+    let input = synthesis_input(scope, summary);
+    SynthesisPacket {
+        schema_version: SchemaVersion(1),
+        scope_id: input.scope_id,
+        id: input.id,
+        target: input.target,
+        summary: input.summary,
+        consensus: input.consensus,
+        contested_claims: input.contested_claims,
+        minority_objections: input.minority_objections,
+        evidence_gaps: input.evidence_gaps,
+        unsupported_speculation: input.unsupported_speculation,
+        open_questions: input.open_questions,
+        suggested_artifacts: input.suggested_artifacts,
+        required_human_decisions: input.required_human_decisions,
+    }
+}
+
+fn target() -> IdeationTarget {
+    IdeationTarget {
+        artifact_type: IdeationTargetType::Requirement,
+        artifact_id: StableId::new("req_overtime").unwrap(),
+    }
 }

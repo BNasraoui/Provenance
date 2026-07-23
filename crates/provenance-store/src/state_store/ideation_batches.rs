@@ -34,7 +34,7 @@ impl StateStore {
         })
     }
 
-    fn write_ideation_batch(
+    pub(super) fn write_ideation_batch(
         &self,
         scope: &ScopeId,
         incoming: IdeationLandingBatch,

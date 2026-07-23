@@ -24,6 +24,11 @@ pub(super) fn import_scope(
         exported.scope == scope,
         "import scope does not match --scope"
     );
+    let scope_id = ScopeId::new(scope)?;
+    anyhow::ensure!(
+        exported.edges.iter().all(|edge| edge.scope_id == scope_id),
+        "edge scope_id must match import scope"
+    );
     let records = exported.sources.len()
         + exported.domains.len()
         + exported.requirements.len()
@@ -53,7 +58,6 @@ pub(super) fn import_scope(
         assertions: &exported.assertion_records,
         dispositions: &exported.dispositions,
     })?;
-    let scope_id = ScopeId::new(scope)?;
     provenance_store::publication::with_repository_publication(&live_layout, || {
         apply_import(&live_layout, &scope_id, &exported, dry_run)
     })?;
