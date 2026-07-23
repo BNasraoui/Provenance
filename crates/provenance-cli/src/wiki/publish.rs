@@ -1,7 +1,7 @@
 //! Publishes a complete wiki corpus as one fail-closed filesystem transaction.
 
 use crate::wiki::model::WikiCorpus;
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use serde::Serialize;
 
 mod error;
@@ -78,16 +78,37 @@ pub fn publish(
     corpus: &WikiCorpus,
     output: PublicationOutput,
 ) -> Result<PublishReport, PublishError> {
+    publish_with(corpus, output, |path| std::fs::create_dir(path))
+}
+
+fn publish_with(
+    corpus: &WikiCorpus,
+    output: PublicationOutput,
+    create_stage: impl FnOnce(&Utf8Path) -> std::io::Result<()>,
+) -> Result<PublishReport, PublishError> {
     let paths = TransactionPaths::new(&output.path)?;
     let output_existed = preflight(&output, &paths)?;
     let lock = acquire_lock(&paths)?;
-    let result = generate_and_replace(corpus, output, &paths, output_existed);
+    let (stage_created, result) = match create_stage(&paths.stage) {
+        Ok(()) => (
+            true,
+            generate_and_replace(corpus, output, &paths, output_existed),
+        ),
+        Err(error) => (
+            false,
+            Err(PublishError::io(
+                "create staging directory",
+                &paths.stage,
+                error,
+            )),
+        ),
+    };
     drop(lock);
 
     match result {
         Err(error @ PublishError::RollbackFailed { .. }) => Err(error),
         Err(error) => {
-            if paths.stage.exists() {
+            if stage_created && paths.stage.exists() {
                 if let Err(cleanup) = std::fs::remove_dir_all(&paths.stage) {
                     return Err(PublishError::CleanupFailed {
                         primary: Box::new(error),

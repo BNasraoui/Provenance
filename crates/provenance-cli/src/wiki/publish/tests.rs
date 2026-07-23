@@ -1,6 +1,6 @@
 use super::{
-    publish, replace_output_with, write_page, PublicationOutput, PublishError, TransactionPaths,
-    OWNERSHIP_MANIFEST,
+    publish, publish_with, replace_output_with, write_page, PublicationOutput, PublishError,
+    TransactionPaths, OWNERSHIP_MANIFEST,
 };
 use crate::wiki::model::{
     CorpusCounts, OrphanReport, PageId, PageKind, RequirementPage, ScopeIndexPage, WikiCorpus,
@@ -203,6 +203,32 @@ fn leaves_ambiguous_interruption_artifacts_untouched() {
         std::fs::read_to_string(backup.join("unknown")).unwrap(),
         "backup bytes"
     );
+    assert!(!output.exists());
+}
+
+#[test]
+fn stage_creation_race_preserves_the_foreign_tree() {
+    let temp = tempfile::tempdir().unwrap();
+    let output = utf8(temp.path().join("wiki"));
+    let stage = artifact(&output, "stage");
+
+    let error = publish_with(
+        &empty_corpus(),
+        PublicationOutput::custom(output.clone()),
+        |path| {
+            std::fs::create_dir(path)?;
+            std::fs::write(path.join("caller"), "keep me").unwrap();
+            std::fs::create_dir(path)
+        },
+    )
+    .unwrap_err();
+
+    assert!(matches!(error, PublishError::Io { .. }));
+    assert_eq!(
+        std::fs::read_to_string(stage.join("caller")).unwrap(),
+        "keep me"
+    );
+    assert!(!artifact(&output, "lock").exists());
     assert!(!output.exists());
 }
 

@@ -14,8 +14,6 @@ pub(super) fn generate_and_replace(
     paths: &TransactionPaths,
     output_existed: bool,
 ) -> Result<PublishReport, PublishError> {
-    std::fs::create_dir(&paths.stage)
-        .map_err(|error| PublishError::io("create staging directory", &paths.stage, error))?;
     let pages = render::render_corpus(corpus);
     for page in &pages {
         write_page(&paths.stage, &page.route, &page.html)?;
