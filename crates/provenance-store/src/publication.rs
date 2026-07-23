@@ -117,10 +117,7 @@ fn validated_transaction_dir(
     transaction_dir: &Utf8Path,
 ) -> anyhow::Result<Utf8PathBuf> {
     let transactions = layout.import_transactions_dir();
-    let canonical_transactions = Utf8PathBuf::from_path_buf(std::fs::canonicalize(&transactions)?)
-        .map_err(|path| {
-            anyhow::anyhow!("import transaction path is not UTF-8: {}", path.display())
-        })?;
+    let canonical_transactions = canonical_transactions_dir(layout)?;
     let canonical_transaction = Utf8PathBuf::from_path_buf(std::fs::canonicalize(transaction_dir)?)
         .map_err(|path| {
             anyhow::anyhow!("import transaction path is not UTF-8: {}", path.display())
@@ -143,13 +140,33 @@ fn validate_missing_transaction_dir(
         parent == Some(transactions.as_path()),
         "publication marker transaction is outside the repository cache"
     );
-    let canonical_transactions = std::fs::canonicalize(&transactions)?;
+    let canonical_transactions = canonical_transactions_dir(layout)?;
     let canonical_parent = std::fs::canonicalize(parent.expect("transaction parent was checked"))?;
     anyhow::ensure!(
         canonical_parent == canonical_transactions,
         "publication marker transaction is outside the repository cache"
     );
     Ok(())
+}
+
+fn canonical_transactions_dir(layout: &ProvenanceLayout) -> anyhow::Result<Utf8PathBuf> {
+    let repository = layout
+        .provenance_dir()
+        .parent()
+        .expect("provenance directory has a repository parent")
+        .to_path_buf();
+    let canonical_repository = Utf8PathBuf::from_path_buf(std::fs::canonicalize(repository)?)
+        .map_err(|path| anyhow::anyhow!("repository path is not UTF-8: {}", path.display()))?;
+    let canonical_transactions =
+        Utf8PathBuf::from_path_buf(std::fs::canonicalize(layout.import_transactions_dir())?)
+            .map_err(|path| {
+                anyhow::anyhow!("import transaction path is not UTF-8: {}", path.display())
+            })?;
+    anyhow::ensure!(
+        canonical_transactions.starts_with(&canonical_repository),
+        "publication marker transaction is outside the repository cache"
+    );
+    Ok(canonical_transactions)
 }
 
 pub fn sync_directory(path: &Utf8Path) -> anyhow::Result<()> {
@@ -275,6 +292,39 @@ mod tests {
 
         assert!(error.contains("outside the repository cache"), "{error}");
         assert!(outside.join("sentinel").is_file());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn recovery_rejects_symlinked_import_transactions_outside_repository() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(directory.path().join("repo")).unwrap();
+        let outside = Utf8PathBuf::from_path_buf(directory.path().join("outside")).unwrap();
+        let layout = ProvenanceLayout::new(root);
+        std::fs::create_dir_all(layout.state_dir()).unwrap();
+        std::fs::create_dir_all(layout.cache_dir()).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::os::unix::fs::symlink(&outside, layout.import_transactions_dir()).unwrap();
+        let transaction = layout.import_transactions_dir().join("Documents");
+        std::fs::create_dir_all(&transaction).unwrap();
+        std::fs::write(transaction.join("sentinel"), "keep").unwrap();
+        std::fs::write(
+            layout.publication_marker_path(),
+            serde_json::to_vec(&serde_json::json!({
+                "schema_version": 1,
+                "transaction_dir": transaction,
+                "phase": "published"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let error = recover_pending_publication(&layout)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("outside the repository cache"), "{error}");
+        assert!(outside.join("Documents/sentinel").is_file());
     }
 
     #[test]
