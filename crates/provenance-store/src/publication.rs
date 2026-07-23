@@ -58,13 +58,10 @@ pub fn write_publication_marker(
     transaction_dir: &Utf8Path,
     phase: PublicationPhase,
 ) -> anyhow::Result<()> {
-    anyhow::ensure!(
-        transaction_dir.starts_with(layout.import_transactions_dir()),
-        "import transaction directory is outside the repository cache"
-    );
+    let transaction_dir = validated_transaction_dir(layout, transaction_dir)?;
     let marker = PublicationMarker {
         schema_version: 1,
-        transaction_dir: transaction_dir.to_path_buf(),
+        transaction_dir,
         phase,
     };
     let path = layout.publication_marker_path();
@@ -95,13 +92,8 @@ pub fn recover_pending_publication(layout: &ProvenanceLayout) -> anyhow::Result<
         marker.schema_version == 1,
         "unsupported publication marker version"
     );
-    anyhow::ensure!(
-        marker
-            .transaction_dir
-            .starts_with(layout.import_transactions_dir()),
-        "publication marker transaction is outside the repository cache"
-    );
-    let backup = marker.transaction_dir.join("backup-state");
+    let transaction_dir = validated_transaction_dir(layout, &marker.transaction_dir)?;
+    let backup = transaction_dir.join("backup-state");
     if !layout.state_dir().exists() {
         anyhow::ensure!(
             backup.exists(),
@@ -110,10 +102,31 @@ pub fn recover_pending_publication(layout: &ProvenanceLayout) -> anyhow::Result<
         std::fs::rename(&backup, layout.state_dir())?;
         sync_directory(&layout.provenance_dir())?;
     }
-    if marker.transaction_dir.exists() {
-        std::fs::remove_dir_all(&marker.transaction_dir)?;
+    if transaction_dir.exists() {
+        std::fs::remove_dir_all(&transaction_dir)?;
     }
     clear_publication_marker(layout)
+}
+
+fn validated_transaction_dir(
+    layout: &ProvenanceLayout,
+    transaction_dir: &Utf8Path,
+) -> anyhow::Result<Utf8PathBuf> {
+    let transactions = layout.import_transactions_dir();
+    let canonical_transactions = Utf8PathBuf::from_path_buf(std::fs::canonicalize(&transactions)?)
+        .map_err(|path| {
+            anyhow::anyhow!("import transaction path is not UTF-8: {}", path.display())
+        })?;
+    let canonical_transaction = Utf8PathBuf::from_path_buf(std::fs::canonicalize(transaction_dir)?)
+        .map_err(|path| {
+            anyhow::anyhow!("import transaction path is not UTF-8: {}", path.display())
+        })?;
+    anyhow::ensure!(
+        transaction_dir.parent() == Some(transactions.as_path())
+            && canonical_transaction.parent() == Some(canonical_transactions.as_path()),
+        "publication marker transaction is outside the repository cache"
+    );
+    Ok(canonical_transaction)
 }
 
 pub fn sync_directory(path: &Utf8Path) -> anyhow::Result<()> {
@@ -211,6 +224,35 @@ impl crate::state_store::StateStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recovery_rejects_traversal_outside_import_transactions() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(directory.path().to_path_buf()).unwrap();
+        let layout = ProvenanceLayout::new(root.clone());
+        std::fs::create_dir_all(layout.state_dir()).unwrap();
+        std::fs::create_dir_all(layout.import_transactions_dir()).unwrap();
+        let outside = root.join("outside");
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("sentinel"), "keep").unwrap();
+        std::fs::write(
+            layout.publication_marker_path(),
+            serde_json::to_vec(&serde_json::json!({
+                "schema_version": 1,
+                "transaction_dir": layout.import_transactions_dir().join("../../../outside"),
+                "phase": "published"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let error = recover_pending_publication(&layout)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("outside the repository cache"), "{error}");
+        assert!(outside.join("sentinel").is_file());
+    }
 
     #[test]
     fn state_snapshot_waits_for_complete_publication() {
