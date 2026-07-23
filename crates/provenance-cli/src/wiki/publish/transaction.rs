@@ -1,5 +1,7 @@
 use super::{manifest, CleanupWarning, PublicationOutput, PublishError};
 use camino::{Utf8Path, Utf8PathBuf};
+#[cfg(unix)]
+use remove_dir_all::RemoveDir;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 
@@ -247,10 +249,7 @@ fn replace_output_with_validation(
                 }),
             };
         }
-        // Recursive path-based removal can be redirected to a replacement tree.
-        // Retain nonempty backups for explicit operator cleanup instead.
-        let cleanup =
-            before_cleanup(&paths.backup).and_then(|()| std::fs::remove_dir(&paths.backup));
+        let cleanup = cleanup_backup(&paths.backup, &mut before_cleanup);
         if let Err(error) = cleanup {
             return Ok(vec![CleanupWarning {
                 path: paths.backup.clone(),
@@ -271,6 +270,36 @@ fn replace_output_with_validation(
         })?;
     }
     Ok(Vec::new())
+}
+
+#[cfg(unix)]
+fn cleanup_backup(
+    backup_path: &Utf8Path,
+    before_cleanup: &mut impl FnMut(&Utf8Path) -> std::io::Result<()>,
+) -> std::io::Result<()> {
+    let mut backup = File::open(backup_path)?;
+    let expected_identity = same_file::Handle::from_file(backup.try_clone()?)?;
+    before_cleanup(backup_path)?;
+    if same_file::Handle::from_path(backup_path)? != expected_identity {
+        return Err(std::io::Error::other("backup path changed before cleanup"));
+    }
+
+    backup.remove_dir_contents(Some(backup_path.as_std_path()))?;
+    drop(backup);
+    std::fs::remove_dir(backup_path)
+}
+
+#[cfg(not(unix))]
+fn cleanup_backup(
+    backup_path: &Utf8Path,
+    before_cleanup: &mut impl FnMut(&Utf8Path) -> std::io::Result<()>,
+) -> std::io::Result<()> {
+    let expected_identity = same_file::Handle::from_path(backup_path)?;
+    before_cleanup(backup_path)?;
+    if same_file::Handle::from_path(backup_path)? != expected_identity {
+        return Err(std::io::Error::other("backup path changed before cleanup"));
+    }
+    remove_dir_all::remove_dir_all(backup_path)
 }
 
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]

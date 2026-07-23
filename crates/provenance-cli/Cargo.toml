@@ -20,6 +20,7 @@ pulldown-cmark.workspace = true
 provenance-core = { path = "../provenance-core" }
 provenance-scanner = { path = "../provenance-scanner" }
 provenance-store = { path = "../provenance-store" }
+remove_dir_all.workspace = true
 rustix.workspace = true
 same-file.workspace = true
 serde.workspace = true

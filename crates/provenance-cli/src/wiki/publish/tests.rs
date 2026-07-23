@@ -68,6 +68,19 @@ fn upgrades_a_recognized_custom_output() {
 }
 
 #[test]
+fn repeatedly_replaces_a_recognized_output_without_leaving_artifacts() {
+    let temp = tempfile::tempdir().unwrap();
+    let output = utf8(temp.path().join("wiki"));
+
+    for _ in 0..3 {
+        let report = publish(&empty_corpus(), PublicationOutput::custom(output.clone())).unwrap();
+
+        assert_eq!(report.status, "ok");
+        assert_no_transaction_artifacts(&output);
+    }
+}
+
+#[test]
 fn default_output_is_generator_owned_even_before_manifests() {
     let temp = tempfile::tempdir().unwrap();
     let output = utf8(temp.path().join("wiki"));
