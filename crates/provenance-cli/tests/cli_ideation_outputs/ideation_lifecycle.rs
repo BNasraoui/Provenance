@@ -1,6 +1,51 @@
 use assert_cmd::Command;
 
 #[test]
+fn dispositions_list_rejects_invalid_lifecycle_records() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "init",
+            "--path",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+        ])
+        .assert()
+        .success();
+    let dispositions = repo.join(".provenance/state/scopes/default/ideation/dispositions.jsonl");
+    std::fs::create_dir_all(dispositions.parent().unwrap()).unwrap();
+    std::fs::write(
+        dispositions,
+        concat!(
+            r#"{"schema_version":1,"scope_id":"default","id":"forged_disposition","proposal_id":"missing_proposal","decision":"accepted","rationale":"Forged","actor":{"identity_type":"human","id":"forger"}}"#,
+            "\n"
+        ),
+    )
+    .unwrap();
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "dispositions",
+            "list",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "disposition proposal missing_proposal does not exist",
+        ));
+}
+
+#[test]
 #[allow(clippy::too_many_lines)]
 fn cli_creates_materializes_and_exports_ideation_outputs() {
     let dir = tempfile::tempdir().unwrap();

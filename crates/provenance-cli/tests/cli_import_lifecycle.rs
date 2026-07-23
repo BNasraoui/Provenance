@@ -132,6 +132,16 @@ fn assert_import_rejects_asserted_evidence_changes(
             "contribution contribution_a is referenced by an assertion and cannot be replaced",
         ));
 
+    let mut retargeted_claim = lifecycle.clone();
+    retargeted_claim["contributions"][0]["id"] = serde_json::json!("contribution_b");
+    let input = directory.join("retargeted-claim.json");
+    std::fs::write(&input, serde_json::to_vec(&retargeted_claim).unwrap()).unwrap();
+    import(repo, &input)
+        .failure()
+        .stderr(predicates::str::contains(
+            "contribution contribution_a is referenced by an assertion and cannot be replaced",
+        ));
+
     let mut changed_synthesis = lifecycle.clone();
     changed_synthesis["synthesis_packets"][0]["summary"] = serde_json::json!("Rewritten");
     let input = directory.join("changed-synthesis.json");

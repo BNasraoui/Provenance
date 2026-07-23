@@ -48,8 +48,12 @@ pub(super) fn handle(command: DispositionsCommand) -> anyhow::Result<()> {
             scope,
             format,
         } => {
-            let dispositions = StateStore::new(ProvenanceLayout::new(repo))
-                .list_dispositions(&ScopeId::new(scope)?)?;
+            let store = StateStore::new(ProvenanceLayout::new(repo));
+            let scope_id = ScopeId::new(scope)?;
+            let dispositions = store.with_repository_publication(|| {
+                store.validate_ideation_scope(&scope_id)?;
+                store.list_dispositions(&scope_id)
+            })?;
             output::print(format, &dispositions)?;
         }
     }

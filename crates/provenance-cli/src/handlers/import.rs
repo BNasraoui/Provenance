@@ -117,23 +117,30 @@ fn ensure_asserted_evidence_preserved(
 ) -> anyhow::Result<()> {
     let assertions = store.list_assertion_records(scope_id)?;
     for existing in store.list_contributions(scope_id)? {
-        let Some(replacement) = incoming
+        let referenced_by_assertion = assertions.iter().any(|assertion| {
+            existing
+                .material_claims
+                .iter()
+                .any(|claim| assertion.supporting_claim_ids.contains(&claim.claim_id))
+        });
+        if !referenced_by_assertion {
+            continue;
+        }
+        let replacement = incoming
             .contributions
             .iter()
             .find(|record| record.id == existing.id)
-        else {
-            continue;
-        };
-        if serde_json::to_value(&existing)? != serde_json::to_value(replacement)? {
-            anyhow::ensure!(
-                !assertions.iter().any(|assertion| existing
-                    .material_claims
-                    .iter()
-                    .any(|claim| assertion.supporting_claim_ids.contains(&claim.claim_id))),
-                "contribution {} is referenced by an assertion and cannot be replaced",
-                existing.id.as_str()
-            );
-        }
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "contribution {} is referenced by an assertion and cannot be replaced",
+                    existing.id.as_str()
+                )
+            })?;
+        anyhow::ensure!(
+            serde_json::to_value(&existing)? == serde_json::to_value(replacement)?,
+            "contribution {} is referenced by an assertion and cannot be replaced",
+            existing.id.as_str()
+        );
     }
     for existing in store.list_synthesis_packets(scope_id)? {
         let Some(replacement) = incoming
