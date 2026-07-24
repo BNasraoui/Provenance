@@ -59,3 +59,25 @@ fn late_scope_validation_failure_is_atomic() {
         "failed import must remove its staged transaction"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn import_rejects_external_file_symlink_without_changing_live_state() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    init_repo(&repo, None);
+    let external = dir.path().join("secret");
+    std::fs::write(&external, "do not import").unwrap();
+    let link = repo.join(".provenance/state/external-link");
+    std::os::unix::fs::symlink(&external, &link).unwrap();
+    let input = dir.path().join("input.json");
+    export_scope(&repo, &input).success();
+
+    import_scope(&repo, &input)
+        .failure()
+        .stderr(predicates::str::contains("unsupported state entry"));
+
+    let metadata = std::fs::symlink_metadata(&link).unwrap();
+    assert!(metadata.file_type().is_symlink());
+    assert_eq!(std::fs::read_to_string(&external).unwrap(), "do not import");
+}

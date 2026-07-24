@@ -209,10 +209,13 @@ fn copy_tree(source: &Utf8Path, destination: &Utf8Path) -> anyhow::Result<()> {
         let source_child = Utf8PathBuf::from_path_buf(entry.path())
             .map_err(|path| anyhow::anyhow!("state path is not UTF-8: {}", path.display()))?;
         let destination_child = destination.join(entry.file_name().to_string_lossy().as_ref());
-        if entry.file_type()?.is_dir() {
+        let file_type = std::fs::symlink_metadata(&source_child)?.file_type();
+        if file_type.is_dir() {
             copy_tree(&source_child, &destination_child)?;
-        } else {
+        } else if file_type.is_file() {
             std::fs::copy(source_child, destination_child)?;
+        } else {
+            anyhow::bail!("unsupported state entry: {source_child}");
         }
     }
     Ok(())
@@ -422,6 +425,29 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(snapshot.layout().state_dir().join("second")).unwrap(),
             "new"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn state_snapshot_rejects_external_file_symlink() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(directory.path().join("repo")).unwrap();
+        let layout = ProvenanceLayout::new(root);
+        std::fs::create_dir_all(layout.state_dir()).unwrap();
+        let external = directory.path().join("secret");
+        std::fs::write(&external, "do not snapshot").unwrap();
+        std::os::unix::fs::symlink(&external, layout.state_dir().join("external-link")).unwrap();
+
+        let error = match snapshot_state(&layout) {
+            Ok(_) => panic!("snapshot unexpectedly followed an external symlink"),
+            Err(error) => error.to_string(),
+        };
+
+        assert!(error.contains("unsupported state entry"), "{error}");
+        assert_eq!(
+            std::fs::read_to_string(external).unwrap(),
+            "do not snapshot"
         );
     }
 }

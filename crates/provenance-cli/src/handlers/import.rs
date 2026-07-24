@@ -375,10 +375,13 @@ fn copy_directory(source: &camino::Utf8Path, destination: &camino::Utf8Path) -> 
         let source_path = Utf8PathBuf::from_path_buf(entry.path())
             .map_err(|path| anyhow::anyhow!("state path is not UTF-8: {}", path.display()))?;
         let target = destination.join(entry.file_name().to_string_lossy().as_ref());
-        if entry.file_type()?.is_dir() {
+        let file_type = std::fs::symlink_metadata(&source_path)?.file_type();
+        if file_type.is_dir() {
             copy_directory(&source_path, &target)?;
-        } else {
+        } else if file_type.is_file() {
             std::fs::copy(source_path, target)?;
+        } else {
+            anyhow::bail!("unsupported state entry: {source_path}");
         }
     }
     Ok(())
