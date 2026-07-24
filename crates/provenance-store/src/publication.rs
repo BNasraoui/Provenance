@@ -20,6 +20,23 @@ thread_local! {
     static HELD_LOCKS: RefCell<BTreeSet<String>> = const { RefCell::new(BTreeSet::new()) };
 }
 
+struct HeldPublicationLock {
+    key: String,
+}
+
+impl HeldPublicationLock {
+    fn new(key: String) -> Self {
+        HELD_LOCKS.with(|locks| locks.borrow_mut().insert(key.clone()));
+        Self { key }
+    }
+}
+
+impl Drop for HeldPublicationLock {
+    fn drop(&mut self) {
+        HELD_LOCKS.with(|locks| locks.borrow_mut().remove(&self.key));
+    }
+}
+
 pub fn with_repository_publication<R>(
     layout: &ProvenanceLayout,
     operation: impl FnOnce() -> anyhow::Result<R>,
@@ -30,10 +47,8 @@ pub fn with_repository_publication<R>(
         return operation();
     }
     crate::jsonl::with_advisory_lock(&lock_path, || {
-        HELD_LOCKS.with(|locks| locks.borrow_mut().insert(key.clone()));
-        let result = recover_pending_publication(layout).and_then(|()| operation());
-        HELD_LOCKS.with(|locks| locks.borrow_mut().remove(&key));
-        result
+        let _held_lock = HeldPublicationLock::new(key);
+        recover_pending_publication(layout).and_then(|()| operation())
     })
 }
 
@@ -381,6 +396,34 @@ mod tests {
         recover_pending_publication(&layout).unwrap();
 
         assert!(layout.state_dir().is_dir());
+        assert!(!layout.publication_marker_path().exists());
+    }
+
+    #[test]
+    fn publication_lock_marker_is_cleared_after_panic() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(directory.path().to_path_buf()).unwrap();
+        let layout = ProvenanceLayout::new(root);
+        std::fs::create_dir_all(layout.state_dir()).unwrap();
+        std::fs::create_dir_all(layout.import_transactions_dir()).unwrap();
+
+        let panic = std::panic::catch_unwind(|| {
+            with_repository_publication(&layout, || -> anyhow::Result<()> {
+                panic!("publication interrupted");
+            })
+            .unwrap();
+        });
+        assert!(panic.is_err());
+        let key = layout.publication_lock_path().to_string();
+        assert!(!HELD_LOCKS.with(|locks| locks.borrow().contains(&key)));
+
+        let transaction = layout.import_transactions_dir().join("completed");
+        std::fs::create_dir(&transaction).unwrap();
+        write_publication_marker(&layout, &transaction, PublicationPhase::Published).unwrap();
+        std::fs::remove_dir(transaction).unwrap();
+
+        with_repository_publication(&layout, || Ok(())).unwrap();
+
         assert!(!layout.publication_marker_path().exists());
     }
 
