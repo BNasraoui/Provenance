@@ -103,6 +103,8 @@ fn fork_tournament_skill_documents_the_assertable_winner_lifecycle() {
     assert!(skill.contains("provenance proposals assert --scope <scope>"));
     assert!(skill.contains("--id assertion_<question>_<winner_slot>"));
     assert!(skill.contains("--resolve-human-gate"));
+    assert!(skill.contains(r#""decision_key":"pick_<question>_winner""#));
+    assert!(skill.contains("--decision-key pick_<question>_winner"));
 }
 
 #[test]

@@ -218,6 +218,90 @@ fn resolving_one_human_decision_preserves_other_blockers() {
 }
 
 #[test]
+fn resolving_winner_gate_asserts_only_the_selected_proposal() {
+    let (_dir, store, scope) = initialized_store();
+    seed_blocked_evidence(&store, &scope);
+    let mut contributions = store.list_contributions(&scope).unwrap();
+    let loser_contribution: provenance_core::Contribution =
+        serde_json::from_value(serde_json::json!({
+            "schema_version": 1, "scope_id": "default", "id": "contribution_comp_time",
+            "target": {"artifact_type": "requirement", "artifact_id": "req_overtime"},
+            "participant_slot": "reviewer_b", "stance": "support", "strongest_finding": "Observed alternative",
+            "evidence_references": [{"reference_id": "evidence_comp_time", "evidence_type": "source", "summary": "Pinned alternative"}],
+            "material_claims": [{"claim_id": "claim_comp_time", "statement": "Observed alternative", "evidence_type": "source", "evidence_reference_ids": ["evidence_comp_time"]}],
+            "risks": [], "objections": [], "challenges": [], "suggested_artifact_changes": [],
+            "unsupported_recommendations": [], "uncertainty": {"level": "low", "rationale": "Direct"}, "open_questions": []
+        }))
+        .unwrap();
+    contributions.push(loser_contribution);
+    crate::jsonl::write_jsonl_atomic(
+        &crate::shards::contributions_path(&store.layout, &scope),
+        &contributions,
+    )
+    .unwrap();
+    let mut packets = store.list_synthesis_packets(&scope).unwrap();
+    packets[0].evidence_gaps.clear();
+    packets[0].required_human_decisions = serde_json::from_value(serde_json::json!([
+        {"decision_key": "pick_overtime_winner", "prompt": "Pick winner", "blocks_promotion": true}
+    ]))
+    .unwrap();
+    packets[0].suggested_artifacts.push(
+        serde_json::from_value(serde_json::json!({
+            "proposal_id": "proposal_comp_time",
+            "proposal_key": "comp_time",
+            "proposal_type": "requirement_candidate",
+            "summary": "Comp time candidate",
+            "origin_participant_slots": ["reviewer_b"]
+        }))
+        .unwrap(),
+    );
+    crate::jsonl::write_jsonl_atomic(
+        &crate::shards::synthesis_packets_path(&store.layout, &scope),
+        &packets,
+    )
+    .unwrap();
+
+    let mut winner = proposal_input(
+        &scope,
+        "proposal_overtime",
+        "Overtime",
+        PromotionState::Proposed,
+    );
+    winner.traceability.supporting_claim_ids = vec![StableId::new("claim_overtime").unwrap()];
+    store.create_proposal_card(winner).unwrap();
+    let mut loser = proposal_input(
+        &scope,
+        "proposal_comp_time",
+        "Comp time",
+        PromotionState::Proposed,
+    );
+    loser.proposal_key = "comp_time".into();
+    loser.traceability.supporting_claim_ids = vec![StableId::new("claim_comp_time").unwrap()];
+    store.create_proposal_card(loser).unwrap();
+
+    store
+        .assert_proposal_after_human_decision(
+            CreateAssertionInput {
+                scope_id: scope.clone(),
+                id: provenance_core::AssertionId::new("assertion_overtime").unwrap(),
+                proposal_id: StableId::new("proposal_overtime").unwrap(),
+                synthesis_packet_id: StableId::new("synthesis_overtime").unwrap(),
+                supporting_claim_ids: vec![StableId::new("claim_overtime").unwrap()],
+            },
+            &[StableId::new("pick_overtime_winner").unwrap()],
+        )
+        .unwrap();
+
+    assert_eq!(store.list_assertion_records(&scope).unwrap().len(), 1);
+    assert_eq!(
+        store.list_synthesis_packets(&scope).unwrap()[0]
+            .suggested_artifacts
+            .len(),
+        2
+    );
+}
+
+#[test]
 fn repository_actor_allowlist_rejects_unlisted_disposition_actor() {
     let (_dir, store, scope) = initialized_store();
     store

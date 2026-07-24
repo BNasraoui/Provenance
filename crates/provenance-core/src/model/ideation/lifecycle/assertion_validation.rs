@@ -229,7 +229,7 @@ pub(super) fn ensure_qualifying_assertions(
     for proposal in proposals {
         let qualifying = synthesis_packets
             .iter()
-            .any(|packet| packet_qualifies_proposal(packet, proposal));
+            .any(|packet| packet_qualifies_proposal(packet, proposal, assertions));
         anyhow::ensure!(
             !qualifying
                 || assertions
@@ -242,7 +242,14 @@ pub(super) fn ensure_qualifying_assertions(
     Ok(())
 }
 
-fn packet_qualifies_proposal(packet: &SynthesisPacket, proposal: &ProposalCard) -> bool {
+fn packet_qualifies_proposal(
+    packet: &SynthesisPacket,
+    proposal: &ProposalCard,
+    assertions: &[AssertionRecord],
+) -> bool {
+    let packet_has_assertion = assertions
+        .iter()
+        .any(|assertion| assertion.synthesis_packet_id == packet.id);
     packet.scope_id == proposal.scope_id
         && packet.target == proposal.traceability.target
         && packet.suggested_artifacts.iter().any(|suggestion| {
@@ -258,6 +265,10 @@ fn packet_qualifies_proposal(packet: &SynthesisPacket, proposal: &ProposalCard) 
             .required_human_decisions
             .iter()
             .any(|decision| decision.blocks_promotion)
+        && (!packet_has_assertion
+            || assertions.iter().any(|assertion| {
+                assertion.synthesis_packet_id == packet.id && assertion.proposal_id == proposal.id
+            }))
         && !proposal.traceability.supporting_claim_ids.is_empty()
         && !packet.contested_claims.iter().any(|contested| {
             proposal
