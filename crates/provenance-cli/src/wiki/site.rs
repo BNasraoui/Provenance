@@ -9,6 +9,7 @@
 use crate::gitignore;
 use crate::output::{self, OutputFormat};
 use crate::wiki::assemble;
+use crate::wiki::publish::{self, PublicationOutput, PublishReport};
 use crate::wiki::render::{self, RenderedPage, WIKI_CSS_ROUTE};
 use crate::wiki::theme;
 use anyhow::Context;
@@ -21,7 +22,6 @@ use axum::{
 };
 use camino::Utf8PathBuf;
 use provenance_store::layout::ProvenanceLayout;
-use serde::Serialize;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -35,103 +35,24 @@ struct WikiSite {
     page_by_route: BTreeMap<String, RenderedPage>,
 }
 
-#[derive(Serialize)]
-struct WikiBuildReport {
-    status: &'static str,
-    scope: String,
-    out: Utf8PathBuf,
-    page_count: usize,
-    pages: Vec<WikiPageSummary>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    failures: Vec<WikiPageFailure>,
-}
-
-#[derive(Serialize)]
-struct WikiPageSummary {
-    route: String,
-    title: String,
-}
-
-#[derive(Serialize)]
-struct WikiPageFailure {
-    route: String,
-    error: String,
-}
-
 pub fn build(
     repo: Utf8PathBuf,
     scope: String,
     out: Option<Utf8PathBuf>,
     format: OutputFormat,
 ) -> anyhow::Result<()> {
-    let out = if let Some(out) = out {
-        out
+    let output = if let Some(out) = out {
+        PublicationOutput::custom(out)
     } else {
         gitignore::ensure_ignored(&repo, WIKI_GITIGNORE_PATTERN).with_context(|| {
             format!("failed to update .gitignore for the default wiki output at {repo}")
         })?;
-        ProvenanceLayout::new(repo.clone()).wiki_dir()
+        PublicationOutput::generator_owned(ProvenanceLayout::new(repo.clone()).wiki_dir())
     };
     let repo_hint = repo.clone();
     let corpus = assemble::load_corpus(repo, scope)?;
-    let pages = render::render_corpus(&corpus);
-
-    // Each page is written independently: a page-specific failure (a
-    // colliding path, a permissions error) shouldn't hide every other page
-    // that built fine. Failures are collected and reported instead.
-    let mut failures = Vec::new();
-    for page in &pages {
-        if let Err(error) = write_page(&out, page) {
-            failures.push(WikiPageFailure {
-                route: page.route.clone(),
-                error: format!("{error:#}"),
-            });
-        }
-    }
-
-    let stylesheet_path = out.join(WIKI_CSS_ROUTE.trim_start_matches('/'));
-    let stylesheet_dir = stylesheet_path
-        .parent()
-        .with_context(|| format!("stylesheet path {stylesheet_path} has no parent directory"))?;
-    std::fs::create_dir_all(stylesheet_dir)
-        .with_context(|| format!("failed to create wiki output directory {stylesheet_dir}"))?;
-    std::fs::write(&stylesheet_path, theme::WIKI_CSS)
-        .with_context(|| format!("failed to write wiki stylesheet {stylesheet_path}"))?;
-
-    let page_count = pages.len();
-    let failure_count = failures.len();
-    let report = WikiBuildReport {
-        status: if failures.is_empty() { "ok" } else { "partial" },
-        scope: corpus.scope,
-        out,
-        page_count,
-        pages: pages
-            .into_iter()
-            .map(|page| WikiPageSummary {
-                route: page.route,
-                title: page.title,
-            })
-            .collect(),
-        failures,
-    };
+    let report = publish::publish(&corpus, output)?;
     print_build_report(format, &report, &repo_hint)?;
-
-    anyhow::ensure!(
-        failure_count == 0,
-        "{failure_count} of {page_count} wiki pages failed to write"
-    );
-    Ok(())
-}
-
-fn write_page(out: &Utf8PathBuf, page: &RenderedPage) -> anyhow::Result<()> {
-    let path = static_page_path(out, &page.route);
-    let parent = path
-        .parent()
-        .with_context(|| format!("wiki page path {path} has no parent directory"))?;
-    std::fs::create_dir_all(parent)
-        .with_context(|| format!("failed to create wiki output directory {parent}"))?;
-    std::fs::write(&path, &page.html)
-        .with_context(|| format!("failed to write wiki page {path}"))?;
     Ok(())
 }
 
@@ -141,25 +62,24 @@ fn write_page(out: &Utf8PathBuf, page: &RenderedPage) -> anyhow::Result<()> {
 /// that failed to write.
 fn print_build_report(
     format: OutputFormat,
-    report: &WikiBuildReport,
+    report: &PublishReport,
     repo: &Utf8PathBuf,
 ) -> anyhow::Result<()> {
     match format {
         OutputFormat::Json | OutputFormat::Jsonl => output::print(format, report)?,
         OutputFormat::Table | OutputFormat::Markdown | OutputFormat::Toon => {
-            let written = report.page_count - report.failures.len();
+            let written = report.page_count;
             let noun = if written == 1 { "page" } else { "pages" };
             println!(
                 "Built {written} {noun} for scope \"{}\" into {}",
                 report.scope, report.out
             );
-            if report.failures.is_empty() {
-                println!("Run `provenance wiki serve --repo {repo}` to view them.");
-            } else {
-                eprintln!("Failed to write {} page(s):", report.failures.len());
-                for failure in &report.failures {
-                    eprintln!("  - {}: {}", failure.route, failure.error);
-                }
+            println!("Run `provenance wiki serve --repo {repo}` to view them.");
+            for warning in &report.cleanup_warnings {
+                eprintln!(
+                    "Wiki publication committed, but cleanup requires attention at {}: {} ({})",
+                    warning.path, warning.action, warning.error
+                );
             }
         }
     }
@@ -231,18 +151,6 @@ async fn render_wiki_page(State(site): State<Arc<WikiSite>>, uri: Uri) -> impl I
     )
 }
 
-/// Maps a wiki route to its file in the static output tree: `/` becomes
-/// `<out>/index.html`, `/requirements/<id>/` becomes
-/// `<out>/requirements/<id>/index.html`.
-fn static_page_path(out: &Utf8PathBuf, route: &str) -> Utf8PathBuf {
-    let mut path = out.clone();
-    for segment in route.split('/').filter(|segment| !segment.is_empty()) {
-        path.push(segment);
-    }
-    path.push("index.html");
-    path
-}
-
 fn normalize_request_route(path: &str) -> String {
     let mut route = String::from("/");
     route.push_str(path.trim_matches('/'));
@@ -254,26 +162,7 @@ fn normalize_request_route(path: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_request_route, static_page_path};
-    use camino::Utf8PathBuf;
-
-    #[test]
-    fn static_page_path_maps_index_route_to_root_index_html() {
-        let out = Utf8PathBuf::from("site");
-        assert_eq!(
-            static_page_path(&out, "/"),
-            Utf8PathBuf::from("site/index.html")
-        );
-    }
-
-    #[test]
-    fn static_page_path_maps_nested_routes_to_directory_index_html() {
-        let out = Utf8PathBuf::from("site");
-        assert_eq!(
-            static_page_path(&out, "/requirements/req_sah/"),
-            Utf8PathBuf::from("site/requirements/req_sah/index.html")
-        );
-    }
+    use super::normalize_request_route;
 
     #[test]
     fn normalize_request_route_adds_missing_slashes() {
