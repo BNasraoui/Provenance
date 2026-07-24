@@ -121,6 +121,55 @@ fn direct_assertion_uses_the_aggregate_evidence_validator() {
 }
 
 #[test]
+fn assertion_rejects_conflicting_duplicate_evidence_ids() {
+    let (_dir, store, scope) = initialized_store();
+    seed_blocked_evidence(&store, &scope);
+    let mut contributions = store.list_contributions(&scope).unwrap();
+    contributions[0]
+        .evidence_references
+        .push(provenance_core::IdeationEvidenceReference {
+            reference_id: StableId::new("evidence_overtime").unwrap(),
+            evidence_type: provenance_core::IdeationEvidenceType::Unsupported,
+            summary: "Conflicting unsupported evidence".into(),
+            file_path: None,
+            line: None,
+        });
+    crate::jsonl::write_jsonl_atomic(
+        &crate::shards::contributions_path(&store.layout, &scope),
+        &contributions,
+    )
+    .unwrap();
+    let mut proposal = proposal_input(
+        &scope,
+        "proposal_overtime",
+        "Overtime",
+        PromotionState::Proposed,
+    );
+    proposal.traceability.supporting_claim_ids = vec![StableId::new("claim_overtime").unwrap()];
+    store.create_proposal_card(proposal).unwrap();
+    let mut packets = store.list_synthesis_packets(&scope).unwrap();
+    packets[0].evidence_gaps.clear();
+    crate::jsonl::write_jsonl_atomic(
+        &crate::shards::synthesis_packets_path(&store.layout, &scope),
+        &packets,
+    )
+    .unwrap();
+
+    let error = store
+        .assert_proposal(CreateAssertionInput {
+            scope_id: scope,
+            id: provenance_core::AssertionId::new("assertion_overtime").unwrap(),
+            proposal_id: StableId::new("proposal_overtime").unwrap(),
+            synthesis_packet_id: StableId::new("synthesis_overtime").unwrap(),
+            supporting_claim_ids: vec![StableId::new("claim_overtime").unwrap()],
+        })
+        .unwrap_err()
+        .to_string();
+
+    assert!(error.contains("exactly one owner"), "{error}");
+}
+
+#[test]
 fn repository_actor_allowlist_rejects_unlisted_disposition_actor() {
     let (_dir, store, scope) = initialized_store();
     store

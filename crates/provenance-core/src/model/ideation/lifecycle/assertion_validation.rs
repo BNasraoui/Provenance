@@ -166,13 +166,17 @@ fn validate_claim_evidence(
     owner: &Contribution,
 ) -> anyhow::Result<()> {
     for evidence_id in &claim.evidence_reference_ids {
-        let evidence = owner
+        let matches = owner
             .evidence_references
             .iter()
-            .find(|evidence| evidence.reference_id == *evidence_id)
-            .ok_or_else(|| {
-                anyhow::anyhow!("assertion evidence {} does not exist", evidence_id.as_str())
-            })?;
+            .filter(|evidence| evidence.reference_id == *evidence_id)
+            .collect::<Vec<_>>();
+        anyhow::ensure!(
+            matches.len() == 1,
+            "assertion evidence {} must have exactly one owner",
+            evidence_id.as_str()
+        );
+        let evidence = matches[0];
         anyhow::ensure!(
             evidence.evidence_type == claim.evidence_type,
             "assertion evidence type does not match claim {}",
