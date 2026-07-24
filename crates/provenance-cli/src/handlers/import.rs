@@ -316,10 +316,20 @@ fn write_scope(
         &exported.service_bindings,
     )?;
     let edge_path = provenance_store::shards::edges_path(layout);
-    let mut edges: Vec<Edge> = StateStore::new(layout.clone()).list_edges()?;
-    edges.retain(|edge| edge.scope_id != *scope_id);
-    edges.extend(exported.edges.iter().cloned());
-    edges.sort_by(|left, right| left.id.as_str().cmp(right.id.as_str()));
+    let mut edges = read_edge_values(layout)?;
+    edges.retain(|(edge, _)| edge.scope_id != *scope_id);
+    edges.extend(
+        exported
+            .edges
+            .iter()
+            .map(|edge| Ok((edge.clone(), serde_json::to_value(edge)?)))
+            .collect::<anyhow::Result<Vec<_>>>()?,
+    );
+    edges.sort_by(|(left, _), (right, _)| left.id.as_str().cmp(right.id.as_str()));
+    let edges = edges
+        .into_iter()
+        .map(|(_, value)| value)
+        .collect::<Vec<_>>();
     remove_edge_shards(layout)?;
     provenance_store::jsonl::write_jsonl_atomic(&edge_path, &edges)?;
     provenance_store::jsonl::write_jsonl_atomic(
@@ -351,6 +361,47 @@ fn write_scope(
         &exported.dispositions,
     )?;
     Ok(())
+}
+
+fn read_edge_values(layout: &ProvenanceLayout) -> anyhow::Result<Vec<(Edge, serde_json::Value)>> {
+    if !layout.edges_dir().exists() {
+        return Ok(Vec::new());
+    }
+    let mut paths = Vec::new();
+    for entry in std::fs::read_dir(layout.edges_dir())? {
+        let entry = entry?;
+        if entry.file_type()?.is_file() {
+            let path = Utf8PathBuf::from_path_buf(entry.path()).map_err(|path| {
+                anyhow::anyhow!("edge shard path is not UTF-8: {}", path.display())
+            })?;
+            if path.extension() == Some("jsonl") {
+                paths.push(path);
+            }
+        }
+    }
+    paths.sort();
+
+    let mut records = Vec::new();
+    for path in paths {
+        for (line_index, line) in std::fs::read_to_string(&path)?.lines().enumerate() {
+            let value: serde_json::Value = serde_json::from_str(line).map_err(|error| {
+                anyhow::anyhow!(
+                    "failed to parse edge shard {} line {}: {error}",
+                    path,
+                    line_index + 1
+                )
+            })?;
+            let edge = serde_json::from_value(value.clone()).map_err(|error| {
+                anyhow::anyhow!(
+                    "failed to parse edge shard {} line {}: {error}",
+                    path,
+                    line_index + 1
+                )
+            })?;
+            records.push((edge, value));
+        }
+    }
+    Ok(records)
 }
 
 fn remove_edge_shards(layout: &ProvenanceLayout) -> anyhow::Result<()> {

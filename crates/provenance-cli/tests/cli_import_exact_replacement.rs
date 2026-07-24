@@ -126,6 +126,55 @@ fn import_rejects_edge_owned_by_another_declared_scope() {
         ));
 }
 
+#[test]
+fn import_preserves_unknown_fields_on_edges_from_other_scopes() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    init(&repo);
+    add_other_scope(&repo);
+    create_source(&repo, "other", "source_other");
+    create_requirement(&repo, "other", "requirement_other");
+    create_edge(&repo, "other", "source_other", "requirement_other");
+
+    let edge_path = repo.join(".provenance/state/edges/edges-00.jsonl");
+    let mut other_edge: serde_json::Value =
+        serde_json::from_str(std::fs::read_to_string(&edge_path).unwrap().trim()).unwrap();
+    other_edge["future_extension"] = serde_json::json!({"enabled": true});
+    std::fs::write(
+        &edge_path,
+        format!("{}\n", serde_json::to_string(&other_edge).unwrap()),
+    )
+    .unwrap();
+
+    let target_export = dir.path().join("default.json");
+    export_scope(&repo, "default", &target_export);
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "import",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--input",
+            target_export.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    let preserved_edges = std::fs::read_dir(repo.join(".provenance/state/edges"))
+        .unwrap()
+        .flat_map(|entry| {
+            std::fs::read_to_string(entry.unwrap().path())
+                .unwrap()
+                .lines()
+                .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    assert!(preserved_edges.contains(&other_edge));
+}
+
 fn init(repo: &std::path::Path) {
     Command::cargo_bin("provenance")
         .unwrap()
