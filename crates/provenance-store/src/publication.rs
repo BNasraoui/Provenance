@@ -41,6 +41,7 @@ pub fn with_repository_publication<R>(
     layout: &ProvenanceLayout,
     operation: impl FnOnce() -> anyhow::Result<R>,
 ) -> anyhow::Result<R> {
+    prepare_publication_lock(layout)?;
     let lock_path = layout.publication_lock_path();
     let key = lock_path.to_string();
     if HELD_LOCKS.with(|locks| locks.borrow().contains(&key)) {
@@ -50,6 +51,47 @@ pub fn with_repository_publication<R>(
         let _held_lock = HeldPublicationLock::new(key);
         recover_pending_publication(layout).and_then(|()| operation())
     })
+}
+
+fn prepare_publication_lock(layout: &ProvenanceLayout) -> anyhow::Result<()> {
+    let canonical_root = Utf8PathBuf::from_path_buf(std::fs::canonicalize(
+        layout
+            .provenance_dir()
+            .parent()
+            .unwrap_or_else(|| Utf8Path::new(".")),
+    )?)
+    .map_err(|path| anyhow::anyhow!("repository path is not UTF-8: {}", path.display()))?;
+    let provenance = layout.provenance_dir();
+    create_real_directory(&provenance)?;
+    let canonical_provenance = Utf8PathBuf::from_path_buf(std::fs::canonicalize(&provenance)?)
+        .map_err(|path| anyhow::anyhow!("provenance path is not UTF-8: {}", path.display()))?;
+    anyhow::ensure!(
+        canonical_provenance == canonical_root.join(".provenance"),
+        "repository provenance directory is outside the repository"
+    );
+
+    let cache = layout.cache_dir();
+    create_real_directory(&cache)?;
+    let locks = cache.join("locks");
+    create_real_directory(&locks)?;
+    Ok(())
+}
+
+fn create_real_directory(path: &Utf8Path) -> anyhow::Result<()> {
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) => anyhow::ensure!(
+            metadata.file_type().is_dir() && !metadata.file_type().is_symlink(),
+            "publication lock path contains a symlink component: {path}"
+        ),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => std::fs::create_dir(path)?,
+        Err(error) => return Err(error.into()),
+    }
+    let metadata = std::fs::symlink_metadata(path)?;
+    anyhow::ensure!(
+        metadata.file_type().is_dir() && !metadata.file_type().is_symlink(),
+        "publication lock path contains a symlink component: {path}"
+    );
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, serde::Deserialize, Serialize)]

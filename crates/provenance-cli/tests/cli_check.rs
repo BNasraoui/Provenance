@@ -271,6 +271,22 @@ fn check_reports_invalid_edge_endpoints_without_masking_dangling_references() {
         .stderr(contains("to rule rule_missing"));
 }
 
+#[cfg(unix)]
+#[test]
+fn check_rejects_symlinked_cache_without_writing_to_target() {
+    let dir = tempfile::tempdir().unwrap();
+    init(dir.path());
+    let cache = dir.path().join(".provenance/cache");
+    std::fs::remove_dir_all(&cache).unwrap();
+    let outside = dir.path().join("outside");
+    std::fs::create_dir(&outside).unwrap();
+    std::os::unix::fs::symlink(&outside, &cache).unwrap();
+
+    provenance(dir.path()).failure();
+
+    assert!(std::fs::read_dir(outside).unwrap().next().is_none());
+}
+
 fn init(repo: &Path) {
     Command::cargo_bin("provenance")
         .unwrap()
