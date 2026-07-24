@@ -140,6 +140,37 @@ fn check_rejects_dangling_disposition_proposal_id() {
 }
 
 #[test]
+fn check_rejects_duplicate_evidence_record_ids() {
+    let cases = [
+        (
+            "contributions.jsonl",
+            r#"{"schema_version":1,"scope_id":"default","id":"contribution_a","target":{"artifact_type":"source","artifact_id":"source_a"},"participant_slot":"reviewer","stance":"support","strongest_finding":"First","evidence_references":[],"material_claims":[],"risks":[],"objections":[],"challenges":[],"suggested_artifact_changes":[],"unsupported_recommendations":[],"uncertainty":{"level":"low","rationale":"Direct"},"open_questions":[]}
+{"schema_version":1,"scope_id":"default","id":"contribution_a","target":{"artifact_type":"source","artifact_id":"source_a"},"participant_slot":"reviewer","stance":"support","strongest_finding":"Divergent","evidence_references":[],"material_claims":[],"risks":[],"objections":[],"challenges":[],"suggested_artifact_changes":[],"unsupported_recommendations":[],"uncertainty":{"level":"low","rationale":"Direct"},"open_questions":[]}"#,
+            "duplicate immutable contribution id contribution_a",
+        ),
+        (
+            "synthesis_packets.jsonl",
+            r#"{"schema_version":1,"scope_id":"default","id":"synthesis_a","target":{"artifact_type":"source","artifact_id":"source_a"},"summary":"First","consensus":[],"contested_claims":[],"minority_objections":[],"evidence_gaps":[],"unsupported_speculation":[],"open_questions":[],"suggested_artifacts":[],"required_human_decisions":[]}
+{"schema_version":1,"scope_id":"default","id":"synthesis_a","target":{"artifact_type":"source","artifact_id":"source_a"},"summary":"Divergent","consensus":[],"contested_claims":[],"minority_objections":[],"evidence_gaps":[],"unsupported_speculation":[],"open_questions":[],"suggested_artifacts":[],"required_human_decisions":[]}"#,
+            "duplicate immutable synthesis packet id synthesis_a",
+        ),
+    ];
+
+    for (file, records, expected) in cases {
+        let dir = tempfile::tempdir().unwrap();
+        init(dir.path());
+        write_jsonl(
+            &dir.path()
+                .join(".provenance/state/scopes/default/ideation")
+                .join(file),
+            records,
+        );
+
+        provenance(dir.path()).failure().stderr(contains(expected));
+    }
+}
+
+#[test]
 fn check_preserves_edge_shard_parse_context() {
     let dir = tempfile::tempdir().unwrap();
     init(dir.path());

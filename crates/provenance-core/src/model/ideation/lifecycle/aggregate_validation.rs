@@ -11,6 +11,20 @@ use std::collections::{BTreeMap, BTreeSet};
 pub(super) fn validate(aggregate: IdeationAggregate<'_>) -> anyhow::Result<()> {
     validate_source_schema_versions(&aggregate)?;
     ensure_immutable_ids(
+        "contribution",
+        aggregate
+            .contributions
+            .iter()
+            .map(|record| (record.id.as_str(), record)),
+    )?;
+    ensure_immutable_ids(
+        "synthesis packet",
+        aggregate
+            .synthesis_packets
+            .iter()
+            .map(|record| (record.id.as_str(), record)),
+    )?;
+    ensure_immutable_ids(
         "proposal",
         aggregate
             .proposals

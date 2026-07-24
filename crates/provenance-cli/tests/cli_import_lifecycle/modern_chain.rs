@@ -27,6 +27,35 @@ fn import_cannot_omit_existing_modern_lifecycle_chain() {
         .stderr(predicates::str::contains("immutable proposal proposal_a"));
 }
 
+#[test]
+fn import_rejects_duplicate_evidence_record_ids() {
+    let fixture = ModernLifecycleFixture::new();
+    let cases = [
+        (
+            "contributions",
+            "strongest_finding",
+            "duplicate immutable contribution id contribution_a",
+        ),
+        (
+            "synthesis_packets",
+            "summary",
+            "duplicate immutable synthesis packet id synthesis_a",
+        ),
+    ];
+
+    for (records, divergent_field, expected) in cases {
+        let mut duplicate = fixture.lifecycle.clone();
+        let mut divergent = duplicate[records][0].clone();
+        divergent[divergent_field] = serde_json::json!("Divergent");
+        duplicate[records].as_array_mut().unwrap().push(divergent);
+
+        fixture
+            .import_value(&format!("duplicate-{records}.json"), &duplicate)
+            .failure()
+            .stderr(predicates::str::contains(expected));
+    }
+}
+
 struct ModernLifecycleFixture {
     _directory: tempfile::TempDir,
     root: PathBuf,
