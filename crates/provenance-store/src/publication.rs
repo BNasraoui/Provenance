@@ -131,14 +131,17 @@ fn validated_transaction_dir(
     layout: &ProvenanceLayout,
     transaction_dir: &Utf8Path,
 ) -> anyhow::Result<Utf8PathBuf> {
-    let transactions = layout.import_transactions_dir();
     let canonical_transactions = canonical_transactions_dir(layout)?;
     let canonical_transaction = Utf8PathBuf::from_path_buf(std::fs::canonicalize(transaction_dir)?)
         .map_err(|path| {
             anyhow::anyhow!("import transaction path is not UTF-8: {}", path.display())
         })?;
+    let parent = transaction_dir
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("publication marker transaction has no parent"))?;
+    let canonical_parent = std::fs::canonicalize(parent)?;
     anyhow::ensure!(
-        transaction_dir.parent() == Some(transactions.as_path())
+        canonical_parent == canonical_transactions
             && canonical_transaction.parent() == Some(canonical_transactions.as_path()),
         "publication marker transaction is outside the repository cache"
     );
@@ -149,14 +152,11 @@ fn validate_missing_transaction_dir(
     layout: &ProvenanceLayout,
     transaction_dir: &Utf8Path,
 ) -> anyhow::Result<()> {
-    let transactions = layout.import_transactions_dir();
-    let parent = transaction_dir.parent();
-    anyhow::ensure!(
-        parent == Some(transactions.as_path()),
-        "publication marker transaction is outside the repository cache"
-    );
+    let parent = transaction_dir
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("publication marker transaction has no parent"))?;
     let canonical_transactions = canonical_transactions_dir(layout)?;
-    let canonical_parent = std::fs::canonicalize(parent.expect("transaction parent was checked"))?;
+    let canonical_parent = std::fs::canonicalize(parent)?;
     anyhow::ensure!(
         canonical_parent == canonical_transactions,
         "publication marker transaction is outside the repository cache"

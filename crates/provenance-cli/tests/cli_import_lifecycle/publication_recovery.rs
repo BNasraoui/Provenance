@@ -1,7 +1,7 @@
 use super::support::{init_repo, provenance};
 
 #[test]
-fn repository_access_restores_backup_after_interrupted_publication() {
+fn relative_repository_access_restores_backup_after_interrupted_publication() {
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path().join("repo");
     init_repo(&repo, None);
@@ -14,13 +14,30 @@ fn repository_access_restores_backup_after_interrupted_publication() {
     .unwrap();
     write_publication_marker(&repo, &transaction, "backup_created");
 
-    check_repo(&repo);
+    check_repo_relative(&repo);
 
     assert!(repo.join(".provenance/state/manifest.json").is_file());
     assert!(!repo
         .join(".provenance/cache/import-publication.json")
         .exists());
     assert!(!transaction.exists());
+}
+
+#[test]
+fn relative_repository_access_clears_marker_when_transaction_is_missing() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    init_repo(&repo, None);
+    let transaction = repo.join(".provenance/cache/import-transactions/completed");
+    std::fs::create_dir_all(transaction.parent().unwrap()).unwrap();
+    write_publication_marker(&repo, &transaction, "published");
+
+    check_repo_relative(&repo);
+
+    assert!(repo.join(".provenance/state/manifest.json").is_file());
+    assert!(!repo
+        .join(".provenance/cache/import-publication.json")
+        .exists());
 }
 
 #[test]
@@ -50,6 +67,14 @@ fn check_repo(repo: &std::path::Path) {
             "--format",
             "json",
         ])
+        .assert()
+        .success();
+}
+
+fn check_repo_relative(repo: &std::path::Path) {
+    provenance()
+        .current_dir(repo)
+        .args(["check", "--repo", ".", "--format", "json"])
         .assert()
         .success();
 }
