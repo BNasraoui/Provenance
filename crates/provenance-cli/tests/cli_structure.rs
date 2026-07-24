@@ -1,36 +1,41 @@
-use std::{fs, path::Path};
+use std::{fs, path::PathBuf, process::Command};
 
 const RUST_FILE_LINE_LIMIT: usize = 500;
 
 #[test]
-fn cli_definition_files_stay_within_the_rust_file_line_limit() {
-    let cli_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/cli");
-    let mut files = vec![Path::new(env!("CARGO_MANIFEST_DIR")).join("src/cli.rs")];
+fn tracked_rust_files_stay_below_the_hard_line_limit() {
+    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|path| path.parent())
+        .expect("CLI crate is nested under the workspace root")
+        .to_path_buf();
+    let output = Command::new("git")
+        .args([
+            "-C",
+            workspace.to_str().expect("workspace path is UTF-8"),
+            "ls-files",
+            "-z",
+            "--",
+            ":(glob)**/*.rs",
+        ])
+        .output()
+        .expect("run git ls-files for the Rust line audit");
+    assert!(output.status.success(), "git ls-files failed");
+    let files = output
+        .stdout
+        .split(|byte| *byte == 0)
+        .filter(|path| !path.is_empty())
+        .map(|path| String::from_utf8(path.to_vec()).expect("tracked Rust path is UTF-8"))
+        .collect::<Vec<_>>();
+    assert!(!files.is_empty(), "tracked Rust line audit found no files");
 
-    collect_rust_files(&cli_root, &mut files);
-
-    for path in files {
-        let source = fs::read_to_string(&path).expect("read CLI definition file");
+    for relative_path in files {
+        let path = workspace.join(&relative_path);
+        let source = fs::read_to_string(&path).expect("read tracked Rust file");
         let line_count = source.lines().count();
         assert!(
-            line_count <= RUST_FILE_LINE_LIMIT,
-            "{} has {line_count} lines; the limit is {RUST_FILE_LINE_LIMIT}",
-            path.display()
+            line_count < RUST_FILE_LINE_LIMIT,
+            "{relative_path} has {line_count} lines; tracked Rust files must stay below {RUST_FILE_LINE_LIMIT}",
         );
-    }
-}
-
-fn collect_rust_files(directory: &Path, files: &mut Vec<std::path::PathBuf>) {
-    if !directory.exists() {
-        return;
-    }
-
-    for entry in fs::read_dir(directory).expect("read CLI module directory") {
-        let path = entry.expect("read CLI module entry").path();
-        if path.is_dir() {
-            collect_rust_files(&path, files);
-        } else if path.extension().is_some_and(|extension| extension == "rs") {
-            files.push(path);
-        }
     }
 }
