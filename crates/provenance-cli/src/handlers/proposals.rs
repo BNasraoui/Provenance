@@ -90,18 +90,23 @@ pub(super) fn handle(command: ProposalsCommand, quiet: bool) -> anyhow::Result<(
             proposal_id,
             synthesis_packet_id,
             supporting_claim_id,
+            resolve_human_gate,
             format,
         } => {
             warn_if_skills_missing(&repo, quiet)?;
-            let assertion = StateStore::new(ProvenanceLayout::new(repo)).assert_proposal(
-                CreateAssertionInput {
-                    scope_id: ScopeId::new(scope)?,
-                    id: AssertionId::new(id)?,
-                    proposal_id: StableId::new(proposal_id)?,
-                    synthesis_packet_id: StableId::new(synthesis_packet_id)?,
-                    supporting_claim_ids: stable_ids(supporting_claim_id)?,
-                },
-            )?;
+            let store = StateStore::new(ProvenanceLayout::new(repo));
+            let input = CreateAssertionInput {
+                scope_id: ScopeId::new(scope)?,
+                id: AssertionId::new(id)?,
+                proposal_id: StableId::new(proposal_id)?,
+                synthesis_packet_id: StableId::new(synthesis_packet_id)?,
+                supporting_claim_ids: stable_ids(supporting_claim_id)?,
+            };
+            let assertion = if resolve_human_gate {
+                store.assert_proposal_after_human_decision(input)?
+            } else {
+                store.assert_proposal(input)?
+            };
             output::print(format, &assertion)?;
         }
         ProposalsCommand::List {

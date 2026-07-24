@@ -52,6 +52,55 @@ impl StateStore {
         self.with_lifecycle_lock(&scope, || self.write_assertion(input))
     }
 
+    pub fn assert_proposal_after_human_decision(
+        &self,
+        input: CreateAssertionInput,
+    ) -> anyhow::Result<AssertionRecord> {
+        let scope = input.scope_id.clone();
+        self.with_lifecycle_lock(&scope, || {
+            anyhow::ensure!(
+                !self
+                    .list_dispositions(&scope)?
+                    .iter()
+                    .any(|record| record.proposal_id == input.proposal_id),
+                "a disposed proposal cannot re-enter assertion"
+            );
+            let mut synthesis = self
+                .list_synthesis_packets(&scope)?
+                .into_iter()
+                .find(|packet| packet.id == input.synthesis_packet_id)
+                .ok_or_else(|| anyhow::anyhow!("assertion synthesis packet does not exist"))?;
+            let previous_len = synthesis.required_human_decisions.len();
+            synthesis
+                .required_human_decisions
+                .retain(|decision| !decision.blocks_promotion);
+            anyhow::ensure!(
+                synthesis.required_human_decisions.len() < previous_len,
+                "synthesis packet has no blocking human decision to resolve"
+            );
+            let assertion = AssertionRecord {
+                schema_version: SchemaVersion(1),
+                scope_id: input.scope_id,
+                id: input.id,
+                proposal_id: input.proposal_id,
+                synthesis_packet_id: input.synthesis_packet_id,
+                supporting_claim_ids: input.supporting_claim_ids,
+            };
+            self.write_ideation_batch(
+                &scope,
+                super::IdeationLandingBatch {
+                    contributions: Vec::new(),
+                    synthesis_packets: vec![synthesis],
+                    proposals: Vec::new(),
+                    assertions: vec![assertion.clone()],
+                    dispositions: Vec::new(),
+                },
+                true,
+            )?;
+            Ok(assertion)
+        })
+    }
+
     fn write_assertion(&self, input: CreateAssertionInput) -> anyhow::Result<AssertionRecord> {
         let assertion = AssertionRecord {
             schema_version: SchemaVersion(1),

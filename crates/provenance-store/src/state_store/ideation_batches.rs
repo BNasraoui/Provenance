@@ -1,7 +1,8 @@
 use super::{read_jsonl, read_legacy_dispositions, IdeationLandingBatch, StateStore};
 use crate::shards;
 use provenance_core::{
-    AssertionRecord, DispositionRecord, IdeationAggregate, ProposalCard, ScopeId,
+    AssertionRecord, Contribution, DispositionRecord, IdeationAggregate, ProposalCard, ScopeId,
+    SynthesisPacket,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -131,10 +132,15 @@ impl StateStore {
     }
 
     pub fn validate_ideation_scope(&self, scope: &ScopeId) -> anyhow::Result<()> {
+        let mut contributions: Vec<Contribution> =
+            read_jsonl(&shards::contributions_path(&self.layout, scope))?;
+        let mut synthesis_packets: Vec<SynthesisPacket> =
+            read_jsonl(&shards::synthesis_packets_path(&self.layout, scope))?;
         let direct_proposals: Vec<ProposalCard> =
             read_jsonl(&shards::proposal_cards_path(&self.layout, scope))?;
         let direct_assertions: Vec<AssertionRecord> =
             read_jsonl(&shards::assertion_records_path(&self.layout, scope))?;
+        let mut assertions_in_order = direct_assertions.clone();
         let mut direct_dispositions: Vec<DispositionRecord> =
             read_jsonl(&shards::dispositions_path(&self.layout, scope))?;
         direct_dispositions.extend(read_legacy_dispositions(
@@ -162,6 +168,12 @@ impl StateStore {
             &mut dispositions,
         )?;
         for batch in self.list_ideation_landings(scope)? {
+            ensure_asserted_evidence_unchanged(
+                &contributions,
+                &synthesis_packets,
+                &batch,
+                &assertions_in_order,
+            )?;
             insert_all(
                 "proposal",
                 &batch.proposals,
@@ -180,6 +192,13 @@ impl StateStore {
                 |r| r.id.as_str(),
                 &mut dispositions,
             )?;
+            overlay_records(&mut contributions, batch.contributions, |record| {
+                record.id.as_str()
+            });
+            overlay_records(&mut synthesis_packets, batch.synthesis_packets, |record| {
+                record.id.as_str()
+            });
+            assertions_in_order.extend(batch.assertions);
         }
         let proposals = self.list_proposal_definitions(scope)?;
         let assertions = self.list_assertion_records(scope)?;
@@ -198,14 +217,39 @@ impl StateStore {
         provenance_core::validate_ideation_aggregate(IdeationAggregate {
             legacy_policy: provenance_core::LegacyProposalPolicy::ShippedV1,
             disposition_actor_ids: &disposition_actor_ids,
-            contributions: &self.list_contributions(scope)?,
-            synthesis_packets: &self.list_synthesis_packets(scope)?,
+            contributions: &contributions,
+            synthesis_packets: &synthesis_packets,
             proposals: &proposals,
             assertions: &assertions,
             dispositions: &dispositions,
         })?;
         Ok(())
     }
+}
+
+fn ensure_asserted_evidence_unchanged(
+    contributions: &[Contribution],
+    synthesis_packets: &[SynthesisPacket],
+    batch: &IdeationLandingBatch,
+    assertions: &[AssertionRecord],
+) -> anyhow::Result<()> {
+    for replacement in &batch.contributions {
+        if let Some(existing) = contributions
+            .iter()
+            .find(|record| record.id == replacement.id)
+        {
+            ensure_asserted_contribution_unchanged(existing, replacement, assertions)?;
+        }
+    }
+    for replacement in &batch.synthesis_packets {
+        if let Some(existing) = synthesis_packets
+            .iter()
+            .find(|record| record.id == replacement.id)
+        {
+            ensure_asserted_synthesis_unchanged(existing, replacement, assertions)?;
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn ensure_asserted_contribution_unchanged(

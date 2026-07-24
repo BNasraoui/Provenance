@@ -217,6 +217,9 @@ pub enum ProposalsCommand {
         synthesis_packet_id: String,
         #[arg(long)]
         supporting_claim_id: Vec<String>,
+        /// Atomically clear resolved blocking human decisions before asserting.
+        #[arg(long)]
+        resolve_human_gate: bool,
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },

@@ -169,7 +169,7 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
             "--suggested-artifacts-json",
             r#"[{"proposal_id":"proposal_overtime_traceability","proposal_key":"req-overtime-traceability","proposal_type":"requirement_candidate","summary":"Clarify source traceability.","origin_participant_slots":["reviewer"]}]"#,
             "--required-human-decisions-json",
-            r#"[{"decision_key":"decide_agreement_scope","prompt":"Confirm the governing agreement.","blocks_promotion":false}]"#,
+            r#"[{"decision_key":"decide_agreement_scope","prompt":"Confirm the governing agreement.","blocks_promotion":true}]"#,
             "--format",
             "json",
         ])
@@ -208,12 +208,32 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
             r#"[{"reference_id":"evidence_code_line","evidence_type":"artifact","summary":"Existing payroll check","file_path":"src/payroll/overtime.rs","line":42}]"#,
             "--supporting-claim-id",
             "claim_overtime_threshold",
-            "--assertion-id",
-            "assertion_overtime_traceability",
-            "--synthesis-packet-id",
-            "synth_overtime_001",
             "--promotion-state",
             "proposed",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success();
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "proposals",
+            "assert",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--id",
+            "assertion_overtime_traceability",
+            "--proposal-id",
+            "proposal_overtime_traceability",
+            "--synthesis-packet-id",
+            "synth_overtime_001",
+            "--supporting-claim-id",
+            "claim_overtime_threshold",
+            "--resolve-human-gate",
             "--format",
             "json",
         ])
