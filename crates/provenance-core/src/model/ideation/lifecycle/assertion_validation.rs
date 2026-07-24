@@ -120,7 +120,7 @@ fn validate_supporting_claims(
         );
         let (claim, owner) = find_claim_owner(claim_id, contributions)?;
         validate_claim_owner(claim_id, proposal, claim, owner)?;
-        validate_claim_evidence(claim_id, claim, owner)?;
+        validate_claim_evidence(claim_id, claim, owner, contributions)?;
     }
     Ok(())
 }
@@ -175,19 +175,31 @@ fn validate_claim_evidence(
     claim_id: &StableId,
     claim: &MaterialClaim,
     owner: &Contribution,
+    contributions: &[Contribution],
 ) -> anyhow::Result<()> {
     for evidence_id in &claim.evidence_reference_ids {
-        let matches = owner
-            .evidence_references
+        let matches = contributions
             .iter()
-            .filter(|evidence| evidence.reference_id == *evidence_id)
+            .flat_map(|contribution| {
+                contribution
+                    .evidence_references
+                    .iter()
+                    .map(move |evidence| (evidence, contribution))
+            })
+            .filter(|(evidence, _)| evidence.reference_id == *evidence_id)
             .collect::<Vec<_>>();
         anyhow::ensure!(
             matches.len() == 1,
             "assertion evidence {} must have exactly one owner",
             evidence_id.as_str()
         );
-        let evidence = matches[0];
+        let (evidence, evidence_owner) = matches[0];
+        anyhow::ensure!(
+            std::ptr::eq(evidence_owner, owner),
+            "assertion evidence {} is not owned by claim contribution {}",
+            evidence_id.as_str(),
+            owner.id.as_str()
+        );
         anyhow::ensure!(
             evidence.evidence_type == claim.evidence_type,
             "assertion evidence type does not match claim {}",

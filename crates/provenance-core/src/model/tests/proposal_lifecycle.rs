@@ -154,6 +154,38 @@ fn assertion_requires_positive_evidence_owned_by_proposal_target() {
 }
 
 #[test]
+fn assertion_rejects_evidence_reference_owned_by_multiple_contributions() {
+    let (contribution, synthesis, proposal, assertion) = lifecycle_fixture();
+    let mut duplicate_owner = contribution.clone();
+    duplicate_owner["id"] = serde_json::json!("contribution_b");
+    duplicate_owner["material_claims"] = serde_json::json!([]);
+    let contributions = vec![
+        serde_json::from_value(contribution).unwrap(),
+        serde_json::from_value(duplicate_owner).unwrap(),
+    ];
+    let synthesis_packets = vec![serde_json::from_value(synthesis).unwrap()];
+    let proposals = vec![serde_json::from_value(proposal).unwrap()];
+    let assertions = vec![serde_json::from_value(assertion).unwrap()];
+
+    let error = crate::validate_ideation_aggregate(crate::IdeationAggregate {
+        legacy_policy: crate::LegacyProposalPolicy::ModernOnly,
+        disposition_actor_ids: &[],
+        contributions: &contributions,
+        synthesis_packets: &synthesis_packets,
+        proposals: &proposals,
+        assertions: &assertions,
+        dispositions: &[],
+    })
+    .unwrap_err()
+    .to_string();
+
+    assert!(
+        error.contains("evidence evidence_a must have exactly one owner"),
+        "{error}"
+    );
+}
+
+#[test]
 fn assertion_requires_unblocked_uncontested_adjudication() {
     let (contribution, mut synthesis, proposal, assertion) = lifecycle_fixture();
     synthesis["evidence_gaps"] = serde_json::json!([{
