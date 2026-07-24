@@ -37,6 +37,7 @@ struct LandReport {
     contributions: usize,
     synthesis_packets: usize,
     proposals: usize,
+    assertions: usize,
     replace: bool,
 }
 
@@ -128,6 +129,7 @@ fn land(
     let contribution_count = contributions.len();
     let synthesis_count = synthesis_packets.len();
     let proposal_count = proposals.len();
+    let assertion_count = assertions.len();
     let store = StateStore::new(ProvenanceLayout::new(repo));
     preflight_land(
         &store,
@@ -158,6 +160,7 @@ fn land(
             contributions: contribution_count,
             synthesis_packets: synthesis_count,
             proposals: proposal_count,
+            assertions: assertion_count,
             replace,
         },
     )

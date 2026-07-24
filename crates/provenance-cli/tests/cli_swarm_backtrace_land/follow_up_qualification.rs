@@ -55,7 +55,9 @@ fn incoming_synthesis_requires_and_supports_asserting_an_existing_proposal() {
         "assertions": original["assertions"]
     });
     std::fs::write(&merge, serde_json::to_vec(&asserted).unwrap()).unwrap();
-    land(&repo, &run_dir).success();
+    land(&repo, &run_dir)
+        .success()
+        .stdout(predicates::str::contains(r#""assertions": 1"#));
     Command::cargo_bin("provenance")
         .unwrap()
         .args([
