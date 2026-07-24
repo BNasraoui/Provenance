@@ -170,6 +170,54 @@ fn assertion_rejects_conflicting_duplicate_evidence_ids() {
 }
 
 #[test]
+fn resolving_one_human_decision_preserves_other_blockers() {
+    let (_dir, store, scope) = initialized_store();
+    seed_blocked_evidence(&store, &scope);
+    let mut packets = store.list_synthesis_packets(&scope).unwrap();
+    packets[0].evidence_gaps.clear();
+    packets[0].required_human_decisions = serde_json::from_value(serde_json::json!([
+        {"decision_key": "decision_a", "prompt": "Choose A", "blocks_promotion": true},
+        {"decision_key": "decision_b", "prompt": "Choose B", "blocks_promotion": true}
+    ]))
+    .unwrap();
+    crate::jsonl::write_jsonl_atomic(
+        &crate::shards::synthesis_packets_path(&store.layout, &scope),
+        &packets,
+    )
+    .unwrap();
+    let mut proposal = proposal_input(
+        &scope,
+        "proposal_overtime",
+        "Overtime",
+        PromotionState::Proposed,
+    );
+    proposal.traceability.supporting_claim_ids = vec![StableId::new("claim_overtime").unwrap()];
+    store.create_proposal_card(proposal).unwrap();
+
+    let error = store
+        .assert_proposal_after_human_decision(
+            CreateAssertionInput {
+                scope_id: scope.clone(),
+                id: provenance_core::AssertionId::new("assertion_overtime").unwrap(),
+                proposal_id: StableId::new("proposal_overtime").unwrap(),
+                synthesis_packet_id: StableId::new("synthesis_overtime").unwrap(),
+                supporting_claim_ids: vec![StableId::new("claim_overtime").unwrap()],
+            },
+            &[StableId::new("decision_a").unwrap()],
+        )
+        .unwrap_err()
+        .to_string();
+
+    assert!(error.contains("blocking human decision"), "{error}");
+    assert_eq!(
+        store.list_synthesis_packets(&scope).unwrap()[0]
+            .required_human_decisions
+            .len(),
+        2
+    );
+}
+
+#[test]
 fn repository_actor_allowlist_rejects_unlisted_disposition_actor() {
     let (_dir, store, scope) = initialized_store();
     store

@@ -26,8 +26,19 @@ pub(super) fn validate_assertions(
             .ok_or_else(|| anyhow::anyhow!("assertion synthesis packet does not exist"))?;
         validate_assertion_packet(proposal, packet)?;
         validate_supporting_claims(assertion, proposal, packet, aggregate.contributions)?;
+        let assertion_claims = assertion
+            .supporting_claim_ids
+            .iter()
+            .map(StableId::as_str)
+            .collect::<BTreeSet<_>>();
+        let proposal_claims = proposal
+            .traceability
+            .supporting_claim_ids
+            .iter()
+            .map(StableId::as_str)
+            .collect::<BTreeSet<_>>();
         anyhow::ensure!(
-            assertion.supporting_claim_ids == proposal.traceability.supporting_claim_ids,
+            assertion_claims == proposal_claims,
             "assertion claims must match proposal traceability"
         );
     }

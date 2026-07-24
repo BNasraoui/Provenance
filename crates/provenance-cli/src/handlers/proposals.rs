@@ -91,6 +91,7 @@ pub(super) fn handle(command: ProposalsCommand, quiet: bool) -> anyhow::Result<(
             synthesis_packet_id,
             supporting_claim_id,
             resolve_human_gate,
+            decision_key,
             format,
         } => {
             warn_if_skills_missing(&repo, quiet)?;
@@ -103,7 +104,8 @@ pub(super) fn handle(command: ProposalsCommand, quiet: bool) -> anyhow::Result<(
                 supporting_claim_ids: stable_ids(supporting_claim_id)?,
             };
             let assertion = if resolve_human_gate {
-                store.assert_proposal_after_human_decision(input)?
+                let decision_keys = stable_ids(decision_key)?;
+                store.assert_proposal_after_human_decision(input, &decision_keys)?
             } else {
                 store.assert_proposal(input)?
             };

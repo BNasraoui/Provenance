@@ -247,6 +247,28 @@ fn accepted_disposition_still_requires_assertion() {
 }
 
 #[test]
+fn assertion_claim_matching_is_order_independent() {
+    let (mut contribution, synthesis, mut proposal, mut assertion) = lifecycle_fixture();
+    contribution["evidence_references"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "reference_id": "evidence_b", "evidence_type": "source", "summary": "Also pinned"
+        }));
+    contribution["material_claims"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "claim_id": "claim_b", "statement": "Also observed", "evidence_type": "source",
+            "evidence_reference_ids": ["evidence_b"]
+        }));
+    proposal["traceability"]["supporting_claim_ids"] = serde_json::json!(["claim_a", "claim_b"]);
+    assertion["supporting_claim_ids"] = serde_json::json!(["claim_b", "claim_a"]);
+
+    validate_fixture(contribution, synthesis, proposal, assertion).unwrap();
+}
+
+#[test]
 fn rejected_or_deferred_disposition_cannot_coexist_with_assertion() {
     for decision in ["rejected", "deferred"] {
         let (contribution, synthesis, proposal, assertion) = lifecycle_fixture();

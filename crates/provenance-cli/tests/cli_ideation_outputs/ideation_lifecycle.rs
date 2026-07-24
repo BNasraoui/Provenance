@@ -234,6 +234,8 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
             "--supporting-claim-id",
             "claim_overtime_threshold",
             "--resolve-human-gate",
+            "--decision-key",
+            "decide_agreement_scope",
             "--format",
             "json",
         ])

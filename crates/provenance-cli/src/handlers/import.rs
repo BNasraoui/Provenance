@@ -48,6 +48,7 @@ pub(super) fn import_scope(
         + exported.assertion_records.len()
         + exported.dispositions.len();
     let live_layout = ProvenanceLayout::new(repo);
+    validate_import_transactions_dir(&live_layout)?;
     let manifest = StateStore::new(live_layout.clone()).manifest()?;
     provenance_core::validate_ideation_aggregate(provenance_core::IdeationAggregate {
         legacy_policy: provenance_core::LegacyProposalPolicy::ShippedV1,
@@ -169,13 +170,14 @@ fn apply_import(
     exported: &ScopeExport,
     dry_run: bool,
 ) -> anyhow::Result<()> {
-    let transaction = live_layout.import_transactions_dir().join(format!(
+    let transaction_name = format!(
         "{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
             .as_nanos()
-    ));
+    );
+    let transaction = create_import_transaction(live_layout, &transaction_name)?;
     let _cleanup = TransactionCleanup::new(transaction.clone(), live_layout);
     let staged_repo = transaction.join("staged-repo");
     copy_directory(
@@ -230,6 +232,79 @@ fn apply_import(
         return Ok(());
     }
     std::fs::remove_dir_all(transaction)?;
+    Ok(())
+}
+
+fn create_import_transaction(
+    layout: &ProvenanceLayout,
+    transaction_name: &str,
+) -> anyhow::Result<Utf8PathBuf> {
+    let transactions = validate_import_transactions_dir(layout)?;
+    let transaction = transactions.join(transaction_name);
+    std::fs::create_dir(&transaction)?;
+    Ok(transaction)
+}
+
+fn validate_import_transactions_dir(layout: &ProvenanceLayout) -> anyhow::Result<Utf8PathBuf> {
+    let repo = layout
+        .provenance_dir()
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("repository has no parent"))?
+        .to_path_buf();
+    let canonical_repo = Utf8PathBuf::from_path_buf(std::fs::canonicalize(repo)?)
+        .map_err(|path| anyhow::anyhow!("repository path is not UTF-8: {}", path.display()))?;
+    let provenance = layout.provenance_dir();
+    ensure_real_directory(&provenance)?;
+    let canonical_provenance = Utf8PathBuf::from_path_buf(std::fs::canonicalize(&provenance)?)
+        .map_err(|path| anyhow::anyhow!("provenance path is not UTF-8: {}", path.display()))?;
+    anyhow::ensure!(
+        canonical_provenance == canonical_repo.join(".provenance"),
+        "repository cache is outside the repository"
+    );
+
+    let cache = layout.cache_dir();
+    create_real_directory(&cache)?;
+    let canonical_cache =
+        Utf8PathBuf::from_path_buf(std::fs::canonicalize(&cache)?).map_err(|path| {
+            anyhow::anyhow!("repository cache path is not UTF-8: {}", path.display())
+        })?;
+    anyhow::ensure!(
+        canonical_cache == canonical_provenance.join("cache"),
+        "repository cache is outside the repository"
+    );
+
+    let transactions = layout.import_transactions_dir();
+    create_real_directory(&transactions)?;
+    let canonical_transactions = Utf8PathBuf::from_path_buf(std::fs::canonicalize(&transactions)?)
+        .map_err(|path| {
+            anyhow::anyhow!("import transaction path is not UTF-8: {}", path.display())
+        })?;
+    anyhow::ensure!(
+        canonical_transactions == canonical_cache.join("import-transactions"),
+        "import transaction directory is outside the repository cache"
+    );
+
+    Ok(transactions)
+}
+
+fn create_real_directory(path: &camino::Utf8Path) -> anyhow::Result<()> {
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) => anyhow::ensure!(
+            metadata.file_type().is_dir() && !metadata.file_type().is_symlink(),
+            "repository cache contains a symlink component: {path}"
+        ),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => std::fs::create_dir(path)?,
+        Err(error) => return Err(error.into()),
+    }
+    ensure_real_directory(path)
+}
+
+fn ensure_real_directory(path: &camino::Utf8Path) -> anyhow::Result<()> {
+    let metadata = std::fs::symlink_metadata(path)?;
+    anyhow::ensure!(
+        metadata.file_type().is_dir() && !metadata.file_type().is_symlink(),
+        "repository cache contains a symlink component: {path}"
+    );
     Ok(())
 }
 

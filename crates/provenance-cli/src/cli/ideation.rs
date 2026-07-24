@@ -218,8 +218,11 @@ pub enum ProposalsCommand {
         #[arg(long)]
         supporting_claim_id: Vec<String>,
         /// Atomically clear resolved blocking human decisions before asserting.
-        #[arg(long)]
+        #[arg(long, requires = "decision_key")]
         resolve_human_gate: bool,
+        /// Blocking human decision key that was resolved. Repeatable.
+        #[arg(long, requires = "resolve_human_gate")]
+        decision_key: Vec<String>,
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },

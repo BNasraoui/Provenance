@@ -197,7 +197,8 @@ The promotion gate, with a clock. This is a grill-shaped turn against the artifa
       --proposal-id prop_<question>_<winner_slot> \
       --synthesis-packet-id synth_<question> \
       --supporting-claim-id claim_<question>_<winner_slot> \
-      --resolve-human-gate
+      --resolve-human-gate \
+      --decision-key decision_<question>
     ```
 
 6. **Dispose of every proposal** — winner accepted with the resolution as canonical

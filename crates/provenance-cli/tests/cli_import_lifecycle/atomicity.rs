@@ -81,3 +81,83 @@ fn import_rejects_external_file_symlink_without_changing_live_state() {
     assert!(metadata.file_type().is_symlink());
     assert_eq!(std::fs::read_to_string(&external).unwrap(), "do not import");
 }
+
+#[cfg(unix)]
+#[test]
+fn dry_run_rejects_symlinked_import_transactions_directory() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    init_repo(&repo, None);
+    let input = dir.path().join("input.json");
+    export_scope(&repo, &input).success();
+    let outside = dir.path().join("outside");
+    std::fs::create_dir(&outside).unwrap();
+    let transactions = repo.join(".provenance/cache/import-transactions");
+    if transactions.exists() {
+        std::fs::remove_dir_all(&transactions).unwrap();
+    }
+    std::os::unix::fs::symlink(&outside, &transactions).unwrap();
+
+    super::support::provenance()
+        .args([
+            "import",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--input",
+            input.to_str().unwrap(),
+            "--dry-run",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("repository cache"));
+
+    let outside_entries = std::fs::read_dir(outside)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect::<Vec<_>>();
+    assert!(
+        outside_entries.is_empty(),
+        "outside writes: {outside_entries:?}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn dry_run_rejects_symlinked_cache_before_locking() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    init_repo(&repo, None);
+    let input = dir.path().join("input.json");
+    export_scope(&repo, &input).success();
+    let outside = dir.path().join("outside-cache");
+    std::fs::create_dir(&outside).unwrap();
+    let cache = repo.join(".provenance/cache");
+    std::fs::remove_dir_all(&cache).unwrap();
+    std::os::unix::fs::symlink(&outside, &cache).unwrap();
+
+    super::support::provenance()
+        .args([
+            "import",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--input",
+            input.to_str().unwrap(),
+            "--dry-run",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("symlink component"));
+
+    let outside_entries = std::fs::read_dir(outside)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect::<Vec<_>>();
+    assert!(
+        outside_entries.is_empty(),
+        "outside writes: {outside_entries:?}"
+    );
+}

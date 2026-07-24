@@ -55,6 +55,7 @@ impl StateStore {
     pub fn assert_proposal_after_human_decision(
         &self,
         input: CreateAssertionInput,
+        decision_keys: &[StableId],
     ) -> anyhow::Result<AssertionRecord> {
         let scope = input.scope_id.clone();
         self.with_lifecycle_lock(&scope, || {
@@ -70,14 +71,30 @@ impl StateStore {
                 .into_iter()
                 .find(|packet| packet.id == input.synthesis_packet_id)
                 .ok_or_else(|| anyhow::anyhow!("assertion synthesis packet does not exist"))?;
-            let previous_len = synthesis.required_human_decisions.len();
-            synthesis
-                .required_human_decisions
-                .retain(|decision| !decision.blocks_promotion);
+            let decision_keys = decision_keys
+                .iter()
+                .map(StableId::as_str)
+                .collect::<std::collections::BTreeSet<_>>();
             anyhow::ensure!(
-                synthesis.required_human_decisions.len() < previous_len,
-                "synthesis packet has no blocking human decision to resolve"
+                !decision_keys.is_empty(),
+                "no human decision key was supplied"
             );
+            let resolved = synthesis
+                .required_human_decisions
+                .iter()
+                .filter(|decision| {
+                    decision.blocks_promotion
+                        && decision_keys.contains(decision.decision_key.as_str())
+                })
+                .count();
+            anyhow::ensure!(
+                resolved == decision_keys.len(),
+                "synthesis packet has no matching blocking human decision to resolve"
+            );
+            synthesis.required_human_decisions.retain(|decision| {
+                !decision.blocks_promotion
+                    || !decision_keys.contains(decision.decision_key.as_str())
+            });
             let assertion = AssertionRecord {
                 schema_version: SchemaVersion(1),
                 scope_id: input.scope_id,
