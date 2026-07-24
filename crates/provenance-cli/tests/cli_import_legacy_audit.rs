@@ -49,6 +49,7 @@ fn altered_replaced_or_omitted_shipped_disposition_audit_is_rejected() {
 fn exact_shipped_promotion_decisions_export_is_accepted() {
     let dir = tempfile::tempdir().unwrap();
     let mut legacy = export_shipped(&dir);
+    legacy.as_object_mut().unwrap().remove("assertion_records");
     let dispositions = legacy
         .as_object_mut()
         .unwrap()

@@ -56,6 +56,21 @@ fn import_rejects_duplicate_evidence_record_ids() {
     }
 }
 
+#[test]
+fn import_rejects_assertion_with_rejected_or_deferred_disposition() {
+    let fixture = ModernLifecycleFixture::new();
+    for decision in ["rejected", "deferred"] {
+        let mut lifecycle = fixture.lifecycle.clone();
+        lifecycle["dispositions"][0]["decision"] = serde_json::json!(decision);
+        fixture
+            .import_value(&format!("{decision}-asserted.json"), &lifecycle)
+            .failure()
+            .stderr(predicates::str::contains(
+                "cannot be asserted after disposition",
+            ));
+    }
+}
+
 struct ModernLifecycleFixture {
     _directory: tempfile::TempDir,
     root: PathBuf,

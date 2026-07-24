@@ -161,12 +161,17 @@ fn validate_disposition_links(
         if proposal.promotion_state != PromotionState::Proposed {
             continue;
         }
+        let is_asserted = aggregate
+            .assertions
+            .iter()
+            .any(|assertion| assertion.proposal_id == proposal.id);
         anyhow::ensure!(
-            disposition.decision != super::super::DispositionDecision::Accepted
-                || aggregate
-                    .assertions
-                    .iter()
-                    .any(|assertion| assertion.proposal_id == proposal.id),
+            disposition.decision == super::super::DispositionDecision::Accepted || !is_asserted,
+            "proposal {} cannot be asserted after disposition",
+            proposal.id.as_str()
+        );
+        anyhow::ensure!(
+            disposition.decision != super::super::DispositionDecision::Accepted || is_asserted,
             "accepted proposal {} must be asserted before disposition",
             proposal.id.as_str()
         );
