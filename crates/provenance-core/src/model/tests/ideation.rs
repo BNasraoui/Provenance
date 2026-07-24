@@ -206,7 +206,88 @@ fn confidence_scores_must_be_in_unit_interval() {
 }
 
 #[test]
-fn public_lifecycle_models_reject_legacy_persisted_field_names() {
+#[allow(clippy::too_many_lines)]
+fn schema_v1_camel_case_ideation_records_remain_readable() {
+    let contribution = serde_json::json!({
+        "schema_version": 1,
+        "scope_id": "default",
+        "id": "contrib_reviewer_001",
+        "target": {"artifactType": "requirement", "artifactId": "req_overtime"},
+        "participantSlot": "reviewer",
+        "stance": "support",
+        "strongestFinding": "The requirement is supported.",
+        "evidenceReferences": [{
+            "referenceId": "evidence_award_clause",
+            "evidenceType": "source",
+            "summary": "SCHADS overtime clause",
+            "filePath": "award.md"
+        }],
+        "materialClaims": [{
+            "claimId": "claim_overtime_threshold",
+            "statement": "Overtime starts after the threshold.",
+            "evidenceType": "source",
+            "evidenceReferenceIds": ["evidence_award_clause"]
+        }],
+        "risks": [],
+        "objections": [],
+        "challenges": [{"claimId": "claim_overtime_threshold", "objection": "Check it."}],
+        "suggestedArtifactChanges": [{
+            "artifactType": "requirement",
+            "artifactId": "req_overtime",
+            "changeType": "update",
+            "supportingClaimIds": ["claim_overtime_threshold"],
+            "summary": "Clarify the threshold."
+        }],
+        "unsupportedRecommendations": [],
+        "uncertainty": {"level": "low", "rationale": "Source reviewed."},
+        "openQuestions": []
+    });
+    let synthesis = serde_json::json!({
+        "schema_version": 1,
+        "scope_id": "default",
+        "id": "synth_overtime_001",
+        "target": {"artifactType": "requirement", "artifactId": "req_overtime"},
+        "summary": "The threshold needs traceability.",
+        "consensus": [{
+            "statement": "Add a source.",
+            "supportingParticipantSlots": ["reviewer"],
+            "evidenceReferenceIds": ["evidence_award_clause"]
+        }],
+        "contestedClaims": [{
+            "claimId": "claim_override",
+            "statement": "An agreement overrides the award.",
+            "supportingParticipantSlots": [],
+            "opposingParticipantSlots": ["reviewer"],
+            "evidenceQuality": "unsupported"
+        }],
+        "minorityObjections": [{
+            "participantSlot": "reviewer",
+            "objection": "Check agreement coverage.",
+            "evidenceReferenceIds": []
+        }],
+        "evidenceGaps": [{
+            "question": "Which agreement applies?",
+            "neededEvidenceType": "source",
+            "blockingPromotion": true
+        }],
+        "unsupportedSpeculation": [{
+            "statement": "The agreement matches the award.",
+            "originatingParticipantSlots": ["reviewer"],
+            "marker": "unsupported"
+        }],
+        "openQuestions": [],
+        "suggestedArtifacts": [{
+            "proposalKey": "req-overtime-traceability",
+            "proposalType": "requirement_candidate",
+            "summary": "Clarify traceability.",
+            "originParticipantSlots": ["reviewer"]
+        }],
+        "requiredHumanDecisions": [{
+            "decisionKey": "decide_agreement_scope",
+            "prompt": "Confirm the agreement.",
+            "blocksPromotion": true
+        }]
+    });
     let proposal = serde_json::json!({
         "schema_version": 1,
         "scope_id": "default",
@@ -227,8 +308,22 @@ fn public_lifecycle_models_reject_legacy_persisted_field_names() {
             }],
             "supportingClaimIds": ["claim_overtime_threshold"]
         },
-        "promotionState": "proposed"
+        "promotionState": "proposed",
+        "duplicateOfProposalId": null,
+        "supersededByProposalId": null
     });
+
+    let contribution = serde_json::from_value::<Contribution>(contribution).unwrap();
+    let synthesis = serde_json::from_value::<SynthesisPacket>(synthesis).unwrap();
+    let proposal = serde_json::from_value::<ProposalCard>(proposal).unwrap();
+
+    assert_eq!(contribution.participant_slot, "reviewer");
+    assert!(synthesis.evidence_gaps[0].blocking_promotion);
+    assert_eq!(proposal.id.as_str(), "proposal_overtime_traceability");
+}
+
+#[test]
+fn public_disposition_model_rejects_legacy_persisted_field_names() {
     let decision = serde_json::json!({
         "schema_version": 1,
         "scope_id": "default",
@@ -240,14 +335,10 @@ fn public_lifecycle_models_reject_legacy_persisted_field_names() {
         "canonicalArtifact": {"artifactType": "requirement", "artifactId": "req_overtime"}
     });
 
-    let proposal_error = serde_json::from_value::<ProposalCard>(proposal)
-        .unwrap_err()
-        .to_string();
     let disposition_error = serde_json::from_value::<DispositionRecord>(decision)
         .unwrap_err()
         .to_string();
 
-    assert!(proposal_error.contains("unknown field"), "{proposal_error}");
     assert!(
         disposition_error.contains("unknown field"),
         "{disposition_error}"

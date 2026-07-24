@@ -273,17 +273,21 @@ impl DispositionDecision {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct IdeationTarget {
+    #[serde(alias = "artifactType")]
     pub artifact_type: IdeationTargetType,
+    #[serde(alias = "artifactId")]
     pub artifact_id: StableId,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct IdeationEvidenceReference {
+    #[serde(alias = "referenceId")]
     pub reference_id: StableId,
+    #[serde(alias = "evidenceType")]
     pub evidence_type: IdeationEvidenceType,
     pub summary: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, alias = "filePath", skip_serializing_if = "Option::is_none")]
     pub file_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub line: Option<u32>,
