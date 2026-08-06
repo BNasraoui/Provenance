@@ -202,7 +202,8 @@ pub(super) fn empty_state() -> ScopeExport {
         contributions: vec![],
         synthesis_packets: vec![],
         proposal_cards: vec![],
-        promotion_decisions: vec![],
+        assertion_records: vec![],
+        dispositions: vec![],
     }
 }
 

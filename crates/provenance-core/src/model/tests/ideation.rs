@@ -1,8 +1,8 @@
 use super::ideation::contributions::{Contribution, MaterialClaim};
-use super::ideation::promotions::PromotionDecisionRecord;
+use super::ideation::dispositions::DispositionRecord;
 use super::ideation::proposals::ProposalCard;
 use super::ideation::synthesis::SynthesisPacket;
-use super::ideation::{PromotionDecision, PromotionState, ProposalType};
+use super::ideation::{DispositionDecision, PromotionState};
 use super::ids::SchemaVersion;
 
 #[test]
@@ -130,7 +130,7 @@ fn ideation_output_records_roundtrip_without_schema_bump() {
     let contribution: Contribution = serde_json::from_value(contribution).unwrap();
     let synthesis: SynthesisPacket = serde_json::from_value(synthesis).unwrap();
     let proposal: ProposalCard = serde_json::from_value(proposal).unwrap();
-    let decision: PromotionDecisionRecord = serde_json::from_value(decision).unwrap();
+    let decision: DispositionRecord = serde_json::from_value(decision).unwrap();
 
     assert_eq!(contribution.schema_version, SchemaVersion(1));
     assert_eq!(
@@ -143,7 +143,7 @@ fn ideation_output_records_roundtrip_without_schema_bump() {
         "source_schads"
     );
     assert_eq!(proposal.promotion_state, PromotionState::Proposed);
-    assert_eq!(decision.decision, PromotionDecision::Accepted);
+    assert_eq!(decision.decision, DispositionDecision::Accepted);
 
     assert_eq!(
         serde_json::to_value(&contribution).unwrap()["schema_version"],
@@ -206,7 +206,88 @@ fn confidence_scores_must_be_in_unit_interval() {
 }
 
 #[test]
-fn proposal_and_promotion_decision_accept_convex_id_aliases() {
+#[allow(clippy::too_many_lines)]
+fn schema_v1_camel_case_ideation_records_remain_readable() {
+    let contribution = serde_json::json!({
+        "schema_version": 1,
+        "scope_id": "default",
+        "id": "contrib_reviewer_001",
+        "target": {"artifactType": "requirement", "artifactId": "req_overtime"},
+        "participantSlot": "reviewer",
+        "stance": "support",
+        "strongestFinding": "The requirement is supported.",
+        "evidenceReferences": [{
+            "referenceId": "evidence_award_clause",
+            "evidenceType": "source",
+            "summary": "SCHADS overtime clause",
+            "filePath": "award.md"
+        }],
+        "materialClaims": [{
+            "claimId": "claim_overtime_threshold",
+            "statement": "Overtime starts after the threshold.",
+            "evidenceType": "source",
+            "evidenceReferenceIds": ["evidence_award_clause"]
+        }],
+        "risks": [],
+        "objections": [],
+        "challenges": [{"claimId": "claim_overtime_threshold", "objection": "Check it."}],
+        "suggestedArtifactChanges": [{
+            "artifactType": "requirement",
+            "artifactId": "req_overtime",
+            "changeType": "update",
+            "supportingClaimIds": ["claim_overtime_threshold"],
+            "summary": "Clarify the threshold."
+        }],
+        "unsupportedRecommendations": [],
+        "uncertainty": {"level": "low", "rationale": "Source reviewed."},
+        "openQuestions": []
+    });
+    let synthesis = serde_json::json!({
+        "schema_version": 1,
+        "scope_id": "default",
+        "id": "synth_overtime_001",
+        "target": {"artifactType": "requirement", "artifactId": "req_overtime"},
+        "summary": "The threshold needs traceability.",
+        "consensus": [{
+            "statement": "Add a source.",
+            "supportingParticipantSlots": ["reviewer"],
+            "evidenceReferenceIds": ["evidence_award_clause"]
+        }],
+        "contestedClaims": [{
+            "claimId": "claim_override",
+            "statement": "An agreement overrides the award.",
+            "supportingParticipantSlots": [],
+            "opposingParticipantSlots": ["reviewer"],
+            "evidenceQuality": "unsupported"
+        }],
+        "minorityObjections": [{
+            "participantSlot": "reviewer",
+            "objection": "Check agreement coverage.",
+            "evidenceReferenceIds": []
+        }],
+        "evidenceGaps": [{
+            "question": "Which agreement applies?",
+            "neededEvidenceType": "source",
+            "blockingPromotion": true
+        }],
+        "unsupportedSpeculation": [{
+            "statement": "The agreement matches the award.",
+            "originatingParticipantSlots": ["reviewer"],
+            "marker": "unsupported"
+        }],
+        "openQuestions": [],
+        "suggestedArtifacts": [{
+            "proposalKey": "req-overtime-traceability",
+            "proposalType": "requirement_candidate",
+            "summary": "Clarify traceability.",
+            "originParticipantSlots": ["reviewer"]
+        }],
+        "requiredHumanDecisions": [{
+            "decisionKey": "decide_agreement_scope",
+            "prompt": "Confirm the agreement.",
+            "blocksPromotion": true
+        }]
+    });
     let proposal = serde_json::json!({
         "schema_version": 1,
         "scope_id": "default",
@@ -227,8 +308,22 @@ fn proposal_and_promotion_decision_accept_convex_id_aliases() {
             }],
             "supportingClaimIds": ["claim_overtime_threshold"]
         },
-        "promotionState": "proposed"
+        "promotionState": "proposed",
+        "duplicateOfProposalId": null,
+        "supersededByProposalId": null
     });
+
+    let contribution = serde_json::from_value::<Contribution>(contribution).unwrap();
+    let synthesis = serde_json::from_value::<SynthesisPacket>(synthesis).unwrap();
+    let proposal = serde_json::from_value::<ProposalCard>(proposal).unwrap();
+
+    assert_eq!(contribution.participant_slot, "reviewer");
+    assert!(synthesis.evidence_gaps[0].blocking_promotion);
+    assert_eq!(proposal.id.as_str(), "proposal_overtime_traceability");
+}
+
+#[test]
+fn public_disposition_model_rejects_legacy_persisted_field_names() {
     let decision = serde_json::json!({
         "schema_version": 1,
         "scope_id": "default",
@@ -240,15 +335,12 @@ fn proposal_and_promotion_decision_accept_convex_id_aliases() {
         "canonicalArtifact": {"artifactType": "requirement", "artifactId": "req_overtime"}
     });
 
-    let proposal: ProposalCard = serde_json::from_value(proposal).unwrap();
-    let decision: PromotionDecisionRecord = serde_json::from_value(decision).unwrap();
+    let disposition_error = serde_json::from_value::<DispositionRecord>(decision)
+        .unwrap_err()
+        .to_string();
 
-    assert_eq!(proposal.id.as_str(), "proposal_overtime_traceability");
-    assert_eq!(proposal.proposal_type, ProposalType::RequirementCandidate);
-    assert_eq!(decision.id.as_str(), "decision_overtime_traceability");
-    assert_eq!(
-        decision.proposal_id.as_str(),
-        "proposal_overtime_traceability"
+    assert!(
+        disposition_error.contains("unknown field"),
+        "{disposition_error}"
     );
-    assert_eq!(decision.actor.id, "ben");
 }

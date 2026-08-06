@@ -17,6 +17,14 @@ pub fn trace_rule(
     rule_id: &provenance_core::StableId,
 ) -> anyhow::Result<TraceabilityView> {
     let store = StateStore::new(layout.clone());
+    store.with_repository_publication(|| trace_rule_locked(scope, rule_id, &store))
+}
+
+fn trace_rule_locked(
+    scope: &provenance_core::ScopeId,
+    rule_id: &provenance_core::StableId,
+    store: &StateStore,
+) -> anyhow::Result<TraceabilityView> {
     let rule = store
         .list_rules(scope)?
         .into_iter()

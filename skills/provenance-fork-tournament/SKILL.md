@@ -84,8 +84,8 @@ provenance questions claim --scope <scope> \
      --participant-slot <stance_slug> \
      --stance support \
      --strongest-finding "<one-line: the artifact's central claim>" \
-     --claims-json '<claims citing typed evidence>' \
-     --evidence-json '<evidence refs; file_path for artifact files>' \
+     --claims-json '[{"claim_id":"claim_<question>_<slot>","statement":"<central claim>","evidence_type":"artifact","evidence_reference_ids":["evidence_<question>_<slot>"]}]' \
+     --evidence-json '[{"reference_id":"evidence_<question>_<slot>","evidence_type":"artifact","summary":"<what the artifact demonstrates>","file_path":"<artifact path>"}]' \
      --unsupported-recommendations-json '<speculation, explicitly marked>' \
      --uncertainty-level <low|medium|high> \
      --uncertainty-rationale "<why>"
@@ -97,7 +97,8 @@ provenance questions claim --scope <scope> \
      --title "<stance>: <artifact one-liner>" \
      --summary "<manifesto, then the artifact body or a file pointer>" \
      --target-type question --target-id <question_id> \
-     --evidence-json '<same refs>'
+     --evidence-json '<same refs>' \
+     --supporting-claim-id claim_<question>_<slot>
    ```
 
    Note `--stance` on contributions is the enum stance toward the target
@@ -117,8 +118,12 @@ provenance questions claim --scope <scope> \
      --consensus-json '<claims all stances landed on — convergence is signal, record it>' \
      --contested-claims-json '<the actual fork>' \
      --minority-objections-json '<kept, never averaged away>' \
-     --required-human-decisions-json '<pick winner; graft list>'
+     --suggested-artifacts-json '[{"proposal_id":"prop_<question>_<slot>","proposal_key":"<question>_<slot>","proposal_type":"resolution_candidate","summary":"<candidate summary>","origin_participant_slots":["<stance_slug>"]}]' \
+     --required-human-decisions-json '[{"decision_key":"pick_<question>_winner","prompt":"Pick winner and grafts","blocks_promotion":true}]'
    ```
+
+    Include one exact `suggested_artifacts` entry for every competing proposal. Each
+    entry's `proposal_id`, key, and type must match its proposal definition.
 
 4. **Mark the question blocked-on-human** and post the proposal ids to its thread:
 
@@ -180,11 +185,27 @@ The promotion gate, with a clock. This is a grill-shaped turn against the artifa
      --format json
    ```
 
-5. **Dispose of every proposal** — winner accepted with the resolution as canonical
+5. **Clear the winner's human gate and assert it.** After recording the human's decision,
+   atomically replace the synthesis packet without its resolved blocking decisions and
+   create the assertion. `--resolve-human-gate` preserves the rest of the packet's
+   adjudication; first ensure the winner's supporting claim is not contested. Assert with
+   the exact claim wired in phase 1:
+
+    ```sh
+    provenance proposals assert --scope <scope> \
+      --id assertion_<question>_<winner_slot> \
+      --proposal-id prop_<question>_<winner_slot> \
+      --synthesis-packet-id synth_<question> \
+      --supporting-claim-id claim_<question>_<winner_slot> \
+      --resolve-human-gate \
+      --decision-key pick_<question>_winner
+    ```
+
+6. **Dispose of every proposal** — winner accepted with the resolution as canonical
    artifact; losers rejected (rationale names the superseding resolution — see Gaps):
 
    ```sh
-   provenance promotion-decisions create --scope <scope> \
+   provenance dispositions create --scope <scope> \
      --id pd_<question>_<slot> \
      --proposal-id prop_<question>_<slot> \
      --decision accepted \
@@ -196,7 +217,7 @@ The promotion gate, with a clock. This is a grill-shaped turn against the artifa
 
    This flips each proposal's `promotion_state` — no separate update step.
 
-6. **Fan out** as any resolution does (docs/shaping.md, "Landing fan-out"): rules
+7. **Fan out** as any resolution does (docs/shaping.md, "Landing fan-out"): rules
    produced, requirements spawned, fog graduated. Then continue the turn loop or hand off.
 
 ## Caveats (empirical — from the Statesman provenance scoping record)
@@ -219,9 +240,11 @@ The promotion gate, with a clock. This is a grill-shaped turn against the artifa
   blocked-on-human` for the phase boundary, and `questions update --method prototype`
   if an existing question was minted with the wrong method. Keep the thread post because
   proposal ids are not question link targets.
-- **`promotion-decisions` supports only `accepted|rejected|deferred`** — `superseded`
-  and `duplicate` states are settable only at proposal creation. Convention: reject
-  losers with a rationale naming the superseding resolution.
+- **Proposal definitions are immutable and always `proposed`.** Before disposition, create an
+  assertion only when the exact proposal suggestion has positive owned evidence and no
+  contested claim or blocking adjudication. `dispositions` is the sole authority for
+  `accepted|rejected|deferred`; reject losers with rationale naming the winning resolution.
+  The actor ID must be repository-allowlisted and is an audit attestation, not a signature.
 - **Generic `edges create` is available** and requires existing endpoints. Relevant valid
   directions are `spawns` (resolution → requirement), `produces` (requirement or resolution
   → rule), and `supersedes` (requirement → requirement). Proposals are not graph edge

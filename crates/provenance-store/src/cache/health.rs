@@ -59,6 +59,14 @@ pub fn find_stale_with_options(
     options: &StaleOptions,
 ) -> anyhow::Result<Vec<StaleItem>> {
     let store = StateStore::new(layout.clone());
+    store.with_repository_publication(|| find_stale_locked(scope, options, &store))
+}
+
+fn find_stale_locked(
+    scope: &provenance_core::ScopeId,
+    options: &StaleOptions,
+    store: &StateStore,
+) -> anyhow::Result<Vec<StaleItem>> {
     let edges = store.list_edges()?;
     let rules = store.list_rules(scope)?;
     let rule_severities: HashMap<_, _> = rules
@@ -153,6 +161,14 @@ pub fn coverage_health(
     scope: &provenance_core::ScopeId,
 ) -> anyhow::Result<HealthView> {
     let store = StateStore::new(layout.clone());
+    store.with_repository_publication(|| coverage_health_locked(layout, scope, &store))
+}
+
+fn coverage_health_locked(
+    layout: &ProvenanceLayout,
+    scope: &provenance_core::ScopeId,
+    store: &StateStore,
+) -> anyhow::Result<HealthView> {
     let requirements = store.list_requirements(scope)?;
     let rules = store.list_rules(scope)?;
     let edges: Vec<_> = store
@@ -212,6 +228,13 @@ pub fn orphan_rules(
     scope: &provenance_core::ScopeId,
 ) -> anyhow::Result<Vec<OrphanRuleItem>> {
     let store = StateStore::new(layout.clone());
+    store.with_repository_publication(|| orphan_rules_locked(scope, &store))
+}
+
+fn orphan_rules_locked(
+    scope: &provenance_core::ScopeId,
+    store: &StateStore,
+) -> anyhow::Result<Vec<OrphanRuleItem>> {
     let edges: Vec<_> = store
         .list_edges()?
         .into_iter()

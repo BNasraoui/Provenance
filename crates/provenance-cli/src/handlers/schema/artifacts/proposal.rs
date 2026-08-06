@@ -1,4 +1,4 @@
-use super::super::common::model::{enum_names, PROMOTION_STATES, PROPOSAL_TYPES};
+use super::super::common::model::{enum_names, PROPOSAL_TYPES};
 use serde_json::{json, Value};
 
 pub(in crate::handlers::schema) fn schema() -> Value {
@@ -27,9 +27,8 @@ pub(in crate::handlers::schema) fn schema() -> Value {
             "summary": {"type": "string"},
             "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
             "traceability": {"$ref": "#/$defs/proposalTraceability"},
-            "promotion_state": {"enum": enum_names(&PROMOTION_STATES)},
-            "duplicate_of": {"$ref": "#/$defs/stableId"},
-            "superseded_by": {"$ref": "#/$defs/stableId"}
+            "promotion_state": {"const": "proposed"},
+            "builds_on": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/stableId"}}
         }
     })
 }

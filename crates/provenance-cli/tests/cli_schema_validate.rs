@@ -26,6 +26,153 @@ fn schema_show_outputs_ideation_artifact_schemas() {
 }
 
 #[test]
+fn disposition_schema_closes_canonical_artifact_and_validation_rejects_unknown_fields() {
+    let schema = Command::cargo_bin("provenance")
+        .unwrap()
+        .args(["schema", "show", "disposition", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(schema.status.success());
+    let schema: serde_json::Value = serde_json::from_slice(&schema.stdout).unwrap();
+    let canonical = &schema["schema"]["properties"]["canonical_artifact"];
+    assert_eq!(canonical["additionalProperties"], false);
+    assert_eq!(
+        canonical["required"],
+        serde_json::json!(["artifact_type", "artifact_id"])
+    );
+
+    let dir = tempfile::tempdir().unwrap();
+    let invalid = write_json(
+        &dir,
+        "invalid-disposition.json",
+        r#"{
+          "schema_version": 1,
+          "scope_id": "default",
+          "id": "disposition_accept",
+          "proposal_id": "proposal_candidate",
+          "decision": "accepted",
+          "rationale": "Accepted.",
+          "actor": {"identity_type": "human", "id": "reviewer"},
+          "canonical_artifact": {
+            "artifact_type": "requirement",
+            "artifact_id": "requirement_one",
+            "unexpected": true
+          }
+        }"#,
+    );
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "validate",
+            "disposition",
+            "--input",
+            &invalid,
+            "--format",
+            "json",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("unknown field `unexpected`"));
+
+    let empty = write_json(
+        &dir,
+        "empty-disposition.json",
+        r#"{
+          "schema_version": 1,
+          "scope_id": "default",
+          "id": "disposition_accept",
+          "proposal_id": "proposal_candidate",
+          "decision": "accepted",
+          "rationale": "",
+          "actor": {"identity_type": "human", "id": ""}
+        }"#,
+    );
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "validate",
+            "disposition",
+            "--input",
+            &empty,
+            "--format",
+            "json",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "disposition rationale must not be empty",
+        ));
+}
+
+#[test]
+fn assertion_validation_matches_closed_schema_invariants() {
+    let dir = tempfile::tempdir().unwrap();
+    let base = json!({
+        "schema_version": 1,
+        "scope_id": "default",
+        "id": "assertion_candidate",
+        "proposal_id": "proposal_candidate",
+        "synthesis_packet_id": "synthesis_candidate",
+        "supporting_claim_ids": ["claim_one"]
+    });
+    for (name, mutate, expected) in [
+        ("empty", "empty", "requires positive evidence"),
+        ("duplicate", "duplicate", "is repeated"),
+        ("unknown", "unknown", "unknown field `unexpected`"),
+    ] {
+        let mut value = base.clone();
+        match mutate {
+            "empty" => value["supporting_claim_ids"] = json!([]),
+            "duplicate" => value["supporting_claim_ids"] = json!(["claim_one", "claim_one"]),
+            "unknown" => value["unexpected"] = json!(true),
+            _ => unreachable!(),
+        }
+        let input = write_json(
+            &dir,
+            &format!("{name}-assertion.json"),
+            &serde_json::to_string(&value).unwrap(),
+        );
+        Command::cargo_bin("provenance")
+            .unwrap()
+            .args(["validate", "assertion", "--input", &input])
+            .assert()
+            .failure()
+            .stderr(predicates::str::contains(expected));
+    }
+}
+
+#[test]
+fn proposal_validation_rejects_unknown_nested_fields() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = write_json(
+        &dir,
+        "unknown-proposal.json",
+        r#"{
+          "schema_version": 1,
+          "scope_id": "default",
+          "id": "proposal_candidate",
+          "proposal_key": "candidate",
+          "proposal_type": "requirement_candidate",
+          "title": "Candidate",
+          "summary": "Candidate.",
+          "traceability": {
+            "target": {"artifact_type": "source", "artifact_id": "source_one", "unexpected": true},
+            "source_ids": [],
+            "evidence_references": [],
+            "supporting_claim_ids": []
+          },
+          "promotion_state": "proposed"
+        }"#,
+    );
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args(["validate", "proposal", "--input", &input])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("unknown field `unexpected`"));
+}
+
+#[test]
 fn validate_accepts_good_ideation_artifacts() {
     let dir = tempfile::tempdir().unwrap();
     let contribution = write_json(

@@ -23,6 +23,8 @@ pub enum IdeationArtifactKind {
     Contribution,
     SynthesisPacket,
     Proposal,
+    Assertion,
+    Disposition,
     GraphReference,
     GraphReferenceExport,
 }
@@ -33,6 +35,8 @@ impl IdeationArtifactKind {
             Self::Contribution => "contribution",
             Self::SynthesisPacket => "synthesis-packet",
             Self::Proposal => "proposal",
+            Self::Assertion => "assertion",
+            Self::Disposition => "disposition",
             Self::GraphReference => "graph-reference",
             Self::GraphReferenceExport => "graph-reference-export",
         }
@@ -180,14 +184,37 @@ pub enum ProposalsCommand {
         evidence_json: String,
         #[arg(long)]
         supporting_claim_id: Vec<String>,
-        #[arg(long, default_value = "proposed")]
-        promotion_state: String,
+        /// Create the proposal and its assertion atomically.
+        #[arg(long, requires = "synthesis_packet_id")]
+        assertion_id: Option<String>,
+        /// Synthesis packet used by the atomic assertion.
+        #[arg(long, requires = "assertion_id")]
+        synthesis_packet_id: Option<String>,
+        /// Immutable assertion ID this proposal builds on. Repeatable.
         #[arg(long)]
-        duplicate_of: Option<String>,
+        builds_on: Vec<String>,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+        format: OutputFormat,
+    },
+    Assert {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
         #[arg(long)]
-        superseded_by: Option<String>,
+        scope: String,
         #[arg(long)]
-        replace: bool,
+        id: String,
+        #[arg(long)]
+        proposal_id: String,
+        #[arg(long)]
+        synthesis_packet_id: String,
+        #[arg(long)]
+        supporting_claim_id: Vec<String>,
+        /// Atomically clear resolved blocking human decisions before asserting.
+        #[arg(long, requires = "decision_key")]
+        resolve_human_gate: bool,
+        /// Blocking human decision key that was resolved. Repeatable.
+        #[arg(long, requires = "resolve_human_gate")]
+        decision_key: Vec<String>,
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },
@@ -221,7 +248,7 @@ pub enum ProposalsCommand {
 
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
-pub enum PromotionDecisionsCommand {
+pub enum DispositionsCommand {
     Create {
         #[arg(long, default_value = ".")]
         repo: Utf8PathBuf,

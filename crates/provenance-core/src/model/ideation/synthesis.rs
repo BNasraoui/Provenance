@@ -6,6 +6,7 @@ use super::{
 use crate::model::ids::{SchemaVersion, ScopeId, StableId};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ConsensusFinding {
     pub statement: String,
     #[serde(alias = "supportingParticipantSlots")]
@@ -15,6 +16,7 @@ pub struct ConsensusFinding {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ContestedClaim {
     #[serde(alias = "claimId")]
     pub claim_id: StableId,
@@ -28,6 +30,7 @@ pub struct ContestedClaim {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct MinorityObjection {
     #[serde(alias = "participantSlot")]
     pub participant_slot: String,
@@ -37,6 +40,7 @@ pub struct MinorityObjection {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct EvidenceGap {
     pub question: String,
     #[serde(alias = "neededEvidenceType")]
@@ -46,6 +50,7 @@ pub struct EvidenceGap {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UnsupportedSpeculation {
     pub statement: String,
     #[serde(alias = "originatingParticipantSlots")]
@@ -54,7 +59,10 @@ pub struct UnsupportedSpeculation {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SuggestedArtifact {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proposal_id: Option<StableId>,
     #[serde(alias = "proposalKey")]
     pub proposal_key: String,
     #[serde(alias = "proposalType")]
@@ -65,6 +73,7 @@ pub struct SuggestedArtifact {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RequiredHumanDecision {
     #[serde(alias = "decisionKey")]
     pub decision_key: StableId,
@@ -74,6 +83,7 @@ pub struct RequiredHumanDecision {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SynthesisPacket {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,

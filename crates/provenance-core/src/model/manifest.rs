@@ -26,6 +26,8 @@ pub struct Scope {
 pub struct Manifest {
     pub schema_version: SchemaVersion,
     pub scopes: Vec<Scope>,
+    #[serde(default)]
+    pub disposition_actor_ids: Vec<String>,
 }
 
 impl Manifest {
@@ -36,6 +38,7 @@ impl Manifest {
                 id: scope,
                 path_prefix,
             }],
+            disposition_actor_ids: Vec::new(),
         }
     }
 }

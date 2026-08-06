@@ -81,6 +81,13 @@ impl StateStore {
         &self,
         input: CreateServiceBindingInput,
     ) -> anyhow::Result<ServiceBinding> {
+        self.with_repository_publication(|| self.write_service_binding(input))
+    }
+
+    fn write_service_binding(
+        &self,
+        input: CreateServiceBindingInput,
+    ) -> anyhow::Result<ServiceBinding> {
         let CreateServiceBindingInput {
             scope_id,
             rule_id,
