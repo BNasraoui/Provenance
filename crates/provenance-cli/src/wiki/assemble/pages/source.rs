@@ -1,4 +1,4 @@
-use crate::wiki::model::{PageId, PageKind, PageLink, SourcePage};
+use crate::wiki::model::{PageId, PageLink, RecordKind, SourcePage};
 use provenance_core::{EdgeType, NodeType, Source};
 
 use super::super::context::Assembler;
@@ -29,7 +29,7 @@ impl<'a> Assembler<'a> {
             .as_ref()
             .and_then(|id| self.find_source(id).map(source_link));
         SourcePage {
-            id: PageId::new(PageKind::Source, source.id.as_str()),
+            id: PageId::new(RecordKind::Source, source.id.as_str()),
             title: source.name.clone(),
             source_type: source.source_type.clone(),
             url: source.url.clone(),

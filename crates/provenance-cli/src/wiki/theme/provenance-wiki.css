@@ -238,7 +238,8 @@
 
     .chrome nav { display: flex; flex: 1 1 auto; min-width: 0; gap: 0.25rem; flex-wrap: wrap; align-items: center; color: var(--pv-muted); }
     .chrome nav a { text-decoration: none; padding: 0.15rem 0.4rem; border-radius: 6px; overflow-wrap: anywhere; }
-    .chrome nav a:hover { background: var(--pv-thread-bg); color: var(--pv-ink); }
+    .chrome nav a:hover, .chrome nav a:focus-visible { background: var(--pv-thread-bg); color: var(--pv-ink); }
+    .global-nav { flex: none !important; font-family: var(--pv-font-mono); font-size: 11px; }
     .chrome nav .sep { opacity: 0.5; }
 
     .theme-select {
@@ -563,7 +564,9 @@
       .body-margin { width: auto; }
       .rule-list li { grid-template-columns: 1fr; }
       .rule-list .rstatement, .rule-list .rref { grid-column: 1; }
-      .chrome nav { display: none; }
+      .chrome nav[aria-label="Breadcrumb"] { display: none; }
+      .global-nav { margin-left: auto; }
+      .theme-select { display: none; }
     }
 
     /* ============================================================
@@ -629,3 +632,47 @@
     }
     .orphan-card h3 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; margin: 0.6rem 0 0.25rem; color: color-mix(in srgb, var(--pv-status-discovery) 85%, var(--pv-ink)); }
     .orphan-card h3:first-child { margin-top: 0; }
+
+    /* ---- static discovery: Domain atlas + local full-text search ---- */
+    .domain-group {
+      scroll-margin-top: 1rem;
+      border: 1px solid var(--pv-card-border);
+      border-left: 4px solid var(--pv-requirement);
+      background: var(--pv-card-bg);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 0.85rem;
+    }
+    .domain-group.domain-gap { border-left-color: var(--pv-status-discovery); border-style: dashed; }
+    .domain-group h2 { font-family: var(--pv-font-display); font-size: 18px; margin: 0; }
+    .domain-group .domain-id { display: block; color: var(--pv-muted); margin: 0.15rem 0 0.65rem; overflow-wrap: anywhere; }
+    .domain-records { margin-top: 0.9rem; }
+    .domain-records h3 { margin: 0 0 0.35rem; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+    .domain-records.requirement { --pv-link-color: var(--pv-requirement); }
+    .domain-records.rule { --pv-link-color: var(--pv-rule); }
+    .data-note, .empty-note { color: var(--pv-muted); font-size: 12px; }
+    .data-note { padding-left: 0.65rem; border-left: 2px solid var(--pv-status-discovery); }
+
+    .search-box { margin-bottom: 1rem; }
+    .search-box label { display: block; margin-bottom: 0.35rem; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+    .search-box div { display: flex; gap: 0.5rem; }
+    .search-box input {
+      min-width: 0; flex: 1; border: 1px solid var(--pv-card-border); border-radius: 8px;
+      background: var(--pv-card-bg); color: var(--pv-ink); font: inherit; padding: 0.65rem 0.75rem;
+    }
+    .search-box input:focus-visible { outline: 2px solid var(--pv-rule); outline-offset: 2px; }
+    .search-box button { border: 0; border-radius: 8px; background: var(--pv-rule); color: var(--pv-card-bg); font: inherit; font-weight: 600; padding: 0.65rem 1rem; cursor: pointer; }
+    .search-summary { color: var(--pv-muted); font-family: var(--pv-font-mono); font-size: 11px; }
+    .search-results { list-style: none; margin: 0; padding: 0; }
+    .search-results li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.35rem 0.65rem; padding: 0.8rem 0; border-top: 1px solid var(--pv-card-border); }
+    .search-results li[hidden] { display: none; }
+    .search-results a { align-self: center; font-family: var(--pv-font-display); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+    .search-results a:hover, .search-results a:focus-visible { text-decoration: underline; }
+    .search-results p { grid-column: 2; margin: 0; color: var(--pv-muted); font-size: 12px; overflow-wrap: anywhere; }
+
+    @media (max-width: 760px) {
+      .search-box div { align-items: stretch; flex-direction: column; }
+      .search-box button { width: 100%; }
+      .search-results li { grid-template-columns: 1fr; }
+      .search-results p { grid-column: 1; }
+    }

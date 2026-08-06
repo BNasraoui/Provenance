@@ -20,7 +20,7 @@ fn staging_failure_preserves_the_previous_complete_output() {
     let previous_index = std::fs::read(output.join("index.html")).unwrap();
     let mut invalid = empty_corpus();
     invalid.requirements.push(RequirementPage {
-        id: PageId::new(PageKind::Requirement, "../escape"),
+        id: PageId::new(RecordKind::Requirement, "../escape"),
         title: "unsafe".to_string(),
         status: RequirementStatus::Active,
         statement: "unsafe".to_string(),

@@ -1,6 +1,4 @@
-use crate::wiki::model::{
-    CorpusCounts, IndexEntry, OrphanReport, PageId, PageKind, ScopeIndexPage,
-};
+use crate::wiki::model::{CorpusCounts, IndexEntry, OrphanReport, ScopeIndexPage};
 use provenance_core::{EdgeType, NodeType};
 
 use super::super::context::Assembler;
@@ -69,7 +67,6 @@ impl Assembler<'_> {
                 .collect(),
         };
         ScopeIndexPage {
-            id: PageId::new(PageKind::ScopeIndex, self.state.scope.as_str()),
             scope: self.state.scope.clone(),
             title: self.state.scope.clone(),
             counts: CorpusCounts {

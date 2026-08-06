@@ -116,7 +116,13 @@ pub fn render_rule(scope: &str, page: &RulePage) -> String {
     let mut chips = vec![severity_chip];
     chips.extend(modality_chip);
     let container = container_html(
-        Some((PageKind::Rule, ("/".to_string(), scope.to_string()))),
+        Some((
+            PageKind::Rule,
+            (
+                crate::wiki::routes::WikiRoute::Index.path(),
+                scope.to_string(),
+            ),
+        )),
         &title_row(
             PageKind::Rule,
             &format!("{} — {}", page.rule_code, page.title),

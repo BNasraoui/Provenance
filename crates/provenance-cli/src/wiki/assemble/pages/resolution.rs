@@ -1,4 +1,4 @@
-use crate::wiki::model::{PageId, PageKind, PageLink, ResolutionPage, RuleCard};
+use crate::wiki::model::{PageId, PageLink, RecordKind, ResolutionPage, RuleCard};
 use provenance_core::{EdgeType, NodeType, Resolution};
 
 use super::super::context::Assembler;
@@ -52,7 +52,7 @@ impl<'a> Assembler<'a> {
                 .map(resolution_link)
         });
         ResolutionPage {
-            id: PageId::new(PageKind::Resolution, resolution.id.as_str()),
+            id: PageId::new(RecordKind::Resolution, resolution.id.as_str()),
             title: resolution.title.clone(),
             status: resolution.status.clone(),
             position: resolution.position.clone(),

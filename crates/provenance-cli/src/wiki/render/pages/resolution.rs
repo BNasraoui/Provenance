@@ -91,8 +91,12 @@ pub fn render_resolution(scope: &str, page: &ResolutionPage) -> String {
     }
     push_classification_block(&mut margin, &rows);
 
+    let index = (
+        crate::wiki::routes::WikiRoute::Index.path(),
+        scope.to_string(),
+    );
     let container = container_html(
-        Some((PageKind::Resolution, ("/".to_string(), scope.to_string()))),
+        Some((PageKind::Resolution, index)),
         &title_row(
             PageKind::Resolution,
             &page.title,

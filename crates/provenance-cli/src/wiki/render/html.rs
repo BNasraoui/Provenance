@@ -67,7 +67,7 @@ impl PageLinksRenderer {
                 html,
                 " <span class=\"id-chip\">{}{}{}{}</span>",
                 if kind {
-                    kind_label(link.target.kind)
+                    kind_label(link.target.kind.into())
                 } else {
                     ""
                 },
