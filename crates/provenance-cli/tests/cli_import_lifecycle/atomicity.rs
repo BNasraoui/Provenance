@@ -60,6 +60,49 @@ fn late_scope_validation_failure_is_atomic() {
     );
 }
 
+#[test]
+fn concurrent_first_imports_share_pristine_transaction_directory_setup() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    init_repo(&repo, None);
+    let input = dir.path().join("input.json");
+    export_scope(&repo, &input).success();
+    std::fs::remove_dir_all(repo.join(".provenance/cache")).unwrap();
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
+    let imports = (0..8)
+        .map(|_| {
+            let barrier = barrier.clone();
+            let repo = repo.clone();
+            let input = input.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                std::process::Command::new(assert_cmd::cargo::cargo_bin!("provenance"))
+                    .args([
+                        "import",
+                        "--repo",
+                        repo.to_str().unwrap(),
+                        "--scope",
+                        "default",
+                        "--input",
+                        input.to_str().unwrap(),
+                        "--dry-run",
+                    ])
+                    .output()
+                    .unwrap()
+            })
+        })
+        .collect::<Vec<_>>();
+
+    for import in imports {
+        let output = import.join().unwrap();
+        assert!(
+            output.status.success(),
+            "concurrent import failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn import_rejects_external_file_symlink_without_changing_live_state() {
@@ -111,7 +154,7 @@ fn dry_run_rejects_symlinked_import_transactions_directory() {
         ])
         .assert()
         .failure()
-        .stderr(predicates::str::contains("repository cache"));
+        .stderr(predicates::str::contains("symlink component"));
 
     let outside_entries = std::fs::read_dir(outside)
         .unwrap()

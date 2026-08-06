@@ -49,18 +49,6 @@ impl StateStore {
             let mut proposals = self.list_proposal_definitions(scope)?;
             let mut assertions = self.list_assertion_records(scope)?;
             let mut dispositions = self.list_dispositions(scope)?;
-            let existing_proposal_ids = proposals
-                .iter()
-                .map(|record| record.id.as_str().to_owned())
-                .collect::<BTreeSet<_>>();
-            let existing_assertion_ids = assertions
-                .iter()
-                .map(|record| record.id.as_str().to_owned())
-                .collect::<BTreeSet<_>>();
-            let existing_disposition_ids = dispositions
-                .iter()
-                .map(|record| record.id.as_str().to_owned())
-                .collect::<BTreeSet<_>>();
             merge_immutable("proposal", &mut proposals, &incoming.proposals, |r| {
                 r.id.as_str()
             })?;
@@ -116,17 +104,7 @@ impl StateStore {
                 assertions: &assertions,
                 dispositions: &dispositions,
             })?;
-            let mut persisted = incoming;
-            persisted
-                .proposals
-                .retain(|record| !existing_proposal_ids.contains(record.id.as_str()));
-            persisted
-                .assertions
-                .retain(|record| !existing_assertion_ids.contains(record.id.as_str()));
-            persisted
-                .dispositions
-                .retain(|record| !existing_disposition_ids.contains(record.id.as_str()));
-            landings.push(persisted);
+            landings.push(incoming);
             Ok(())
         })
     }
@@ -143,9 +121,10 @@ impl StateStore {
         let mut assertions_in_order = direct_assertions.clone();
         let mut direct_dispositions: Vec<DispositionRecord> =
             read_jsonl(&shards::dispositions_path(&self.layout, scope))?;
-        direct_dispositions.extend(read_legacy_dispositions(
+        let legacy_dispositions = read_legacy_dispositions(
             &shards::legacy_promotion_decisions_path(&self.layout, scope),
-        )?);
+        )?;
+        direct_dispositions.extend(legacy_dispositions.iter().cloned());
         let mut proposals = BTreeMap::new();
         let mut assertions = BTreeMap::new();
         let mut dispositions = BTreeMap::new();
@@ -203,6 +182,7 @@ impl StateStore {
         let proposals = self.list_proposal_definitions(scope)?;
         let assertions = self.list_assertion_records(scope)?;
         let dispositions = self.list_dispositions(scope)?;
+        validate_legacy_disposition_shard(&legacy_dispositions, &proposals)?;
         let has_modern_disposition = dispositions.iter().any(|disposition| {
             proposals.iter().any(|proposal| {
                 proposal.id == disposition.proposal_id
@@ -358,7 +338,7 @@ fn merge_replaceable<T: Clone>(
     Ok(())
 }
 
-fn merge_immutable<T: Clone + serde::Serialize>(
+fn merge_immutable<T: Clone>(
     kind: &str,
     existing: &mut Vec<T>,
     incoming: &[T],
@@ -371,14 +351,27 @@ fn merge_immutable<T: Clone + serde::Serialize>(
             incoming_ids.insert(record_id),
             "duplicate {kind} id {record_id} in batch"
         );
-        if let Some(current) = existing.iter().find(|current| id(current) == record_id) {
-            anyhow::ensure!(
-                serde_json::to_value(current)? == serde_json::to_value(record)?,
-                "{kind} {record_id} already exists and is immutable"
-            );
-        } else {
-            existing.push(record.clone());
-        }
+        anyhow::ensure!(
+            !existing.iter().any(|current| id(current) == record_id),
+            "{kind} {record_id} already exists and is immutable"
+        );
+        existing.push(record.clone());
+    }
+    Ok(())
+}
+
+fn validate_legacy_disposition_shard(
+    legacy_dispositions: &[DispositionRecord],
+    proposals: &[ProposalCard],
+) -> anyhow::Result<()> {
+    for disposition in legacy_dispositions {
+        anyhow::ensure!(
+            proposals.iter().any(|proposal| {
+                proposal.id == disposition.proposal_id
+                    && proposal.promotion_state != provenance_core::PromotionState::Proposed
+            }),
+            "deprecated promotion_decisions.jsonl accepts only the frozen shipped-v1 disposition audit"
+        );
     }
     Ok(())
 }

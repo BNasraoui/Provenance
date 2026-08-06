@@ -73,6 +73,23 @@ fn exact_shipped_promotion_decisions_export_is_accepted() {
         ])
         .assert()
         .success();
+    assert!(repo
+        .join(".provenance/state/scopes/default/ideation/dispositions.jsonl")
+        .is_file());
+    assert!(!repo
+        .join(".provenance/state/scopes/default/ideation/promotion_decisions.jsonl")
+        .exists());
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "check",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success();
 }
 
 #[test]

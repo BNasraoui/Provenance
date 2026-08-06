@@ -49,6 +49,7 @@ pub fn with_repository_publication<R>(
     }
     crate::jsonl::with_advisory_lock(&lock_path, || {
         let _held_lock = HeldPublicationLock::new(key);
+        prepare_import_transactions_dir(layout)?;
         recover_pending_publication(layout).and_then(|()| operation())
     })
 }
@@ -99,6 +100,11 @@ fn create_real_directory(path: &Utf8Path) -> anyhow::Result<()> {
         "publication lock path contains a symlink component: {path}"
     );
     Ok(())
+}
+
+fn prepare_import_transactions_dir(layout: &ProvenanceLayout) -> anyhow::Result<()> {
+    create_real_directory(&layout.import_transactions_dir())?;
+    canonical_transactions_dir(layout).map(|_| ())
 }
 
 #[derive(Clone, Copy, Debug, serde::Deserialize, Serialize)]

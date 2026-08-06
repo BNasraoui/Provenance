@@ -22,6 +22,34 @@ fn legacy_disposition_path_reads_shipped_camel_case_records() {
 }
 
 #[test]
+fn deprecated_disposition_shard_rejects_modern_records() {
+    let (_dir, store, scope) = initialized_store();
+    allow_actor(&store, "reviewer");
+    store
+        .create_proposal_card(proposal_input(
+            &scope,
+            "proposal_modern",
+            "Modern proposal",
+            PromotionState::Proposed,
+        ))
+        .unwrap();
+    let path = crate::shards::legacy_promotion_decisions_path(&store.layout, &scope);
+    std::fs::write(
+        path,
+        r#"{"schema_version":1,"scope_id":"default","promotionDecisionId":"disposition_modern","proposalId":"proposal_modern","decision":"rejected","rationale":"Rejected.","decidedBy":{"identityType":"human","userId":"reviewer"},"canonicalArtifact":null}
+"#,
+    )
+    .unwrap();
+
+    let error = store
+        .validate_ideation_scope(&scope)
+        .unwrap_err()
+        .to_string();
+
+    assert!(error.contains("frozen shipped-v1"), "{error}");
+}
+
+#[test]
 fn direct_modern_proposal_write_rejects_terminal_ingress() {
     let (_dir, store, scope) = initialized_store();
     let error = store

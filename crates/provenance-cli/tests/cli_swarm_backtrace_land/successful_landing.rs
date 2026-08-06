@@ -96,6 +96,12 @@ fn swarm_backtrace_land_cannot_replace_asserted_run_outputs() {
         .assert()
         .success();
     write_run_dir(&run_dir, "Updated extracted finding.");
+    let merge_path = run_dir.join("merge/merged.json");
+    let mut merge: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&merge_path).unwrap()).unwrap();
+    merge["proposals"] = serde_json::json!([]);
+    merge["assertions"] = serde_json::json!([]);
+    std::fs::write(&merge_path, serde_json::to_vec(&merge).unwrap()).unwrap();
     Command::cargo_bin("provenance")
         .unwrap()
         .args([
@@ -128,7 +134,7 @@ fn swarm_backtrace_land_cannot_replace_asserted_run_outputs() {
 }
 
 #[test]
-fn identical_proposal_and_assertion_relanding_without_replace_is_idempotent() {
+fn identical_proposal_and_assertion_relanding_without_replace_is_rejected() {
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path().join("repo").to_string_lossy().to_string();
     let run_dir = dir.path().join("run");
@@ -164,8 +170,8 @@ fn identical_proposal_and_assertion_relanding_without_replace_is_idempotent() {
     std::fs::write(&merge_path, serde_json::to_vec(&merge).unwrap()).unwrap();
 
     land()
-        .success()
-        .stdout(predicates::str::contains(r#""replace": false"#));
+        .failure()
+        .stderr(predicates::str::contains("already exists"));
 
     let output = Command::cargo_bin("provenance")
         .unwrap()

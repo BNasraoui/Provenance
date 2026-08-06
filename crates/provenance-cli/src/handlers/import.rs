@@ -52,19 +52,18 @@ pub(super) fn import_scope(
         + exported.assertion_records.len()
         + exported.dispositions.len();
     let live_layout = ProvenanceLayout::new(repo);
-    validate_import_transactions_dir(&live_layout)?;
-    let manifest = StateStore::new(live_layout.clone()).manifest()?;
-    provenance_core::validate_ideation_aggregate(provenance_core::IdeationAggregate {
-        legacy_policy: provenance_core::LegacyProposalPolicy::ShippedV1,
-        disposition_actor_ids: &manifest.disposition_actor_ids,
-        contributions: &exported.contributions,
-        synthesis_packets: &exported.synthesis_packets,
-        proposals: &exported.proposal_cards,
-        assertions: &exported.assertion_records,
-        dispositions: &exported.dispositions,
-    })?;
     provenance_store::publication::with_repository_publication(&live_layout, || {
         let store = StateStore::new(live_layout.clone());
+        let manifest = store.manifest()?;
+        provenance_core::validate_ideation_aggregate(provenance_core::IdeationAggregate {
+            legacy_policy: provenance_core::LegacyProposalPolicy::ShippedV1,
+            disposition_actor_ids: &manifest.disposition_actor_ids,
+            contributions: &exported.contributions,
+            synthesis_packets: &exported.synthesis_packets,
+            proposals: &exported.proposal_cards,
+            assertions: &exported.assertion_records,
+            dispositions: &exported.dispositions,
+        })?;
         ensure_immutable_records_preserved(
             "proposal",
             &store.list_proposal_definitions(&scope_id)?,
@@ -243,73 +242,10 @@ fn create_import_transaction(
     layout: &ProvenanceLayout,
     transaction_name: &str,
 ) -> anyhow::Result<Utf8PathBuf> {
-    let transactions = validate_import_transactions_dir(layout)?;
+    let transactions = layout.import_transactions_dir();
     let transaction = transactions.join(transaction_name);
     std::fs::create_dir(&transaction)?;
     Ok(transaction)
-}
-
-fn validate_import_transactions_dir(layout: &ProvenanceLayout) -> anyhow::Result<Utf8PathBuf> {
-    let repo = layout
-        .provenance_dir()
-        .parent()
-        .ok_or_else(|| anyhow::anyhow!("repository has no parent"))?
-        .to_path_buf();
-    let canonical_repo = Utf8PathBuf::from_path_buf(std::fs::canonicalize(repo)?)
-        .map_err(|path| anyhow::anyhow!("repository path is not UTF-8: {}", path.display()))?;
-    let provenance = layout.provenance_dir();
-    ensure_real_directory(&provenance)?;
-    let canonical_provenance = Utf8PathBuf::from_path_buf(std::fs::canonicalize(&provenance)?)
-        .map_err(|path| anyhow::anyhow!("provenance path is not UTF-8: {}", path.display()))?;
-    anyhow::ensure!(
-        canonical_provenance == canonical_repo.join(".provenance"),
-        "repository cache is outside the repository"
-    );
-
-    let cache = layout.cache_dir();
-    create_real_directory(&cache)?;
-    let canonical_cache =
-        Utf8PathBuf::from_path_buf(std::fs::canonicalize(&cache)?).map_err(|path| {
-            anyhow::anyhow!("repository cache path is not UTF-8: {}", path.display())
-        })?;
-    anyhow::ensure!(
-        canonical_cache == canonical_provenance.join("cache"),
-        "repository cache is outside the repository"
-    );
-
-    let transactions = layout.import_transactions_dir();
-    create_real_directory(&transactions)?;
-    let canonical_transactions = Utf8PathBuf::from_path_buf(std::fs::canonicalize(&transactions)?)
-        .map_err(|path| {
-            anyhow::anyhow!("import transaction path is not UTF-8: {}", path.display())
-        })?;
-    anyhow::ensure!(
-        canonical_transactions == canonical_cache.join("import-transactions"),
-        "import transaction directory is outside the repository cache"
-    );
-
-    Ok(transactions)
-}
-
-fn create_real_directory(path: &camino::Utf8Path) -> anyhow::Result<()> {
-    match std::fs::symlink_metadata(path) {
-        Ok(metadata) => anyhow::ensure!(
-            metadata.file_type().is_dir() && !metadata.file_type().is_symlink(),
-            "repository cache contains a symlink component: {path}"
-        ),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => std::fs::create_dir(path)?,
-        Err(error) => return Err(error.into()),
-    }
-    ensure_real_directory(path)
-}
-
-fn ensure_real_directory(path: &camino::Utf8Path) -> anyhow::Result<()> {
-    let metadata = std::fs::symlink_metadata(path)?;
-    anyhow::ensure!(
-        metadata.file_type().is_dir() && !metadata.file_type().is_symlink(),
-        "repository cache contains a symlink component: {path}"
-    );
-    Ok(())
 }
 
 struct TransactionCleanup {
