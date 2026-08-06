@@ -83,7 +83,14 @@ fn create_real_directory(path: &Utf8Path) -> anyhow::Result<()> {
             metadata.file_type().is_dir() && !metadata.file_type().is_symlink(),
             "publication lock path contains a symlink component: {path}"
         ),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => std::fs::create_dir(path)?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            if let Err(error) = std::fs::create_dir(path) {
+                anyhow::ensure!(
+                    error.kind() == std::io::ErrorKind::AlreadyExists,
+                    "failed to create publication lock directory {path}: {error}"
+                );
+            }
+        }
         Err(error) => return Err(error.into()),
     }
     let metadata = std::fs::symlink_metadata(path)?;

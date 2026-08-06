@@ -1,6 +1,27 @@
 use super::*;
 
 #[test]
+fn concurrent_first_access_creates_publication_lock_directories_idempotently() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(directory.path().to_path_buf()).unwrap();
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
+    let threads = (0..8)
+        .map(|_| {
+            let layout = ProvenanceLayout::new(root.clone());
+            let barrier = barrier.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                with_repository_publication(&layout, || Ok(()))
+            })
+        })
+        .collect::<Vec<_>>();
+
+    for thread in threads {
+        thread.join().unwrap().unwrap();
+    }
+}
+
+#[test]
 fn recovery_rejects_traversal_outside_import_transactions() {
     let directory = tempfile::tempdir().unwrap();
     let root = Utf8PathBuf::from_path_buf(directory.path().to_path_buf()).unwrap();
