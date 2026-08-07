@@ -274,42 +274,6 @@ impl StateStore {
         )
     }
 
-    pub(super) fn ensure_canonical_artifact_exists(
-        &self,
-        scope_id: &ScopeId,
-        artifact: Option<&provenance_core::CanonicalArtifact>,
-    ) -> anyhow::Result<()> {
-        let Some(artifact) = artifact else {
-            return Ok(());
-        };
-        let exists = match artifact.artifact_type {
-            provenance_core::CanonicalArtifactType::Source => self
-                .list_sources(scope_id)?
-                .iter()
-                .any(|record| record.id == artifact.artifact_id),
-            provenance_core::CanonicalArtifactType::Requirement => self
-                .list_requirements(scope_id)?
-                .iter()
-                .any(|record| record.id == artifact.artifact_id),
-            provenance_core::CanonicalArtifactType::Resolution => self
-                .list_resolutions(scope_id)?
-                .iter()
-                .any(|record| record.id == artifact.artifact_id),
-            provenance_core::CanonicalArtifactType::Rule => self
-                .list_rules(scope_id)?
-                .iter()
-                .any(|record| record.id == artifact.artifact_id),
-        };
-        anyhow::ensure!(
-            exists,
-            "canonical artifact does not exist in scope {} with kind {:?}: {}",
-            scope_id.as_str(),
-            artifact.artifact_type,
-            artifact.artifact_id.as_str()
-        );
-        Ok(())
-    }
-
     pub fn ensure_proposal_card_replaceable(
         &self,
         scope_id: &ScopeId,

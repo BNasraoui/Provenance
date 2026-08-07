@@ -72,6 +72,34 @@ fn direct_disposition_rejects_wrong_kind_and_wrong_scope_targets() {
 }
 
 #[test]
+fn direct_disposition_rejects_every_canonical_kind_misfiled_in_the_scope_shard() {
+    for (artifact_type, shard, record) in misfiled_canonical_records() {
+        let (_dir, store, scope) = initialized_store();
+        allow_actor(&store);
+        store
+            .create_proposal_card(proposal_input(
+                &scope,
+                "proposal_artifact",
+                "Artifact",
+                PromotionState::Proposed,
+            ))
+            .unwrap();
+        write_jsonl(&store.layout.state_dir().join(shard), record);
+
+        let error = store
+            .create_disposition(input(&scope, artifact_type, "artifact_misfiled"))
+            .unwrap_err()
+            .to_string();
+
+        assert!(
+            error.contains("canonical artifact does not exist"),
+            "{artifact_type}: {error}"
+        );
+        assert!(store.list_dispositions(&scope).unwrap().is_empty());
+    }
+}
+
+#[test]
 fn scope_validation_rejects_a_persisted_missing_canonical_artifact() {
     let (_dir, store, scope) = initialized_store();
     allow_actor(&store);
@@ -96,6 +124,82 @@ fn scope_validation_rejects_a_persisted_missing_canonical_artifact() {
         error.contains("canonical artifact does not exist"),
         "{error}"
     );
+}
+
+#[test]
+fn scope_validation_rejects_a_misfiled_canonical_artifact() {
+    let (_dir, store, scope) = initialized_store();
+    allow_actor(&store);
+    store
+        .create_proposal_card(proposal_input(
+            &scope,
+            "proposal_artifact",
+            "Artifact",
+            PromotionState::Proposed,
+        ))
+        .unwrap();
+    write_jsonl(
+        &store
+            .layout
+            .state_dir()
+            .join("scopes/default/requirements/req.jsonl"),
+        r#"{"schema_version":1,"scope_id":"other","id":"artifact_misfiled","statement":"Misfiled","status":"active"}"#,
+    );
+    write_jsonl(
+        &crate::shards::dispositions_path(&store.layout, &scope),
+        r#"{"schema_version":1,"scope_id":"default","id":"disposition_artifact","proposal_id":"proposal_artifact","decision":"rejected","rationale":"Reviewed","actor":{"identity_type":"human","id":"reviewer"},"canonical_artifact":{"artifact_type":"requirement","artifact_id":"artifact_misfiled"}}"#,
+    );
+
+    let error = store
+        .validate_ideation_scope(&scope)
+        .unwrap_err()
+        .to_string();
+
+    assert!(
+        error.contains("canonical artifact does not exist"),
+        "{error}"
+    );
+}
+
+#[test]
+fn batch_rejects_a_misfiled_canonical_artifact_without_landing() {
+    let (_dir, store, scope) = initialized_store();
+    allow_actor(&store);
+    store
+        .create_proposal_card(proposal_input(
+            &scope,
+            "proposal_artifact",
+            "Artifact",
+            PromotionState::Proposed,
+        ))
+        .unwrap();
+    write_jsonl(
+        &store
+            .layout
+            .state_dir()
+            .join("scopes/default/requirements/req.jsonl"),
+        r#"{"schema_version":1,"scope_id":"other","id":"artifact_misfiled","statement":"Misfiled","status":"active"}"#,
+    );
+    let batch = serde_json::from_value(serde_json::json!({
+        "dispositions": [{
+            "schema_version": 1, "scope_id": "default", "id": "disposition_artifact",
+            "proposal_id": "proposal_artifact", "decision": "rejected", "rationale": "Reviewed",
+            "actor": {"identity_type": "human", "id": "reviewer"},
+            "canonical_artifact": {"artifact_type": "requirement", "artifact_id": "artifact_misfiled"}
+        }]
+    }))
+    .unwrap();
+
+    let error = store
+        .land_ideation_batch(&scope, batch, false)
+        .unwrap_err()
+        .to_string();
+
+    assert!(
+        error.contains("canonical artifact does not exist"),
+        "{error}"
+    );
+    assert!(store.list_dispositions(&scope).unwrap().is_empty());
 }
 
 #[test]
@@ -187,4 +291,29 @@ fn allow_actor(store: &crate::state_store::StateStore) {
 fn write_jsonl(path: &camino::Utf8Path, record: &str) {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(path, format!("{record}\n")).unwrap();
+}
+
+fn misfiled_canonical_records() -> [(&'static str, &'static str, &'static str); 4] {
+    [
+        (
+            "source",
+            "scopes/default/sources/source.jsonl",
+            r#"{"schema_version":1,"scope_id":"other","id":"artifact_misfiled","name":"Misfiled","source_type":"document","url":null}"#,
+        ),
+        (
+            "requirement",
+            "scopes/default/requirements/req.jsonl",
+            r#"{"schema_version":1,"scope_id":"other","id":"artifact_misfiled","statement":"Misfiled","status":"active"}"#,
+        ),
+        (
+            "resolution",
+            "scopes/default/resolutions/resolution.jsonl",
+            r#"{"schema_version":1,"scope_id":"other","id":"artifact_misfiled","title":"Misfiled","position":"No","rationale":"No","status":"approved","inputs":[],"review_on":null,"review_triggers":[]}"#,
+        ),
+        (
+            "rule",
+            "scopes/default/rules/rule.jsonl",
+            r#"{"schema_version":1,"scope_id":"other","id":"artifact_misfiled","rule_code":"MISFILED","statement":"Misfiled","status":"draft","severity":"high"}"#,
+        ),
+    ]
 }

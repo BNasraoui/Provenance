@@ -45,6 +45,49 @@ async fn materialize_rejects_missing_disposition_canonical_artifact_before_cache
 }
 
 #[tokio::test]
+async fn materialize_rejects_misfiled_disposition_target_before_cache_changes() {
+    let (_dir, layout, scope) = empty_layout();
+    let mut manifest: provenance_core::Manifest =
+        serde_json::from_slice(&std::fs::read(layout.manifest_path()).unwrap()).unwrap();
+    manifest.disposition_actor_ids.push("reviewer".into());
+    std::fs::write(
+        layout.manifest_path(),
+        serde_json::to_vec(&manifest).unwrap(),
+    )
+    .unwrap();
+    let requirements = crate::shards::requirements_path(&layout, &scope);
+    std::fs::create_dir_all(requirements.parent().unwrap()).unwrap();
+    std::fs::write(
+        requirements,
+        r#"{"schema_version":1,"scope_id":"other","id":"req_misfiled","statement":"Misfiled","status":"active"}
+"#,
+    )
+    .unwrap();
+    let proposals = crate::shards::proposal_cards_path(&layout, &scope);
+    std::fs::create_dir_all(proposals.parent().unwrap()).unwrap();
+    std::fs::write(
+        proposals,
+        r#"{"schema_version":1,"scope_id":"default","id":"proposal_a","proposal_key":"a","proposal_type":"requirement_candidate","title":"A","summary":"A","traceability":{"target":{"artifact_type":"requirement","artifact_id":"req_misfiled"},"source_ids":[],"evidence_references":[],"supporting_claim_ids":[]},"promotion_state":"proposed"}
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        crate::shards::dispositions_path(&layout, &scope),
+        r#"{"schema_version":1,"scope_id":"default","id":"disposition_a","proposal_id":"proposal_a","decision":"rejected","rationale":"Reviewed","actor":{"identity_type":"human","id":"reviewer"},"canonical_artifact":{"artifact_type":"requirement","artifact_id":"req_misfiled"}}
+"#,
+    )
+    .unwrap();
+
+    let error = materialize_state(&layout).await.unwrap_err().to_string();
+
+    assert!(
+        error.contains("canonical artifact does not exist"),
+        "{error}"
+    );
+    assert!(!layout.cache_db_path().exists());
+}
+
+#[tokio::test]
 async fn materialize_caches_generic_disposition_external_action() {
     let (_dir, layout, scope) = seeded_layout();
     let mut manifest: provenance_core::Manifest =

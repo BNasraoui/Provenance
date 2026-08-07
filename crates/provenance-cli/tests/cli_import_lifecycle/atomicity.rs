@@ -101,6 +101,75 @@ fn missing_disposition_canonical_artifact_import_is_atomic() {
 }
 
 #[test]
+fn misfiled_disposition_canonical_artifact_import_is_atomic() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    init_repo(&repo, Some("reviewer"));
+    let baseline = dir.path().join("baseline.json");
+    export_scope(&repo, &baseline).success();
+    let before = std::fs::read(&baseline).unwrap();
+    let mut invalid: serde_json::Value = serde_json::from_slice(&before).unwrap();
+    invalid["requirements"] = serde_json::json!([{
+        "schema_version": 1, "scope_id": "other", "id": "req_misfiled",
+        "statement": "Misfiled", "status": "active"
+    }]);
+    invalid["proposal_cards"] = serde_json::json!([{
+        "schema_version": 1, "scope_id": "default", "id": "proposal_a",
+        "proposal_key": "a", "proposal_type": "requirement_candidate", "title": "A", "summary": "A",
+        "traceability": {"target": {"artifact_type": "requirement", "artifact_id": "req_misfiled"},
+            "source_ids": [], "evidence_references": [], "supporting_claim_ids": []},
+        "promotion_state": "proposed"
+    }]);
+    invalid["dispositions"] = serde_json::json!([{
+        "schema_version": 1, "scope_id": "default", "id": "disposition_a",
+        "proposal_id": "proposal_a", "decision": "rejected", "rationale": "Reviewed",
+        "actor": {"identity_type": "human", "id": "reviewer"},
+        "canonical_artifact": {"artifact_type": "requirement", "artifact_id": "req_misfiled"}
+    }]);
+    let input = dir.path().join("misfiled-canonical-artifact.json");
+    write_json(&input, &invalid);
+
+    import_scope(&repo, &input).failure();
+
+    let after = dir.path().join("after.json");
+    export_scope(&repo, &after).success();
+    assert_eq!(std::fs::read(after).unwrap(), before);
+}
+
+#[test]
+fn check_rejects_a_misfiled_disposition_target() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    init_repo(&repo, Some("reviewer"));
+    let scope = repo.join(".provenance/state/scopes/default");
+    std::fs::create_dir_all(scope.join("requirements")).unwrap();
+    std::fs::create_dir_all(scope.join("ideation")).unwrap();
+    std::fs::write(
+        scope.join("requirements/req.jsonl"),
+        "{\"schema_version\":1,\"scope_id\":\"other\",\"id\":\"req_misfiled\",\"statement\":\"Misfiled\",\"status\":\"active\"}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        scope.join("ideation/proposal_cards.jsonl"),
+        "{\"schema_version\":1,\"scope_id\":\"default\",\"id\":\"proposal_a\",\"proposal_key\":\"a\",\"proposal_type\":\"requirement_candidate\",\"title\":\"A\",\"summary\":\"A\",\"traceability\":{\"target\":{\"artifact_type\":\"requirement\",\"artifact_id\":\"req_misfiled\"},\"source_ids\":[],\"evidence_references\":[],\"supporting_claim_ids\":[]},\"promotion_state\":\"proposed\"}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        scope.join("ideation/dispositions.jsonl"),
+        "{\"schema_version\":1,\"scope_id\":\"default\",\"id\":\"disposition_a\",\"proposal_id\":\"proposal_a\",\"decision\":\"rejected\",\"rationale\":\"Reviewed\",\"actor\":{\"identity_type\":\"human\",\"id\":\"reviewer\"},\"canonical_artifact\":{\"artifact_type\":\"requirement\",\"artifact_id\":\"req_misfiled\"}}\n",
+    )
+    .unwrap();
+
+    super::support::provenance()
+        .args(["check", "--repo", repo.to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "canonical artifact does not exist",
+        ));
+}
+
+#[test]
 fn concurrent_first_imports_share_pristine_transaction_directory_setup() {
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path().join("repo");
