@@ -17,14 +17,14 @@ pub async fn materialize_empty_state(
 }
 
 pub async fn materialize_state(layout: &ProvenanceLayout) -> anyhow::Result<MaterializeReport> {
-    let pool = open_cache(layout).await?;
-    let migrations_applied = migrations::run_migrations(&pool).await?;
     let snapshot = publication::snapshot_state(layout)?;
     let store = StateStore::new(snapshot.layout().clone());
     let manifest = store.manifest()?;
     for scope in &manifest.scopes {
         store.validate_ideation_scope(&scope.id)?;
     }
+    let pool = open_cache(layout).await?;
+    let migrations_applied = migrations::run_migrations(&pool).await?;
     let mut tx = pool.begin().await?;
     clear_cache(&mut tx).await?;
 

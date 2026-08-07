@@ -358,7 +358,9 @@ Before moving to the next question, verify the current answer has been handled:
 - proposal definitions remain immutable `proposed` records; assertion lineage uses assertion
   IDs, and only positive owned evidence with unblocked adjudication can create an assertion;
 - accepted, rejected, or deferred outcomes are disposition records by a manifest-allowlisted
-  actor ID. The ID is a repository-local audit attestation, not cryptographic identity;
+  actor ID. The ID is a repository-local audit attestation, not cryptographic identity. A
+  canonical artifact must already exist under the exact scope and kind; correlate any external
+  action with the generic system/scope/kind/key fields rather than workflow-specific metadata;
 - fog is updated;
 - invalidated questions are answered or updated; a thread note can document the change but
   does not change question status;

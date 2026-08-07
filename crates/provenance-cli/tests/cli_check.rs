@@ -140,6 +140,60 @@ fn check_rejects_dangling_disposition_proposal_id() {
 }
 
 #[test]
+fn check_rejects_missing_wrong_kind_and_wrong_scope_canonical_artifacts() {
+    for case in ["missing", "wrong_kind", "wrong_scope"] {
+        let dir = tempfile::tempdir().unwrap();
+        init(dir.path());
+        let state = dir.path().join(".provenance/state");
+        std::fs::write(
+            state.join("manifest.json"),
+            if case == "wrong_scope" {
+                r#"{"schema_version":1,"scopes":[{"id":"default","path_prefix":"."},{"id":"other","path_prefix":"other"}],"disposition_actor_ids":["reviewer"]}"#
+            } else {
+                r#"{"schema_version":1,"scopes":[{"id":"default","path_prefix":"."}],"disposition_actor_ids":["reviewer"]}"#
+            },
+        )
+        .unwrap();
+        write_jsonl(
+            &state.join("scopes/default/sources/source.jsonl"),
+            r#"{"schema_version":1,"scope_id":"default","id":"source_anchor","name":"Anchor","source_type":"document"}"#,
+        );
+        let (artifact_type, artifact_id) = match case {
+            "missing" => ("requirement", "req_missing"),
+            "wrong_kind" => {
+                write_jsonl(
+                    &state.join("scopes/default/requirements/req.jsonl"),
+                    r#"{"schema_version":1,"scope_id":"default","id":"artifact_collision","statement":"Collision","status":"active"}"#,
+                );
+                ("source", "artifact_collision")
+            }
+            "wrong_scope" => {
+                write_jsonl(
+                    &state.join("scopes/other/requirements/req.jsonl"),
+                    r#"{"schema_version":1,"scope_id":"other","id":"req_other","statement":"Other","status":"active"}"#,
+                );
+                ("requirement", "req_other")
+            }
+            _ => unreachable!(),
+        };
+        write_jsonl(
+            &state.join("scopes/default/ideation/proposal_cards.jsonl"),
+            r#"{"schema_version":1,"scope_id":"default","id":"proposal_a","proposal_key":"a","proposal_type":"source_gap","title":"A","summary":"A","traceability":{"target":{"artifact_type":"source","artifact_id":"source_anchor"},"source_ids":[],"evidence_references":[],"supporting_claim_ids":[]},"promotion_state":"proposed"}"#,
+        );
+        write_jsonl(
+            &state.join("scopes/default/ideation/dispositions.jsonl"),
+            &format!(
+                r#"{{"schema_version":1,"scope_id":"default","id":"disposition_a","proposal_id":"proposal_a","decision":"rejected","rationale":"Reviewed","actor":{{"identity_type":"human","id":"reviewer"}},"canonical_artifact":{{"artifact_type":"{artifact_type}","artifact_id":"{artifact_id}"}}}}"#
+            ),
+        );
+
+        provenance(dir.path())
+            .failure()
+            .stderr(contains("canonical artifact does not exist"));
+    }
+}
+
+#[test]
 fn check_rejects_duplicate_evidence_record_ids() {
     let cases = [
         (

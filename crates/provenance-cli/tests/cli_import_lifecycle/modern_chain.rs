@@ -68,6 +68,21 @@ fn import_accepts_rejected_or_deferred_disposition_after_assertion() {
     }
 }
 
+#[test]
+fn import_and_export_round_trip_generic_external_action() {
+    let fixture = ModernLifecycleFixture::new();
+    fixture.import_lifecycle().success();
+    let exported = fixture.root.join("round-trip.json");
+    export_scope(&fixture.repo, &exported).success();
+    let value: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(exported).unwrap()).unwrap();
+
+    assert_eq!(
+        value["dispositions"][0]["external_action"],
+        fixture.lifecycle["dispositions"][0]["external_action"]
+    );
+}
+
 struct ModernLifecycleFixture {
     _directory: tempfile::TempDir,
     root: PathBuf,
@@ -163,6 +178,8 @@ fn add_modern_lifecycle(lifecycle: &mut serde_json::Value) {
     }]);
     lifecycle["dispositions"] = serde_json::json!([{
         "schema_version": 1, "scope_id": "default", "id": "disposition_a", "proposal_id": "proposal_a",
-        "decision": "accepted", "rationale": "Reviewed", "actor": {"identity_type": "human", "id": "reviewer"}
+        "decision": "accepted", "rationale": "Reviewed", "actor": {"identity_type": "human", "id": "reviewer"},
+        "canonical_artifact": {"artifact_type": "source", "artifact_id": "source_a"},
+        "external_action": {"system": "github", "scope": "acme/payroll", "kind": "deployment", "key": "prod-44"}
     }]);
 }

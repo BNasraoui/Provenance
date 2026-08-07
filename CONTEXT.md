@@ -28,6 +28,10 @@ The selected scope declaration and graph records that contribute to that scope. 
 
 An optional association between a graph reference and an identifier owned by another system. It does not participate in graph-reference identity.
 
+## External action correlation
+
+An optional immutable association between a Disposition and one action owned by another system. Its identity is the exact system, external scope, action kind, and stable key tuple; equal keys in different systems, scopes, or kinds are distinct. It is audit context, not Disposition identity or workflow state.
+
 ## Commit-then-issue
 
 The handoff in which canonical graph changes are committed before a graph reference is issued, so issuance does not create new canonical state.
@@ -54,7 +58,7 @@ The sole immutable authority for `accepted`, `rejected`, or `deferred`. Its acto
 
 ## Ratification through action
 
-Acceptance recorded when a human action resolves the relevant problem and produces a canonical artifact. The immutable Disposition names that artifact and preserves the Proposal definition unchanged.
+Acceptance recorded when a human action resolves the relevant problem and produces an existing canonical artifact. The immutable Disposition names the artifact, may correlate the external action that produced it, and preserves the Proposal definition unchanged.
 
 ## Frozen legacy terminal
 

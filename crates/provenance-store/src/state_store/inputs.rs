@@ -222,6 +222,7 @@ pub struct CreateDispositionInput {
     pub rationale: String,
     pub actor: DispositionActor,
     pub canonical_artifact: Option<CanonicalArtifact>,
+    pub external_action: Option<provenance_core::ExternalActionCorrelation>,
 }
 
 pub struct CreateAssertionInput {

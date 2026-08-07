@@ -9,6 +9,82 @@ use provenance_core::{
 };
 
 #[tokio::test]
+async fn materialize_rejects_missing_disposition_canonical_artifact_before_cache_changes() {
+    let (_dir, layout, scope) = empty_layout();
+    let mut manifest: provenance_core::Manifest =
+        serde_json::from_slice(&std::fs::read(layout.manifest_path()).unwrap()).unwrap();
+    manifest.disposition_actor_ids.push("reviewer".into());
+    std::fs::write(
+        layout.manifest_path(),
+        serde_json::to_vec(&manifest).unwrap(),
+    )
+    .unwrap();
+    let proposals = crate::shards::proposal_cards_path(&layout, &scope);
+    std::fs::create_dir_all(proposals.parent().unwrap()).unwrap();
+    std::fs::write(
+        proposals,
+        r#"{"schema_version":1,"scope_id":"default","id":"proposal_a","proposal_key":"a","proposal_type":"requirement_candidate","title":"A","summary":"A","traceability":{"target":{"artifact_type":"requirement","artifact_id":"req_missing"},"source_ids":[],"evidence_references":[],"supporting_claim_ids":[]},"promotion_state":"proposed"}
+"#,
+    )
+    .unwrap();
+    let dispositions = crate::shards::dispositions_path(&layout, &scope);
+    std::fs::write(
+        dispositions,
+        r#"{"schema_version":1,"scope_id":"default","id":"disposition_a","proposal_id":"proposal_a","decision":"rejected","rationale":"Reviewed","actor":{"identity_type":"human","id":"reviewer"},"canonical_artifact":{"artifact_type":"requirement","artifact_id":"req_missing"}}
+"#,
+    )
+    .unwrap();
+
+    let error = materialize_state(&layout).await.unwrap_err().to_string();
+
+    assert!(
+        error.contains("canonical artifact does not exist"),
+        "{error}"
+    );
+    assert!(!layout.cache_db_path().exists());
+}
+
+#[tokio::test]
+async fn materialize_caches_generic_disposition_external_action() {
+    let (_dir, layout, scope) = seeded_layout();
+    let mut manifest: provenance_core::Manifest =
+        serde_json::from_slice(&std::fs::read(layout.manifest_path()).unwrap()).unwrap();
+    manifest.disposition_actor_ids.push("reviewer".into());
+    std::fs::write(
+        layout.manifest_path(),
+        serde_json::to_vec(&manifest).unwrap(),
+    )
+    .unwrap();
+    let proposals = crate::shards::proposal_cards_path(&layout, &scope);
+    std::fs::create_dir_all(proposals.parent().unwrap()).unwrap();
+    std::fs::write(
+        proposals,
+        r#"{"schema_version":1,"scope_id":"default","id":"proposal_a","proposal_key":"a","proposal_type":"requirement_candidate","title":"A","summary":"A","traceability":{"target":{"artifact_type":"requirement","artifact_id":"req_schads_overtime"},"source_ids":[],"evidence_references":[],"supporting_claim_ids":[]},"promotion_state":"proposed"}
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        crate::shards::dispositions_path(&layout, &scope),
+        r#"{"schema_version":1,"scope_id":"default","id":"disposition_a","proposal_id":"proposal_a","decision":"rejected","rationale":"Reviewed","actor":{"identity_type":"human","id":"reviewer"},"canonical_artifact":{"artifact_type":"requirement","artifact_id":"req_schads_overtime"},"external_action":{"system":"github","scope":"acme/payroll","kind":"issue","key":"44"}}
+"#,
+    )
+    .unwrap();
+
+    materialize_state(&layout).await.unwrap();
+    let pool = open_cache(&layout).await.unwrap();
+    let action: String =
+        sqlx::query_scalar("SELECT external_action FROM dispositions WHERE id = ?")
+            .bind("disposition_a")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&action).unwrap(),
+        serde_json::json!({"system":"github","scope":"acme/payroll","kind":"issue","key":"44"})
+    );
+}
+
+#[tokio::test]
 async fn materialize_state_caches_fog_resolution_method_and_claim_state() {
     let (_dir, layout, scope) = seeded_layout();
     let store = StateStore::new(layout.clone());

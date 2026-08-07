@@ -27,6 +27,7 @@ fn proposal_projection_rejects_unlisted_disposition_actor() {
             rationale: "Forged review".into(),
             actor: disposition_actor("forged-reviewer"),
             canonical_artifact: None,
+            external_action: None,
         }],
     )
     .unwrap();
@@ -230,6 +231,14 @@ fn unregistered_terminal_row_is_not_legacy_compatibility() {
 
 fn seed_proposal_ready_for_disposition(store: &StateStore, scope: &ScopeId) {
     allow_disposition_actor(store);
+    let requirement_path = crate::shards::requirements_path(&store.layout, scope);
+    std::fs::create_dir_all(requirement_path.parent().unwrap()).unwrap();
+    std::fs::write(
+        requirement_path,
+        r#"{"schema_version":1,"scope_id":"default","id":"req_overtime","statement":"Overtime","status":"active"}
+"#,
+    )
+    .unwrap();
     let contribution: provenance_core::Contribution = serde_json::from_value(serde_json::json!({
         "schema_version": 1, "scope_id": "default", "id": "contribution_overtime",
         "target": {"artifact_type": "requirement", "artifact_id": "req_overtime"},
@@ -321,6 +330,7 @@ fn disposition_input(scope_id: ScopeId, id: &str) -> CreateDispositionInput {
             artifact_type: provenance_core::CanonicalArtifactType::Requirement,
             artifact_id: StableId::new("req_overtime").unwrap(),
         }),
+        external_action: None,
     }
 }
 

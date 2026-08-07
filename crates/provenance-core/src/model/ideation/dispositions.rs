@@ -21,6 +21,15 @@ pub struct CanonicalArtifact {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct ExternalActionCorrelation {
+    pub system: String,
+    pub scope: String,
+    pub kind: String,
+    pub key: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DispositionRecord {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,
@@ -31,6 +40,21 @@ pub struct DispositionRecord {
     pub actor: DispositionActor,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub canonical_artifact: Option<CanonicalArtifact>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_external_action",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub external_action: Option<ExternalActionCorrelation>,
+}
+
+fn deserialize_external_action<'de, D>(
+    deserializer: D,
+) -> Result<Option<ExternalActionCorrelation>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    ExternalActionCorrelation::deserialize(deserializer).map(Some)
 }
 
 pub fn validate_disposition_intrinsic(disposition: &DispositionRecord) -> anyhow::Result<()> {
@@ -42,5 +66,18 @@ pub fn validate_disposition_intrinsic(disposition: &DispositionRecord) -> anyhow
         !disposition.actor.id.trim().is_empty(),
         "disposition actor id must not be empty"
     );
+    if let Some(action) = &disposition.external_action {
+        for (name, value) in [
+            ("system", &action.system),
+            ("scope", &action.scope),
+            ("kind", &action.kind),
+            ("key", &action.key),
+        ] {
+            anyhow::ensure!(
+                !value.trim().is_empty(),
+                "external action {name} must not be empty"
+            );
+        }
+    }
     Ok(())
 }

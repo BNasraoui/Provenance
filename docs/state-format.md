@@ -23,6 +23,13 @@ state remains authoritative even if lifecycle rows are present. The audit finger
 only dispositions targeting that frozen terminal set, so allowlisted modern lifecycle records can
 coexist in the same scope. New terminal definitions are never accepted as modern ingress.
 
+A modern disposition may omit or carry one closed `external_action` object with required
+`system`, `scope`, `kind`, and `key` strings. Its identity is that exact four-part tuple and it
+is preserved as part of the immutable audit row. Omission keeps shipped-v1 serialization and
+fingerprints unchanged. A `canonical_artifact` resolves as the disposition scope plus exact
+artifact type and ID; missing, cross-scope, and cross-kind collisions fail closed before direct
+write or import publication and during repository checking and cache materialization.
+
 Repository access first takes `.provenance/cache/locks/repository.publication.lock`. Writers then
 take a scope lifecycle lock when applicable and finally a shard lock; this repository, lifecycle,
 shard order is mandatory. Multi-shard writers hold the publication lock for their complete

@@ -272,6 +272,18 @@ pub enum DispositionsCommand {
         canonical_artifact_type: Option<String>,
         #[arg(long)]
         canonical_artifact_id: Option<String>,
+        /// External system owning the correlated action (for example, github).
+        #[arg(long, requires_all = ["external_scope", "external_kind", "external_key"])]
+        external_system: Option<String>,
+        /// Namespace within the external system (for example, owner/repository).
+        #[arg(long, requires_all = ["external_system", "external_kind", "external_key"])]
+        external_scope: Option<String>,
+        /// Generic external action type (for example, issue, commit, ticket, or deployment).
+        #[arg(long, requires_all = ["external_system", "external_scope", "external_key"])]
+        external_kind: Option<String>,
+        /// Stable action key within the external system, scope, and kind.
+        #[arg(long, requires_all = ["external_system", "external_scope", "external_kind"])]
+        external_key: Option<String>,
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },

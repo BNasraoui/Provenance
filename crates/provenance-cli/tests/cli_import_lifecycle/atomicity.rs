@@ -61,6 +61,46 @@ fn late_scope_validation_failure_is_atomic() {
 }
 
 #[test]
+fn missing_disposition_canonical_artifact_import_is_atomic() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    init_repo(&repo, Some("reviewer"));
+    let baseline = dir.path().join("baseline.json");
+    export_scope(&repo, &baseline).success();
+    let before = std::fs::read(&baseline).unwrap();
+    let mut invalid: serde_json::Value = serde_json::from_slice(&before).unwrap();
+    invalid["sources"] = serde_json::json!([{
+        "schema_version": 1, "scope_id": "default", "id": "source_anchor",
+        "name": "Anchor", "source_type": "document"
+    }]);
+    invalid["proposal_cards"] = serde_json::json!([{
+        "schema_version": 1, "scope_id": "default", "id": "proposal_a",
+        "proposal_key": "a", "proposal_type": "source_gap", "title": "A", "summary": "A",
+        "traceability": {"target": {"artifact_type": "source", "artifact_id": "source_anchor"},
+            "source_ids": [], "evidence_references": [], "supporting_claim_ids": []},
+        "promotion_state": "proposed"
+    }]);
+    invalid["dispositions"] = serde_json::json!([{
+        "schema_version": 1, "scope_id": "default", "id": "disposition_a",
+        "proposal_id": "proposal_a", "decision": "rejected", "rationale": "Reviewed",
+        "actor": {"identity_type": "human", "id": "reviewer"},
+        "canonical_artifact": {"artifact_type": "requirement", "artifact_id": "req_missing"}
+    }]);
+    let input = dir.path().join("invalid-canonical-artifact.json");
+    write_json(&input, &invalid);
+
+    import_scope(&repo, &input)
+        .failure()
+        .stderr(predicates::str::contains(
+            "canonical artifact does not exist",
+        ));
+
+    let after = dir.path().join("after.json");
+    export_scope(&repo, &after).success();
+    assert_eq!(std::fs::read(after).unwrap(), before);
+}
+
+#[test]
 fn concurrent_first_imports_share_pristine_transaction_directory_setup() {
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path().join("repo");

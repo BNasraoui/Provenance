@@ -22,6 +22,7 @@ pub use ideation::contributions::{
 };
 pub use ideation::dispositions::{
     validate_disposition_intrinsic, CanonicalArtifact, DispositionActor, DispositionRecord,
+    ExternalActionCorrelation,
 };
 pub use ideation::lifecycle::{
     effective_proposal_state, validate_assertion_intrinsic, validate_ideation_aggregate,

@@ -40,6 +40,12 @@ fn disposition_schema_closes_canonical_artifact_and_validation_rejects_unknown_f
         canonical["required"],
         serde_json::json!(["artifact_type", "artifact_id"])
     );
+    let external_action = &schema["schema"]["properties"]["external_action"];
+    assert_eq!(external_action["additionalProperties"], false);
+    assert_eq!(
+        external_action["required"],
+        serde_json::json!(["system", "scope", "kind", "key"])
+    );
 
     let dir = tempfile::tempdir().unwrap();
     let invalid = write_json(
@@ -74,6 +80,8 @@ fn disposition_schema_closes_canonical_artifact_and_validation_rejects_unknown_f
         .failure()
         .stderr(predicates::str::contains("unknown field `unexpected`"));
 
+    assert_external_action_unknown_field_rejected(&dir);
+
     let empty = write_json(
         &dir,
         "empty-disposition.json",
@@ -102,6 +110,25 @@ fn disposition_schema_closes_canonical_artifact_and_validation_rejects_unknown_f
         .stderr(predicates::str::contains(
             "disposition rationale must not be empty",
         ));
+}
+
+fn assert_external_action_unknown_field_rejected(dir: &tempfile::TempDir) {
+    let unknown_action = write_json(
+        dir,
+        "unknown-action-field.json",
+        r#"{
+          "schema_version": 1, "scope_id": "default", "id": "disposition_accept",
+          "proposal_id": "proposal_candidate", "decision": "rejected", "rationale": "Rejected.",
+          "actor": {"identity_type": "human", "id": "reviewer"},
+          "external_action": {"system": "github", "scope": "acme/payroll", "kind": "issue", "key": "44", "workflow_state": "closed"}
+        }"#,
+    );
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args(["validate", "disposition", "--input", &unknown_action])
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("unknown field `workflow_state`"));
 }
 
 #[test]

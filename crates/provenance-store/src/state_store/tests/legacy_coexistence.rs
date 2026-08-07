@@ -103,6 +103,7 @@ fn modern_lifecycle_coexists_with_frozen_shipped_records() {
                 name: None,
             },
             canonical_artifact: None,
+            external_action: None,
         })
         .unwrap();
 }

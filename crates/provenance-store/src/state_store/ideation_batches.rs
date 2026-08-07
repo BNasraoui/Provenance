@@ -104,6 +104,12 @@ impl StateStore {
                 assertions: &assertions,
                 dispositions: &dispositions,
             })?;
+            for disposition in &dispositions {
+                self.ensure_canonical_artifact_exists(
+                    scope,
+                    disposition.canonical_artifact.as_ref(),
+                )?;
+            }
             landings.push(incoming);
             Ok(())
         })
@@ -203,6 +209,9 @@ impl StateStore {
             assertions: &assertions,
             dispositions: &dispositions,
         })?;
+        for disposition in &dispositions {
+            self.ensure_canonical_artifact_exists(scope, disposition.canonical_artifact.as_ref())?;
+        }
         Ok(())
     }
 }
