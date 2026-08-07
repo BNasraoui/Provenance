@@ -1,5 +1,13 @@
 # Domain Glossary
 
+## Domain
+
+A reader-facing taxonomy classification for requirements. A derived rule belongs to each Domain of its upstream requirements through the canonical graph relationships.
+
+## Topic
+
+A persisted, claimable shaping work area attached to a requirement. A Topic is not a reader taxonomy classification.
+
 ## Graph reference
 
 An immutable identification of one canonical graph scope at one pinned repository commit. Its identity includes the repository, canonical store, scope, commit, and graph content.

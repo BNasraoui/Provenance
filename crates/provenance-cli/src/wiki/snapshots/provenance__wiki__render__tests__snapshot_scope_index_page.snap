@@ -1,6 +1,5 @@
 ---
 source: crates/provenance-cli/src/wiki/render.rs
-assertion_line: 1793
 expression: "render_index(\"default\", &index_fixture())"
 ---
 <!doctype html>
@@ -32,6 +31,7 @@ expression: "render_index(\"default\", &index_fixture())"
 <div class="chrome-inner">
 <span class="wordmark">Provenance<span class="scope">default</span></span>
 <nav aria-label="Breadcrumb"></nav>
+<nav class="global-nav" aria-label="Wiki"><a href="/">Atlas</a><a href="/domains/">Domains</a><a href="/search/">Search</a></nav>
 <label class="theme-select">Theme
 <select id="theme-select">
 <option value="statesman" selected>Statesman</option>

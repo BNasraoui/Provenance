@@ -1,7 +1,7 @@
 use super::super::build_corpus;
 use super::fixtures::*;
 use crate::wiki::links::LinkResolver;
-use crate::wiki::model::{GapKind, PageKind};
+use crate::wiki::model::{GapKind, RecordKind};
 use provenance_core::{EdgeType, NodeType, RequirementStatus};
 
 #[test]
@@ -22,7 +22,7 @@ fn requirement_page_assembles_lineage_decision_rules_and_sources() {
     assert_eq!(page.decisions.len(), 1);
     let decision = &page.decisions[0];
     assert_eq!(decision.link.target.record_id, "res_split");
-    assert_eq!(decision.link.target.kind, PageKind::Resolution);
+    assert_eq!(decision.link.target.kind, RecordKind::Resolution);
     assert_eq!(decision.position, "Adopt the split");
     assert_eq!(decision.inputs.len(), 1);
     assert_eq!(

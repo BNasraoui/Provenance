@@ -1,0 +1,10 @@
+{
+  "name": "provenance-wiki-dom-tests",
+  "private": true,
+  "scripts": {
+    "test:dom": "node --test tests/wiki-search-dom.test.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "29.1.1"
+  }
+}

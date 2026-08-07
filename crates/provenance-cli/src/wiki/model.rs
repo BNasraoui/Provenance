@@ -13,27 +13,52 @@ use provenance_core::{
 pub use provenance_store::cache::GapKind;
 use serde::Serialize;
 
-/// The kind of page an id refers to.
+mod discovery;
+pub use discovery::{DomainGroup, DomainIndexPage, DomainState, SearchEntry, SearchIndexPage};
+
+/// A rendered page kind, including singleton discovery pages.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PageKind {
     ScopeIndex,
+    DomainIndex,
+    SearchIndex,
     Requirement,
     Resolution,
     Rule,
     Source,
 }
 
-/// Identifies one wiki page: a page kind plus the record's stable id
-/// (the scope id for the index page).
+/// A persisted record kind. Singleton pages deliberately have no variant here.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RecordKind {
+    Requirement,
+    Resolution,
+    Rule,
+    Source,
+}
+
+impl From<RecordKind> for PageKind {
+    fn from(kind: RecordKind) -> Self {
+        match kind {
+            RecordKind::Requirement => Self::Requirement,
+            RecordKind::Resolution => Self::Resolution,
+            RecordKind::Rule => Self::Rule,
+            RecordKind::Source => Self::Source,
+        }
+    }
+}
+
+/// Identifies one persisted record page by kind and stable id.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PageId {
-    pub kind: PageKind,
+    pub kind: RecordKind,
     pub record_id: String,
 }
 
 impl PageId {
-    pub fn new(kind: PageKind, record_id: impl Into<String>) -> Self {
+    pub fn new(kind: RecordKind, record_id: impl Into<String>) -> Self {
         Self {
             kind,
             record_id: record_id.into(),
@@ -43,14 +68,7 @@ impl PageId {
     /// The canonical route for this page, mirroring the docs server's
     /// trailing-slash convention.
     pub fn route(&self) -> String {
-        let prefix = match self.kind {
-            PageKind::ScopeIndex => return "/".to_string(),
-            PageKind::Requirement => "requirements",
-            PageKind::Resolution => "resolutions",
-            PageKind::Rule => "rules",
-            PageKind::Source => "sources",
-        };
-        format!("/{prefix}/{}/", self.record_id)
+        crate::wiki::routes::WikiRoute::Record(self).path()
     }
 }
 
@@ -106,7 +124,6 @@ pub struct IndexEntry {
 /// orphans.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ScopeIndexPage {
-    pub id: PageId,
     pub scope: String,
     pub title: String,
     pub counts: CorpusCounts,
@@ -325,6 +342,8 @@ pub struct SourcePage {
 pub struct WikiCorpus {
     pub scope: String,
     pub index: ScopeIndexPage,
+    pub domains: DomainIndexPage,
+    pub search: SearchIndexPage,
     pub requirements: Vec<RequirementPage>,
     pub resolutions: Vec<ResolutionPage>,
     pub rules: Vec<RulePage>,
@@ -336,26 +355,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn page_id_routes_the_scope_index_to_the_root() {
-        assert_eq!(PageId::new(PageKind::ScopeIndex, "default").route(), "/");
+    fn singleton_pages_are_not_record_identities() {
+        let singletons = [
+            PageKind::ScopeIndex,
+            PageKind::DomainIndex,
+            PageKind::SearchIndex,
+        ];
+        assert_eq!(singletons.len(), 3);
     }
 
     #[test]
     fn page_id_routes_records_under_their_kind() {
         assert_eq!(
-            PageId::new(PageKind::Requirement, "req_split").route(),
+            PageId::new(RecordKind::Requirement, "req_split").route(),
             "/requirements/req_split/"
         );
         assert_eq!(
-            PageId::new(PageKind::Resolution, "res_split").route(),
+            PageId::new(RecordKind::Resolution, "res_split").route(),
             "/resolutions/res_split/"
         );
         assert_eq!(
-            PageId::new(PageKind::Rule, "rule_sah_inv_001").route(),
+            PageId::new(RecordKind::Rule, "rule_sah_inv_001").route(),
             "/rules/rule_sah_inv_001/"
         );
         assert_eq!(
-            PageId::new(PageKind::Source, "source_schads").route(),
+            PageId::new(RecordKind::Source, "source_schads").route(),
             "/sources/source_schads/"
         );
     }

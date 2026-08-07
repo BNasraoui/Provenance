@@ -6,6 +6,7 @@
 //! orphan entry instead of being dropped.
 
 mod context;
+mod discovery;
 mod evidence;
 mod gaps;
 mod page_links;
@@ -47,29 +48,36 @@ pub fn build_corpus(state: &ScopeExport, resolver: &LinkResolver) -> WikiCorpus 
         resolver,
         gaps: &gaps,
     };
+    let requirements = state
+        .requirements
+        .iter()
+        .map(|requirement| assembler.requirement_page(requirement))
+        .collect::<Vec<_>>();
+    let resolutions = state
+        .resolutions
+        .iter()
+        .map(|resolution| assembler.resolution_page(resolution))
+        .collect::<Vec<_>>();
+    let rules = state
+        .rules
+        .iter()
+        .map(|rule| assembler.rule_page(rule))
+        .collect::<Vec<_>>();
+    let sources = state
+        .sources
+        .iter()
+        .map(|source| assembler.source_page(source))
+        .collect::<Vec<_>>();
+    let (domains, search) = discovery::build_discovery_pages(state, &requirements, &rules);
     WikiCorpus {
         scope: state.scope.clone(),
         index: assembler.index_page(),
-        requirements: state
-            .requirements
-            .iter()
-            .map(|requirement| assembler.requirement_page(requirement))
-            .collect(),
-        resolutions: state
-            .resolutions
-            .iter()
-            .map(|resolution| assembler.resolution_page(resolution))
-            .collect(),
-        rules: state
-            .rules
-            .iter()
-            .map(|rule| assembler.rule_page(rule))
-            .collect(),
-        sources: state
-            .sources
-            .iter()
-            .map(|source| assembler.source_page(source))
-            .collect(),
+        domains,
+        search,
+        requirements,
+        resolutions,
+        rules,
+        sources,
     }
 }
 

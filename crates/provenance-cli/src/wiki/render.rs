@@ -14,16 +14,13 @@ mod html;
 mod labels;
 mod pages;
 
-use crate::wiki::model::{PageId, WikiCorpus};
+use crate::wiki::model::WikiCorpus;
+use crate::wiki::routes::WikiRoute;
 
 pub use pages::{
-    render_index, render_not_found, render_requirement, render_resolution, render_rule,
-    render_source,
+    render_domains, render_index, render_not_found, render_requirement, render_resolution,
+    render_rule, render_search, render_source,
 };
-
-/// Route the vendored stylesheet is referenced under; the server (or static
-/// build) must expose [`crate::wiki::theme::WIKI_CSS`] here.
-pub const WIKI_CSS_ROUTE: &str = "/assets/provenance-wiki.css";
 
 /// One rendered page: its canonical route, title, and full HTML document.
 #[derive(Debug, Clone)]
@@ -37,37 +34,57 @@ pub struct RenderedPage {
 /// resolutions, rules, and sources in record order.
 pub fn render_corpus(corpus: &WikiCorpus) -> Vec<RenderedPage> {
     let scope = corpus.scope.as_str();
-    let mut pages = vec![rendered(
-        &corpus.index.id,
-        &corpus.index.title,
-        render_index(scope, &corpus.index),
-    )];
+    let mut pages = vec![
+        rendered(
+            WikiRoute::Index,
+            &corpus.index.title,
+            render_index(scope, &corpus.index),
+        ),
+        rendered(
+            WikiRoute::Domains,
+            &corpus.domains.title,
+            render_domains(scope, &corpus.domains),
+        ),
+        rendered(
+            WikiRoute::Search,
+            &corpus.search.title,
+            render_search(scope, &corpus.search),
+        ),
+    ];
     for page in &corpus.requirements {
         pages.push(rendered(
-            &page.id,
+            WikiRoute::Record(&page.id),
             &page.title,
             render_requirement(scope, page),
         ));
     }
     for page in &corpus.resolutions {
         pages.push(rendered(
-            &page.id,
+            WikiRoute::Record(&page.id),
             &page.title,
             render_resolution(scope, page),
         ));
     }
     for page in &corpus.rules {
-        pages.push(rendered(&page.id, &page.title, render_rule(scope, page)));
+        pages.push(rendered(
+            WikiRoute::Record(&page.id),
+            &page.title,
+            render_rule(scope, page),
+        ));
     }
     for page in &corpus.sources {
-        pages.push(rendered(&page.id, &page.title, render_source(scope, page)));
+        pages.push(rendered(
+            WikiRoute::Record(&page.id),
+            &page.title,
+            render_source(scope, page),
+        ));
     }
     pages
 }
 
-fn rendered(id: &PageId, title: &str, html: String) -> RenderedPage {
+fn rendered(route: WikiRoute<'_>, title: &str, html: String) -> RenderedPage {
     RenderedPage {
-        route: id.route(),
+        route: route.path(),
         title: title.to_string(),
         html,
     }
@@ -77,6 +94,8 @@ fn rendered(id: &PageId, title: &str, html: String) -> RenderedPage {
 mod tests {
     #[path = "corpus.rs"]
     mod corpus;
+    #[path = "discovery.rs"]
+    mod discovery;
     #[path = "fixtures.rs"]
     mod fixtures;
     #[path = "formatting.rs"]

@@ -3,7 +3,8 @@ use super::{
     TransactionPaths, OWNERSHIP_MANIFEST,
 };
 use crate::wiki::model::{
-    CorpusCounts, OrphanReport, PageId, PageKind, RequirementPage, ScopeIndexPage, WikiCorpus,
+    CorpusCounts, DomainIndexPage, OrphanReport, PageId, RecordKind, RequirementPage,
+    ScopeIndexPage, SearchIndexPage, WikiCorpus,
 };
 use camino::Utf8PathBuf;
 use provenance_core::RequirementStatus;
@@ -17,13 +18,22 @@ fn empty_corpus() -> WikiCorpus {
     WikiCorpus {
         scope: "default".to_string(),
         index: ScopeIndexPage {
-            id: PageId::new(PageKind::ScopeIndex, "default"),
             scope: "default".to_string(),
             title: "Provenance Wiki".to_string(),
             counts: CorpusCounts::default(),
             roots: Vec::new(),
             gaps: Vec::new(),
             orphans: OrphanReport::default(),
+        },
+        domains: DomainIndexPage {
+            scope: "default".to_string(),
+            title: "Requirements and rules by domain".to_string(),
+            groups: Vec::new(),
+        },
+        search: SearchIndexPage {
+            scope: "default".to_string(),
+            title: "Search requirements and rules".to_string(),
+            entries: Vec::new(),
         },
         requirements: Vec::new(),
         resolutions: Vec::new(),

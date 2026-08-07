@@ -1,6 +1,6 @@
-use super::WIKI_CSS_ROUTE;
 use crate::wiki::model::{LineageEntry, PageKind};
-use crate::wiki::theme::{ICON_DEFS, THEME_SCRIPT};
+use crate::wiki::routes::WikiRoute;
+use crate::wiki::theme::{ICON_DEFS, SEARCH_SCRIPT, THEME_SCRIPT};
 use std::fmt::Write as _;
 
 use super::html::{escape_attr, escape_html, icon_svg};
@@ -14,6 +14,45 @@ pub(in crate::wiki::render) fn page_shell(
     container: &str,
     field_notes: &str,
 ) -> String {
+    page_shell_with_script(
+        scope,
+        kind_class,
+        title,
+        breadcrumb,
+        container,
+        field_notes,
+        "",
+    )
+}
+
+pub(in crate::wiki::render) fn search_page_shell(
+    scope: &str,
+    kind_class: &str,
+    title: &str,
+    breadcrumb: &str,
+    container: &str,
+) -> String {
+    page_shell_with_script(
+        scope,
+        kind_class,
+        title,
+        breadcrumb,
+        container,
+        "",
+        SEARCH_SCRIPT,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn page_shell_with_script(
+    scope: &str,
+    kind_class: &str,
+    title: &str,
+    breadcrumb: &str,
+    container: &str,
+    field_notes: &str,
+    extra_script: &str,
+) -> String {
     let mut html = String::new();
     html.push_str("<!doctype html>\n<html lang=\"en\" data-theme=\"statesman\">\n<head>\n");
     html.push_str("<meta charset=\"utf-8\">\n");
@@ -24,8 +63,12 @@ pub(in crate::wiki::render) fn page_shell(
         escape_html(title)
     )
     .expect("writing to a String should not fail");
-    writeln!(html, "<link rel=\"stylesheet\" href=\"{WIKI_CSS_ROUTE}\">")
-        .expect("writing to a String should not fail");
+    writeln!(
+        html,
+        "<link rel=\"stylesheet\" href=\"{}\">",
+        WikiRoute::Stylesheet.path()
+    )
+    .expect("writing to a String should not fail");
     html.push_str("</head>\n<body>\n");
     html.push_str(ICON_DEFS.trim_start_matches('\n'));
     html.push_str("<header class=\"chrome\">\n<div class=\"chrome-inner\">\n");
@@ -37,6 +80,16 @@ pub(in crate::wiki::render) fn page_shell(
     .expect("writing to a String should not fail");
     writeln!(html, "<nav aria-label=\"Breadcrumb\">{breadcrumb}</nav>")
         .expect("writing to a String should not fail");
+    writeln!(
+        html,
+        "<nav class=\"global-nav\" aria-label=\"Wiki\">\
+         <a href=\"{}\">Atlas</a><a href=\"{}\">Domains</a>\
+         <a href=\"{}\">Search</a></nav>",
+        WikiRoute::Index.path(),
+        WikiRoute::Domains.path(),
+        WikiRoute::Search.path(),
+    )
+    .expect("writing to a String should not fail");
     html.push_str(
         "<label class=\"theme-select\">Theme\n<select id=\"theme-select\">\n\
          <option value=\"statesman\" selected>Statesman</option>\n\
@@ -57,6 +110,7 @@ pub(in crate::wiki::render) fn page_shell(
     html.push_str(field_notes);
     html.push_str("<script>");
     html.push_str(THEME_SCRIPT);
+    html.push_str(extra_script);
     html.push_str("</script>\n</body>\n</html>\n");
     html
 }
@@ -144,5 +198,9 @@ pub(in crate::wiki::render) fn breadcrumb_from_lineage(lineage: &[LineageEntry])
 }
 
 pub(in crate::wiki::render) fn index_breadcrumb(scope: &str) -> String {
-    format!("<a href=\"/\">{}</a>", escape_html(scope))
+    format!(
+        "<a href=\"{}\">{}</a>",
+        WikiRoute::Index.path(),
+        escape_html(scope)
+    )
 }

@@ -10,7 +10,8 @@ use crate::gitignore;
 use crate::output::{self, OutputFormat};
 use crate::wiki::assemble;
 use crate::wiki::publish::{self, PublicationOutput, PublishReport};
-use crate::wiki::render::{self, RenderedPage, WIKI_CSS_ROUTE};
+use crate::wiki::render::{self, RenderedPage};
+use crate::wiki::routes::{normalize_request_path, WIKI_CSS_ROUTE};
 use crate::wiki::theme;
 use anyhow::Context;
 use axum::{
@@ -119,7 +120,7 @@ impl WikiSite {
     }
 
     fn page_for_request_path(&self, path: &str) -> Option<&RenderedPage> {
-        self.page_by_route.get(&normalize_request_route(path))
+        self.page_by_route.get(&normalize_request_path(path))
     }
 }
 
@@ -151,30 +152,21 @@ async fn render_wiki_page(State(site): State<Arc<WikiSite>>, uri: Uri) -> impl I
     )
 }
 
-fn normalize_request_route(path: &str) -> String {
-    let mut route = String::from("/");
-    route.push_str(path.trim_matches('/'));
-    if !route.ends_with('/') {
-        route.push('/');
-    }
-    route
-}
-
 #[cfg(test)]
 mod tests {
-    use super::normalize_request_route;
+    use crate::wiki::routes::normalize_request_path;
 
     #[test]
     fn normalize_request_route_adds_missing_slashes() {
         assert_eq!(
-            normalize_request_route("/requirements/req_sah"),
+            normalize_request_path("/requirements/req_sah"),
             "/requirements/req_sah/"
         );
         assert_eq!(
-            normalize_request_route("requirements/req_sah/"),
+            normalize_request_path("requirements/req_sah/"),
             "/requirements/req_sah/"
         );
-        assert_eq!(normalize_request_route("/"), "/");
-        assert_eq!(normalize_request_route(""), "/");
+        assert_eq!(normalize_request_path("/"), "/");
+        assert_eq!(normalize_request_path(""), "/");
     }
 }

@@ -1,8 +1,9 @@
 use crate::wiki::links::{EvidenceRef, LinkResolver};
 use crate::wiki::model::{
-    CorpusCounts, DecisionSection, EvidenceThread, FieldNote, GapKind, GapNotice, IndexEntry,
-    InputCitation, LineageEntry, OrphanReport, PageId, PageKind, PageLink, RequirementPage,
-    ResolutionPage, RuleCard, RulePage, ScopeIndexPage, SourceCitation, SourcePage, WikiCorpus,
+    CorpusCounts, DecisionSection, DomainGroup, DomainIndexPage, DomainState, EvidenceThread,
+    FieldNote, GapKind, GapNotice, IndexEntry, InputCitation, LineageEntry, OrphanReport, PageId,
+    PageKind, PageLink, RecordKind, RequirementPage, ResolutionPage, RuleCard, RulePage,
+    ScopeIndexPage, SearchEntry, SearchIndexPage, SourceCitation, SourcePage, WikiCorpus,
 };
 use provenance_core::{
     MessageRole, NodeType, RequirementStatus, ResolutionInputType, ResolutionStatus, RuleModality,
@@ -12,6 +13,15 @@ use provenance_core::{
 pub(super) const REMOTE: &str = "git@github.com:exampleorg/ex-api.git";
 
 pub(super) fn link(kind: PageKind, id: &str, title: &str) -> PageLink {
+    let kind = match kind {
+        PageKind::Requirement => RecordKind::Requirement,
+        PageKind::Resolution => RecordKind::Resolution,
+        PageKind::Rule => RecordKind::Rule,
+        PageKind::Source => RecordKind::Source,
+        PageKind::ScopeIndex | PageKind::DomainIndex | PageKind::SearchIndex => {
+            panic!("singleton pages are not record links")
+        }
+    };
     PageLink {
         target: PageId::new(kind, id),
         title: title.to_string(),
@@ -118,7 +128,7 @@ pub(super) fn decision(resolver: &LinkResolver) -> DecisionSection {
 pub(super) fn requirement_fixture() -> RequirementPage {
     let resolver = LinkResolver::new(Some(REMOTE));
     RequirementPage {
-        id: PageId::new(PageKind::Requirement, "req_saveinvoice_split"),
+        id: PageId::new(RecordKind::Requirement, "req_saveinvoice_split"),
         title: "SaveInvoice shall split each claim item into portions".to_string(),
         status: RequirementStatus::Discovery,
         statement: "Grouping by participant_ref with per-portion positive-amount guards."
@@ -170,7 +180,7 @@ pub(super) fn requirement_fixture() -> RequirementPage {
 
 pub(super) fn gappy_requirement_fixture() -> RequirementPage {
     RequirementPage {
-        id: PageId::new(PageKind::Requirement, "req_stuck"),
+        id: PageId::new(RecordKind::Requirement, "req_stuck"),
         title: "Rostering shall respect awards".to_string(),
         status: RequirementStatus::Resolved,
         statement: "Rostering shall respect awards.".to_string(),
@@ -212,7 +222,7 @@ pub(super) fn gappy_requirement_fixture() -> RequirementPage {
 pub(super) fn resolution_fixture() -> ResolutionPage {
     let resolver = LinkResolver::new(Some(REMOTE));
     ResolutionPage {
-        id: PageId::new(PageKind::Resolution, "res_split"),
+        id: PageId::new(RecordKind::Resolution, "res_split"),
         title: "SaveInvoice per-portion split & $0 suppression extraction".to_string(),
         status: ResolutionStatus::Approved,
         position: "Adopt these as 7 rules. Severity high.".to_string(),
@@ -245,7 +255,7 @@ pub(super) fn resolution_fixture() -> ResolutionPage {
 pub(super) fn rule_fixture() -> RulePage {
     let resolver = LinkResolver::new(Some(REMOTE));
     RulePage {
-        id: PageId::new(PageKind::Rule, "rule_sah_inv_016"),
+        id: PageId::new(RecordKind::Rule, "rule_sah_inv_016"),
         title: "Suppress line emission for fully zero claim items".to_string(),
         rule_code: "SAH-INV-016".to_string(),
         statement: "No invoice lines shall be emitted for fully zero claim items.".to_string(),
@@ -288,7 +298,7 @@ pub(super) fn rule_fixture() -> RulePage {
 pub(super) fn source_fixture() -> SourcePage {
     let resolver = LinkResolver::new(Some(REMOTE));
     SourcePage {
-        id: PageId::new(PageKind::Source, "source_schads"),
+        id: PageId::new(RecordKind::Source, "source_schads"),
         title: "SCHADS Award mapping".to_string(),
         source_type: SourceType::Document,
         url: Some("https://example.test/award".to_string()),
@@ -309,7 +319,6 @@ pub(super) fn source_fixture() -> SourcePage {
 
 pub(super) fn index_fixture() -> ScopeIndexPage {
     ScopeIndexPage {
-        id: PageId::new(PageKind::ScopeIndex, "default"),
         scope: "default".to_string(),
         title: "Provenance atlas — default".to_string(),
         counts: CorpusCounts {
@@ -341,9 +350,64 @@ pub(super) fn corpus_fixture() -> WikiCorpus {
     WikiCorpus {
         scope: "default".to_string(),
         index: index_fixture(),
+        domains: domain_index_fixture(),
+        search: search_fixture(),
         requirements: vec![requirement_fixture(), gappy_requirement_fixture()],
         resolutions: vec![resolution_fixture()],
         rules: vec![rule_fixture()],
         sources: vec![source_fixture()],
+    }
+}
+
+pub(super) fn domain_index_fixture() -> DomainIndexPage {
+    DomainIndexPage {
+        scope: "default".to_string(),
+        title: "Requirements and rules by domain".to_string(),
+        groups: vec![
+            DomainGroup {
+                state: DomainState::Defined {
+                    id: "domain_default".to_string(),
+                    name: "Invoicing".to_string(),
+                    description: Some("Invoice behavior".to_string()),
+                },
+                requirements: vec![link(
+                    PageKind::Requirement,
+                    "req_saveinvoice_split",
+                    "Invoice & participant",
+                )],
+                rules: vec![link(
+                    PageKind::Rule,
+                    "rule_sah_inv_016",
+                    "Suppress line emission",
+                )],
+            },
+            DomainGroup {
+                state: DomainState::Missing {
+                    id: "domain_missing".to_string(),
+                },
+                requirements: vec![],
+                rules: vec![],
+            },
+            DomainGroup {
+                state: DomainState::Unassigned,
+                requirements: vec![],
+                rules: vec![],
+            },
+        ],
+    }
+}
+
+pub(super) fn search_fixture() -> SearchIndexPage {
+    SearchIndexPage {
+        scope: "default".to_string(),
+        title: "Search requirements and rules".to_string(),
+        entries: vec![SearchEntry {
+            link: link(
+                PageKind::Requirement,
+                "req_saveinvoice_split",
+                "Invoice & participant",
+            ),
+            statement: "Invoice & participant statement".to_string(),
+        }],
     }
 }
