@@ -30,13 +30,14 @@ provenance prime
 
 | Command | What it does |
 | --- | --- |
-| `provenance prime` | Low-res view of the graph, the right thing to feed an agent at the start of a session |
+| `provenance prime` | Bounded low-res graph frontier; proposals surface separately when evidence or claimed territory demands them |
 | `provenance check` | Validate the state files |
 | `provenance materialize` | Rebuild the SQLite query cache |
 | `provenance graph <requirement>` | Show the neighbourhood of a requirement |
 | `provenance graph-reference issue\|show\|verify\|exact-export` | Hand off an immutable pinned graph |
 | `provenance traceability <rule>` | Walk a rule back to the decision and requirement behind it |
 | `provenance proposals surface --scope default --changed-path <path>` | Surface undisposed proposals when current work touches their evidence or explicit territory |
+| `provenance wiki build` / `provenance wiki serve` | Build or serve the generated wiki with domain browsing and offline search |
 | `provenance coverage scan --path .` | Match `@provenance` code annotations against rules |
 | `provenance skills install` | Install the bundled agent skills (`provenance-shaping`, `provenance-fork-tournament`, `provenance-swarm-backtrace`, `provenance-grounded-writing`) |
 

@@ -1,11 +1,12 @@
 use super::super::*;
 use super::fixtures::*;
 use crate::state_store::{
-    AddSourceReferenceInput, CreateEdgeInput, CreateQuestionInput, CreateResolutionInput,
-    CreateRuleInput, CreateSourceInput, CreateTopicInput, StateStore,
+    AddSourceReferenceInput, CreateEdgeInput, CreateProposalCardInput, CreateQuestionInput,
+    CreateResolutionInput, CreateRuleInput, CreateSourceInput, CreateTopicInput, StateStore,
 };
 use provenance_core::{
-    EdgeType, NodeType, QuestionStatus, RequirementStatus, ResolutionMethod, ResolutionStatus,
+    EdgeType, IdeationTarget, IdeationTargetType, NodeType, PromotionState, ProposalTraceability,
+    ProposalType, QuestionStatus, RequirementStatus, ResolutionMethod, ResolutionStatus,
     RuleSeverity, RuleStatus, SourceType, TopicStatus,
 };
 
@@ -48,6 +49,43 @@ fn assert_gap(gaps: &[GapItem], kind: GapKind, node_type: NodeType, node_id: &st
             .any(|gap| gap.kind == kind && gap.node_type == node_type && gap.node_id == node_id),
         "missing {kind:?} for {node_type:?} {node_id}; got {gaps:#?}"
     );
+}
+
+#[test]
+fn ordinary_prime_does_not_expand_into_a_global_proposal_queue() {
+    let (_dir, layout, scope) = empty_layout();
+    let store = StateStore::new(layout.clone());
+    store
+        .create_proposal_card(CreateProposalCardInput {
+            scope_id: scope.clone(),
+            id: sid("proposal_demand_only"),
+            proposal_key: "demand-only".into(),
+            proposal_type: ProposalType::RequirementCandidate,
+            title: "Demand only".into(),
+            summary: "Surface only when territory is claimed".into(),
+            confidence: None,
+            traceability: ProposalTraceability {
+                target: IdeationTarget {
+                    artifact_type: IdeationTargetType::Requirement,
+                    artifact_id: sid("req_demand_only"),
+                },
+                source_ids: Vec::new(),
+                evidence_references: Vec::new(),
+                supporting_claim_ids: Vec::new(),
+            },
+            builds_on: Vec::new(),
+            promotion_state: PromotionState::Proposed,
+            duplicate_of: None,
+            superseded_by: None,
+        })
+        .unwrap();
+
+    let prime = prime_context(&layout, &scope, false).unwrap();
+
+    assert!(!serde_json::to_string(&prime)
+        .unwrap()
+        .contains("proposal_demand_only"));
+    assert!(!render_prime_markdown(&prime).contains("proposal_demand_only"));
 }
 
 #[test]

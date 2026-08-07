@@ -116,8 +116,8 @@ fn topic_claims_are_check_and_set_and_clear_on_close() {
     let topic_id = StableId::new("topic_overtime").unwrap();
 
     let claimed = store.claim_topic(&scope, &topic_id, "agent-one").unwrap();
-    assert_eq!(claimed.claimed_by.as_deref(), Some("agent-one"));
-    assert!(claimed.claimed_at.unwrap() > 0);
+    assert_eq!(claimed.topic.claimed_by.as_deref(), Some("agent-one"));
+    assert!(claimed.topic.claimed_at.unwrap() > 0);
 
     let err = store
         .claim_topic(&scope, &topic_id, "agent-two")

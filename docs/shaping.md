@@ -180,11 +180,12 @@ proposals surface when current work enters territory they already name:
   or one of the topic's explicit artifact links; or
 - an external work item such as a bug explicitly identifies one of those typed targets.
 
-Use `provenance proposals surface --changed-path <path>` for changed files. Topic claims
-surface their matching proposals in the claim result. Integrations that already know a
-typed territory can use `provenance proposals surface --target-type <type> --target-id
-<id>`; Provenance does not infer territory from issue text, titles, graph proximity, or
-similar filenames.
+Use `provenance proposals surface --scope <scope> --changed-path <path>` for changed files.
+Topic claims derive matching `proposed` and `asserted` views and persist the claim in the
+same publication operation, so invalid lifecycle state cannot leave a claim behind.
+Integrations that already know a typed territory can use `provenance proposals surface
+--scope <scope> --target-type <type> --target-id <id>`; Provenance does not infer territory
+from issue text, titles, graph proximity, or similar filenames.
 
 Review all proposals together only when a small set jointly blocks the work: competing
 fork proposals, explicitly contested synthesis claims, or conflicting backtrace findings.
