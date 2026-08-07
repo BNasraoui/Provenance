@@ -1,7 +1,8 @@
 use super::{super::initialized_store, proposal_input};
-use crate::state_store::{CreateAssertionInput, CreateDispositionInput};
+use crate::state_store::{CreateAssertionInput, CreateDispositionInput, ProposalDemand};
 use provenance_core::{
-    DispositionActor, DispositionDecision, IdentityType, PromotionState, StableId,
+    DispositionActor, DispositionDecision, IdeationTarget, IdeationTargetType, IdentityType,
+    PromotionState, StableId,
 };
 
 #[test]
@@ -111,11 +112,45 @@ fn rejected_disposition_does_not_require_an_assertion() {
             canonical_artifact: None,
         })
         .unwrap();
+    store
+        .create_proposal_card(proposal_input(
+            &scope,
+            "proposal_deferred",
+            "Deferred",
+            PromotionState::Proposed,
+        ))
+        .unwrap();
+    store
+        .create_disposition(CreateDispositionInput {
+            scope_id: scope.clone(),
+            id: StableId::new("disposition_deferred").unwrap(),
+            proposal_id: StableId::new("proposal_deferred").unwrap(),
+            decision: DispositionDecision::Deferred,
+            rationale: "Wait for policy".into(),
+            actor: actor("ben"),
+            canonical_artifact: None,
+        })
+        .unwrap();
 
     assert_eq!(
-        store.list_proposal_cards(&scope).unwrap()[0].promotion_state,
-        PromotionState::Rejected
+        store
+            .list_proposal_cards(&scope)
+            .unwrap()
+            .into_iter()
+            .map(|proposal| proposal.promotion_state)
+            .collect::<Vec<_>>(),
+        vec![PromotionState::Deferred, PromotionState::Rejected]
     );
+    assert!(store
+        .surface_proposals(
+            &scope,
+            &ProposalDemand::for_target(IdeationTarget {
+                artifact_type: IdeationTargetType::Requirement,
+                artifact_id: StableId::new("req_overtime").unwrap(),
+            }),
+        )
+        .unwrap()
+        .is_empty());
 }
 
 #[test]

@@ -17,7 +17,7 @@ pub use inputs::{
     CreateServiceBindingInput, CreateServiceInput, CreateSourceInput, CreateSynthesisPacketInput,
     CreateTopicInput, PostMessageInput, UpdateQuestionInput,
 };
-pub use proposal_surfaces::{ProposalDemand, ProposalSurfaceReason, SurfacedProposal};
+pub use proposal_surfaces::{ProposalDemand, ProposalSurfaceReason, SurfacedProposal, TopicClaim};
 
 use crate::{layout::ProvenanceLayout, shards};
 use ideation_batches::overlay_records;

@@ -1,5 +1,6 @@
 use super::{
-    CreateBoundaryInput, CreateQuestionInput, CreateTopicInput, StateStore, UpdateQuestionInput,
+    CreateBoundaryInput, CreateQuestionInput, CreateTopicInput, ProposalDemand, StateStore,
+    TopicClaim, UpdateQuestionInput,
 };
 use crate::shards;
 use provenance_core::{
@@ -161,21 +162,34 @@ impl StateStore {
         scope_id: &ScopeId,
         id: &StableId,
         actor: &str,
-    ) -> anyhow::Result<Topic> {
+    ) -> anyhow::Result<TopicClaim> {
         let actor = validated_actor(actor)?;
         let claimed_at = now_ms()?;
-        self.update_topic(scope_id, id, |topic| {
-            anyhow::ensure!(
-                topic.status != TopicStatus::Closed,
-                "topic {} is closed and cannot be claimed",
-                topic.id.as_str()
-            );
-            if let Some(holder) = &topic.claimed_by {
-                anyhow::bail!("topic {} is already claimed by {holder}", topic.id.as_str());
-            }
-            topic.claimed_by = Some(actor);
-            topic.claimed_at = Some(claimed_at);
-            Ok(())
+        self.with_repository_publication(|| {
+            let current_topic = self
+                .list_topics(scope_id)?
+                .into_iter()
+                .find(|topic| &topic.id == id)
+                .ok_or_else(|| anyhow::anyhow!("topic does not exist"))?;
+            let surfaced_proposals =
+                self.surface_proposals(scope_id, &ProposalDemand::for_topic(&current_topic))?;
+            let topic = self.update_topic(scope_id, id, |topic| {
+                anyhow::ensure!(
+                    topic.status != TopicStatus::Closed,
+                    "topic {} is closed and cannot be claimed",
+                    topic.id.as_str()
+                );
+                if let Some(holder) = &topic.claimed_by {
+                    anyhow::bail!("topic {} is already claimed by {holder}", topic.id.as_str());
+                }
+                topic.claimed_by = Some(actor);
+                topic.claimed_at = Some(claimed_at);
+                Ok(())
+            })?;
+            Ok(TopicClaim {
+                topic,
+                surfaced_proposals,
+            })
         })
     }
 

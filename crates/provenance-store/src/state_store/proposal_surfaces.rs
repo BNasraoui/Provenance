@@ -77,6 +77,13 @@ pub struct SurfacedProposal {
     pub reasons: Vec<ProposalSurfaceReason>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct TopicClaim {
+    #[serde(flatten)]
+    pub topic: Topic,
+    pub surfaced_proposals: Vec<SurfacedProposal>,
+}
+
 impl StateStore {
     pub fn surface_proposals(
         &self,

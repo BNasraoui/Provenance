@@ -1,7 +1,8 @@
 use super::{super::initialized_store, proposal_input};
-use crate::state_store::{CreateDispositionInput, ProposalCard, StateStore};
+use crate::state_store::{CreateDispositionInput, ProposalCard, ProposalDemand, StateStore};
 use provenance_core::{
-    DispositionActor, DispositionDecision, IdentityType, PromotionState, ScopeId, StableId,
+    DispositionActor, DispositionDecision, IdeationTarget, IdeationTargetType, IdentityType,
+    PromotionState, ScopeId, StableId,
 };
 
 #[test]
@@ -113,9 +114,19 @@ fn modern_proposal_rejects_duplicate_create() {
 }
 
 #[test]
-fn disposition_derives_effective_state_without_mutating_proposal_definition() {
+fn ratification_records_a_disposition_without_mutating_proposal_definition() {
     let (_dir, store, scope) = initialized_store();
     seed_proposal_ready_for_disposition(&store, &scope);
+    let demand = ProposalDemand::for_target(IdeationTarget {
+        artifact_type: IdeationTargetType::Requirement,
+        artifact_id: StableId::new("req_overtime").unwrap(),
+    });
+    assert_eq!(
+        store.surface_proposals(&scope, &demand).unwrap()[0]
+            .proposal
+            .promotion_state,
+        PromotionState::Asserted
+    );
     let barrier = std::sync::Arc::new(std::sync::Barrier::new(3));
     let mut threads = Vec::new();
     for id in ["disposition_overtime_a", "disposition_overtime_b"] {
@@ -133,7 +144,17 @@ fn disposition_derives_effective_state_without_mutating_proposal_definition() {
         .map(|thread| thread.join().unwrap())
         .collect::<Vec<_>>();
     assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
-    assert_eq!(store.list_dispositions(&scope).unwrap().len(), 1);
+    let dispositions = store.list_dispositions(&scope).unwrap();
+    assert_eq!(dispositions.len(), 1);
+    assert_eq!(
+        dispositions[0]
+            .canonical_artifact
+            .as_ref()
+            .unwrap()
+            .artifact_id
+            .as_str(),
+        "req_overtime"
+    );
 
     let persisted: Vec<ProposalCard> = serde_json::from_str(&format!(
         "[{}]",
@@ -147,6 +168,7 @@ fn disposition_derives_effective_state_without_mutating_proposal_definition() {
         store.list_proposal_cards(&scope).unwrap()[0].promotion_state,
         PromotionState::Accepted
     );
+    assert!(store.surface_proposals(&scope, &demand).unwrap().is_empty());
 }
 
 #[test]
@@ -295,7 +317,10 @@ fn disposition_input(scope_id: ScopeId, id: &str) -> CreateDispositionInput {
         decision: DispositionDecision::Accepted,
         rationale: "Reviewed".into(),
         actor: disposition_actor("ben"),
-        canonical_artifact: None,
+        canonical_artifact: Some(provenance_core::CanonicalArtifact {
+            artifact_type: provenance_core::CanonicalArtifactType::Requirement,
+            artifact_id: StableId::new("req_overtime").unwrap(),
+        }),
     }
 }
 

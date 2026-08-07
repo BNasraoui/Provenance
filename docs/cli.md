@@ -64,7 +64,8 @@ git commit -m "Update provenance graph"
 provenance graph-reference issue --repo . --scope default > graph-reference.json
 
 # 3. Attach graph-reference.json to any external work item. Correlation is
-#    generic and does not change deterministic reference identity.
+#    generic and does not change deterministic reference identity or trigger
+#    proposal surfacing.
 provenance graph-reference issue --repo . --scope default \
   --correlation-system github --correlation-key owner/repo#42
 
@@ -132,9 +133,12 @@ repository-relative `--changed-path` values to surface undisposed proposals whos
 evidence sites are touched. Pass `--target-type <type> --target-id <id>` when current work
 already names an explicit proposal territory; both target flags are required together and
 may be combined with changed paths. Results include every matching proposal and the
-`evidence_site` or `territory` reasons it surfaced. `topics claim` returns the claimed topic
-plus proposals targeting that topic, its anchor requirement, or its explicit artifact
-links. This is a read-time view and writes no queue or trigger state.
+`evidence_site` or `territory` reasons it surfaced, in deterministic order, and each nested
+proposal carries its derived `proposed` or `asserted` state. `topics claim` returns the
+claimed topic plus proposals targeting that topic, its anchor requirement, or its explicit
+artifact links. Consultation and claim persistence share one publication operation: a
+lifecycle read failure writes no claim. The surface itself is a read-time view and writes
+no queue or trigger state.
 
 An accepted `dispositions create` record may link a human's action to the canonical
 source, requirement, resolution, or rule it produced using `--canonical-artifact-type` and

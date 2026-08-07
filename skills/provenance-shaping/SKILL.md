@@ -159,8 +159,10 @@ shaping-focused subset of the computed graph frontier includes:
 - open or `blocked_on_human` questions and open topics.
 
 Proposals are not part of the computed graph frontier and are not a batch-review inbox.
-Claiming a topic returns undisposed proposals targeting the topic, its anchor requirement,
-or its explicit artifact links. For diff-driven work, run `provenance proposals surface
+Claiming a topic atomically consults and returns undisposed `proposed` and `asserted`
+proposals targeting the topic, its anchor requirement, or its explicit artifact links;
+each result includes its derived state and deterministic reasons. For diff-driven work,
+run `provenance proposals surface
 --scope <scope> --changed-path <repo-relative-path> --format json` (repeat the path flag).
 Review only those surfaced proposals. Use a complete list only for a deliberately bounded
 set of competing, contested, or conflicting proposals that jointly blocks the turn.
@@ -185,7 +187,8 @@ already held.
 
 On a successful topic claim, inspect `surfaced_proposals` before resolving the first
 question. They are context that has become decision-relevant because the turn entered its
-explicit territory; do not infer further territory from titles or graph proximity.
+explicit territory; do not infer further territory from titles or graph proximity. If
+lifecycle consultation fails, the topic claim is not persisted.
 
 ### 3. Resolve and land as you go
 

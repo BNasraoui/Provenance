@@ -36,6 +36,14 @@ The handoff in which canonical graph changes are committed before a graph refere
 
 An immutable modern candidate definition. It is always authored as `proposed`; assertion and disposition records derive its effective state without rewriting it.
 
+## Proposal demand
+
+A bounded occasion to consult undisposed Proposals because current work names an exact changed evidence path or an explicit typed Territory. Proposal demand is not a global review queue.
+
+## Territory
+
+The typed artifacts explicitly claimed by current shaping work: a Topic, its anchor Requirement, and its declared artifact links. Similar names or graph proximity do not expand Territory.
+
 ## Assertion
 
 Immutable evidence that one proposal passed unblocked adjudication using positive, uniquely owned evidence. Proposal lineage names assertion IDs, not mutable proposal state.
@@ -43,6 +51,10 @@ Immutable evidence that one proposal passed unblocked adjudication using positiv
 ## Disposition
 
 The sole immutable authority for `accepted`, `rejected`, or `deferred`. Its actor ID is a repository-allowlisted audit attestation under repository and CLI access, not proof of cryptographic or human identity.
+
+## Ratification through action
+
+Acceptance recorded when a human action resolves the relevant problem and produces a canonical artifact. The immutable Disposition names that artifact and preserves the Proposal definition unchanged.
 
 ## Frozen legacy terminal
 
