@@ -30,6 +30,14 @@ impl Drop for AdvisoryLock {
     }
 }
 
+pub fn with_advisory_lock<R>(
+    path: &Utf8Path,
+    operation: impl FnOnce() -> anyhow::Result<R>,
+) -> anyhow::Result<R> {
+    let _lock = AdvisoryLock::acquire(path)?;
+    operation()
+}
+
 pub fn to_stable_json<T: Serialize>(value: &T) -> anyhow::Result<String> {
     Ok(serde_json::to_string(value)?)
 }

@@ -8,6 +8,7 @@ use crate::model::ids::{SchemaVersion, ScopeId, StableId};
 use crate::model::validation::deserialize_optional_confidence;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct MaterialClaim {
     #[serde(alias = "claimId")]
     pub claim_id: StableId,
@@ -25,6 +26,7 @@ pub struct MaterialClaim {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ClaimChallenge {
     #[serde(alias = "claimId")]
     pub claim_id: StableId,
@@ -32,6 +34,7 @@ pub struct ClaimChallenge {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SuggestedArtifactChange {
     #[serde(alias = "artifactType")]
     pub artifact_type: IdeationTargetType,
@@ -45,18 +48,21 @@ pub struct SuggestedArtifactChange {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UnsupportedRecommendation {
     pub recommendation: String,
     pub marker: SpeculationMarker,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UncertaintyRating {
     pub level: UncertaintyLevel,
     pub rationale: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Contribution {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,

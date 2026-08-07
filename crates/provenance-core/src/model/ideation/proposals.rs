@@ -1,10 +1,13 @@
 use serde::{Deserialize, Serialize};
 
-use super::{IdeationEvidenceReference, IdeationTarget, PromotionState, ProposalType};
+use super::{
+    lifecycle::AssertionId, IdeationEvidenceReference, IdeationTarget, PromotionState, ProposalType,
+};
 use crate::model::ids::{SchemaVersion, ScopeId, StableId};
 use crate::model::validation::deserialize_optional_confidence;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProposalTraceability {
     pub target: IdeationTarget,
     #[serde(alias = "sourceIds")]
@@ -16,6 +19,7 @@ pub struct ProposalTraceability {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProposalCard {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,
@@ -36,6 +40,8 @@ pub struct ProposalCard {
     pub traceability: ProposalTraceability,
     #[serde(alias = "promotionState")]
     pub promotion_state: PromotionState,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub builds_on: Vec<AssertionId>,
     #[serde(
         default,
         alias = "duplicateOfProposalId",
@@ -49,3 +55,5 @@ pub struct ProposalCard {
     )]
     pub superseded_by: Option<StableId>,
 }
+
+pub type Proposal = ProposalCard;

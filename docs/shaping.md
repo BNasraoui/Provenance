@@ -165,9 +165,10 @@ land their candidates through the same durable shapes (ported from the Convex
 - **Synthesis**: consensus, contested claims, and minority objections are kept separate —
   never averaged; evidence gaps can block promotion; required human decisions are explicit.
 - **Proposals**: typed candidates (`requirement_candidate`, `rule_candidate`,
-  `source_gap`, …) with traceability, moving through
-  `proposed → accepted/rejected/deferred/duplicate/superseded` by explicit human
-  **promotion decisions**.
+  `source_gap`, …) with traceability. Definitions are immutable and always authored
+  `proposed`. A positive, unblocked **Assertion** derives `asserted`; an immutable
+  **Disposition** is the sole authority for `accepted`, `rejected`, or `deferred`.
+  Lineage uses assertion IDs so it cannot silently retarget when proposal views change.
 
 ### Dispose on demand
 
@@ -190,15 +191,16 @@ fork proposals, explicitly contested synthesis claims, or conflicting backtrace 
 Do not turn the complete backtrace output into a disposal queue.
 
 When a human action both resolves the problem and produces an existing canonical artifact
-(source, requirement, resolution, or rule), record one accepted promotion decision with
+(source, requirement, resolution, or rule), record one accepted disposition with
 that human actor and `canonical_artifact`. The action is then the ratification evidence;
 do not require a second ceremonial review. A commit or bug ID alone is not a canonical
 artifact in the current model and must not be disguised as one. The current writer records
 but does not verify that artifact reference, so create and verify the canonical record first.
 
-The current lifecycle still uses `proposed` as the undisposed state. The permanent
-observed-but-not-ratified resting state described by `provenance-134` is not yet available,
-so this release does not claim that all swarm assertions have that stronger status.
+Both `proposed` and `asserted` remain undisposed and surface only on exact path or typed
+territory demand. `provenance prime` does not globally consult proposals. Dispositions
+require a repository-allowlisted actor ID; this is an audit attestation under repository
+and CLI access, not cryptographic identity verification.
 
 The run-status machinery of the original (queued/running/failed_retryable…) is *not*
 ported — skills and workflows own execution; only durable outputs enter state.

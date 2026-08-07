@@ -32,6 +32,17 @@ pub fn prime_context(
     include_threads: bool,
 ) -> anyhow::Result<PrimeContextView> {
     let store = StateStore::new(layout.clone());
+    store.with_repository_publication(|| {
+        prime_context_locked(layout, scope, include_threads, &store)
+    })
+}
+
+fn prime_context_locked(
+    layout: &ProvenanceLayout,
+    scope: &provenance_core::ScopeId,
+    include_threads: bool,
+    store: &StateStore,
+) -> anyhow::Result<PrimeContextView> {
     let threads = if include_threads {
         let messages = store.list_messages(scope)?;
         store
@@ -94,6 +105,15 @@ pub fn get_requirement_graph(
     requirement_id: &provenance_core::StableId,
 ) -> anyhow::Result<RequirementGraphView> {
     let store = StateStore::new(layout.clone());
+    store
+        .with_repository_publication(|| get_requirement_graph_locked(scope, requirement_id, &store))
+}
+
+fn get_requirement_graph_locked(
+    scope: &provenance_core::ScopeId,
+    requirement_id: &provenance_core::StableId,
+    store: &StateStore,
+) -> anyhow::Result<RequirementGraphView> {
     let requirement = store
         .list_requirements(scope)?
         .into_iter()

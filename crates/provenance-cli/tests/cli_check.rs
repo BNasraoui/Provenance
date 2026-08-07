@@ -125,20 +125,49 @@ fn check_rejects_record_whose_embedded_scope_differs_from_directory_scope() {
 }
 
 #[test]
-fn check_rejects_dangling_promotion_decision_proposal_id() {
+fn check_rejects_dangling_disposition_proposal_id() {
     let dir = tempfile::tempdir().unwrap();
     init(dir.path());
     let state = dir.path().join(".provenance/state");
     write_jsonl(
-        &state.join("scopes/default/ideation/promotion_decisions.jsonl"),
-        r#"{"schema_version":1,"scope_id":"default","promotionDecisionId":"decision_missing_proposal","proposalId":"proposal_missing","decision":"accepted","rationale":"Looks good.","decidedBy":{"identity_type":"human","id":"ben"}}"#,
+        &state.join("scopes/default/ideation/dispositions.jsonl"),
+        r#"{"schema_version":1,"scope_id":"default","id":"disposition_missing_proposal","proposal_id":"proposal_missing","decision":"accepted","rationale":"Looks good.","actor":{"identity_type":"human","id":"ben"}}"#,
     );
 
-    provenance(dir.path())
-        .failure()
-        .stderr(contains("dangling reference"))
-        .stderr(contains("promotion decision decision_missing_proposal"))
-        .stderr(contains("proposal proposal_missing"));
+    provenance(dir.path()).failure().stderr(contains(
+        "disposition proposal proposal_missing does not exist",
+    ));
+}
+
+#[test]
+fn check_rejects_duplicate_evidence_record_ids() {
+    let cases = [
+        (
+            "contributions.jsonl",
+            r#"{"schema_version":1,"scope_id":"default","id":"contribution_a","target":{"artifact_type":"source","artifact_id":"source_a"},"participant_slot":"reviewer","stance":"support","strongest_finding":"First","evidence_references":[],"material_claims":[],"risks":[],"objections":[],"challenges":[],"suggested_artifact_changes":[],"unsupported_recommendations":[],"uncertainty":{"level":"low","rationale":"Direct"},"open_questions":[]}
+{"schema_version":1,"scope_id":"default","id":"contribution_a","target":{"artifact_type":"source","artifact_id":"source_a"},"participant_slot":"reviewer","stance":"support","strongest_finding":"Divergent","evidence_references":[],"material_claims":[],"risks":[],"objections":[],"challenges":[],"suggested_artifact_changes":[],"unsupported_recommendations":[],"uncertainty":{"level":"low","rationale":"Direct"},"open_questions":[]}"#,
+            "duplicate immutable contribution id contribution_a",
+        ),
+        (
+            "synthesis_packets.jsonl",
+            r#"{"schema_version":1,"scope_id":"default","id":"synthesis_a","target":{"artifact_type":"source","artifact_id":"source_a"},"summary":"First","consensus":[],"contested_claims":[],"minority_objections":[],"evidence_gaps":[],"unsupported_speculation":[],"open_questions":[],"suggested_artifacts":[],"required_human_decisions":[]}
+{"schema_version":1,"scope_id":"default","id":"synthesis_a","target":{"artifact_type":"source","artifact_id":"source_a"},"summary":"Divergent","consensus":[],"contested_claims":[],"minority_objections":[],"evidence_gaps":[],"unsupported_speculation":[],"open_questions":[],"suggested_artifacts":[],"required_human_decisions":[]}"#,
+            "duplicate immutable synthesis packet id synthesis_a",
+        ),
+    ];
+
+    for (file, records, expected) in cases {
+        let dir = tempfile::tempdir().unwrap();
+        init(dir.path());
+        write_jsonl(
+            &dir.path()
+                .join(".provenance/state/scopes/default/ideation")
+                .join(file),
+            records,
+        );
+
+        provenance(dir.path()).failure().stderr(contains(expected));
+    }
 }
 
 #[test]
@@ -240,6 +269,22 @@ fn check_reports_invalid_edge_endpoints_without_masking_dangling_references() {
         .stderr(contains("edge edge_bad_endpoint"))
         .stderr(contains("invalid"))
         .stderr(contains("to rule rule_missing"));
+}
+
+#[cfg(unix)]
+#[test]
+fn check_rejects_symlinked_cache_without_writing_to_target() {
+    let dir = tempfile::tempdir().unwrap();
+    init(dir.path());
+    let cache = dir.path().join(".provenance/cache");
+    std::fs::remove_dir_all(&cache).unwrap();
+    let outside = dir.path().join("outside");
+    std::fs::create_dir(&outside).unwrap();
+    std::os::unix::fs::symlink(&outside, &cache).unwrap();
+
+    provenance(dir.path()).failure();
+
+    assert!(std::fs::read_dir(outside).unwrap().next().is_none());
 }
 
 fn init(repo: &Path) {

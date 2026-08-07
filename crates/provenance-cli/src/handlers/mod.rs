@@ -5,6 +5,7 @@ mod check;
 mod common;
 mod contributions;
 mod coverage;
+mod dispositions;
 mod docs;
 mod domains;
 mod edges;
@@ -19,7 +20,6 @@ mod materialize;
 mod merge_jsonl;
 mod orphans;
 mod prime;
-mod promotion_decisions;
 mod proposals;
 mod questions;
 mod repo;
@@ -51,8 +51,9 @@ pub(super) async fn dispatch(command: Command, quiet: bool) -> anyhow::Result<()
             path,
             scope,
             path_prefix,
+            disposition_actor_id,
         } => {
-            repo::init(path, scope, path_prefix)?;
+            repo::init(path, scope, path_prefix, disposition_actor_id)?;
         }
         Command::Check { repo, format } => {
             check::check(repo, format)?;
@@ -137,8 +138,8 @@ pub(super) async fn dispatch(command: Command, quiet: bool) -> anyhow::Result<()
         Command::Proposals { command } => {
             proposals::handle(command, quiet)?;
         }
-        Command::PromotionDecisions { command } => {
-            promotion_decisions::handle(command)?;
+        Command::Dispositions { command } => {
+            dispositions::handle(command)?;
         }
         Command::Prime {
             repo,

@@ -1,42 +1,46 @@
 use serde::{Deserialize, Serialize};
 
-use super::{CanonicalArtifactType, IdentityType, PromotionDecision};
+use super::{CanonicalArtifactType, DispositionDecision, IdentityType};
 use crate::model::ids::{SchemaVersion, ScopeId, StableId};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PromotionActor {
-    #[serde(alias = "identityType")]
+#[serde(deny_unknown_fields)]
+pub struct DispositionActor {
     pub identity_type: IdentityType,
-    #[serde(alias = "userId")]
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CanonicalArtifact {
-    #[serde(alias = "artifactType")]
     pub artifact_type: CanonicalArtifactType,
-    #[serde(alias = "artifactId")]
     pub artifact_id: StableId,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PromotionDecisionRecord {
+#[serde(deny_unknown_fields)]
+pub struct DispositionRecord {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,
-    #[serde(alias = "promotionDecisionId")]
     pub id: StableId,
-    #[serde(alias = "proposalId")]
     pub proposal_id: StableId,
-    pub decision: PromotionDecision,
+    pub decision: DispositionDecision,
     pub rationale: String,
-    #[serde(alias = "decidedBy")]
-    pub actor: PromotionActor,
-    #[serde(
-        default,
-        alias = "canonicalArtifact",
-        skip_serializing_if = "Option::is_none"
-    )]
+    pub actor: DispositionActor,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub canonical_artifact: Option<CanonicalArtifact>,
+}
+
+pub fn validate_disposition_intrinsic(disposition: &DispositionRecord) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        !disposition.rationale.trim().is_empty(),
+        "disposition rationale must not be empty"
+    );
+    anyhow::ensure!(
+        !disposition.actor.id.trim().is_empty(),
+        "disposition actor id must not be empty"
+    );
+    Ok(())
 }

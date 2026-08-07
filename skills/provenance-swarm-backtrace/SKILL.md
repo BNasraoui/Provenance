@@ -137,7 +137,8 @@ Run directory contract:
 - `<run-dir>/refuters/<batch>.json` — `<Contribution>` or
   `{"contribution": <Contribution>}` for each refuter participant slot.
 - `<run-dir>/merge/merged.json` — `{"synthesis_packet": <SynthesisPacket>, "proposals":
-  [<ProposalCard>, ...]}` for the merged candidate set.
+  [<ProposalCard>, ...], "assertions": [<Assertion>, ...]}`. Every qualifying proposal must
+  include its immutable assertion. Swarm output never carries dispositions.
 
 Use the CLI schemas while assembling these files:
 
@@ -145,6 +146,8 @@ Use the CLI schemas while assembling these files:
 provenance schema show contribution --format json
 provenance schema show synthesis-packet --format json
 provenance schema show proposal --format json
+provenance schema show assertion --format json
+provenance schema show disposition --format json
 ```
 
 `provenance validate` accepts a single full artifact record. Use it on generated records
@@ -156,18 +159,20 @@ provenance validate synthesis-packet --input synthesis.json --format json
 provenance validate proposal --input proposal.json --format json
 ```
 
-The landing command reads extractor/refuter contributions plus merge outputs, validates
-schema version and nested IDs, and writes contributions, synthesis packets, and proposals
-serially:
+The landing command reads extractor/refuter contributions plus merge outputs, validates the
+whole existing-plus-incoming lifecycle aggregate, and appends one atomic landing batch. A
+proposal-only follow-up may rely on already-landed contribution and synthesis evidence, but a
+qualifying proposal still requires its assertion. A late assertion, lineage,
+or disposition failure writes nothing:
 
 ```sh
 provenance swarm-backtrace land --scope <scope> --run-dir <run-dir> --format json
 ```
 
-Use `--replace` when intentionally re-landing a regenerated run with the same stable IDs.
-It can replace matching contribution and synthesis IDs; an existing proposal is replaceable
-only while it is still `proposed` and has no promotion decision. Without `--replace`,
-existing contribution/synthesis/proposal IDs fail fast.
+Use `--replace` when intentionally re-landing regenerated contribution or synthesis records.
+Proposal, assertion, and disposition IDs are immutable: identical records are idempotent,
+while divergent duplicates fail closed before overlay. Without `--replace`, existing mutable
+run-output IDs fail fast.
 
 Contribution records:
 
@@ -196,7 +201,12 @@ Proposals:
   in `summary`;
 - keep ALL merged evidence sites in `traceability.evidence_references`;
 - keep supporting claim links in `traceability.supporting_claim_ids`;
-- every candidate remains `promotion_state: "proposed"` unless a human later disposes it.
+- every definition remains `promotion_state: "proposed"`; never write asserted or terminal
+  state into a proposal;
+- a qualifying proposal must include an assertion backed by positive, non-unsupported,
+  non-exploratory evidence
+  owned by exactly one contribution and an exact unblocked synthesis suggestion;
+- `builds_on` contains immutable assertion IDs, never proposal IDs.
 
 **Completeness:** reconcile against the stage-1 partition manifest. Any partition with
 no extractor output — agent failed, context blown, code unreadable — is **logged, never
@@ -211,5 +221,5 @@ human how many proposals landed, what's contested, and what surprised the refute
 forward only a small set that is already contested or conflicting and blocks a decision.
 The rest remain discoverable by `provenance proposals surface`: exact evidence paths for
 diff-driven work, and explicit topic/requirement/artifact targets for shaping work. Do not
-ask the human to dispose of the complete output, and do not make promotion decisions
+ask the human to dispose of the complete output, and do not create dispositions
 yourself.

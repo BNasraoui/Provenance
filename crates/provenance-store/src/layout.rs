@@ -45,6 +45,21 @@ impl ProvenanceLayout {
             .join(relative)
             .with_extension("jsonl.lock"))
     }
+    pub fn lifecycle_lock_path(&self, scope: &provenance_core::ScopeId) -> Utf8PathBuf {
+        self.cache_dir()
+            .join("locks/scopes")
+            .join(scope.as_str())
+            .join("ideation.lifecycle.lock")
+    }
+    pub fn publication_lock_path(&self) -> Utf8PathBuf {
+        self.cache_dir().join("locks/repository.publication.lock")
+    }
+    pub fn publication_marker_path(&self) -> Utf8PathBuf {
+        self.cache_dir().join("import-publication.json")
+    }
+    pub fn import_transactions_dir(&self) -> Utf8PathBuf {
+        self.cache_dir().join("import-transactions")
+    }
 }
 
 pub fn locate_repo_root(start: &Utf8Path) -> anyhow::Result<Utf8PathBuf> {

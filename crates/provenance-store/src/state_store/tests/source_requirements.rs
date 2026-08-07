@@ -136,6 +136,118 @@ fn concurrent_source_creates_preserve_all_records() {
 }
 
 #[test]
+fn repository_publication_cannot_overwrite_a_concurrent_writer() {
+    let (_dir, store, scope) = initialized_store();
+    let (publication_ready_tx, publication_ready_rx) = std::sync::mpsc::channel();
+    let (publish_tx, publish_rx) = std::sync::mpsc::channel();
+    let publisher = {
+        let store = store.clone();
+        let scope = scope.clone();
+        std::thread::spawn(move || {
+            store
+                .with_repository_publication(|| {
+                    publication_ready_tx.send(()).unwrap();
+                    publish_rx.recv().unwrap();
+                    crate::jsonl::write_jsonl_atomic::<provenance_core::Source>(
+                        &crate::shards::sources_path(&store.layout, &scope),
+                        &[],
+                    )
+                })
+                .unwrap();
+        })
+    };
+    publication_ready_rx.recv().unwrap();
+
+    let (writer_done_tx, writer_done_rx) = std::sync::mpsc::channel();
+    let writer = {
+        let store = store.clone();
+        let scope = scope.clone();
+        std::thread::spawn(move || {
+            store
+                .create_source(CreateSourceInput {
+                    scope_id: scope,
+                    id: StableId::new("source_after_snapshot").unwrap(),
+                    name: "After snapshot".into(),
+                    source_type: SourceType::Policy,
+                    url: None,
+                    reference: None,
+                    commit_pin: None,
+                    effective_date: None,
+                    review_date: None,
+                    superseded_by: None,
+                    origin_thread: None,
+                    origin_message: None,
+                })
+                .unwrap();
+            writer_done_tx.send(()).unwrap();
+        })
+    };
+    assert!(writer_done_rx
+        .recv_timeout(std::time::Duration::from_millis(100))
+        .is_err());
+    publish_tx.send(()).unwrap();
+    publisher.join().unwrap();
+    writer.join().unwrap();
+
+    assert_eq!(
+        store.list_sources(&scope).unwrap()[0].id.as_str(),
+        "source_after_snapshot"
+    );
+}
+
+#[test]
+fn repository_publication_excludes_an_entire_multi_shard_write() {
+    let (_dir, store, scope) = seeded_source_requirement_store();
+    let (publication_ready_tx, publication_ready_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let publisher = {
+        let store = store.clone();
+        std::thread::spawn(move || {
+            store
+                .with_repository_publication(|| {
+                    publication_ready_tx.send(()).unwrap();
+                    release_rx.recv().unwrap();
+                    Ok(())
+                })
+                .unwrap();
+        })
+    };
+    publication_ready_rx.recv().unwrap();
+
+    let (writer_done_tx, writer_done_rx) = std::sync::mpsc::channel();
+    let writer = {
+        let store = store.clone();
+        let scope = scope.clone();
+        std::thread::spawn(move || {
+            store
+                .add_source_reference(AddSourceReferenceInput {
+                    scope_id: scope,
+                    source_id: StableId::new("source_schads").unwrap(),
+                    requirement_id: StableId::new("req_overtime").unwrap(),
+                    clause: Some("clause 1".into()),
+                })
+                .unwrap();
+            writer_done_tx.send(()).unwrap();
+        })
+    };
+    assert!(writer_done_rx
+        .recv_timeout(std::time::Duration::from_millis(100))
+        .is_err());
+    release_tx.send(()).unwrap();
+    publisher.join().unwrap();
+    writer.join().unwrap();
+
+    assert_eq!(store.list_edges().unwrap().len(), 1);
+    assert_eq!(
+        store.list_requirements(&scope).unwrap()[0].source_refs,
+        vec![provenance_core::SourceReference {
+            source_id: StableId::new("source_schads").unwrap(),
+            clause: Some("clause 1".into()),
+        }]
+    );
+}
+
+#[test]
 fn requirement_fog_is_set_and_cleared_as_free_text() {
     let (_dir, store, scope) = seeded_requirement_store();
     let requirement_id = StableId::new("req_overtime").unwrap();

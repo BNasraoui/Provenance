@@ -42,25 +42,34 @@ pub(super) async fn load_scope(
             .execute(&mut **tx).await?;
         loaded += 1;
     }
+    for assertion in store.list_assertion_records(scope)? {
+        sqlx::query("INSERT INTO assertion_records (scope_id, id, proposal_id, synthesis_packet_id, supporting_claim_ids, payload) VALUES (?, ?, ?, ?, ?, ?)")
+            .bind(assertion.scope_id.as_str()).bind(assertion.id.as_str())
+            .bind(assertion.proposal_id.as_str()).bind(assertion.synthesis_packet_id.as_str())
+            .bind(serde_json::to_string(&assertion.supporting_claim_ids)?)
+            .bind(serde_json::to_string(&assertion)?).execute(&mut **tx).await?;
+        loaded += 1;
+    }
     for proposal in store.list_proposal_cards(scope)? {
-        sqlx::query("INSERT INTO proposal_cards (scope_id, id, proposal_key, proposal_type, title, summary, confidence, target_type, target_id, traceability, promotion_state, duplicate_of, superseded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        sqlx::query("INSERT INTO proposal_cards (scope_id, id, proposal_key, proposal_type, title, summary, confidence, target_type, target_id, traceability, builds_on, promotion_state, duplicate_of, superseded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(proposal.scope_id.as_str()).bind(proposal.id.as_str()).bind(&proposal.proposal_key)
             .bind(serde_name(&proposal.proposal_type)?).bind(&proposal.title).bind(&proposal.summary)
             .bind(proposal.confidence).bind(serde_name(&proposal.traceability.target.artifact_type)?)
             .bind(proposal.traceability.target.artifact_id.as_str())
             .bind(serde_json::to_string(&proposal.traceability)?)
+            .bind(serde_json::to_string(&proposal.builds_on)?)
             .bind(serde_name(&proposal.promotion_state)?)
             .bind(proposal.duplicate_of.as_ref().map(provenance_core::StableId::as_str))
             .bind(proposal.superseded_by.as_ref().map(provenance_core::StableId::as_str))
             .execute(&mut **tx).await?;
         loaded += 1;
     }
-    for decision in store.list_promotion_decisions(scope)? {
-        sqlx::query("INSERT INTO promotion_decisions (scope_id, id, proposal_id, decision, rationale, actor, canonical_artifact) VALUES (?, ?, ?, ?, ?, ?, ?)")
-            .bind(decision.scope_id.as_str()).bind(decision.id.as_str()).bind(decision.proposal_id.as_str())
-            .bind(serde_name(&decision.decision)?).bind(&decision.rationale)
-            .bind(serde_json::to_string(&decision.actor)?)
-            .bind(decision.canonical_artifact.as_ref().map(serde_json::to_string).transpose()?)
+    for disposition in store.list_dispositions(scope)? {
+        sqlx::query("INSERT INTO dispositions (scope_id, id, proposal_id, decision, rationale, actor, canonical_artifact) VALUES (?, ?, ?, ?, ?, ?, ?)")
+            .bind(disposition.scope_id.as_str()).bind(disposition.id.as_str()).bind(disposition.proposal_id.as_str())
+            .bind(serde_name(&disposition.decision)?).bind(&disposition.rationale)
+            .bind(serde_json::to_string(&disposition.actor)?)
+            .bind(disposition.canonical_artifact.as_ref().map(serde_json::to_string).transpose()?)
             .execute(&mut **tx).await?;
         loaded += 1;
     }

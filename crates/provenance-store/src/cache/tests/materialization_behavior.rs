@@ -187,3 +187,79 @@ async fn materialize_state_caches_commit_pin_and_confidence_scores() {
     assert_eq!(confidence, Some(0.83));
     assert!(payload.contains(r#""confidence":0.87"#));
 }
+
+#[tokio::test]
+async fn materialize_state_caches_proposal_lineage() {
+    let (_dir, layout, scope) = empty_layout();
+    let records = [
+        (
+            crate::shards::contributions_path(&layout, &scope),
+            serde_json::json!({
+                "schema_version": 1, "scope_id": "default", "id": "contribution_a",
+                "target": {"artifact_type": "requirement", "artifact_id": "req_a"},
+                "participant_slot": "extractor", "stance": "support", "strongest_finding": "Observed",
+                "evidence_references": [{"reference_id": "evidence_a", "evidence_type": "source", "summary": "Pinned"}],
+                "material_claims": [{"claim_id": "claim_a", "statement": "Observed", "evidence_type": "source", "evidence_reference_ids": ["evidence_a"]}],
+                "risks": [], "objections": [], "challenges": [], "suggested_artifact_changes": [],
+                "unsupported_recommendations": [], "uncertainty": {"level": "low", "rationale": "Direct"}, "open_questions": []
+            }),
+        ),
+        (
+            crate::shards::synthesis_packets_path(&layout, &scope),
+            serde_json::json!({
+                "schema_version": 1, "scope_id": "default", "id": "synthesis_a",
+                "target": {"artifact_type": "requirement", "artifact_id": "req_a"}, "summary": "Adjudicated",
+                "consensus": [], "contested_claims": [], "minority_objections": [], "evidence_gaps": [],
+                "unsupported_speculation": [], "open_questions": [],
+                "suggested_artifacts": [{"proposal_id": "proposal_a", "proposal_key": "proposal-a", "proposal_type": "requirement_candidate", "summary": "Candidate", "origin_participant_slots": ["extractor"]}],
+                "required_human_decisions": []
+            }),
+        ),
+        (
+            crate::shards::proposal_cards_path(&layout, &scope),
+            serde_json::json!([
+                {
+                    "schema_version": 1, "scope_id": "default", "id": "proposal_a", "proposal_key": "proposal-a",
+                    "proposal_type": "requirement_candidate", "title": "Candidate", "summary": "Candidate",
+                    "traceability": {"target": {"artifact_type": "requirement", "artifact_id": "req_a"}, "source_ids": [], "evidence_references": [], "supporting_claim_ids": ["claim_a"]},
+                    "promotion_state": "proposed"
+                },
+                {
+                    "schema_version": 1, "scope_id": "default", "id": "proposal_b", "proposal_key": "proposal-b",
+                    "proposal_type": "requirement_candidate", "title": "Descendant", "summary": "Descendant",
+                    "traceability": {"target": {"artifact_type": "requirement", "artifact_id": "req_a"}, "source_ids": [], "evidence_references": [], "supporting_claim_ids": []},
+                    "promotion_state": "proposed", "builds_on": ["assertion_a"]
+                }
+            ]),
+        ),
+        (
+            crate::shards::assertion_records_path(&layout, &scope),
+            serde_json::json!({
+                "schema_version": 1, "scope_id": "default", "id": "assertion_a", "proposal_id": "proposal_a",
+                "synthesis_packet_id": "synthesis_a", "supporting_claim_ids": ["claim_a"]
+            }),
+        ),
+    ];
+    for (path, value) in records {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let contents = match value {
+            serde_json::Value::Array(values) => values
+                .into_iter()
+                .map(|value| serde_json::to_string(&value).unwrap())
+                .collect::<Vec<_>>()
+                .join("\n"),
+            value => serde_json::to_string(&value).unwrap(),
+        };
+        std::fs::write(path, format!("{contents}\n")).unwrap();
+    }
+
+    materialize_state(&layout).await.unwrap();
+    let pool = open_cache(&layout).await.unwrap();
+    let builds_on: String = sqlx::query_scalar("SELECT builds_on FROM proposal_cards WHERE id = ?")
+        .bind("proposal_b")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    assert_eq!(builds_on, r#"["assertion_a"]"#);
+}
