@@ -41,16 +41,16 @@ fn modern_lifecycle_coexists_with_frozen_shipped_records() {
         "suggested_artifacts": [{"proposal_id": "proposal_modern", "proposal_key": "modern", "proposal_type": "requirement_candidate", "summary": "Candidate", "origin_participant_slots": ["reviewer"]}],
         "required_human_decisions": []
     })).unwrap();
-    crate::jsonl::write_jsonl_atomic(
-        &crate::shards::contributions_path(&store.layout, &scope),
-        &[contribution],
-    )
-    .unwrap();
-    crate::jsonl::write_jsonl_atomic(
-        &crate::shards::synthesis_packets_path(&store.layout, &scope),
-        &[synthesis.clone()],
-    )
-    .unwrap();
+    let mut contributions = store.list_contributions(&scope).unwrap();
+    contributions.push(contribution);
+    contributions.sort_by(|left, right| left.id.as_str().cmp(right.id.as_str()));
+    let contributions_path = crate::shards::contributions_path(&store.layout, &scope);
+    write_jsonl(&contributions_path, &contributions);
+    let mut synthesis_packets = store.list_synthesis_packets(&scope).unwrap();
+    synthesis_packets.push(synthesis.clone());
+    synthesis_packets.sort_by(|left, right| left.id.as_str().cmp(right.id.as_str()));
+    let synthesis_path = crate::shards::synthesis_packets_path(&store.layout, &scope);
+    write_jsonl(&synthesis_path, &synthesis_packets);
     store
         .create_proposal_card(CreateProposalCardInput {
             scope_id: scope.clone(),
@@ -76,11 +76,12 @@ fn modern_lifecycle_coexists_with_frozen_shipped_records() {
         })
         .unwrap();
     synthesis.evidence_gaps.clear();
-    crate::jsonl::write_jsonl_atomic(
-        &crate::shards::synthesis_packets_path(&store.layout, &scope),
-        &[synthesis],
-    )
-    .unwrap();
+    let synthesis_id = synthesis.id.clone();
+    *synthesis_packets
+        .iter_mut()
+        .find(|packet| packet.id == synthesis_id)
+        .unwrap() = synthesis;
+    write_jsonl(&synthesis_path, &synthesis_packets);
     store
         .assert_proposal(CreateAssertionInput {
             scope_id: scope.clone(),
@@ -106,6 +107,10 @@ fn modern_lifecycle_coexists_with_frozen_shipped_records() {
             external_action: None,
         })
         .unwrap();
+}
+
+fn write_jsonl<T: serde::Serialize>(path: &camino::Utf8Path, records: &[T]) {
+    crate::jsonl::write_jsonl_atomic(path, records).unwrap();
 }
 
 fn copy_tree(source: &camino::Utf8Path, destination: &camino::Utf8Path) {

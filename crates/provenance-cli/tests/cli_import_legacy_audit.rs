@@ -6,19 +6,23 @@ fn altered_replaced_or_omitted_shipped_disposition_audit_is_rejected() {
     let baseline = export_shipped(&dir);
     for attack in ["altered", "replaced", "omitted"] {
         let mut value = baseline.clone();
+        let disposition_index = shipped_disposition_index(&value);
         let dispositions = value["dispositions"].as_array_mut().unwrap();
         match attack {
             "altered" => {
-                dispositions[0]["rationale"] = serde_json::json!(format!(
+                dispositions[disposition_index]["rationale"] = serde_json::json!(format!(
                     "{}x",
-                    dispositions[0]["rationale"].as_str().unwrap()
+                    dispositions[disposition_index]["rationale"]
+                        .as_str()
+                        .unwrap()
                 ));
             }
             "replaced" => {
-                dispositions[0]["id"] = serde_json::json!("disposition_replacement");
+                dispositions[disposition_index]["id"] =
+                    serde_json::json!("disposition_replacement");
             }
             "omitted" => {
-                dispositions.remove(0);
+                dispositions.remove(disposition_index);
             }
             _ => unreachable!(),
         }
@@ -49,12 +53,17 @@ fn altered_replaced_or_omitted_shipped_disposition_audit_is_rejected() {
 fn exact_shipped_promotion_decisions_export_is_accepted() {
     let dir = tempfile::tempdir().unwrap();
     let mut legacy = export_shipped(&dir);
-    legacy.as_object_mut().unwrap().remove("assertion_records");
-    let dispositions = legacy
+    let mut dispositions = legacy
         .as_object_mut()
         .unwrap()
         .remove("dispositions")
         .unwrap();
+    let terminal_ids = terminal_proposal_ids(&legacy);
+    dispositions.as_array_mut().unwrap().retain(|disposition| {
+        disposition["proposal_id"]
+            .as_str()
+            .is_some_and(|id| terminal_ids.contains(id))
+    });
     legacy["promotion_decisions"] = dispositions;
     let input = dir.path().join("legacy.json");
     std::fs::write(&input, serde_json::to_vec(&legacy).unwrap()).unwrap();
@@ -193,6 +202,30 @@ fn export_shipped(dir: &tempfile::TempDir) -> serde_json::Value {
     serde_json::from_slice(&std::fs::read(output).unwrap()).unwrap()
 }
 
+fn shipped_disposition_index(export: &serde_json::Value) -> usize {
+    let terminal_ids = terminal_proposal_ids(export);
+    export["dispositions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .position(|disposition| {
+            disposition["proposal_id"]
+                .as_str()
+                .is_some_and(|id| terminal_ids.contains(id))
+        })
+        .unwrap()
+}
+
+fn terminal_proposal_ids(export: &serde_json::Value) -> std::collections::BTreeSet<&str> {
+    export["proposal_cards"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|proposal| proposal["promotion_state"].as_str() != Some("proposed"))
+        .map(|proposal| proposal["id"].as_str().unwrap())
+        .collect()
+}
+
 fn init(repo: &std::path::Path) {
     Command::cargo_bin("provenance")
         .unwrap()
@@ -204,6 +237,8 @@ fn init(repo: &std::path::Path) {
             "default",
             "--disposition-actor-id",
             "codex-review-panel-gpt55-medium",
+            "--disposition-actor-id",
+            "ben_nasraoui",
         ])
         .assert()
         .success();

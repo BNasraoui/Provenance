@@ -6,7 +6,7 @@ fn shipped_legacy_export_imports_into_fresh_repo_and_materializes() {
     let fresh = dir.path().join("fresh");
     let export = dir.path().join("shipped.json");
     export_scope(&shipped_repo(), &export).success();
-    init_repo(&fresh, Some("codex-review-panel-gpt55-medium"));
+    init_repo(&fresh, Some("ben_nasraoui"));
     import_scope(&fresh, &export).success();
     for command in ["check", "materialize"] {
         run_repo_command(command, &fresh);
@@ -19,6 +19,8 @@ fn historical_shipped_manifest_without_actor_allowlist_remains_readable() {
     let repo = dir.path().join("historical");
     let shipped_state = shipped_repo().join(".provenance/state");
     copy_tree(&shipped_state, &repo.join(".provenance/state"));
+    std::fs::remove_file(repo.join(".provenance/state/scopes/default/ideation/dispositions.jsonl"))
+        .unwrap();
     let manifest_path = repo.join(".provenance/state/manifest.json");
     let mut manifest: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
