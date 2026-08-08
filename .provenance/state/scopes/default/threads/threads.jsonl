@@ -38,3 +38,5 @@
 {"schema_version":1,"scope_id":"default","id":"thr_requirement_req_provenance_shall_support_structured_mult_1","parent":{"node_type":"requirement","node_id":"req_provenance_shall_support_structured_mult"},"status":"resolved","created_at":1781416253340}
 {"schema_version":1,"scope_id":"default","id":"thr_requirement_req_the_provenance_thread_post_command_shall_0","parent":{"node_type":"requirement","node_id":"req_the_provenance_thread_post_command_shall"},"status":"active","created_at":1781416298220}
 {"schema_version":1,"scope_id":"default","id":"thr_requirement_req_persona_profiles_shall_be_versioned_prom_0","parent":{"node_type":"requirement","node_id":"req_persona_profiles_shall_be_versioned_prom"},"status":"active","created_at":1781475908098}
+{"schema_version":1,"scope_id":"default","id":"thread_question_question_wiki_homepage_direction","parent":{"node_type":"question","node_id":"question_wiki_homepage_direction"},"status":"active","created_at":1}
+{"schema_version":1,"scope_id":"default","id":"thread_requirement_req_wiki_homepage_entry_mode","parent":{"node_type":"requirement","node_id":"req_wiki_homepage_entry_mode"},"status":"active","created_at":1}

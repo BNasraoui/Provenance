@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Payments Atlas — Provenance Wiki</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --canvas: #faf8f5;
+      --dots: #ded8cf;
+      --paper: #fffdf9;
+      --line: #e4ddd3;
+      --ink: #2c2418;
+      --muted: #81796f;
+      --faint: #a59d92;
+      --green: #517c5e;
+      --green-deep: #355b41;
+      --green-wash: #ecf5ef;
+      --rule: #4c7986;
+      --source: #9c6730;
+      --resolution: #7a68aa;
+      --warning: #a85555;
+      --serif: Charter, "Bitstream Charter", "Source Serif 4", Georgia, serif;
+      --sans: "IBM Plex Sans", "Avenir Next", Candara, sans-serif;
+      --mono: "IBM Plex Mono", "DM Mono", "Cascadia Mono", monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { margin: 0; min-height: 100%; }
+
+    body {
+      color: var(--ink);
+      font: 14px/1.5 var(--sans);
+      background-color: var(--canvas);
+      background-image: radial-gradient(var(--dots) 0.75px, transparent 0.75px);
+      background-size: 22px 22px;
+    }
+
+    button, input { font: inherit; }
+    a { color: inherit; }
+
+    .chrome {
+      height: 48px;
+      background: rgba(255, 253, 249, 0.96);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .chrome-inner {
+      max-width: 1100px;
+      height: 100%;
+      padding: 0 30px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .wordmark {
+      font: 700 16px/1 var(--serif);
+      text-decoration: none;
+      letter-spacing: -0.015em;
+      white-space: nowrap;
+    }
+
+    .scope {
+      margin-left: 9px;
+      color: var(--muted);
+      font: 400 10px/1 var(--mono);
+      letter-spacing: 0.03em;
+    }
+
+    .chrome nav { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+
+    .chrome nav a {
+      padding: 7px 10px;
+      border-radius: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      text-decoration: none;
+    }
+
+    .chrome nav a:hover, .chrome nav a:focus-visible { color: var(--ink); background: #f2eee8; }
+
+    .theme {
+      margin-left: 7px;
+      padding-left: 13px;
+      border-left: 1px solid var(--line);
+      color: var(--faint);
+      font: 10px/1 var(--mono);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .accent { height: 4px; background: var(--green); }
+
+    main {
+      width: min(1100px, 100%);
+      margin: 0 auto;
+      padding: 46px 30px 32px;
+    }
+
+    .masthead {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 210px;
+      gap: 52px;
+      align-items: start;
+    }
+
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 11px;
+      color: var(--green);
+      font: 600 10px/1 var(--mono);
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before { content: ""; width: 24px; height: 1px; background: currentColor; }
+
+    h1 {
+      margin: 0;
+      max-width: 680px;
+      font: 700 clamp(36px, 4.4vw, 58px)/.99 var(--serif);
+      letter-spacing: -.045em;
+    }
+
+    .lede {
+      max-width: 590px;
+      margin: 16px 0 0;
+      color: var(--muted);
+      font: 18px/1.45 var(--serif);
+    }
+
+    .edition {
+      border-top: 1px solid var(--ink);
+      padding-top: 11px;
+      color: var(--muted);
+      font: 10px/1.45 var(--mono);
+      letter-spacing: .045em;
+      text-transform: uppercase;
+    }
+
+    .edition strong { display: block; color: var(--ink); font-size: 12px; margin-bottom: 5px; }
+
+    .search-stage {
+      position: relative;
+      margin-top: 30px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      box-shadow: 0 18px 50px rgba(76, 62, 42, .08);
+    }
+
+    .search-stage::before {
+      content: "01 / RETRIEVE";
+      position: absolute;
+      inset: 20px auto auto -13px;
+      padding: 6px 7px;
+      background: var(--green);
+      color: white;
+      font: 9px/1 var(--mono);
+      letter-spacing: .1em;
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+    }
+
+    .search-form { padding: 26px 30px 20px; }
+
+    .search-label {
+      display: block;
+      margin-bottom: 9px;
+      color: var(--green-deep);
+      font: 600 12px/1.2 var(--mono);
+      letter-spacing: .03em;
+    }
+
+    .search-control {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      border-bottom: 2px solid var(--ink);
+      transition: border-color 160ms ease, box-shadow 160ms ease;
+    }
+
+    .search-control:focus-within { border-color: var(--green); box-shadow: 0 5px 0 -3px var(--green-wash); }
+
+    .search-control input {
+      min-width: 0;
+      height: 62px;
+      padding: 0 16px 0 0;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--ink);
+      font: 25px/1 var(--serif);
+    }
+
+    .search-control input::placeholder { color: #aaa196; opacity: 1; }
+
+    .search-control button {
+      align-self: center;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      height: 40px;
+      padding: 0 15px;
+      color: white;
+      background: var(--green-deep);
+      border: 1px solid var(--green-deep);
+      border-radius: 3px;
+      cursor: pointer;
+      font: 600 11px/1 var(--mono);
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+
+    .search-control button:hover { background: var(--ink); border-color: var(--ink); }
+    .search-control button:focus-visible, a:focus-visible { outline: 3px solid rgba(81,124,94,.28); outline-offset: 2px; }
+
+    .coverage {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .coverage strong { color: var(--ink); font-weight: 600; }
+    .coverage .hint { font: 10px/1 var(--mono); color: var(--faint); white-space: nowrap; }
+
+    .search-feedback {
+      display: none;
+      margin: 0;
+      padding: 15px 30px;
+      background: var(--green-wash);
+      border-top: 1px solid #d6e6db;
+      color: var(--green-deep);
+    }
+
+    .search-feedback.show { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    .search-feedback strong { font-family: var(--serif); font-size: 16px; }
+    .search-feedback span { color: var(--muted); font-size: 12px; }
+
+    .lower-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      margin-top: 26px;
+      background: rgba(255,253,249,.75);
+      border: 1px solid var(--line);
+    }
+
+    .browse, .ledger { min-width: 0; padding: 21px 24px; }
+    .browse { border-right: 1px solid var(--line); }
+
+    .section-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+
+    h2 { margin: 0; font: 700 17px/1.2 var(--serif); letter-spacing: -.015em; }
+
+    .quiet-link {
+      color: var(--green-deep);
+      font: 600 10px/1 var(--mono);
+      letter-spacing: .05em;
+      text-decoration: none;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .quiet-link:hover { text-decoration: underline; text-underline-offset: 4px; }
+
+    .domain-list { display: flex; flex-wrap: wrap; gap: 7px; }
+
+    .domain-list a {
+      display: inline-flex;
+      gap: 7px;
+      align-items: center;
+      padding: 7px 10px;
+      background: var(--green-wash);
+      border: 1px solid #d7e6db;
+      border-radius: 999px;
+      color: var(--green-deep);
+      text-decoration: none;
+      font-size: 12px;
+    }
+
+    .domain-list b { font: 500 9px/1 var(--mono); color: var(--muted); }
+
+    .totals {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 17px;
+    }
+
+    .total { min-width: 0; }
+    .total strong { display: block; font: 700 20px/1 var(--serif); }
+    .total span { display: block; margin-top: 5px; color: var(--muted); font: 8px/1 var(--mono); text-transform: uppercase; letter-spacing: .07em; }
+    .total.source strong { color: var(--source); }
+    .total.requirement strong { color: var(--green); }
+    .total.resolution strong { color: var(--resolution); }
+    .total.rule strong { color: var(--rule); }
+
+    .health {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding-top: 13px;
+      border-top: 1px solid var(--line);
+    }
+
+    .health-mark {
+      width: 8px;
+      height: 8px;
+      flex: 0 0 auto;
+      background: var(--warning);
+      border-radius: 50%;
+      box-shadow: 0 0 0 4px rgba(168,85,85,.09);
+    }
+
+    .health-copy { min-width: 0; flex: 1; font-size: 12px; }
+    .health-copy strong { display: block; font-weight: 650; }
+    .health-copy span { color: var(--muted); }
+
+    .health a { color: var(--warning); font: 600 10px/1 var(--mono); text-decoration: none; text-transform: uppercase; white-space: nowrap; }
+
+    @media (max-width: 700px) {
+      .chrome { height: 45px; }
+      .chrome-inner { padding: 0 16px; gap: 10px; }
+      .chrome nav a { padding: 6px 5px; font-size: 11px; }
+      .chrome nav a:last-of-type, .theme { display: none; }
+      .scope { display: none; }
+      main { padding: 24px 16px 18px; }
+      .masthead { display: block; }
+      .edition { display: none; }
+      h1 { font-size: 37px; max-width: 340px; }
+      .lede { margin-top: 10px; font-size: 15px; max-width: 330px; }
+      .search-stage { margin-top: 20px; }
+      .search-stage::before { display: none; }
+      .search-form { padding: 18px 18px 14px; }
+      .search-label { margin-bottom: 4px; }
+      .search-control { grid-template-columns: minmax(0, 1fr) 42px; }
+      .search-control input { height: 52px; font-size: 18px; padding-right: 8px; }
+      .search-control button { width: 42px; height: 36px; padding: 0; justify-content: center; }
+      .search-control button span { display: none; }
+      .coverage { align-items: flex-start; margin-top: 9px; font-size: 10px; }
+      .coverage .hint { display: none; }
+      .search-feedback { padding: 11px 18px; }
+      .search-feedback.show { align-items: flex-start; flex-direction: column; gap: 2px; }
+      .lower-grid { display: block; margin-top: 14px; }
+      .browse, .ledger { padding: 15px 17px; }
+      .browse { border-right: 0; border-bottom: 1px solid var(--line); }
+      .section-head { margin-bottom: 10px; }
+      h2 { font-size: 15px; }
+      .domain-list { flex-wrap: nowrap; overflow: hidden; }
+      .domain-list a { padding: 6px 9px; flex: 0 0 auto; }
+      .domain-list a:nth-child(n+4) { display: none; }
+      .totals { margin-bottom: 12px; }
+      .total strong { font-size: 18px; }
+      .total span { font-size: 7px; letter-spacing: 0; }
+      .health { padding-top: 10px; }
+      .health-copy span { display: none; }
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .masthead, .search-stage, .lower-grid { animation: enter 440ms both cubic-bezier(.2,.8,.2,1); }
+      .search-stage { animation-delay: 70ms; }
+      .lower-grid { animation-delay: 130ms; }
+      @keyframes enter { from { opacity: 0; transform: translateY(8px); } }
+    }
+  </style>
+</head>
+<body>
+  <header class="chrome">
+    <div class="chrome-inner">
+      <a class="wordmark" href="#">Provenance<span class="scope">payments</span></a>
+      <nav aria-label="Primary">
+        <a href="#domains">Domains</a>
+        <a href="#health">Corpus health</a>
+        <span class="theme">Statesman</span>
+      </nav>
+    </div>
+  </header>
+  <div class="accent" aria-hidden="true"></div>
+
+  <main>
+    <section class="masthead" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">Scope index</p>
+        <h1 id="page-title">Payments Atlas</h1>
+        <p class="lede">Find the requirement or rule that settles the question.</p>
+      </div>
+      <aside class="edition" aria-label="Corpus edition">
+        <strong>Working corpus</strong>
+        07 sources<br>
+        Updated 08 Aug 2026<br>
+        Scope / payments
+      </aside>
+    </section>
+
+    <section class="search-stage" aria-label="Search the corpus">
+      <form class="search-form" role="search" id="search-form">
+        <label class="search-label" for="query">Search requirement and rule text</label>
+        <div class="search-control">
+          <input id="query" name="q" type="search" autocomplete="off" placeholder="invoice participant, audit trail…">
+          <button type="submit"><span>Search</span><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/></svg></button>
+        </div>
+        <p class="coverage"><span>Searches <strong>228 requirements</strong> and <strong>576 rules</strong></span><span class="hint">All terms must match</span></p>
+      </form>
+      <p class="search-feedback" id="feedback" aria-live="polite"><strong id="feedback-title"></strong><span>Opening the full ranked index →</span></p>
+    </section>
+
+    <section class="lower-grid" aria-label="Other corpus entry points">
+      <div class="browse" id="domains">
+        <div class="section-head"><h2>Browse instead</h2><a class="quiet-link" href="#">All domains →</a></div>
+        <nav class="domain-list" aria-label="Featured domains">
+          <a href="#">Identity <b>42</b></a>
+          <a href="#">Billing <b>76</b></a>
+          <a href="#">Privacy <b>31</b></a>
+          <a href="#">Security <b>49</b></a>
+        </nav>
+      </div>
+
+      <div class="ledger" data-corpus-counts>
+        <div class="totals" aria-label="Corpus totals">
+          <div class="total source"><strong>7</strong><span>Sources</span></div>
+          <div class="total requirement"><strong>228</strong><span>Requirements</span></div>
+          <div class="total resolution"><strong>165</strong><span>Decisions</span></div>
+          <div class="total rule"><strong>576</strong><span>Rules</span></div>
+        </div>
+        <div class="health" id="health" data-corpus-health>
+          <i class="health-mark" aria-hidden="true"></i>
+          <div class="health-copy"><strong>42 missing-source links</strong><span>Corpus health needs attention</span></div>
+          <a href="#">Inspect →</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      var form = document.getElementById('search-form');
+      var input = document.getElementById('query');
+      var feedback = document.getElementById('feedback');
+      var title = document.getElementById('feedback-title');
+      form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var query = input.value.trim();
+        if (!query) { input.focus(); return; }
+        title.textContent = 'Searching for “' + query + '”';
+        feedback.classList.add('show');
+      });
+      input.addEventListener('input', function () {
+        if (!input.value.trim()) feedback.classList.remove('show');
+      });
+      document.documentElement.dataset.horizontalOverflow =
+        document.documentElement.scrollWidth > window.innerWidth ? 'true' : 'false';
+    }());
+  </script>
+</body>
+</html>
