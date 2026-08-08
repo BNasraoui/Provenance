@@ -73,7 +73,7 @@ fn direct_disposition_rejects_wrong_kind_and_wrong_scope_targets() {
 
 #[test]
 fn direct_disposition_rejects_every_canonical_kind_misfiled_in_the_scope_shard() {
-    for (artifact_type, shard, record) in misfiled_canonical_records() {
+    for (artifact_type, record) in misfiled_canonical_records() {
         let (_dir, store, scope) = initialized_store();
         allow_actor(&store);
         store
@@ -84,7 +84,11 @@ fn direct_disposition_rejects_every_canonical_kind_misfiled_in_the_scope_shard()
                 PromotionState::Proposed,
             ))
             .unwrap();
-        write_jsonl(&store.layout.state_dir().join(shard), record);
+        write_jsonl(
+            &canonical_shard_path(&store.layout, &scope, artifact_type),
+            record,
+        );
+        assert_misfiled_record_is_in_canonical_shard(&store, &scope, artifact_type);
 
         let error = store
             .create_disposition(input(&scope, artifact_type, "artifact_misfiled"))
@@ -293,26 +297,55 @@ fn write_jsonl(path: &camino::Utf8Path, record: &str) {
     std::fs::write(path, format!("{record}\n")).unwrap();
 }
 
-fn misfiled_canonical_records() -> [(&'static str, &'static str, &'static str); 4] {
+fn assert_misfiled_record_is_in_canonical_shard(
+    store: &crate::state_store::StateStore,
+    scope: &ScopeId,
+    artifact_type: &str,
+) {
+    let loaded = match artifact_type {
+        "source" => serde_json::to_value(store.list_sources(scope).unwrap()),
+        "requirement" => serde_json::to_value(store.list_requirements(scope).unwrap()),
+        "resolution" => serde_json::to_value(store.list_resolutions(scope).unwrap()),
+        "rule" => serde_json::to_value(store.list_rules(scope).unwrap()),
+        _ => unreachable!("all canonical artifact kinds are covered"),
+    }
+    .unwrap();
+    let records = loaded.as_array().unwrap();
+    assert_eq!(records.len(), 1, "{artifact_type}");
+    assert_eq!(records[0]["id"], "artifact_misfiled", "{artifact_type}");
+    assert_eq!(records[0]["scope_id"], "other", "{artifact_type}");
+}
+
+fn canonical_shard_path(
+    layout: &crate::layout::ProvenanceLayout,
+    scope: &ScopeId,
+    artifact_type: &str,
+) -> camino::Utf8PathBuf {
+    match artifact_type {
+        "source" => crate::shards::sources_path(layout, scope),
+        "requirement" => crate::shards::requirements_path(layout, scope),
+        "resolution" => crate::shards::resolutions_path(layout, scope),
+        "rule" => crate::shards::rules_path(layout, scope),
+        _ => unreachable!("all canonical artifact kinds are covered"),
+    }
+}
+
+fn misfiled_canonical_records() -> [(&'static str, &'static str); 4] {
     [
         (
             "source",
-            "scopes/default/sources/source.jsonl",
             r#"{"schema_version":1,"scope_id":"other","id":"artifact_misfiled","name":"Misfiled","source_type":"document","url":null}"#,
         ),
         (
             "requirement",
-            "scopes/default/requirements/req.jsonl",
             r#"{"schema_version":1,"scope_id":"other","id":"artifact_misfiled","statement":"Misfiled","status":"active"}"#,
         ),
         (
             "resolution",
-            "scopes/default/resolutions/resolution.jsonl",
             r#"{"schema_version":1,"scope_id":"other","id":"artifact_misfiled","title":"Misfiled","position":"No","rationale":"No","status":"approved","inputs":[],"review_on":null,"review_triggers":[]}"#,
         ),
         (
             "rule",
-            "scopes/default/rules/rule.jsonl",
             r#"{"schema_version":1,"scope_id":"other","id":"artifact_misfiled","rule_code":"MISFILED","statement":"Misfiled","status":"draft","severity":"high"}"#,
         ),
     ]
