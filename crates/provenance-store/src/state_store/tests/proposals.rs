@@ -4,6 +4,7 @@ use provenance_core::{
     ScopeId, StableId,
 };
 
+mod disposition_references;
 mod lifecycle_validation;
 mod projection;
 

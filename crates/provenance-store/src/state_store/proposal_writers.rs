@@ -214,6 +214,7 @@ impl StateStore {
             rationale,
             actor,
             canonical_artifact,
+            external_action,
         } = input;
         let disposition = DispositionRecord {
             schema_version: SchemaVersion(1),
@@ -224,6 +225,7 @@ impl StateStore {
             rationale,
             actor,
             canonical_artifact,
+            external_action,
         };
         anyhow::ensure!(
             self.list_proposal_definitions(&scope_id)?
@@ -239,6 +241,7 @@ impl StateStore {
                     .any(|assertion| assertion.proposal_id == proposal_id),
             "accepted proposal must be asserted before disposition"
         );
+        self.ensure_canonical_artifact_exists(&scope_id, disposition.canonical_artifact.as_ref())?;
         let mut dispositions = self.list_dispositions(&scope_id)?;
         anyhow::ensure!(
             !dispositions.iter().any(|record| {

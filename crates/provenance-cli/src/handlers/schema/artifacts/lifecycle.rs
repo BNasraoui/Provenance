@@ -47,6 +47,17 @@ pub(in crate::handlers::schema) fn disposition_schema() -> Value {
                     "artifact_type": {"enum": ["source", "requirement", "resolution", "rule"]},
                     "artifact_id": {"$ref": "#/$defs/stableId"}
                 }
+            },
+            "external_action": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["system", "scope", "kind", "key"],
+                "properties": {
+                    "system": {"type": "string", "pattern": ".*\\S.*"},
+                    "scope": {"type": "string", "pattern": ".*\\S.*"},
+                    "kind": {"type": "string", "pattern": ".*\\S.*"},
+                    "key": {"type": "string", "pattern": ".*\\S.*"}
+                }
             }
         }
     })

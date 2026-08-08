@@ -1,3 +1,4 @@
+mod canonical_artifacts;
 mod domain_service_writers;
 mod ideation_batches;
 mod ideation_writers;

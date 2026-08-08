@@ -86,3 +86,57 @@ fn rejected_or_deferred_disposition_can_override_asserted_state() {
         .unwrap();
     }
 }
+
+#[test]
+fn disposition_external_action_is_closed_and_round_trips_generically() {
+    let value = serde_json::json!({
+        "schema_version": 1,
+        "scope_id": "default",
+        "id": "disposition_a",
+        "proposal_id": "proposal_a",
+        "decision": "rejected",
+        "rationale": "Implemented elsewhere",
+        "actor": {"identity_type": "human", "id": "reviewer"},
+        "external_action": {
+            "system": "github",
+            "scope": "acme/payroll",
+            "kind": "commit",
+            "key": "abc123"
+        }
+    });
+    let disposition: crate::DispositionRecord = serde_json::from_value(value.clone()).unwrap();
+
+    assert_eq!(serde_json::to_value(disposition).unwrap(), value);
+
+    let mut unknown = value;
+    unknown["external_action"]["workflow_state"] = serde_json::json!("deployed");
+    let error = serde_json::from_value::<crate::DispositionRecord>(unknown)
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("unknown field"), "{error}");
+}
+
+#[test]
+fn disposition_external_action_rejects_null_and_blank_identity_parts() {
+    let base = serde_json::json!({
+        "schema_version": 1, "scope_id": "default", "id": "disposition_a",
+        "proposal_id": "proposal_a", "decision": "rejected", "rationale": "Reviewed",
+        "actor": {"identity_type": "human", "id": "reviewer"}
+    });
+    let mut null = base.clone();
+    null["external_action"] = serde_json::Value::Null;
+    assert!(serde_json::from_value::<crate::DispositionRecord>(null).is_err());
+
+    for field in ["system", "scope", "kind", "key"] {
+        let mut value = base.clone();
+        value["external_action"] = serde_json::json!({
+            "system": "github", "scope": "acme/payroll", "kind": "issue", "key": "44"
+        });
+        value["external_action"][field] = serde_json::json!("  ");
+        let disposition: crate::DispositionRecord = serde_json::from_value(value).unwrap();
+        let error = crate::validate_disposition_intrinsic(&disposition)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains(field), "{error}");
+    }
+}

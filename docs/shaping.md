@@ -196,7 +196,9 @@ When a human action both resolves the problem and produces an existing canonical
 that human actor and `canonical_artifact`. The action is then the ratification evidence;
 do not require a second ceremonial review. A commit or bug ID alone is not a canonical
 artifact in the current model and must not be disguised as one. The current writer records
-but does not verify that artifact reference, so create and verify the canonical record first.
+and verifies the exact scoped, typed artifact reference before persistence. When the action is
+owned by another system, record its generic system/scope/kind/key correlation on the immutable
+disposition; do not add issue-, commit-, ticket-, or deployment-specific lifecycle fields.
 
 Both `proposed` and `asserted` remain undisposed and surface only on exact path or typed
 territory demand. `provenance prime` does not globally consult proposals. Dispositions

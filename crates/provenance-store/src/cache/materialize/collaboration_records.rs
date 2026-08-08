@@ -65,11 +65,12 @@ pub(super) async fn load_scope(
         loaded += 1;
     }
     for disposition in store.list_dispositions(scope)? {
-        sqlx::query("INSERT INTO dispositions (scope_id, id, proposal_id, decision, rationale, actor, canonical_artifact) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        sqlx::query("INSERT INTO dispositions (scope_id, id, proposal_id, decision, rationale, actor, canonical_artifact, external_action) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(disposition.scope_id.as_str()).bind(disposition.id.as_str()).bind(disposition.proposal_id.as_str())
             .bind(serde_name(&disposition.decision)?).bind(&disposition.rationale)
             .bind(serde_json::to_string(&disposition.actor)?)
             .bind(disposition.canonical_artifact.as_ref().map(serde_json::to_string).transpose()?)
+            .bind(disposition.external_action.as_ref().map(serde_json::to_string).transpose()?)
             .execute(&mut **tx).await?;
         loaded += 1;
     }

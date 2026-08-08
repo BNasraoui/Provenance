@@ -143,10 +143,16 @@ no queue or trigger state.
 An accepted `dispositions create` record may link a human's action to the canonical
 source, requirement, resolution, or rule it produced using `--canonical-artifact-type` and
 `--canonical-artifact-id`. Use that existing link for ratification-through-action; commits
-and external issue IDs are not canonical artifact types. The writer records this reference
-but does not currently verify the artifact's existence, so the caller must create and check
-the canonical record. Provenance currently has no bug record or issue adapter, so bug filing
-can trigger surfacing only when the caller supplies the bug's already-known typed target.
+and external issue IDs are not canonical artifact types. Every direct create, import, check,
+and materialization resolves the exact `(scope, artifact type, artifact ID)` and fails without
+persisting when it is missing, belongs to another scope, or exists only under another type.
+
+Optionally correlate the immutable disposition with an external action using all four of
+`--external-system`, `--external-scope`, `--external-kind`, and `--external-key`. The exact
+four-part tuple supports issues, commits, tickets, deployments, and other actions without
+adding workflow-specific fields. Equal keys in another system, external scope, or action kind
+are distinct. Correlation is audit metadata: it does not replace disposition or proposal
+identity, and a duplicate disposition cannot mutate it.
 Dispositions do not rewrite proposal definitions; `proposals list` derives effective state.
 
 Graph edge commands: `edges create --type references|refines_into|depends_on|contradicts|supersedes|needs|resolves|spawns|produces --from-type source|requirement|resolution|rule --from-id <id> --to-type source|requirement|resolution|rule --to-id <id>`, `edges list`, and `edges delete --id <edge-id>`. Creation validates edge type/endpoints and requires both endpoint records to exist.

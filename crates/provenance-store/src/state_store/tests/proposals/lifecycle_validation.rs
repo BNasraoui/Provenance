@@ -110,6 +110,7 @@ fn rejected_disposition_does_not_require_an_assertion() {
             rationale: "Did not pass adjudication".into(),
             actor: actor("ben"),
             canonical_artifact: None,
+            external_action: None,
         })
         .unwrap();
     store
@@ -129,6 +130,7 @@ fn rejected_disposition_does_not_require_an_assertion() {
             rationale: "Wait for policy".into(),
             actor: actor("ben"),
             canonical_artifact: None,
+            external_action: None,
         })
         .unwrap();
 
@@ -446,6 +448,7 @@ fn disposition_input(scope_id: provenance_core::ScopeId, actor_id: &str) -> Crea
         rationale: "Reviewed".into(),
         actor: actor(actor_id),
         canonical_artifact: None,
+        external_action: None,
     }
 }
 

@@ -267,6 +267,14 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
             "requirement",
             "--canonical-artifact-id",
             "req_overtime",
+            "--external-system",
+            "github",
+            "--external-scope",
+            "acme/payroll",
+            "--external-kind",
+            "commit",
+            "--external-key",
+            "abc123",
             "--format",
             "json",
         ])
@@ -322,6 +330,13 @@ fn cli_creates_materializes_and_exports_ideation_outputs() {
     assert!(exported.contains(r#""confidence": 0.87"#));
     assert!(exported.contains(r#""confidence": 0.83"#));
     assert!(exported.contains(r#""dispositions""#));
+    let exported_json: serde_json::Value = serde_json::from_str(&exported).unwrap();
+    assert_eq!(
+        exported_json["dispositions"][0]["external_action"],
+        serde_json::json!({
+            "system": "github", "scope": "acme/payroll", "kind": "commit", "key": "abc123"
+        })
+    );
     assert!(!exported.contains(r#""promotion_decisions""#));
     assert!(std::path::Path::new(&repo)
         .join(".provenance/state/scopes/default/ideation/dispositions.jsonl")

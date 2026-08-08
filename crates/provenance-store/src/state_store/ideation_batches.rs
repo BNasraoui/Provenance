@@ -104,12 +104,20 @@ impl StateStore {
                 assertions: &assertions,
                 dispositions: &dispositions,
             })?;
+            let canonical_artifacts = self.canonical_artifact_index(scope)?;
+            for disposition in &dispositions {
+                canonical_artifacts.ensure_exists(disposition.canonical_artifact.as_ref())?;
+            }
             landings.push(incoming);
             Ok(())
         })
     }
 
     pub fn validate_ideation_scope(&self, scope: &ScopeId) -> anyhow::Result<()> {
+        self.with_repository_publication(|| self.validate_ideation_scope_snapshot(scope))
+    }
+
+    fn validate_ideation_scope_snapshot(&self, scope: &ScopeId) -> anyhow::Result<()> {
         let mut contributions: Vec<Contribution> =
             read_jsonl(&shards::contributions_path(&self.layout, scope))?;
         let mut synthesis_packets: Vec<SynthesisPacket> =
@@ -203,6 +211,10 @@ impl StateStore {
             assertions: &assertions,
             dispositions: &dispositions,
         })?;
+        let canonical_artifacts = self.canonical_artifact_index(scope)?;
+        for disposition in &dispositions {
+            canonical_artifacts.ensure_exists(disposition.canonical_artifact.as_ref())?;
+        }
         Ok(())
     }
 }
