@@ -75,13 +75,15 @@ impl Records {
                     thread.scope_id.as_str()
                 ));
             }
-            if !index.has_global_node(thread.parent.node_type, &thread.parent.node_id) {
-                dangling.push(format!(
-                    "{owner} has dangling reference: parent {} {}",
-                    node_type_name(thread.parent.node_type),
-                    thread.parent.node_id.as_str()
-                ));
-            }
+            check_scoped_reference(
+                index,
+                dangling,
+                scope_id,
+                &owner,
+                "parent",
+                node_type_name(thread.parent.node_type),
+                &thread.parent.node_id,
+            );
         }
         for message in &self.messages {
             check_scoped_reference(

@@ -52,6 +52,35 @@ fn check_rejects_thread_with_unknown_parent_and_names_only_the_offender() {
 }
 
 #[test]
+fn check_rejects_thread_whose_parent_exists_only_in_another_scope() {
+    let dir = tempfile::tempdir().unwrap();
+    init(dir.path());
+    let state = dir.path().join(".provenance/state");
+    add_scope(dir.path(), "other", "other");
+    write_jsonl(
+        &state.join("scopes/default/requirements/req.jsonl"),
+        &requirement("req_parent"),
+    );
+    write_jsonl(
+        &state.join("scopes/other/requirements/req.jsonl"),
+        &requirement_in("other", "req_other"),
+    );
+    write_jsonl(
+        &state.join("scopes/default/threads/threads.jsonl"),
+        &format!(
+            "{}\n{}",
+            thread("thread_innocent", "default", "req_parent", 1),
+            thread("thread_cross_scope", "default", "req_other", 2)
+        ),
+    );
+
+    check(dir.path()).failure().stderr(
+        contains("thread thread_cross_scope has dangling reference: parent requirement req_other")
+            .and(contains("thread_innocent").not()),
+    );
+}
+
+#[test]
 fn check_accepts_threads_with_known_scopes_and_parents() {
     let dir = tempfile::tempdir().unwrap();
     init(dir.path());
@@ -69,9 +98,24 @@ fn check_accepts_threads_with_known_scopes_and_parents() {
 }
 
 fn requirement(id: &str) -> String {
+    requirement_in("default", id)
+}
+
+fn requirement_in(scope_id: &str, id: &str) -> String {
     format!(
-        r#"{{"schema_version":1,"scope_id":"default","id":"{id}","statement":"Parent","status":"active"}}"#
+        r#"{{"schema_version":1,"scope_id":"{scope_id}","id":"{id}","statement":"Parent","status":"active"}}"#
     )
+}
+
+fn add_scope(repo: &Path, scope_id: &str, path_prefix: &str) {
+    let path = repo.join(".provenance/state/manifest.json");
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    manifest["scopes"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({"id": scope_id, "path_prefix": path_prefix}));
+    std::fs::write(path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
 }
 
 fn thread(id: &str, scope_id: &str, parent_id: &str, created_at: i64) -> String {
