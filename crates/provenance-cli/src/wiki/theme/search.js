@@ -29,7 +29,9 @@
     matches.forEach(function (match) { results.appendChild(match.item); });
     summary.textContent = terms.length === 0
       ? "Type one or more words to search titles and statements."
-      : matches.length + (matches.length === 1 ? " result" : " results");
+      : matches.length === 0
+        ? "No requirements or rules match this search."
+        : matches.length + (matches.length === 1 ? " result" : " results");
     try {
       var url = new URL(window.location.href);
       if (query) url.searchParams.set("q", input.value.trim());

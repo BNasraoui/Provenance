@@ -87,6 +87,10 @@ pub struct PageLink {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct GapNotice {
     pub kind: GapKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subject: Option<PageLink>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub related: Option<PageLink>,
     pub detail: String,
 }
 
@@ -144,6 +148,7 @@ pub struct ScopeIndexPage {
     pub gaps: Vec<GapNotice>,
     pub orphans: OrphanReport,
     pub search_coverage: String,
+    pub search_example: Option<String>,
     pub domains: Vec<HomepageDomain>,
     pub authored_domain_count: usize,
     pub finding_count: usize,
@@ -257,6 +262,7 @@ pub struct RequirementPage {
     pub fog: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub domain_id: Option<String>,
+    pub domain_has_anchor: bool,
     /// The parent requirement; `None` means the back link targets the index.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub back_link: Option<PageLink>,

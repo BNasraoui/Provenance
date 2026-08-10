@@ -49,11 +49,11 @@ expression: "render_rule(\"default\", &page)"
 <svg class="icon"><use href="#i-arrow-left"/></svg>default
 </a>
 <div class="title-row">
-<svg class="icon rule" aria-hidden="true"><use href="#i-book-open"/></svg>
+<svg class="icon rule" aria-hidden="true"><use href="#i-shield"/></svg>
 <div>
 <h1>Suppress line emission for fully zero claim items</h1>
 <div class="badge-row">
-<span class="type-badge rule"><svg class="icon"><use href="#i-book-open"/></svg>Rule</span>
+<span class="type-badge rule"><svg class="icon"><use href="#i-shield"/></svg>Rule</span>
 <span class="status-badge active"><svg class="icon"><use href="#i-check-circle"/></svg>Active</span>
 <span class="sev high">high</span>
 <span class="id-chip">rule_sah_inv_016</span>
@@ -70,14 +70,9 @@ expression: "render_rule(\"default\", &page)"
 <p class="scan-note">No code scan was supplied to this build; bindings and verification are not shown.</p>
 </section>
 <section>
-<h2 class="section-head sh-resolution"><svg class="icon"><use href="#i-scale"/></svg>Produced By</h2>
+<h2 class="section-head sh-requirement"><svg class="icon"><use href="#i-git-branch"/></svg>Provenance</h2>
 <ul class="link-list">
 <li><a href="/resolutions/res_split/">SaveInvoice per-portion split &amp; $0 suppression extraction</a></li>
-</ul>
-</section>
-<section>
-<h2 class="section-head sh-requirement"><svg class="icon"><use href="#i-git-branch"/></svg>Upstream Requirements</h2>
-<ul class="link-list">
 <li><a href="/requirements/req_saveinvoice_split/">SaveInvoice shall split each claim item into portions</a></li>
 </ul>
 </section>

@@ -2,7 +2,7 @@ use crate::wiki::model::{CodeScan, PageKind, PageLink, RulePage};
 use std::fmt::Write as _;
 
 use super::super::chrome::{container_html, index_breadcrumb, page_shell, title_row};
-use super::super::citations::push_gap_citations;
+use super::super::citations::{gap_links, push_gap_citations};
 use super::super::field_notes::field_notes;
 use super::super::fragments::{
     push_classification_block, push_classification_row, push_prose_section, push_section_open,
@@ -16,6 +16,17 @@ fn page_links(page: &RulePage) -> Vec<&PageLink> {
     let mut links: Vec<&PageLink> = page.produced_by.iter().collect();
     links.extend(&page.requirements);
     links.extend(&page.sources);
+    links.extend(gap_links(&page.gaps));
+    links
+}
+
+fn provenance_links(page: &RulePage) -> Vec<PageLink> {
+    let mut links = page.produced_by.clone();
+    for requirement in &page.requirements {
+        if !links.iter().any(|link| link.target == requirement.target) {
+            links.push(requirement.clone());
+        }
+    }
     links
 }
 
@@ -101,20 +112,28 @@ pub fn render_rule(scope: &str, page: &RulePage) -> String {
     if let Some(description) = &page.description {
         push_prose_section(&mut main, "sh-rule", None, "Description", description);
     }
-    push_code_scan(&mut main, page);
-    if !page.produced_by.is_empty() {
-        push_section_open(&mut main, "sh-resolution", Some("i-scale"), "Produced By");
-        main.push_str(&links.link_list(&page.produced_by));
-        main.push_str("</section>\n");
+    if let Some(orphan) = page
+        .gaps
+        .iter()
+        .find(|gap| gap.kind == crate::wiki::model::GapKind::OrphanRule)
+    {
+        writeln!(
+            main,
+            "<p class=\"data-note\">{}</p>",
+            escape_html(&orphan.detail)
+        )
+        .expect("writing to a String should not fail");
     }
-    if !page.requirements.is_empty() {
+    push_code_scan(&mut main, page);
+    let provenance = provenance_links(page);
+    if !provenance.is_empty() {
         push_section_open(
             &mut main,
             "sh-requirement",
             Some("i-git-branch"),
-            "Upstream Requirements",
+            "Provenance",
         );
-        main.push_str(&links.link_list(&page.requirements));
+        main.push_str(&links.link_list(&provenance));
         main.push_str("</section>\n");
     }
     if !page.sources.is_empty() {
@@ -126,7 +145,7 @@ pub fn render_rule(scope: &str, page: &RulePage) -> String {
     let mut margin = String::new();
     if !page.gaps.is_empty() {
         margin.push_str("<h3 class=\"margin-head\">Gaps</h3>\n");
-        push_gap_citations(&mut margin, &page.gaps);
+        push_gap_citations(&mut margin, &links, &page.gaps);
     }
     let mut rows = String::new();
     push_classification_row(

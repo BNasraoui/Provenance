@@ -16,6 +16,7 @@ pub struct SearchIndexPage {
     pub scope: String,
     pub title: String,
     pub coverage: String,
+    pub example: Option<String>,
     pub entries: Vec<SearchEntry>,
 }
 
@@ -46,7 +47,10 @@ pub struct DomainGroup {
 pub struct DomainIndexPage {
     pub scope: String,
     pub title: String,
+    pub authored_group_count: usize,
     pub groups: Vec<DomainGroup>,
+    pub all_requirements: Vec<SearchEntry>,
+    pub all_rules: Vec<SearchEntry>,
 }
 
 /// One authored domain summarized on the bounded homepage browse list.

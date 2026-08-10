@@ -2,7 +2,7 @@ use crate::wiki::model::{PageKind, PageLink, ResolutionPage};
 use std::fmt::Write as _;
 
 use super::super::chrome::{container_html, index_breadcrumb, page_shell, title_row};
-use super::super::citations::{push_gap_citations, push_input_citations};
+use super::super::citations::{gap_links, push_gap_citations, push_input_citations};
 use super::super::field_notes::field_notes;
 use super::super::fragments::{
     push_attribution, push_classification_block, push_classification_link_row,
@@ -16,7 +16,9 @@ use super::super::labels::{format_confidence, resolution_status_word, status_bad
 fn page_links(page: &ResolutionPage) -> Vec<&PageLink> {
     let mut links: Vec<&PageLink> = page.resolves.iter().collect();
     links.extend(&page.spawned);
+    links.extend(page.produced_rules.iter().map(|rule| &rule.link));
     links.extend(page.superseded_by.iter());
+    links.extend(gap_links(&page.gaps));
     links
 }
 
@@ -63,9 +65,9 @@ pub fn render_resolution(scope: &str, page: &ResolutionPage) -> String {
         main.push_str("</section>\n");
     }
     if !page.produced_rules.is_empty() {
-        push_section_open(&mut main, "sh-resolution", None, "Downstream Territory");
+        push_section_open(&mut main, "sh-rule", Some("i-shield"), "Produced rules");
         main.push_str("<div class=\"territory\">\n");
-        push_rule_territory_card(&mut main, &page.produced_rules);
+        push_rule_territory_card(&mut main, &links, &page.produced_rules);
         main.push_str("</div>\n</section>\n");
     }
     push_attribution(
@@ -107,9 +109,14 @@ pub fn render_resolution(scope: &str, page: &ResolutionPage) -> String {
 /// The scholarly margin: inputs as citations, then the classification rows.
 fn margin_html(page: &ResolutionPage, links: &PageLinksRenderer) -> String {
     let mut margin = String::new();
-    margin.push_str("<h3 class=\"margin-head\">Inputs</h3>\n");
-    push_gap_citations(&mut margin, &page.gaps);
-    push_input_citations(&mut margin, &page.inputs);
+    if !page.inputs.is_empty() {
+        margin.push_str("<h3 class=\"margin-head\">Inputs</h3>\n");
+        push_input_citations(&mut margin, &page.inputs);
+    }
+    if !page.gaps.is_empty() {
+        margin.push_str("<h3 class=\"margin-head\">Gaps</h3>\n");
+        push_gap_citations(&mut margin, links, &page.gaps);
+    }
     let mut rows = String::new();
     if let Some(enforcement) = &page.enforcement {
         push_classification_row(&mut rows, "i-shield", "Enforcement", enforcement, false);

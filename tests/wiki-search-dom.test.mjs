@@ -58,6 +58,21 @@ test("populated DOM fixture uses case-insensitive all-term matching", () => {
   assert.equal(dom.window.document.querySelector("#search-summary").textContent, "1 result");
 });
 
+test("zero matches are explained with a complete sentence", () => {
+  const entries = `
+    <li data-search-entry data-search-title="Invoice participant" data-search-statement="Settlement rule">one</li>`;
+  const { dom, errors } = run(fixture(entries));
+  const input = dom.window.document.querySelector("#wiki-search");
+  input.value = "missing words";
+  input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+
+  assert.deepEqual(errors, []);
+  assert.equal(
+    dom.window.document.querySelector("#search-summary").textContent,
+    "No requirements or rules match this search.",
+  );
+});
+
 test("hydrated DOM fixture ranks titles first with stable ties and preserves q", () => {
   const entries = `
     <li data-search-entry data-id="statement" data-search-title="Settlement" data-search-statement="Invoice participant">statement</li>

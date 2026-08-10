@@ -2,18 +2,20 @@ use crate::wiki::model::{FindingsPage, PageKind};
 use crate::wiki::routes::WikiRoute;
 
 use super::super::chrome::{container_html, index_breadcrumb, page_shell, title_row};
-use super::super::citations::push_gap_citations;
+use super::super::citations::{gap_links, push_gap_citations};
+use super::super::html::PageLinksRenderer;
 use super::super::labels::counted;
 
 pub fn render_findings(scope: &str, page: &FindingsPage) -> String {
     let mut main = String::new();
+    let links = PageLinksRenderer::new(gap_links(&page.findings));
     if page.findings.is_empty() {
         main.push_str("<p class=\"empty-note\">No missing evidence was found.</p>\n");
     } else {
         main.push_str(
             "<p class=\"prose\">Every current traceability finding is listed below.</p>\n",
         );
-        push_gap_citations(&mut main, &page.findings);
+        push_gap_citations(&mut main, &links, &page.findings);
     }
     let margin = format!(
         "<h3 class=\"margin-head\">Findings</h3><p class=\"prose\">{}</p>",

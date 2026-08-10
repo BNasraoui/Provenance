@@ -71,10 +71,10 @@ fn findings_route_renders_every_finding_summarized_by_the_homepage() {
         .expect("the complete findings route must be rendered");
 
     for detail in [
-        "source_unused is referenced by nothing",
-        "source ref points at source_missing, which does not exist",
-        "no source refs recorded on this requirement",
-        "resolved with no resolving decision",
+        "A source is not referenced by a requirement.",
+        "A requirement points to a source that is missing.",
+        "A requirement has no source references.",
+        "A requirement is marked resolved but has no resolving decision.",
     ] {
         assert!(findings.html.contains(detail), "missing {detail:?}");
     }

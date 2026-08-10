@@ -4,7 +4,7 @@ use provenance_macros::rule;
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
-use super::labels::kind_label;
+use super::labels::{kind_icon, kind_label};
 
 #[cfg(test)]
 #[path = "tests/disambiguation.rs"]
@@ -103,7 +103,12 @@ impl PageLinksRenderer {
     pub(in crate::wiki::render) fn link_list(&self, links: &[PageLink]) -> String {
         let mut html = String::from("<ul class=\"link-list\">\n");
         for link in links {
-            writeln!(html, "<li>{}</li>", self.link(link, None))
+            let icon = if link.target.kind == crate::wiki::model::RecordKind::Rule {
+                icon_svg(kind_icon(link.target.kind.into()))
+            } else {
+                String::new()
+            };
+            writeln!(html, "<li>{icon}{}</li>", self.link(link, None))
                 .expect("writing to a String should not fail");
         }
         html.push_str("</ul>\n");

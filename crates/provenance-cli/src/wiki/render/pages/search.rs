@@ -8,14 +8,17 @@ use super::super::labels::{kind_class, kind_label};
 
 pub fn render_search(scope: &str, page: &SearchIndexPage) -> String {
     let mut main = String::new();
+    let placeholder = page.example.as_deref().map_or_else(String::new, |example| {
+        format!(" placeholder=\"e.g. {}\"", escape_attr(example))
+    });
     write!(
         main,
         "<form class=\"search-box\" action=\"{}\" method=\"get\">\n\
          <label for=\"wiki-search\">Search requirement and rule text</label>\n\
-         <div><input id=\"wiki-search\" name=\"q\" type=\"search\" autocomplete=\"off\" \
-         placeholder=\"e.g. invoice participant\"><button type=\"submit\">Search</button></div>\n\
+         <div><input id=\"wiki-search\" name=\"q\" type=\"search\" autocomplete=\"off\"{}><button type=\"submit\">Search</button></div>\n\
          </form>\n",
-        WikiRoute::Search.path()
+        WikiRoute::Search.path(),
+        placeholder,
     )
     .expect("writing to a String should not fail");
     main.push_str(

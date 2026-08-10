@@ -51,6 +51,29 @@ fn discovery_indexes_requirement_and_rule_titles_and_statements() {
 }
 
 #[test]
+fn homepage_and_search_use_a_real_indexed_title_as_the_search_example() {
+    let mut state = empty_state();
+    state.requirements = vec![requirement(
+        "req_invoice",
+        "Invoices shall identify the participant",
+        RequirementStatus::Active,
+        vec![],
+    )];
+    let corpus = build_corpus(&state, &LinkResolver::new(None));
+
+    let homepage = crate::wiki::render::render_index("default", &corpus.index);
+    let search = crate::wiki::render::render_search("default", &corpus.search);
+
+    for html in [homepage, search] {
+        assert!(
+            html.contains("placeholder=\"e.g. Invoices shall identify the participant\""),
+            "{html}"
+        );
+        assert!(!html.contains("invoice participant"), "{html}");
+    }
+}
+
+#[test]
 #[verifies("rule_domain_attribution", examples)]
 fn domains_group_rules_through_canonical_requirement_relationships() {
     let mut state = empty_state();
@@ -179,6 +202,89 @@ fn domains_surface_defined_missing_and_unassigned_without_dropping_rules() {
     assert_eq!(
         corpus.domains.groups[2].rules[0].target.record_id,
         "rule_unassigned"
+    );
+}
+
+#[test]
+fn domains_without_authored_groups_render_flat_records_with_statements() {
+    let mut state = empty_state();
+    let mut requirement = requirement(
+        "req_invoice",
+        "Invoices shall identify the participant",
+        RequirementStatus::Active,
+        vec![],
+    );
+    requirement.domain_id = None;
+    state.requirements = vec![requirement];
+    state.rules = vec![rule("rule_invoice", Some("Group invoices"))];
+
+    let corpus = build_corpus(&state, &LinkResolver::new(None));
+    let html = crate::wiki::render::render_domains("default", &corpus.domains);
+
+    assert!(html.contains("No domains have been authored"), "{html}");
+    assert!(html.contains(">All requirements</h2>"), "{html}");
+    assert!(html.contains(">All rules</h2>"), "{html}");
+    assert!(
+        html.contains("Invoices shall identify the participant"),
+        "{html}"
+    );
+    assert!(
+        html.contains("Claim items shall be grouped by participant"),
+        "{html}"
+    );
+    assert!(!html.contains(">Unassigned</h2>"), "{html}");
+    assert!(html.contains("0 groups"), "{html}");
+}
+
+#[test]
+fn missing_domain_classification_does_not_link_to_an_absent_group() {
+    let mut state = empty_state();
+    let mut requirement = requirement(
+        "req_invoice",
+        "Invoices shall identify the participant",
+        RequirementStatus::Active,
+        vec![],
+    );
+    requirement.domain_id = Some(sid("domain_missing"));
+    state.requirements = vec![requirement];
+
+    let corpus = build_corpus(&state, &LinkResolver::new(None));
+    let requirement = crate::wiki::render::render_requirement("default", &corpus.requirements[0]);
+
+    assert!(
+        requirement.contains(">domain_missing</span>"),
+        "{requirement}"
+    );
+    assert!(
+        !requirement.contains("href=\"/domains/#domain-domain_missing\""),
+        "{requirement}"
+    );
+}
+
+#[test]
+fn missing_domain_classification_links_when_the_gap_group_is_rendered() {
+    let mut state = empty_state();
+    state.domains = vec![domain("domain_authored", "Authored")];
+    let mut requirement = requirement(
+        "req_invoice",
+        "Invoices shall identify the participant",
+        RequirementStatus::Active,
+        vec![],
+    );
+    requirement.domain_id = Some(sid("domain_missing"));
+    state.requirements = vec![requirement];
+
+    let corpus = build_corpus(&state, &LinkResolver::new(None));
+    let requirement = crate::wiki::render::render_requirement("default", &corpus.requirements[0]);
+    let domains = crate::wiki::render::render_domains("default", &corpus.domains);
+
+    assert!(
+        requirement.contains("href=\"/domains/#domain-domain_missing\""),
+        "{requirement}"
+    );
+    assert!(
+        domains.contains("id=\"domain-domain_missing\""),
+        "{domains}"
     );
 }
 

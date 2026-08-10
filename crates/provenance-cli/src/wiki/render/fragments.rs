@@ -1,8 +1,8 @@
 use crate::wiki::model::{DecisionSection, LineageEntry, PageLink, RuleCard};
 use std::fmt::Write as _;
 
-use super::html::{escape_attr, escape_html, evidence_html, icon_svg, PageLinksRenderer};
-use super::labels::{capitalize, format_date_ms, sev_chip, severity_word};
+use super::html::{escape_html, evidence_html, icon_svg, PageLinksRenderer};
+use super::labels::{capitalize, display_name, format_date_ms, sev_chip, severity_word};
 
 pub(in crate::wiki::render) fn push_section_open(
     html: &mut String,
@@ -65,12 +65,16 @@ pub(in crate::wiki::render) fn push_decision_sections(
     }
 }
 
-pub(in crate::wiki::render) fn push_rule_territory_card(html: &mut String, rules: &[RuleCard]) {
+pub(in crate::wiki::render) fn push_rule_territory_card(
+    html: &mut String,
+    links: &PageLinksRenderer,
+    rules: &[RuleCard],
+) {
     html.push_str("<div class=\"territory-card rule\">\n");
     write!(
         html,
-        "<div class=\"card-head\">{}Produced Rules — {}</div>\n<ul class=\"rule-list\">\n",
-        icon_svg("i-book-open"),
+        "<div class=\"card-head\">{}Produced rules — {}</div>\n<ul class=\"rule-list\">\n",
+        icon_svg("i-shield"),
         rules.len()
     )
     .expect("writing to a String should not fail");
@@ -78,15 +82,10 @@ pub(in crate::wiki::render) fn push_rule_territory_card(html: &mut String, rules
         html.push_str("<li>\n");
         writeln!(
             html,
-            "<span class=\"rcode\"><a href=\"{}\">{}</a></span>",
-            escape_attr(&rule.link.target.route()),
-            escape_html(&rule.link.target.record_id)
+            "<span class=\"rname\">{}</span>",
+            links.link(&rule.link, None)
         )
         .expect("writing to a String should not fail");
-        if let Some(name) = rule.name.as_deref() {
-            writeln!(html, "<span class=\"rname\">{}</span>", escape_html(name))
-                .expect("writing to a String should not fail");
-        }
         html.push_str("<span class=\"rmeta\">");
         html.push_str(&sev_chip(
             severity_word(&rule.severity),
@@ -118,10 +117,20 @@ pub(in crate::wiki::render) fn push_attribution(
 ) {
     html.push_str("<section class=\"attribution\" aria-label=\"Attribution\">\n");
     if let Some(made_by) = made_by {
-        push_attribution_row(html, "i-user", "Made by", &escape_html(made_by));
+        push_attribution_row(
+            html,
+            "i-user",
+            "Made by",
+            &escape_html(&display_name(made_by)),
+        );
     }
     if let Some(approved_by) = approved_by {
-        push_attribution_row(html, "i-user", "Approved by", &escape_html(approved_by));
+        push_attribution_row(
+            html,
+            "i-user",
+            "Approved by",
+            &escape_html(&display_name(approved_by)),
+        );
     }
     if let Some(approved_at) = approved_at {
         push_attribution_row(html, "i-calendar", "Approved", &format_date_ms(approved_at));

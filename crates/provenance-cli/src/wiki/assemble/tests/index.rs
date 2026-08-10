@@ -16,6 +16,7 @@ fn build_corpus_on_a_truly_empty_scope_is_honestly_empty() {
     assert!(corpus.index.gaps.is_empty());
     assert!(corpus.index.orphans.is_empty());
     assert_eq!(corpus.index.counts, CorpusCounts::default());
+    assert_eq!(corpus.index.title, "Default documentation");
 }
 
 #[test]
@@ -53,26 +54,18 @@ fn index_reports_scope_gaps_and_orphans() {
             GapKind::DanglingReference,
         ]
     );
+    for id in ["req_root", "req_stuck", "res_orphan"] {
+        assert!(corpus.index.gaps.iter().any(|gap| {
+            gap.subject
+                .as_ref()
+                .is_some_and(|subject| subject.target.record_id == id)
+        }));
+    }
     assert!(corpus
         .index
         .gaps
         .iter()
-        .any(|gap| gap.detail.contains("req_root")));
-    assert!(corpus
-        .index
-        .gaps
-        .iter()
-        .any(|gap| gap.detail.contains("req_stuck")));
-    assert!(corpus
-        .index
-        .gaps
-        .iter()
-        .any(|gap| gap.detail.contains("res_orphan")));
-    assert!(corpus
-        .index
-        .gaps
-        .iter()
-        .any(|gap| gap.detail.contains("source_missing")));
+        .any(|gap| gap.detail.contains("source that is missing")));
     let orphan_ids = |links: &[crate::wiki::model::PageLink]| {
         links
             .iter()
@@ -159,8 +152,11 @@ fn index_reports_a_gap_for_a_thread_whose_parent_record_is_gone() {
         .iter()
         .find(|gap| gap.kind == GapKind::DanglingReference)
         .expect("a dangling thread parent should be reported as a gap");
-    assert!(dangling.detail.contains("thr_ghost"));
-    assert!(dangling.detail.contains("res_missing"));
+    assert_eq!(
+        dangling.detail,
+        "A discussion belongs to a decision that is missing."
+    );
+    assert!(dangling.subject.is_none());
 }
 
 #[test]
@@ -168,16 +164,37 @@ fn findings_page_preserves_every_computed_gap_exactly_once() {
     let state = fixture_state();
     let expected = compute_state_gaps(&state)
         .into_iter()
-        .map(|gap| (gap.kind, format!("{}: {}", gap.subject(), gap.reason)))
+        .map(|gap| gap.kind)
         .collect::<Vec<_>>();
     let corpus = build_corpus(&state, &LinkResolver::new(None));
     let actual = corpus
         .findings
         .findings
         .iter()
-        .map(|gap| (gap.kind, gap.detail.clone()))
+        .map(|gap| gap.kind)
         .collect::<Vec<_>>();
 
     assert_eq!(actual, expected);
     assert_eq!(corpus.index.finding_count, actual.len());
+}
+
+#[test]
+fn findings_use_plain_sentences_and_link_existing_record_titles() {
+    let corpus = fixture_corpus();
+    let html = crate::wiki::render::render_findings("default", &corpus.findings);
+
+    assert!(
+        html.contains(
+            "<a href=\"/requirements/req_root/\">Platform shall manage invoicing</a> has no source references."
+        ),
+        "{html}"
+    );
+    assert!(
+        html.contains(
+            "<a href=\"/rules/rule_orphan/\">Rule orphan</a> has no producing requirement or decision."
+        ),
+        "{html}"
+    );
+    assert!(!html.contains('`'), "{html}");
+    assert!(!html.contains("requirement req_root:"), "{html}");
 }

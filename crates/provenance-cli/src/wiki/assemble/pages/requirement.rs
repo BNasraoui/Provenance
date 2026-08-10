@@ -2,7 +2,7 @@ use crate::wiki::model::{DecisionSection, PageId, RecordKind, RequirementPage, R
 use provenance_core::{EdgeType, NodeType, Requirement};
 
 use super::super::context::Assembler;
-use super::super::page_links::requirement_link;
+use super::super::page_links::{reader_title, requirement_link};
 
 impl<'a> Assembler<'a> {
     pub(in crate::wiki::assemble) fn requirement_page(
@@ -27,7 +27,7 @@ impl<'a> Assembler<'a> {
         }
         RequirementPage {
             id: PageId::new(RecordKind::Requirement, requirement.id.as_str()),
-            title: requirement.statement.clone(),
+            title: reader_title(&requirement.statement),
             status: requirement.status.clone(),
             statement: requirement.statement.clone(),
             description: requirement.description.clone(),
@@ -36,6 +36,7 @@ impl<'a> Assembler<'a> {
                 .domain_id
                 .as_ref()
                 .map(|id| id.as_str().to_string()),
+            domain_has_anchor: requirement.domain_id.is_some() && !self.state.domains.is_empty(),
             back_link: self.parent_of(&requirement.id).map(requirement_link),
             lineage: self.lineage(requirement),
             decisions,

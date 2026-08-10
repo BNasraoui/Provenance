@@ -1,62 +1,111 @@
-use crate::wiki::model::{FindingsPage, GapNotice};
+use crate::wiki::model::{FindingsPage, GapNotice, PageLink};
 use provenance_core::{NodeType, StableId};
-use provenance_store::cache::{node_type_word, GapItem, GapKind};
+use provenance_store::cache::{GapItem, GapKind};
 
 use super::context::Assembler;
+use super::page_links::{requirement_link, resolution_link, rule_link, source_link};
+
+const SUBJECT_TOKEN: &str = concat!("{", "subject", "}");
+const RELATED_TOKEN: &str = concat!("{", "related", "}");
 
 impl Assembler<'_> {
     pub(super) fn findings_page(&self) -> FindingsPage {
         FindingsPage {
             scope: self.state.scope.clone(),
             title: "Missing evidence".to_string(),
-            findings: self.gaps.iter().map(Self::gap_notice).collect(),
+            findings: self
+                .gaps
+                .iter()
+                .map(|gap| self.gap_notice(gap, None))
+                .collect(),
         }
     }
 
-    pub(super) fn gap_notice(gap: &GapItem) -> GapNotice {
-        GapNotice {
-            kind: gap.kind,
-            detail: format!("{}: {}", gap.subject(), gap.reason),
+    fn record_link(&self, node_type: NodeType, node_id: &str) -> Option<PageLink> {
+        match node_type {
+            NodeType::Requirement => self
+                .state
+                .requirements
+                .iter()
+                .find(|record| record.id.as_str() == node_id)
+                .map(requirement_link),
+            NodeType::Resolution => self
+                .state
+                .resolutions
+                .iter()
+                .find(|record| record.id.as_str() == node_id)
+                .map(resolution_link),
+            NodeType::Rule => self
+                .state
+                .rules
+                .iter()
+                .find(|record| record.id.as_str() == node_id)
+                .map(rule_link),
+            NodeType::Source => self
+                .state
+                .sources
+                .iter()
+                .find(|record| record.id.as_str() == node_id)
+                .map(source_link),
+            NodeType::Topic | NodeType::Question => None,
         }
     }
 
-    pub(super) fn mirrored_contradiction_notice(
-        gap: &GapItem,
-        node_type: NodeType,
-        node_id: &str,
-    ) -> GapNotice {
+    fn subject_link(&self, gap: &GapItem) -> Option<PageLink> {
+        if matches!(gap.node_type, NodeType::Topic | NodeType::Question) {
+            return gap
+                .requirement_id
+                .as_deref()
+                .and_then(|id| self.record_link(NodeType::Requirement, id));
+        }
+        self.record_link(gap.node_type, &gap.node_id)
+    }
+
+    fn gap_notice(&self, gap: &GapItem, current: Option<(NodeType, &str)>) -> GapNotice {
+        let mirrored = current.is_some_and(|(node_type, node_id)| {
+            gap.kind == GapKind::UnresolvedContradictsPair
+                && gap.related_node_type == Some(node_type)
+                && gap.related_node_id.as_deref() == Some(node_id)
+        });
+        let owns_subject = current.is_some();
+        let subject = (!owns_subject).then(|| self.subject_link(gap)).flatten();
+        let related = if mirrored {
+            self.record_link(gap.node_type, &gap.node_id)
+        } else {
+            gap.related_node_type
+                .zip(gap.related_node_id.as_deref())
+                .and_then(|(node_type, node_id)| self.record_link(node_type, node_id))
+        };
+        let subject_type = current.map_or(gap.node_type, |(node_type, _)| node_type);
+        let subject_text = if owns_subject {
+            format!("This {}", reader_node_word(subject_type))
+        } else if subject.is_some() {
+            SUBJECT_TOKEN.to_string()
+        } else if gap.reason.starts_with("thread ") {
+            "A discussion".to_string()
+        } else {
+            format!("A {}", reader_node_word(subject_type))
+        };
+        let detail = gap_detail(gap, &subject_text, related.is_some(), owns_subject);
+
         GapNotice {
             kind: gap.kind,
-            detail: format!(
-                "{} {} -> {} {}: {}",
-                node_type_word(node_type),
-                node_id,
-                node_type_word(gap.node_type),
-                gap.node_id,
-                gap.reason
-            ),
+            subject,
+            related,
+            detail,
         }
     }
 
     pub(super) fn gaps_for(&self, node_type: NodeType, node_id: &StableId) -> Vec<GapNotice> {
         self.gaps
             .iter()
-            .filter_map(|gap| {
-                if gap.node_type == node_type && gap.node_id == node_id.as_str() {
-                    Some(Self::gap_notice(gap))
-                } else if gap.kind == GapKind::UnresolvedContradictsPair
-                    && gap.related_node_type == Some(node_type)
-                    && gap.related_node_id.as_deref() == Some(node_id.as_str())
-                {
-                    Some(Self::mirrored_contradiction_notice(
-                        gap,
-                        node_type,
-                        node_id.as_str(),
-                    ))
-                } else {
-                    None
-                }
+            .filter(|gap| {
+                (gap.node_type == node_type && gap.node_id == node_id.as_str())
+                    || (gap.kind == GapKind::UnresolvedContradictsPair
+                        && gap.related_node_type == Some(node_type)
+                        && gap.related_node_id.as_deref() == Some(node_id.as_str()))
             })
+            .map(|gap| self.gap_notice(gap, Some((node_type, node_id.as_str()))))
             .collect()
     }
 
@@ -73,7 +122,78 @@ impl Assembler<'_> {
                         | GapKind::UnexploredTopic
                 )
             })
-            .map(Self::gap_notice)
+            .map(|gap| self.gap_notice(gap, None))
             .collect()
+    }
+}
+
+fn gap_detail(gap: &GapItem, subject: &str, has_related: bool, owns_subject: bool) -> String {
+    match gap.kind {
+        GapKind::MissingDomainId => format!("{subject} has no domain."),
+        GapKind::MissingSourceRefs => format!("{subject} has no source references."),
+        GapKind::NoResolvingDecision => {
+            format!("{subject} is marked resolved but has no resolving decision.")
+        }
+        GapKind::NoProducedRules => format!("{subject} has no produced rules."),
+        GapKind::OrphanRule if owns_subject => orphan_rule_page_copy(&gap.reason).to_string(),
+        GapKind::OrphanRule => format!("{subject} {}.", orphan_rule_predicate(&gap.reason)),
+        GapKind::OrphanResolution => format!("{subject} does not resolve a requirement."),
+        GapKind::UnreferencedSource => {
+            format!("{subject} is not referenced by a requirement.")
+        }
+        GapKind::DanglingReference => {
+            if gap.reason.starts_with("thread ") {
+                let related = reader_node_word(gap.node_type);
+                format!("{subject} belongs to a {related} that is missing.")
+            } else {
+                let related = gap.related_node_type.map_or("record", reader_node_word);
+                format!("{subject} points to a {related} that is missing.")
+            }
+        }
+        GapKind::UnresolvedContradictsPair => {
+            let related = if has_related {
+                RELATED_TOKEN
+            } else {
+                "another requirement"
+            };
+            format!("{subject} conflicts with {related}, but no decision resolves the conflict.")
+        }
+        GapKind::OpenQuestion => format!("{subject} has an open question."),
+        GapKind::UnexploredTopic => format!("{subject} has an unexplored topic."),
+    }
+}
+
+fn orphan_rule_predicate(reason: &str) -> &'static str {
+    if reason.contains("requirement or resolution") {
+        "has no producing requirement or decision"
+    } else if reason.starts_with("no requirement ") {
+        "has no producing requirement"
+    } else if reason.starts_with("no resolution ") {
+        "has no producing decision"
+    } else {
+        "has no producing requirement or decision"
+    }
+}
+
+fn orphan_rule_page_copy(reason: &str) -> &'static str {
+    if reason.contains("requirement or resolution") {
+        "No requirement or decision is recorded as producing this rule."
+    } else if reason.starts_with("no requirement ") {
+        "No requirement is recorded as producing this rule."
+    } else if reason.starts_with("no resolution ") {
+        "No decision is recorded as producing this rule."
+    } else {
+        "No requirement or decision is recorded as producing this rule."
+    }
+}
+
+const fn reader_node_word(node_type: NodeType) -> &'static str {
+    match node_type {
+        NodeType::Source => "source",
+        NodeType::Requirement => "requirement",
+        NodeType::Resolution => "decision",
+        NodeType::Rule => "rule",
+        NodeType::Topic => "topic",
+        NodeType::Question => "question",
     }
 }

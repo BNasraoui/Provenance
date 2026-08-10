@@ -2,8 +2,8 @@
 //!
 //! Pages follow the design mockup: type-colored accent bar, top chrome with
 //! wordmark and breadcrumb, display-serif title with type and status badges,
-//! a 780px body next to a 220px scholarly margin, and a full-width Field
-//! Notes band. Everything is a pure `model -> String` function; the CSS and
+//! a 780px body next to a 220px scholarly margin, and a full-width Discussion
+//! band. Everything is a pure `model -> String` function; the CSS and
 //! theme switcher are vendored in [`crate::wiki::theme`].
 
 mod chrome;

@@ -1,5 +1,5 @@
 use crate::wiki::links::InlineRef;
-use crate::wiki::model::PageLink;
+use crate::wiki::model::{GapKind, PageKind, PageLink};
 
 use super::super::html::{escape_attr, escape_html, linkify_body, PageLinksRenderer};
 use super::super::labels::{format_confidence, format_date_ms};
@@ -126,4 +126,36 @@ fn short_ids_use_the_shortest_suffix_that_distinguishes_records() {
     let html = link_list(&links);
     assert!(html.contains("<span class=\"id-chip\">req_a1</span>"));
     assert!(html.contains("<span class=\"id-chip\">req_b1</span>"));
+}
+
+#[test]
+fn gap_placeholders_cannot_rewrite_text_inside_inserted_links() {
+    let subject_token = concat!("{", "subject", "}");
+    let related_token = concat!("{", "related", "}");
+    let subject = super::fixtures::link(
+        PageKind::Requirement,
+        "req_subject",
+        &["Keep ", related_token].concat(),
+    );
+    let related = super::fixtures::link(PageKind::Requirement, "req_related", "Other requirement");
+    let gap = crate::wiki::model::GapNotice {
+        kind: GapKind::UnresolvedContradictsPair,
+        subject: Some(subject.clone()),
+        related: Some(related.clone()),
+        detail: [subject_token, " conflicts with ", related_token, "."].concat(),
+    };
+    let links = PageLinksRenderer::new([&subject, &related]);
+
+    let html = super::super::citations::gap_detail_html(&links, &gap);
+
+    assert_eq!(
+        html,
+        [
+            "<a href=\"/requirements/req_subject/\">Keep ",
+            related_token,
+            "</a> conflicts with <a href=\"/requirements/req_related/\">Other requirement</a>."
+        ]
+        .concat()
+    );
+    assert_eq!(html.matches("<a ").count(), 2);
 }

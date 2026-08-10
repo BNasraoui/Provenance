@@ -79,14 +79,13 @@ expression: "render_requirement(\"default\", &requirement_fixture())"
 <p class="prose">Codebase scan of UseCase.php identified 7 patterns.</p>
 </section>
 <section>
-<h2 class="section-head sh-resolution">Downstream Territory</h2>
+<h2 class="section-head sh-rule"><svg class="icon"><use href="#i-shield"/></svg>Produced rules</h2>
 <div class="territory">
 <div class="territory-card rule">
-<div class="card-head"><svg class="icon"><use href="#i-book-open"/></svg>Produced Rules — 1</div>
+<div class="card-head"><svg class="icon"><use href="#i-shield"/></svg>Produced rules — 1</div>
 <ul class="rule-list">
 <li>
-<span class="rcode"><a href="/rules/rule_sah_inv_016/">rule_sah_inv_016</a></span>
-<span class="rname">Suppress line emission for fully zero claim items</span>
+<span class="rname"><a href="/rules/rule_sah_inv_016/">Suppress line emission for fully zero claim items</a></span>
 <span class="rmeta"><span class="sev high">high</span></span>
 <span class="rstatement">If a claim item's participant, government, and gap portions are all &lt;= 0 after markup, no invoice lines shall be emitted for that claim item.</span>
 <span class="rref"><a href="https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php#L153-L156">src/UseCase.php:153-156</a></span>
@@ -141,7 +140,7 @@ expression: "render_requirement(\"default\", &requirement_fixture())"
 <div class="field-notes">
 <div class="container">
 <div class="fn-head">
-<svg class="icon"><use href="#i-message-square"/></svg><h2>Field Notes</h2>
+<svg class="icon"><use href="#i-message-square"/></svg><h2>Discussion</h2>
 <span class="count">1 message · active</span>
 <span class="thread-id">thr_resolution_res_split_0 · on resolution res_split</span>
 </div>

@@ -56,6 +56,29 @@ pub(in crate::wiki::render) fn counted(count: usize, singular: &str, plural: &st
     format!("{count} {noun}")
 }
 
+pub(in crate::wiki::render) fn display_name(actor: &str) -> String {
+    let actor = actor.trim();
+    if actor.is_empty()
+        || actor.contains(char::is_whitespace)
+        || actor.starts_with('@')
+        || actor.contains('@')
+        || (!actor.contains('_') && !actor.contains('-'))
+    {
+        return actor.to_string();
+    }
+    actor
+        .split(['_', '-'])
+        .filter(|word| !word.is_empty())
+        .map(|word| {
+            let mut chars = word.chars();
+            chars.next().map_or_else(String::new, |first| {
+                first.to_uppercase().collect::<String>() + chars.as_str()
+            })
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 pub(in crate::wiki::render) const fn kind_class(kind: PageKind) -> &'static str {
     match kind {
         PageKind::ScopeIndex => "scope-index",
@@ -84,7 +107,8 @@ pub(in crate::wiki::render) const fn kind_label(kind: PageKind) -> &'static str 
 
 pub(in crate::wiki::render) const fn kind_icon(kind: PageKind) -> &'static str {
     match kind {
-        PageKind::ScopeIndex | PageKind::Rule | PageKind::Source => "i-book-open",
+        PageKind::Rule => "i-shield",
+        PageKind::ScopeIndex | PageKind::Source => "i-book-open",
         PageKind::SearchIndex | PageKind::Findings => "i-search",
         PageKind::DomainIndex | PageKind::Requirement => "i-git-branch",
         PageKind::Resolution => "i-scale",
