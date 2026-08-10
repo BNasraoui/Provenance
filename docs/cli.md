@@ -50,6 +50,13 @@ text. Pass an earlier JSON scan with `--baseline` to resolve those anchors. An
 `--validate-rules`, gone anchors produce warnings; moved anchors do not become false
 absence warnings.
 
+Anchors relocate only within a file. A site moved to a different file is reported
+gone at its old coordinate, and the new file carries it as a fresh unchanged site.
+When several sites share a file, rule, symbol, and line text, the scan refuses to
+guess between them: any that cannot be pinned to a baseline line are reported at
+their current coordinates as unchanged, and losing one of them raises no gone
+warning.
+
 The scanner is line-oriented. Its native binding patterns and current limits are:
 
 | Language | Rule function binding | Verification binding | Recognition grade |
