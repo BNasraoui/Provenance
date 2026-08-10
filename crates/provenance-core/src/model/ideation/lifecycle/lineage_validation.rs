@@ -8,24 +8,15 @@ use std::collections::{BTreeMap, BTreeSet};
 ///
 /// `builds_on` names assertions, and every assertion belongs to a proposal, so
 /// a proposal's lineage is a walk: proposal to assertion to the proposal that
-/// owns it, and on. The decision is that the walk may never come back to where
-/// it started. A proposal that rests on its own conclusion has nothing under
-/// it. One hop counts: a proposal that builds on an assertion of its own is
-/// rejected like any longer loop.
-///
-/// Shared ancestors are not loops. A diamond, where two lines of a proposal's
-/// lineage meet at one older assertion, is ordinary and passes.
+/// owns it, and on. The walk may never come back to where it started. One hop
+/// counts: a proposal that builds on an assertion of its own is rejected like
+/// any longer loop. Shared ancestors are not loops; a diamond, where two lines
+/// of a proposal's lineage meet at one older assertion, is ordinary and passes.
 ///
 /// The check is whole-graph, not per proposal. It runs over every proposal
 /// handed to it and rejects the batch when any lineage closes on itself, even
 /// one that the proposal a caller cares about cannot reach. The error names
 /// the proposal where the walk closed; it does not print the path.
-///
-/// Two neighbouring decisions live elsewhere. That every `builds_on` id names
-/// an assertion that exists is a precondition checked here, because the walk
-/// cannot run without it, but it is referential integrity rather than this
-/// rule. That a proposal must not repeat an id inside its own `builds_on`
-/// list is `super::validate_proposal_intrinsic`.
 #[rule("rule_proposal_lineage_acyclic")]
 pub(super) fn validate(
     proposals: &[ProposalCard],

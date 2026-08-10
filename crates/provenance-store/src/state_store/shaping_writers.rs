@@ -408,8 +408,7 @@ enum ShapingStatus {
 /// claim is a separate question, answered after this one.
 ///
 /// Returns the status word to name in the refusal, or `None` when the record
-/// may be claimed. [`claim_survives`] is the dual, taking the claim away again
-/// when a write moves the record out of the claimable state.
+/// may be claimed.
 #[rule("rule_claim_eligibility")]
 const fn claim_blocking_status(status: ShapingStatus) -> Option<&'static str> {
     match status {
@@ -423,12 +422,11 @@ const fn claim_blocking_status(status: ShapingStatus) -> Option<&'static str> {
 
 /// A claim does not survive the record leaving the claimable state.
 ///
-/// The dual of [`claim_blocking_status`]: that rule guards the entry, refusing
-/// a claim on a record that wants no worker; this one guards the exit, so the
-/// write that closes a topic or answers a question takes the claim with it and
-/// nobody is left holding work that is over. The two read the same six
-/// statuses and agree on every one of them, which is what makes a held claim
-/// mean the same thing as a grantable one.
+/// The dual of [`claim_blocking_status`]: that one guards the entry, this one
+/// guards the exit, so the write that closes a topic or answers a question
+/// takes the claim with it and nobody is left holding work that is over. The
+/// two read the same six statuses and agree on every one of them, which is
+/// what makes a held claim mean the same thing as a grantable one.
 #[rule("rule_claim_cleared_on_exit")]
 const fn claim_survives(status: ShapingStatus) -> bool {
     matches!(

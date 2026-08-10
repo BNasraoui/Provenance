@@ -10,20 +10,17 @@ use serde::{Deserialize, Serialize};
 
 /// The families that travel in a pinned graph.
 ///
-/// A pinned graph carries the canonical families and nothing else: sources,
-/// domains, requirements, boundaries, topics, questions, resolutions, rules,
-/// services, service bindings, and edges. The collaboration and ideation
-/// records the repository also holds (proposals, assertions, dispositions,
-/// contributions, synthesis packets, threads) say who was talking and what
-/// they were still arguing about. They are not what the graph asserts, and
-/// they never enter the projection.
+/// A pinned graph carries the canonical families and nothing else. The
+/// collaboration and ideation records the repository also holds (proposals,
+/// assertions, dispositions, contributions, synthesis packets, threads) say
+/// who was talking and what they were still arguing about; they are not what
+/// the graph asserts, and they never enter the projection.
 ///
 /// This field list is the rule, not a check laid over it. There is no
 /// predicate to run and nothing to remember: a family with no field here
 /// cannot leave (`load_projection` has nowhere to put it) and cannot come
-/// back (`deny_unknown_fields` refuses a document that names it). Both
-/// directions read the same list, so they cannot drift apart. Adding a field
-/// is how the rule changes; there is no other way to break it.
+/// back (`deny_unknown_fields` refuses a document that names it). Adding a
+/// field is how the rule changes; there is no other way to break it.
 #[rule("rule_pinned_graph_families")]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -172,15 +169,12 @@ impl<T> CollaborationField for Option<T> {
 /// A graph shared outside the repository carries no trace of who was
 /// talking or who claimed what. Thread and message origins, and the claims
 /// on topics and questions, are collaboration state: they name people and
-/// conversations, they say nothing about what the graph asserts, and they
-/// must not travel with it.
+/// conversations, and they must not travel with the graph.
 ///
 /// This walk is the only place that list of fields is written down. Export
-/// clears every field it visits (`strip_collaboration_fields`) and import
-/// refuses a graph in which any field it visits is set
-/// (`GraphExport::validate_no_collaboration_fields`), so the two halves
-/// cannot drift: a field added here is both stripped and rejected at once,
-/// and a field missing here is neither.
+/// clears every field it visits and import refuses a graph in which any field
+/// it visits is set, so the two halves cannot drift: a field added here is
+/// both stripped and rejected at once, and a field missing here is neither.
 ///
 /// Visiting is field-major, every record of a kind for one field before the
 /// next field, so which field a refusal names does not depend on which
@@ -257,9 +251,8 @@ fn sort_records(graph: &mut GraphExport) {
 /// single record carrying a different scope id would smuggle another scope's
 /// data into the handover and make those counts lie, so every record of every
 /// family must carry the claimed scope id. The first record that does not is
-/// named in the refusal, so the holder can find it. Both directions are
-/// guarded here: what the store hands out (`load_projection`) and what an
-/// exact export brings back in (`ExactExport::from_json`).
+/// named in the refusal. Both directions are guarded here: what the store
+/// hands out and what an exact export brings back in.
 #[rule("rule_pinned_scope_ownership")]
 pub(super) fn validate_scope_ownership(
     graph: &GraphExport,

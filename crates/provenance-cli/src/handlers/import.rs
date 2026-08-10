@@ -121,13 +121,9 @@ fn ensure_immutable_records_preserved<T: Serialize>(
 
 /// Evidence an assertion rests on cannot be dropped.
 ///
-/// Rewriting such a record is refused by `provenance-store`'s freeze, which an
-/// import asks of every record it replaces. Import is the only path that can
-/// drop one: it stands a whole scope in place of the stored one, so a record
-/// the incoming scope never mentions is gone. Dropping the evidence an
-/// assertion cites takes away the ground the assertion stands on as surely as
-/// rewriting it would, so it is refused too, and in the same breath: a record
-/// no assertion cites may be dropped freely.
+/// Import is the only path that can drop a record at all: it stands a whole
+/// scope in place of the stored one, so a record the incoming scope never
+/// mentions is gone. A record no assertion cites may be dropped freely.
 ///
 /// The caller reads "cited by an assertion" with `provenance-store`'s reading
 /// for the record's kind, so this and the freeze answer the same question of

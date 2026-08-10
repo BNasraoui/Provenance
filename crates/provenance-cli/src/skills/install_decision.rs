@@ -50,18 +50,16 @@ pub enum InstallVerdict {
 ///
 /// What this protects is the user's own files at the target: a hand-written
 /// `SKILL.md`, a symlink they pointed somewhere else, a directory they keep
-/// under `.claude/skills`. The install may write where nothing is, and may
-/// write where its own output already sits, because rewriting identical
-/// content costs the user nothing. Anything else it did not write, it leaves
+/// under `.claude/skills`. The install may write where nothing is, and where
+/// its own output already sits; anything else it did not write, it leaves
 /// alone.
 ///
-/// `--force` is the only override. No other flag, environment variable or
+/// `--force` is the only override: no other flag, environment variable or
 /// target path lets an install destroy a file it did not write, and an
-/// install that refuses always says so rather than writing quietly.
-///
-/// One case is not an override but a gentler route: a directory where a
-/// symlink was wanted is not destroyed at all, it is copied into, so
-/// whatever else lives under it survives.
+/// install that refuses always says so rather than writing quietly. One case
+/// is not an override but a gentler route: a directory where a symlink was
+/// wanted is not destroyed at all, it is copied into, so whatever else lives
+/// under it survives.
 #[rule("rule_install_never_clobbers")]
 pub const fn classify_install(state: TargetState, force: bool) -> InstallVerdict {
     match state {

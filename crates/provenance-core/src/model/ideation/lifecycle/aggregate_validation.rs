@@ -38,17 +38,6 @@ pub(super) const ASSERTION_KIND: &str = "assertion";
 ///
 /// `kind` names the record in the message and is the only thing that differs
 /// between the call sites; the test they all state is the same one.
-///
-/// This function speaks for the aggregate: it is what a whole scope of
-/// ideation records is judged against once they are in hand, and it is the
-/// statement the CLI's artifact validator asks of a single file. It is no
-/// longer the only place a version is refused. Every record the store loads
-/// from disk, ideation or not, now passes `rule_reads_supported_version_only`
-/// in `provenance-store`'s `state_store::readers` first, which reads
-/// [`SUPPORTED_SCHEMA_VERSION`] and names the file and record it refused. A
-/// hand-edited requirement, rule or edge is stopped there, where nothing
-/// reaches this function; the two guards agree because they read the same
-/// const.
 #[rule("rule_schema_version_one")]
 pub fn ensure_supported_schema_version(kind: &str, version: SchemaVersion) -> anyhow::Result<()> {
     anyhow::ensure!(
@@ -157,8 +146,7 @@ fn validate_disposition_intrinsics(dispositions: &[DispositionRecord]) -> anyhow
 /// A disposition ends a proposal's life, so only an actor named in the
 /// repository's manifest may record one. The check bites on a live proposal,
 /// meaning a row that still claims `proposed`; a legacy terminal row is frozen
-/// by its shipped fingerprint and carries its own audit, and a disposition is
-/// the only record kind that names an actor at all.
+/// by its shipped fingerprint and carries its own audit.
 ///
 /// The allowlist is manifest state, written at `provenance repo init` and read
 /// on every write path that validates the aggregate. An empty list therefore
@@ -167,8 +155,7 @@ fn validate_disposition_intrinsics(dispositions: &[DispositionRecord]) -> anyhow
 ///
 /// The actor id is an attestation, not proof of identity. Nothing here checks
 /// a key or a signature: the id records who claims to have decided, and write
-/// access to the repository is the only gate behind that claim. The graph
-/// records that trust contract as `req_proposal_state_from_dispositions`.
+/// access to the repository is the only gate behind that claim.
 #[rule("rule_disposition_actor_allowlist")]
 fn validate_actor_allowlist(
     aggregate: &IdeationAggregate<'_>,

@@ -221,19 +221,15 @@ enum RecoveryUse {
 /// passed in.
 ///
 /// Resolving the name and comparing it with where it is supposed to sit settles
-/// both halves of the decision at once. A `..` step lands somewhere other than
-/// the container, and so does a symlink, because a symlink resolves away from
-/// the name it stands under. Applied twice (the transactions directory inside
-/// the cache, then the transaction inside that) this covers every component
-/// below the cache. That the cache itself is a real directory is settled
-/// earlier, by [`create_real_directory`].
+/// both halves of the decision at once: a `..` step lands somewhere other than
+/// the container, and so does a symlink. Applied twice (the transactions
+/// directory inside the cache, then the transaction inside that) this covers
+/// every component below the cache. That the cache itself is a real directory
+/// is settled earlier, by [`create_real_directory`].
 ///
-/// Landing in the right place is not enough on its own: recovery renames and
-/// removes whole trees, and only a directory can be one. A regular file sitting
-/// under the name a marker gives resolves exactly where the name says, so the
-/// containment check alone would pass it on to `remove_dir_all`, which would
-/// then fail from inside the recovery it was supposed to guard. A touched entry
-/// therefore has to be a directory as well as contained. Nothing is probed for
+/// A touched entry has to be a directory as well as contained, because a
+/// regular file under the name a marker gives resolves exactly where the name
+/// says and would then fail from inside `remove_dir_all`. Nothing is probed for
 /// [`RecoveryUse::AlreadyGone`], which has no entry left to be of any kind.
 #[rule("rule_recovery_stays_in_cache")]
 fn recovery_dir_inside_cache(

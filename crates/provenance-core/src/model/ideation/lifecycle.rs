@@ -85,11 +85,10 @@ pub enum LegacyProposalPolicy {
 ///
 /// A modern proposal is written as `proposed` and nothing else. Every later
 /// state is a verdict some other record reaches: a recorded assertion makes a
-/// proposal asserted, a human disposition accepts, rejects or defers it, and
-/// [`effective_proposal_state`] reads that verdict back. The same holds for
-/// `duplicate_of` and `superseded_by`. Both name an outcome of review, so an
-/// author may not write either onto the row being authored; only a disposition
-/// record carries that authority.
+/// proposal asserted, a human disposition accepts, rejects or defers it. The
+/// same holds for `duplicate_of` and `superseded_by`. Both name an outcome of
+/// review, so an author may not write either onto the row being authored; only
+/// a disposition record carries that authority.
 ///
 /// The remaining checks are housekeeping on the row itself: `builds_on` may not
 /// name the same assertion twice, and any confidence score must be in range.

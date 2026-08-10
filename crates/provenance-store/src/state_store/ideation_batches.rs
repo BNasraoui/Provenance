@@ -254,16 +254,13 @@ fn ensure_batch_evidence_unchanged(
 /// Evidence an assertion rests on cannot be edited afterwards.
 ///
 /// Once any assertion cites a record, that record is frozen: a replacement is
-/// accepted only when it serializes to exactly what is already stored, and a
-/// replacement that differs is rejected naming the record. A record no
-/// assertion cites may change freely.
+/// accepted only when it serializes to exactly what is already stored. A
+/// record no assertion cites may change freely.
 ///
 /// The caller supplies the reading of "cited by an assertion" for its record
 /// kind, because that reading differs by kind and the freeze does not: a
 /// contribution is reached through the claim ids an assertion supports, a
-/// synthesis packet through the packet id an assertion names. See
-/// [`assertion_cites_contribution`] and [`assertion_cites_synthesis`] for the
-/// two readings.
+/// synthesis packet through the packet id an assertion names.
 #[rule("rule_asserted_evidence_immutable")]
 pub fn ensure_asserted_evidence_unchanged<T: serde::Serialize>(
     kind: &str,
@@ -428,20 +425,13 @@ fn merge_immutable<T: Clone>(
 /// The shard is admitted only when its rows are the shipped-v1 audit itself,
 /// which `provenance-core` pins as a SHA-256 of the records. Membership is a
 /// property of the whole set, so a row appended beside genuine history changes
-/// the fingerprint and takes the whole shard down with it. That closes the way
-/// in that a per-row test left open: a decision taken now belongs to the
-/// modern lifecycle in `dispositions.jsonl`, which checks the actor against
-/// the repository allowlist and demands an assertion behind an acceptance, and
-/// a writer who both dropped a row here and moved its proposal out of
-/// `proposed` used to buy those gates off. An empty shard passes, having
-/// claimed nothing.
+/// the fingerprint and takes the whole shard down with it: a decision taken
+/// now belongs to the modern lifecycle in `dispositions.jsonl`, which checks
+/// the actor against the repository allowlist and demands an assertion behind
+/// an acceptance. An empty shard passes, having claimed nothing.
 ///
-/// The older, weaker half of the test is kept: every row must still name a
-/// proposal that has already left `proposed`. Membership decides every case it
-/// decides - the shipped rows name proposals that shipped terminal - so this
-/// refuses nothing membership would admit on today's records. It is kept
-/// because it is the reading that makes the shard history rather than a
-/// decision surface, and it is cheap to state.
+/// Every row must also name a proposal that has already left `proposed`, the
+/// reading that makes the shard history rather than a decision surface.
 ///
 /// This gate reads the shard as it stands on disk. The same fingerprint is
 /// checked again inside `validate_ideation_aggregate`, over the dispositions

@@ -149,9 +149,8 @@ pub(super) enum RouteVerdict<'a> {
 /// slash and every segment between those slashes is a plain name: never `.`
 /// or `..`, never empty, and free of the separators (`\`) and terminators
 /// (`\0`) another platform or a syscall could read as further path
-/// structure. `/` is the one route with no segments at all; every other
-/// route names at least one directory. Nothing here reshapes a route: a
-/// route is either used exactly as given or refused.
+/// structure. Nothing here reshapes a route: a route is either used exactly
+/// as given or refused.
 #[rule("rule_page_route_safety")]
 pub(super) fn classify_route(route: &str) -> RouteVerdict<'_> {
     if route == "/" {

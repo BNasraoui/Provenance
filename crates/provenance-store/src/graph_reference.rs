@@ -118,11 +118,7 @@ impl GraphReference {
     /// The same decision is replicated as JSON Schema in
     /// `provenance-cli/src/handlers/schema/artifacts/graph_reference.rs`
     /// (`reference_schema`), which is what a holder outside this codebase
-    /// validates against. The two are held in step by the conformance test
-    /// `graph_reference_schema_and_runtime_reject_the_same_boundary_values`
-    /// in `provenance-cli/tests/cli_graph_references/schema.rs`: every
-    /// boundary value there is pushed through both and must get the same
-    /// verdict.
+    /// validates against; the two must reach the same verdict on every value.
     #[rule("rule_reference_wellformed")]
     fn validate(&self) -> Result<(), GraphReferenceError> {
         if self.schema_version != SUPPORTED_SCHEMA_VERSION.0 {
@@ -265,39 +261,23 @@ impl GraphReferences {
     /// Decides when a graph reference is honoured.
     ///
     /// A reference is a claim about a repository its holder does not control,
-    /// so none of it is taken on trust. Every read verb comes through here
-    /// (`show`, `verify`, `exact-export`), and the pinned graph is handed back
-    /// only when four things hold at once. The shape rule runs first
-    /// (`validate`, `rule_reference_wellformed`), so a malformed reference is
-    /// refused before any Git work is done on its behalf.
+    /// so none of it is taken on trust. Every read verb comes through here,
+    /// and the shape rule runs first, so a malformed reference is refused
+    /// before any Git work is done on its behalf. The pinned graph is then
+    /// handed back only when four things hold at once:
     ///
-    /// The commit the reference names still exists in this repository and is
-    /// that commit. If Git cannot resolve it the reference is `Missing`: the
-    /// history it was cut from was rewritten, collected, or never reached this
-    /// clone, and the holder has a pin with nothing behind it. If it resolves
-    /// to some other object, as an annotated tag id does when it peels to the
-    /// commit it points at, the reference names something that is not the
-    /// commit it claims.
-    ///
-    /// The repository identity taken from that commit matches the recorded
-    /// one. Two repositories can hold the same store path and the same scope
-    /// name, so identity is the hash of the commit's root commits. A mismatch
-    /// means the holder is reading the right-looking commit in the wrong
-    /// repository, or the field was edited.
-    ///
-    /// The graph materialized at that commit still hashes to the recorded
-    /// digest. This is what makes the pin worth quoting: the holder gets the
-    /// bytes that were pinned or an error, never a graph that moved underneath
-    /// the reference.
-    ///
-    /// The reference id is the hash of exactly those parts, which is
-    /// repository identity, store path, scope, commit, and digest. The id is
-    /// what people paste into tickets and reviews, so it has to be
-    /// reproducible from the parts it names. An id lifted from another
-    /// reference clears every check above this one, because two commits over
-    /// the same graph agree on everything except their ids; a mismatch here
-    /// means the id was minted over some other set of parts, and quoting it
-    /// names a graph nobody can produce.
+    /// 1. the commit the reference names still resolves in this repository and
+    ///    is that commit, not an annotated tag peeling to it;
+    /// 2. the repository identity taken from that commit, which is the hash of
+    ///    its root commits, matches the recorded one, because two repositories
+    ///    can hold the same store path and the same scope name;
+    /// 3. the graph materialized at that commit still hashes to the recorded
+    ///    digest, so the holder gets the bytes that were pinned or an error,
+    ///    never a graph that moved underneath the reference;
+    /// 4. the reference id is the hash of exactly those parts. An id lifted
+    ///    from another reference clears every check above it, because two
+    ///    commits over the same graph agree on everything except their ids,
+    ///    and quoting it names a graph nobody can produce.
     ///
     /// The checks run in that order and the first failure is returned, so a
     /// reference with several fields edited is reported by the earliest one.

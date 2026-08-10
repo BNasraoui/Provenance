@@ -4,21 +4,17 @@ use serde::{de::Error, Deserialize, Deserializer, Serialize};
 /// Every id in the graph is non-empty and uses only lowercase ASCII letters,
 /// digits, `_` or `-`.
 ///
-/// This function is the rule. It is the only statement of the character set in
-/// the runtime: both id constructors and both `Deserialize` impls call it, so
-/// there is no second copy to drift. The four JSON Schema `pattern` strings
-/// published by `provenance schema show` are replicas of it, checked against
-/// it by the conformance test in
-/// `crates/provenance-cli/tests/cli_id_charset_conformance.rs`.
+/// This is the only statement of the character set in the runtime: both id
+/// constructors and both `Deserialize` impls call it, so there is no second
+/// copy to drift. The four JSON Schema `pattern` strings published by
+/// `provenance schema show` are replicas of it.
 ///
 /// The rule holds by construction, not by discipline. `StableId` and `ScopeId`
 /// wrap a private `String` in a module that contains nothing else, so no code
 /// outside this file can build one without going through `new`, and `new` is
 /// the only constructor: there is no `From`, no `FromStr`, no `Default`, no
 /// public field, and no derived `Deserialize` that would skip the check. An
-/// id that breaks the rule is unrepresentable as a `StableId` or a `ScopeId`,
-/// which is why the type-level tests below are marked `construction` rather
-/// than `examples`.
+/// id that breaks the rule is unrepresentable as a `StableId` or a `ScopeId`.
 #[rule("rule_id_charset")]
 fn is_well_formed_id(value: &str) -> bool {
     !value.is_empty()

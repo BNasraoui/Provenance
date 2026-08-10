@@ -327,24 +327,20 @@ impl StateStore {
 ///
 /// 1. the proposal named exists in the scope, so no decision lands on nothing;
 /// 2. an `accepted` decision on a live proposal names one that already carries
-///    an assertion, so nobody accepts a proposal whose evidence was never
-///    recorded (`rejected` and `deferred` need no assertion, because refusing
-///    a proposal is not a claim about its evidence; nor does an acceptance a
-///    human recorded naming a canonical artifact, because that ratified
-///    artifact is the evidence; nor a row that already left `proposed`, which
-///    is legacy history carrying its own audit);
+///    an assertion (`rejected` and `deferred` need no assertion, because
+///    refusing a proposal is not a claim about its evidence; nor does an
+///    acceptance naming a canonical artifact, because that ratified artifact
+///    is the evidence; nor a row that already left `proposed`, which is legacy
+///    history carrying its own audit);
 /// 3. the proposal has no disposition yet and the disposition id is free, so
-///    a person disposes of a proposal exactly once and cannot overwrite the
-///    decision already recorded;
+///    a person disposes of a proposal exactly once;
 /// 4. the canonical artifact named, when one is named, exists in the same
-///    scope under the kind it claims, so the decision points at a real
-///    artifact.
+///    scope under the kind it claims.
 ///
 /// The first three are [`provenance_core::validate_disposition_admissible`],
-/// which the ideation aggregate runs over every disposition it reads, so this
-/// gate and that aggregate refuse the same writes for the same reasons in the
-/// same words. The fourth is this gate's alone: only the store can see the
-/// scope's artifacts.
+/// which the ideation aggregate also runs, so this gate and that aggregate
+/// refuse the same writes in the same words. The fourth is this gate's alone:
+/// only the store can see the scope's artifacts.
 ///
 /// The gate reads state the caller has already loaded and writes nothing; the
 /// caller holds the scope's lifecycle lock across both, so the state it judges

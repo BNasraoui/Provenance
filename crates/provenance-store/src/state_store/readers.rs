@@ -58,16 +58,12 @@ fn record_from_line<T: DeserializeOwned>(
 /// record if the line carries an id, and both versions, because the fix is to
 /// find that line and decide what it should say.
 ///
-/// Reading is not the only way a stored line becomes a record. Every write is
-/// a read first: `mutate_jsonl_locked` loads the shard, hands the records to
-/// the caller, and writes the whole shard back. Left unguarded that path was
-/// the worse half of the same hole, because it does not merely misread the
-/// row, it rewrites it: an unrecognised field on a future-version record is
-/// dropped on the way out, so an unrelated `create` would launder a record the
-/// readers refuse. That path therefore calls this same function, on the same
-/// raw JSON, before any record is built - see `crate::jsonl`. A write against
-/// a shard holding an unsupported row fails before the mutation runs, and the
-/// shard is left byte for byte as it was.
+/// Every write is a read first: `mutate_jsonl_locked` loads the shard, hands
+/// the records to the caller, and writes the whole shard back, dropping any
+/// unrecognised field on the way out. That path therefore calls this same
+/// function, on the same raw JSON, before any record is built - see
+/// `crate::jsonl`. A write against a shard holding an unsupported row fails
+/// before the mutation runs, and the shard is left byte for byte as it was.
 ///
 /// A line with no `schema_version` at all makes no claim about its layout;
 /// there is nothing to compare, and its own deserializer says whether the

@@ -50,19 +50,11 @@ pub(in crate::wiki::publish) fn acquire_lock(
 /// Decides whether a publication may start against the path it was pointed at.
 ///
 /// Publication replaces a whole directory tree, so it refuses to start from
-/// any state it cannot reason about. It stops before writing a byte when:
-///
-/// - The output is a symlink. Following it would let a link redirect the
-///   replacement onto a tree the caller never named, so the link is refused
-///   rather than resolved.
-/// - The output exists and is not a directory. A regular file, a device, or a
-///   socket at the output path belongs to the caller, and the only move this
-///   code knows is replacing a directory.
-/// - Any artifact of an earlier run is still beside the output: the lock, the
-///   lock cleanup, the stage, the stage cleanup, or the backup. Their presence
-///   means a previous publication was interrupted, and a lock leaf that is not
-///   a regular file is worse still, because something other than a lock is
-///   standing where the lock goes.
+/// any state it cannot reason about: a symlink at the output, which would let
+/// a link redirect the replacement onto a tree the caller never named; a
+/// non-directory at the output, which belongs to the caller; or any artifact
+/// an interrupted earlier run left beside it (the lock, the lock cleanup, the
+/// stage, the stage cleanup, or the backup).
 ///
 /// Crash residue is reported by path and left exactly as found. Only an
 /// operator can tell whether a leftover backup holds the live wiki or a
@@ -72,12 +64,7 @@ pub(in crate::wiki::publish) fn acquire_lock(
 /// All five artifacts are probed before that refusal is built, so the operator
 /// is told about everything an interrupted run left rather than about whichever
 /// leftover happened to be looked at first. Clearing one artifact and retrying
-/// only to be sent back for the next is the failure this avoids. A lock that is
-/// not a regular file is named as such alongside the list, being an extra fact
-/// about one of the paths and not a refusal of its own.
-///
-/// An absent output and a directory this generator is allowed to own both
-/// pass, and only then does the run proceed.
+/// only to be sent back for the next is the failure this avoids.
 #[rule("rule_publish_preflight")]
 pub(in crate::wiki::publish) fn preflight(
     output: &PublicationOutput,

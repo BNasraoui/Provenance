@@ -71,13 +71,13 @@ impl UnmetQualification {
 /// the proposal rests on at least one supporting claim that the packet does
 /// not contest.
 ///
-/// The codebase reads this decision two ways, and both call this function.
-/// `ensure_qualifying_assertions` reads it as a must: a qualified proposal
-/// with no assertion is a hole in the run, and the write is refused.
-/// `validate_assertion_packet` reads it as a may: an assertion is accepted
-/// only against a packet that qualifies its proposal. The two readings differ
-/// only in which facts they must establish themselves, which is why the facts
-/// arrive as data rather than as a second hand-written conjunction.
+/// Both readings of that decision call this function: the must
+/// (`ensure_qualifying_assertions`, where a qualified proposal with no
+/// assertion is a hole in the run) and the may (`validate_assertion_packet`,
+/// where an assertion is accepted only against a packet that qualifies its
+/// proposal). They differ only in which facts they establish themselves, which
+/// is why the facts arrive as data rather than as a second hand-written
+/// conjunction.
 #[rule("rule_qualified_proposal_assertion")]
 pub const fn qualify_proposal_for_assertion(
     facts: QualificationFacts,

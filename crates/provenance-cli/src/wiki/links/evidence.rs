@@ -49,28 +49,18 @@ impl LinkResolver {
     /// A recorded reference is shown as a clickable link only when the link
     /// would actually work: either the reference is already a web address,
     /// which is used as it stands, or it reads as a file path that a known
-    /// code host can turn into a real blob URL. Everything else stays plain
-    /// text.
-    ///
-    /// The honest consequence: with no known remote — no `origin` at all, or
-    /// a self-hosted host outside the GitHub/GitLab/Bitbucket allowlist in
-    /// `parse_git_remote` — code references stay plain text. A path like
-    /// `src/UseCase.php` is relative to the repo root, so a browser would
-    /// resolve it against the wiki page's own route and get a 404. Plain
-    /// text the reader can search for beats a link that lies.
-    ///
-    /// This is the composing decision. `href_for` answers the narrower
-    /// question "can this path be turned into a real address", and
-    /// [`Self::annotate`] applies the same decision to spans inside free
-    /// text; both are parts of the rule marked here, not separate rules.
+    /// code host can turn into a real blob URL. With no known remote, a
+    /// relative path would resolve against the wiki page's own route and give
+    /// the reader a 404, so everything else stays plain text: text the reader
+    /// can search for beats a link that lies.
     ///
     /// "Reads as a file path" is decided in one place, `parse_code_ref`: a
     /// directory separator, or a bare name carrying a line group. A bare
-    /// dotted token with neither — `e.g.`, `Fig.`, `v1.2`, and equally
-    /// `payroll.rs` — is prose and stays plain text, even when it is the
+    /// dotted token with neither (`e.g.`, `Fig.`, `v1.2`, and equally
+    /// `payroll.rs`) is prose and stays plain text, even when it is the
     /// whole field. The resolver has nothing to tell the abbreviation from
-    /// the file name, and a wrong link costs more than a missing one; the
-    /// writer who wants the link adds a directory or a line number.
+    /// the file name; the writer who wants the link adds a directory or a
+    /// line number.
     #[rule("rule_wiki_reference_links")]
     pub fn resolve_at(&self, reference: &str, commit: Option<&str>) -> EvidenceRef {
         let label = reference.trim().to_string();

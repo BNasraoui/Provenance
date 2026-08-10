@@ -111,20 +111,18 @@ impl StateStore {
 /// touches ground the proposal already claims. The returned reasons are those
 /// overlaps; an empty list means the proposal stays out of the worker's way.
 ///
-/// Undisposed is the precondition, and it is read from the projected promotion
-/// state rather than the state the stored row claims: only `proposed` and
-/// `asserted` pass. Once a human accepts, rejects, or defers a proposal, or it
-/// is marked duplicate or superseded, it never surfaces again, however well it
-/// matches.
+/// Undisposed is read from the projected promotion state rather than the state
+/// the stored row claims: only `proposed` and `asserted` pass. Once a human
+/// accepts, rejects, or defers a proposal, or it is marked duplicate or
+/// superseded, it never surfaces again, however well it matches.
 ///
 /// Either trigger alone surfaces the proposal:
 /// - evidence site: the work touches a file the proposal cited as evidence;
-/// - territory: the work lands on the artifact the proposal is about.
+/// - territory: the work lands on the artifact the proposal is about, matched
+///   on both artifact type and id.
 ///
 /// Every reason names the overlap that produced it, so the worker can see why
-/// the proposal arrived. An evidence-site reason names a path the proposal
-/// cited and the work touched; a territory reason names a demanded target that
-/// equals the proposal's own target, matched on both artifact type and id.
+/// the proposal arrived.
 #[rule("rule_proposal_surfacing")]
 pub(super) fn surfacing_reasons(
     proposal: &ProposalCard,

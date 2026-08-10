@@ -22,19 +22,15 @@ pub fn choose_canonical_active_thread(threads: &[Thread]) -> Option<&Thread> {
 /// Archives every active thread of a record apart from the canonical one.
 ///
 /// A record can carry several active threads. When a write picks the canonical
-/// one (`rule_canonical_thread`), the same write archives every other active
-/// thread of that record, so the record converges to one active thread.
-/// Threads that are resolved or archived keep the status they have, and
-/// threads belonging to other records are left alone.
+/// one, the same write archives every other active thread of that record, so
+/// the record converges to one active thread. Threads that are resolved or
+/// archived keep the status they have, and threads belonging to other records
+/// are left alone.
 ///
-/// This is where the store enforces `rule_prov_ideate_032`, which states that
-/// concurrent posting for the same parent artifact must end with exactly one
-/// active thread for that parent. It enforces it by reconciling, not by
-/// refusing: no write is rejected for adding a second active thread, and
-/// nothing sweeps the whole shard. A posting write leaves the record it posts
-/// to holding exactly one active thread, so a record that somehow gained
-/// duplicates is repaired the next time anyone posts to it, and a record
-/// nobody posts to keeps them.
+/// This reconciles rather than refuses: no write is rejected for adding a
+/// second active thread, and nothing sweeps the whole shard. A record that
+/// somehow gained duplicates is repaired the next time anyone posts to it, and
+/// a record nobody posts to keeps them.
 #[rule("rule_thread_siblings_archived")]
 pub fn archive_non_canonical_siblings(
     threads: &mut [Thread],

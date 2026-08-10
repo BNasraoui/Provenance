@@ -15,10 +15,7 @@ use serde::{de::Error, Deserialize, Deserializer};
 /// agree on the verdict and differ only in the remedy: the graph channel
 /// rejects the record, while the annotation channel warns on the line and
 /// falls back to the default 1.0, since one bad comment must not stop a scan
-/// of the repository. The conformance test
-/// `scanner_and_core_agree_on_which_confidences_are_in_range` in
-/// `provenance-scanner/tests/confidence_conformance.rs` pushes generated
-/// values through both and asserts the verdicts match.
+/// of the repository.
 #[rule("rule_confidence_range")]
 pub fn validate_confidence_score(confidence: f64) -> anyhow::Result<()> {
     anyhow::ensure!(
@@ -59,11 +56,8 @@ where
 /// tells a reader where to go and look, and an abbreviation does that. A
 /// reference commit identifies: it is part of a claim about a repository the
 /// holder cannot read, so an abbreviation that later grows ambiguous would
-/// name two different commits. The strict shape lives in
-/// `rule_reference_wellformed`
-/// (`provenance-store/src/graph_reference.rs`, `validate`) and is a separate
-/// rule; loosening that one or tightening this one is a decision to be taken
-/// on its own, not a divergence to be tidied away.
+/// name two different commits. The gap between the two is a decision, not a
+/// divergence to be tidied away.
 #[rule("rule_source_commit_pin")]
 pub fn validate_commit_pin(commit_pin: &str) -> anyhow::Result<()> {
     anyhow::ensure!(
@@ -96,12 +90,10 @@ where
 
 /// Decides what a resolution input must say.
 ///
-/// An input that names nothing locates nothing. Both fields carry the whole
-/// weight of it: the reference says where the input came from, and the summary
-/// says what it told the decision. A blank one leaves a resolution claiming to
-/// have been informed by something nobody can name. So a blank field is
-/// refused rather than repaired, because a reference filled in later reads
-/// exactly like one that was there when the decision was made.
+/// An input that names nothing locates nothing: the reference says where the
+/// input came from and the summary says what it told the decision, so a blank
+/// field is refused rather than repaired, because a reference filled in later
+/// reads exactly like one that was there when the decision was made.
 ///
 /// Blank means empty or nothing but whitespace. The reference is not resolved:
 /// it may name a record in the graph, a file in this repository, a clause of

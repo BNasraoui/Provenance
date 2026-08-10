@@ -65,11 +65,10 @@ pub type CanonicalRecord = Value;
 /// record: it merges untyped JSON and never inspects a field other than `id`.
 /// A merged set can therefore hold a record that no writer would have accepted,
 /// because each side's record was legal on its own branch and only the
-/// combination is not. Writing a merged shard is a write like any other, so the
-/// caller must put the merged records back through the write gate before they
-/// land: [`validate_merged_records`] re-checks them against the type the shard
-/// holds, and the merge fails rather than storing an invalid record. The two
-/// compose - this rule picks the survivor, the gate rejects it if it is illegal.
+/// combination is not. The caller must put the merged records back through the
+/// write gate before they land: [`validate_merged_records`] re-checks them
+/// against the type the shard holds, and the merge fails rather than storing an
+/// invalid record.
 #[rule("rule_record_merge")]
 pub fn merge_records(
     base: &[CanonicalRecord],

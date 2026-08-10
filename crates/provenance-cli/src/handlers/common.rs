@@ -19,17 +19,9 @@ use std::borrow::Cow;
 /// `required` and `optional` hold how many times each flag in the family was
 /// given. The number of records is what the required flags agree on, so an
 /// incomplete family is one where they disagree, or where an optional flag
-/// was given a number of times that fits no record.
-///
-/// Four families ride on this. `--input-type`, `--input-reference` and
-/// `--input-summary` repeat to name one `ResolutionInput` each, and all three
-/// are required. `--canonical-artifact-type` and `--canonical-artifact-id`
-/// name at most one `CanonicalArtifact`, and both are required.
-/// `--source-id` and `--source-clause` name at most one `SourceReference`,
-/// whose clause is optional. `--target-type` and `--target-id` name at most
-/// one `IdeationTarget` for `proposals surface`, and both are required. Each
-/// caller phrases its own rejection, because the flag names are what the
-/// operator needs to read back.
+/// was given a number of times that fits no record. Each caller phrases its
+/// own rejection, because the flag names are what the operator needs to read
+/// back.
 #[rule("rule_flag_sets_complete")]
 pub(super) fn complete_flag_set(required: &[usize], optional: &[usize]) -> bool {
     let records = required.first().copied().unwrap_or(0);

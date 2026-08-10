@@ -380,19 +380,15 @@ fn write_managed_file(
 }
 
 /// An install run reports the strongest change any one of its files
-/// underwent, answering with one of the three outcomes that can describe a
-/// whole run: "unchanged", "installed" or "updated". A file rewritten or
-/// deleted ("updated", "removed") makes the
-/// whole run "updated"; failing that, a file newly written or newly linked
-/// ("installed", "linked") makes it "installed"; only when every file already
-/// matched what provenance would write is the run "unchanged". Order and
-/// repetition carry no weight: the run status depends on which outcomes
-/// occurred, not how many times or in what sequence.
+/// underwent: "unchanged", "installed" or "updated". A file rewritten or
+/// deleted makes the whole run "updated"; failing that, a file newly written
+/// or newly linked makes it "installed"; only when every file already matched
+/// what provenance would write is the run "unchanged". Order and repetition
+/// carry no weight.
 ///
-/// Nothing branches on the answer - `provenance skills install` prints it and
-/// exits - but it is the one line a reader takes as the account of the run, so
-/// it must never claim less than happened (a rewrite reported as "unchanged")
-/// or more (a no-op reported as "updated").
+/// Nothing branches on the answer, but it is the one line a reader takes as
+/// the account of the run, so it must never claim less than happened (a
+/// rewrite reported as "unchanged") or more (a no-op reported as "updated").
 #[rule("rule_install_run_status")]
 fn combined_status(files: &[FileInstallReport]) -> FileStatus {
     if files

@@ -230,29 +230,16 @@ impl DocsSite {
     /// document it names has to be a page the site actually publishes.
     /// Every destination that names a `.md` file relative to the page it is
     /// written on is joined onto that page's directory, normalized, and
-    /// looked up among the pages loaded from the repo. A destination with
-    /// no page behind it is reported, naming the page it was written on and
-    /// the path it resolved to. The site's own page list is the authority:
-    /// a markdown file that exists on disk but that the site does not
-    /// publish (a `README.md` shadowed by `docs/index.md`, say) is not a
-    /// target.
+    /// looked up among the pages loaded from the repo. The site's own page
+    /// list is the authority: a markdown file that exists on disk but that
+    /// the site does not publish (a `README.md` shadowed by `docs/index.md`,
+    /// say) is not a target.
     ///
-    /// Deliberately out of scope, and never reported:
-    ///
-    /// - a bare `#anchor`, which names a place on the page rather than a
-    ///   document;
-    /// - an absolute path such as `/guide/install.md`, which names a served
-    ///   route or a file outside the docs tree, neither of which this site
-    ///   resolves;
-    /// - any destination carrying a URL scheme (`https:`, `http:`,
-    ///   `mailto:`), which points off this site entirely;
-    /// - a destination that does not end in `.md`, which is not one of this
-    ///   site's documents;
-    /// - the fragment hanging off a local destination
-    ///   (`guide/install.md#usage`), which is cut off before resolution:
-    ///   the page has to exist, the heading inside it need not;
-    /// - images (`![alt](x.md)`), which the link extraction below does not
-    ///   collect.
+    /// Deliberately out of scope, and never reported: a bare `#anchor`, an
+    /// absolute path, any destination carrying a URL scheme, a destination
+    /// that does not end in `.md`, the fragment hanging off a local
+    /// destination (the page has to exist, the heading inside it need not),
+    /// and images.
     ///
     /// The server resolves a link with the same two functions
     /// (`local_markdown_path` and `resolve_markdown_link`) before rewriting
