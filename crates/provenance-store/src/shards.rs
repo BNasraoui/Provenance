@@ -59,20 +59,6 @@ pub fn rules_path(layout: &ProvenanceLayout, scope: &ScopeId) -> Utf8PathBuf {
         .join("rules/rule.jsonl")
 }
 
-pub fn services_path(layout: &ProvenanceLayout, scope: &ScopeId) -> Utf8PathBuf {
-    layout
-        .scopes_dir()
-        .join(scope.as_str())
-        .join("services/service.jsonl")
-}
-
-pub fn service_bindings_path(layout: &ProvenanceLayout, scope: &ScopeId) -> Utf8PathBuf {
-    layout
-        .scopes_dir()
-        .join(scope.as_str())
-        .join("services/service_binding.jsonl")
-}
-
 pub fn threads_path(layout: &ProvenanceLayout, scope: &ScopeId) -> Utf8PathBuf {
     layout
         .scopes_dir()

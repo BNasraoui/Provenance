@@ -5,7 +5,7 @@ use crate::wiki::model::GapKind;
 use provenance_core::{
     Edge, EdgeType, Message, MessageRole, NodeType, Question, QuestionStatus, Requirement,
     RequirementStatus, Resolution, ResolutionInput, ResolutionInputType, ResolutionMethod,
-    ResolutionStatus, Rule, RuleModality, RuleSeverity, RuleStatus, SchemaVersion, ScopeId, Source,
+    ResolutionStatus, Rule, RuleSeverity, RuleStatus, SchemaVersion, ScopeId, Source,
     SourceReference, SourceType, StableId, Thread, ThreadParent, ThreadStatus, Topic, TopicStatus,
 };
 use provenance_store::cache::{compute_gaps, GapGraph, GapItem};
@@ -62,21 +62,16 @@ pub(super) fn resolution(id: &str, title: &str, inputs: Vec<ResolutionInput>) ->
     }
 }
 
-pub(super) fn rule(id: &str, rule_code: &str, name: Option<&str>) -> Rule {
+pub(super) fn rule(id: &str, name: Option<&str>) -> Rule {
     Rule {
         schema_version: SchemaVersion(1),
         scope_id: scope_id(),
         id: sid(id),
-        rule_code: rule_code.to_string(),
         name: name.map(str::to_string),
         description: None,
         statement: "Claim items shall be grouped by participant".to_string(),
         status: RuleStatus::Active,
         severity: RuleSeverity::High,
-        rule_type: None,
-        modality: Some(RuleModality::Obligation),
-        confidence: None,
-        extraction_method: None,
         source_document: Some("src/UseCase.php".to_string()),
         source_section: Some("59-69".to_string()),
         origin_thread: None,
@@ -191,8 +186,6 @@ pub(super) fn empty_state() -> ScopeExport {
         questions: vec![],
         resolutions: vec![],
         rules: vec![],
-        services: vec![],
-        service_bindings: vec![],
         edges: vec![],
         threads: vec![],
         messages: vec![],
@@ -262,12 +255,8 @@ fn fixture_resolutions() -> Vec<Resolution> {
 
 fn fixture_rules() -> Vec<Rule> {
     vec![
-        rule(
-            "rule_001",
-            "SAH-INV-001",
-            Some("Invoices grouped by participant"),
-        ),
-        rule("rule_orphan", "SAH-INV-999", None),
+        rule("rule_001", Some("Invoices grouped by participant")),
+        rule("rule_orphan", None),
     ]
 }
 

@@ -3,10 +3,7 @@ use provenance_core::{
 };
 use provenance_store::{
     layout::ProvenanceLayout,
-    state_store::{
-        CreateDomainInput, CreateRequirementInput, CreateRuleInput, CreateServiceBindingInput,
-        CreateServiceInput, StateStore,
-    },
+    state_store::{CreateDomainInput, CreateRequirementInput, CreateRuleInput, StateStore},
 };
 
 fn seeded_store() -> (tempfile::TempDir, StateStore, ScopeId) {
@@ -27,7 +24,7 @@ fn seeded_store() -> (tempfile::TempDir, StateStore, ScopeId) {
     (dir, StateStore::new(layout), scope)
 }
 
-fn seed_domain_rule_and_service(store: &StateStore, scope: &ScopeId) {
+fn seed_domains_and_rule(store: &StateStore, scope: &ScopeId) {
     store
         .create_domain(CreateDomainInput {
             scope_id: scope.clone(),
@@ -62,7 +59,6 @@ fn seed_domain_rule_and_service(store: &StateStore, scope: &ScopeId) {
         .create_rule(CreateRuleInput {
             scope_id: scope.clone(),
             id: StableId::new("rule_overtime").unwrap(),
-            rule_code: "PAY-001".into(),
             name: None,
             description: None,
             requirement_id: Some(StableId::new("req_overtime").unwrap()),
@@ -70,46 +66,19 @@ fn seed_domain_rule_and_service(store: &StateStore, scope: &ScopeId) {
             statement: "Pay overtime after threshold".into(),
             status: RuleStatus::Active,
             severity: RuleSeverity::High,
-            rule_type: None,
-            modality: None,
-            confidence: None,
-            extraction_method: None,
             source_document: None,
             source_section: None,
             origin_thread: None,
             origin_message: None,
         })
         .unwrap();
-    store
-        .create_service(CreateServiceInput {
-            scope_id: scope.clone(),
-            id: StableId::new("service_payroll_api").unwrap(),
-            name: "payroll-api".into(),
-            description: Some("Calculates payroll".into()),
-            owner: Some("platform".into()),
-            repository: Some("github.com/example/payroll-api".into()),
-            environment: Some(provenance_core::ServiceEnvironment::Production),
-            tier: Some(provenance_core::ServiceTier::Critical),
-            external_id: Some("backstage:component/payroll-api".into()),
-            status: provenance_core::ServiceStatus::Active,
-        })
-        .unwrap();
 }
 
 #[test]
-fn domain_service_records_are_written_deterministically_and_validate_bindings() {
+fn domain_records_are_written_deterministically_and_claimed_by_requirements() {
     let (_dir, store, scope) = seeded_store();
 
-    seed_domain_rule_and_service(&store, &scope);
-
-    let binding = store
-        .create_service_binding(CreateServiceBindingInput {
-            scope_id: scope.clone(),
-            rule_id: StableId::new("rule_overtime").unwrap(),
-            service_id: StableId::new("service_payroll_api").unwrap(),
-            binding_type: provenance_core::ServiceBindingType::Enforces,
-        })
-        .unwrap();
+    seed_domains_and_rule(&store, &scope);
 
     assert_eq!(
         store.list_domains(&scope).unwrap()[0].id.as_str(),
@@ -123,18 +92,23 @@ fn domain_service_records_are_written_deterministically_and_validate_bindings() 
             .as_str(),
         "domain_payroll"
     );
-    assert_eq!(
-        binding.id.as_str(),
-        "service_binding_rule_overtime_service_payroll_api_enforces"
-    );
+}
+
+#[test]
+fn a_second_domain_with_the_same_name_is_refused() {
+    let (_dir, store, scope) = seeded_store();
+
+    seed_domains_and_rule(&store, &scope);
+
     assert!(store
-        .create_service_binding(CreateServiceBindingInput {
+        .create_domain(CreateDomainInput {
             scope_id: scope,
-            rule_id: StableId::new("rule_missing").unwrap(),
-            service_id: StableId::new("service_payroll_api").unwrap(),
-            binding_type: provenance_core::ServiceBindingType::Consumes,
+            id: StableId::new("domain_payroll_again").unwrap(),
+            name: "Payroll".into(),
+            description: None,
+            color: None,
         })
         .unwrap_err()
         .to_string()
-        .contains("rule does not exist"));
+        .contains("domain name already exists"));
 }

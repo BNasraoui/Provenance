@@ -198,48 +198,6 @@ impl RuleSeverity {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum RuleType {
-    #[serde(rename = "business")]
-    Business,
-    #[serde(rename = "functional")]
-    Functional,
-    #[serde(rename = "technical")]
-    Technical,
-}
-
-impl RuleType {
-    pub fn parse(value: &str) -> anyhow::Result<Self> {
-        match normalize_enum_value(value).as_str() {
-            "business" => Ok(Self::Business),
-            "functional" => Ok(Self::Functional),
-            "technical" => Ok(Self::Technical),
-            _ => anyhow::bail!("rule type must be business, functional, or technical"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum RuleModality {
-    #[serde(rename = "obligation")]
-    Obligation,
-    #[serde(rename = "prohibition")]
-    Prohibition,
-    #[serde(rename = "necessity")]
-    Necessity,
-}
-
-impl RuleModality {
-    pub fn parse(value: &str) -> anyhow::Result<Self> {
-        match normalize_enum_value(value).as_str() {
-            "obligation" => Ok(Self::Obligation),
-            "prohibition" => Ok(Self::Prohibition),
-            "necessity" => Ok(Self::Necessity),
-            _ => anyhow::bail!("rule modality must be obligation, prohibition, or necessity"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Source {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,
@@ -407,13 +365,11 @@ pub struct Resolution {
     pub origin_message: Option<StableId>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Rule {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,
     pub id: StableId,
-    #[serde(alias = "ruleCode")]
-    pub rule_code: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -421,22 +377,6 @@ pub struct Rule {
     pub statement: String,
     pub status: RuleStatus,
     pub severity: RuleSeverity,
-    #[serde(default, alias = "ruleType", skip_serializing_if = "Option::is_none")]
-    pub rule_type: Option<RuleType>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub modality: Option<RuleModality>,
-    #[serde(
-        default,
-        deserialize_with = "deserialize_optional_confidence",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub confidence: Option<f64>,
-    #[serde(
-        default,
-        alias = "extractionMethod",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub extraction_method: Option<String>,
     #[serde(
         default,
         alias = "sourceDocument",

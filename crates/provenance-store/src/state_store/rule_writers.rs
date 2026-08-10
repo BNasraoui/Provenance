@@ -1,8 +1,6 @@
 use super::{CreateResolutionInput, CreateRuleInput, StateStore};
 use crate::shards;
-use provenance_core::{
-    validate_optional_confidence_score, EdgeType, NodeType, Resolution, Rule, SchemaVersion,
-};
+use provenance_core::{EdgeType, NodeType, Resolution, Rule, SchemaVersion};
 
 impl StateStore {
     pub fn create_resolution(&self, input: CreateResolutionInput) -> anyhow::Result<Resolution> {
@@ -29,7 +27,6 @@ impl StateStore {
             origin_thread,
             origin_message,
         } = input;
-        let confidence = validate_optional_confidence_score(confidence)?;
         if let Some(requirement_id) = &requirement_id {
             anyhow::ensure!(
                 self.list_requirements(&scope_id)?
@@ -97,7 +94,6 @@ impl StateStore {
         let CreateRuleInput {
             scope_id,
             id,
-            rule_code,
             name,
             description,
             requirement_id,
@@ -105,16 +101,11 @@ impl StateStore {
             statement,
             status,
             severity,
-            rule_type,
-            modality,
-            confidence,
-            extraction_method,
             source_document,
             source_section,
             origin_thread,
             origin_message,
         } = input;
-        let confidence = validate_optional_confidence_score(confidence)?;
         if let Some(requirement_id) = &requirement_id {
             anyhow::ensure!(
                 self.list_requirements(&scope_id)?
@@ -137,16 +128,11 @@ impl StateStore {
                 schema_version: SchemaVersion(1),
                 scope_id: scope_id.clone(),
                 id: id.clone(),
-                rule_code,
                 name,
                 description,
                 statement,
                 status,
                 severity,
-                rule_type,
-                modality,
-                confidence,
-                extraction_method,
                 source_document,
                 source_section,
                 origin_thread,

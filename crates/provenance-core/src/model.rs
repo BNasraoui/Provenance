@@ -11,8 +11,7 @@ mod validation;
 
 pub use artifacts::{
     Requirement, RequirementStatus, Resolution, ResolutionInput, ResolutionInputType,
-    ResolutionStatus, Rule, RuleModality, RuleSeverity, RuleStatus, RuleType, Source,
-    SourceReference, SourceType,
+    ResolutionStatus, Rule, RuleSeverity, RuleStatus, Source, SourceReference, SourceType,
 };
 pub use collaboration::{Message, MessageRole, Thread, ThreadParent, ThreadStatus};
 pub use graph::{Edge, EdgeType, NodeType};
@@ -44,10 +43,7 @@ pub use ideation::{
 };
 pub use ids::{SchemaVersion, ScopeId, StableId};
 pub use manifest::{Manifest, RepoPathPrefix, Scope};
-pub use services::{
-    Domain, Service, ServiceBinding, ServiceBindingType, ServiceEnvironment, ServiceStatus,
-    ServiceTier,
-};
+pub use services::Domain;
 pub use shaping::{
     ArtifactLink, ArtifactLinkTargetType, Boundary, Question, QuestionStatus, ResolutionMethod,
     Topic, TopicStatus,

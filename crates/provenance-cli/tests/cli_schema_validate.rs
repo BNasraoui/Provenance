@@ -22,8 +22,6 @@ fn graph_with_source(source: &Value) -> Value {
         "questions": [],
         "resolutions": [],
         "rules": [],
-        "services": [],
-        "service_bindings": [],
         "edges": []
     })
 }

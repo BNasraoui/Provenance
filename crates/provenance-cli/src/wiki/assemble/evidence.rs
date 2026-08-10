@@ -54,12 +54,10 @@ impl Assembler<'_> {
     pub(super) fn rule_card(&self, rule: &Rule) -> RuleCard {
         RuleCard {
             link: rule_link(rule),
-            rule_code: rule.rule_code.clone(),
             name: rule.name.clone(),
             statement: rule.statement.clone(),
             status: rule.status.clone(),
             severity: rule.severity.clone(),
-            modality: rule.modality.clone(),
             evidence: self.rule_evidence(rule),
         }
     }

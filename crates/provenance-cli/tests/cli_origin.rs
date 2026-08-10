@@ -144,8 +144,6 @@ fn cli_create_commands_preserve_origin_thread_and_message() {
         "default",
         "--id",
         "rule_origin",
-        "--rule-code",
-        "ORIGIN-001",
         "--requirement-id",
         "req_origin_child",
         "--resolution-id",

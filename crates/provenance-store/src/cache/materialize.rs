@@ -53,8 +53,6 @@ async fn clear_cache(tx: &mut Transaction<'_, Sqlite>) -> anyhow::Result<()> {
         "edges",
         "resolutions",
         "rules",
-        "services",
-        "service_bindings",
         "messages",
         "threads",
         "contributions",

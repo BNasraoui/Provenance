@@ -13,7 +13,8 @@ JSONL under `.provenance/state/` with a derived SQLite cache.
 
 - `crates/provenance-core` — domain model (nodes, edges, validation)
 - `crates/provenance-store` — JSONL state store, shards, SQLite cache, migrations
-- `crates/provenance-scanner` — code annotation scanner and coverage
+- `crates/provenance-macros` — the `#[rule]` and `#[verifies]` marker attributes
+- `crates/provenance-scanner` — reads those markers, and legacy `@provenance` comments, and reports rule coverage
 - `crates/provenance-cli` — CLI; integration tests in `crates/provenance-cli/tests/`
 
 Schema-porting beads reference the original Convex schema as source of truth:

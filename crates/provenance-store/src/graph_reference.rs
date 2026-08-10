@@ -82,8 +82,6 @@ pub struct GraphCounts {
     pub questions: usize,
     pub resolutions: usize,
     pub rules: usize,
-    pub services: usize,
-    pub service_bindings: usize,
     pub edges: usize,
 }
 
@@ -331,8 +329,6 @@ impl From<&GraphExport> for GraphCounts {
             questions: graph.questions.len(),
             resolutions: graph.resolutions.len(),
             rules: graph.rules.len(),
-            services: graph.services.len(),
-            service_bindings: graph.service_bindings.len(),
             edges: graph.edges.len(),
         }
     }

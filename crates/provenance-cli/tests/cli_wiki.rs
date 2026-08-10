@@ -65,7 +65,7 @@ fn wiki_build_writes_static_pages_and_stylesheet() {
         requirement.contains("Support at Home shall be traceable"),
         "{requirement}"
     );
-    assert!(requirement.contains("SAH-001"), "{requirement}");
+    assert!(requirement.contains("rule_sah_001"), "{requirement}");
     assert!(
         requirement.contains("href=\"/assets/provenance-wiki.css\""),
         "{requirement}"
@@ -370,13 +370,10 @@ fn seed_state(dir: &std::path::Path, repo: &str) {
     "schema_version": 1,
     "scope_id": "default",
     "id": "rule_sah_001",
-    "rule_code": "SAH-001",
     "name": "SAH rule",
     "statement": "Draft rule shall stay draft",
     "status": "active",
     "severity": "high",
-    "rule_type": "business",
-    "modality": "obligation",
     "source_document": "Example-API-main/src/example.php",
     "source_section": "lines 1-3"
   }],

@@ -25,7 +25,7 @@ fn discovery_indexes_requirement_and_rule_titles_and_statements() {
         RequirementStatus::Active,
         vec![],
     )];
-    state.rules = vec![rule("rule_invoice", "INV-1", Some("Group invoices"))];
+    state.rules = vec![rule("rule_invoice", Some("Group invoices"))];
 
     let corpus = build_corpus(&state, &LinkResolver::new(None));
 
@@ -56,7 +56,7 @@ fn domains_group_rules_through_canonical_requirement_relationships() {
         RequirementStatus::Active,
         vec![],
     )];
-    state.rules = vec![rule("rule_invoice", "INV-1", Some("Group invoices"))];
+    state.rules = vec![rule("rule_invoice", Some("Group invoices"))];
     state.edges = vec![edge(
         EdgeType::Produces,
         (NodeType::Requirement, "req_invoice"),
@@ -90,7 +90,7 @@ fn domains_group_children_and_rules_by_their_root_requirement_domain() {
     );
     child.domain_id = None;
     state.requirements = vec![root, child];
-    state.rules = vec![rule("rule_invoice", "INV-1", Some("Group invoices"))];
+    state.rules = vec![rule("rule_invoice", Some("Group invoices"))];
     state.edges = vec![
         edge(
             EdgeType::RefinesInto,
@@ -136,8 +136,8 @@ fn domains_surface_defined_missing_and_unassigned_without_dropping_rules() {
     unassigned.domain_id = None;
     state.requirements = vec![defined, missing, unassigned];
     state.rules = vec![
-        rule("rule_missing", "MISS-1", Some("Missing rule")),
-        rule("rule_unassigned", "NONE-1", Some("Unassigned rule")),
+        rule("rule_missing", Some("Missing rule")),
+        rule("rule_unassigned", Some("Unassigned rule")),
     ];
     state.edges = vec![
         edge(

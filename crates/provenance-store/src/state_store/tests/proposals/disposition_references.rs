@@ -349,7 +349,7 @@ fn misfiled_canonical_records() -> [(&'static str, &'static str); 4] {
         ),
         (
             "rule",
-            r#"{"schema_version":1,"scope_id":"other","id":"artifact_misfiled","rule_code":"MISFILED","statement":"Misfiled","status":"draft","severity":"high"}"#,
+            r#"{"schema_version":1,"scope_id":"other","id":"artifact_misfiled","statement":"Misfiled","status":"draft","severity":"high"}"#,
         ),
     ]
 }

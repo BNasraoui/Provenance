@@ -7,8 +7,8 @@
 
 use crate::wiki::links::{EvidenceRef, InlineRef};
 use provenance_core::{
-    MessageRole, NodeType, RequirementStatus, ResolutionInputType, ResolutionStatus, RuleModality,
-    RuleSeverity, RuleStatus, RuleType, SourceType, ThreadStatus,
+    MessageRole, NodeType, RequirementStatus, ResolutionInputType, ResolutionStatus, RuleSeverity,
+    RuleStatus, SourceType, ThreadStatus,
 };
 pub use provenance_store::cache::GapKind;
 use serde::Serialize;
@@ -196,14 +196,11 @@ pub struct DecisionSection {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RuleCard {
     pub link: PageLink,
-    pub rule_code: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub statement: String,
     pub status: RuleStatus,
     pub severity: RuleSeverity,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub modality: Option<RuleModality>,
     pub evidence: Vec<EvidenceRef>,
 }
 
@@ -289,24 +286,15 @@ pub struct ResolutionPage {
 }
 
 /// A rule detail page with its backward traceability chain.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RulePage {
     pub id: PageId,
     pub title: String,
-    pub rule_code: String,
     pub statement: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub status: RuleStatus,
     pub severity: RuleSeverity,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub modality: Option<RuleModality>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub rule_type: Option<RuleType>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub confidence: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub extraction_method: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_document: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

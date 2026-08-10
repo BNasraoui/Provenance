@@ -81,7 +81,6 @@ pub fn seeded_layout() -> (tempfile::TempDir, ProvenanceLayout, ScopeId) {
         .create_rule(CreateRuleInput {
             scope_id: scope.clone(),
             id: sid("rule_schads_pay_001"),
-            rule_code: "SCHADS-PAY-001".into(),
             name: None,
             description: None,
             requirement_id: Some(sid("req_schads_overtime")),
@@ -89,10 +88,6 @@ pub fn seeded_layout() -> (tempfile::TempDir, ProvenanceLayout, ScopeId) {
             statement: "Pay overtime after the threshold".into(),
             status: RuleStatus::Active,
             severity: RuleSeverity::High,
-            rule_type: None,
-            modality: None,
-            confidence: None,
-            extraction_method: None,
             source_document: None,
             source_section: None,
             origin_thread: None,

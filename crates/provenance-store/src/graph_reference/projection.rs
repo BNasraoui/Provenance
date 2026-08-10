@@ -2,8 +2,8 @@ use super::GraphReferenceError;
 use crate::{layout::ProvenanceLayout, state_store::StateStore};
 use camino::Utf8Path;
 use provenance_core::{
-    Boundary, Domain, Edge, Question, Requirement, Resolution, Rule, Scope, ScopeId, Service,
-    ServiceBinding, Source, Topic, SUPPORTED_SCHEMA_VERSION,
+    Boundary, Domain, Edge, Question, Requirement, Resolution, Rule, Scope, ScopeId, Source, Topic,
+    SUPPORTED_SCHEMA_VERSION,
 };
 use provenance_macros::rule;
 use serde::{Deserialize, Serialize};
@@ -21,6 +21,11 @@ use serde::{Deserialize, Serialize};
 /// cannot leave (`load_projection` has nowhere to put it) and cannot come
 /// back (`deny_unknown_fields` refuses a document that names it). Adding a
 /// field is how the rule changes; there is no other way to break it.
+///
+/// Deleting a field works the same way in reverse. Services and service
+/// bindings once travelled here; with their fields gone, a pinned graph that
+/// names them is refused on the way in, like any other family the projection
+/// has no room for.
 #[rule("rule_pinned_graph_families")]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -35,8 +40,6 @@ pub struct GraphExport {
     pub questions: Vec<Question>,
     pub resolutions: Vec<Resolution>,
     pub rules: Vec<Rule>,
-    pub services: Vec<Service>,
-    pub service_bindings: Vec<ServiceBinding>,
     pub edges: Vec<Edge>,
 }
 
@@ -78,10 +81,6 @@ pub(super) fn load_projection(
         questions: store.closed_questions(&scope_id).map_err(incomplete)?,
         resolutions: store.closed_resolutions(&scope_id).map_err(incomplete)?,
         rules: store.closed_rules(&scope_id).map_err(incomplete)?,
-        services: store.closed_services(&scope_id).map_err(incomplete)?,
-        service_bindings: store
-            .closed_service_bindings(&scope_id)
-            .map_err(incomplete)?,
         edges: store.closed_edges(&scope_id).map_err(incomplete)?,
     };
     graph.validate_schema_versions()?;
@@ -118,8 +117,6 @@ impl GraphExport {
         require_v1!(&self.questions, "question");
         require_v1!(&self.resolutions, "resolution");
         require_v1!(&self.rules, "rule");
-        require_v1!(&self.services, "service");
-        require_v1!(&self.service_bindings, "service binding");
         require_v1!(&self.edges, "edge");
         Ok(())
     }
@@ -235,12 +232,6 @@ fn sort_records(graph: &mut GraphExport) {
         .resolutions
         .sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
     graph.rules.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-    graph
-        .services
-        .sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-    graph
-        .service_bindings
-        .sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
     graph.edges.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
 }
 
@@ -283,8 +274,6 @@ pub(super) fn validate_scope_ownership(
     require_scope!(&graph.questions, "question");
     require_scope!(&graph.resolutions, "resolution");
     require_scope!(&graph.rules, "rule");
-    require_scope!(&graph.services, "service");
-    require_scope!(&graph.service_bindings, "service binding");
     require_scope!(&graph.edges, "edge");
     Ok(())
 }

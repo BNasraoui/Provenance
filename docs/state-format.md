@@ -4,7 +4,9 @@
 
 Scopes live in `manifest.json`; shard paths derive from scope IDs. Cache files and volatile fields are forbidden in state shards.
 
-Schema version `1` includes the local graph fields plus imported/cloud review metadata. Optional fields are omitted when absent, but preserved when present: domain grouping for root requirements, requirement descriptions and source references, source references/clauses/effective/review/supersession dates/commit pins, draft/review statuses, resolution context/enforcement/confidence/input references/actor approval/supersession metadata, resolved thread status, rule name/type/modality/confidence/extraction/source-location metadata, deployed services, rule-to-service bindings, proposal confidence, and material-claim confidence.
+Schema version `1` includes the local graph fields plus imported/cloud review metadata. Optional fields are omitted when absent, but preserved when present: domain grouping for root requirements, requirement descriptions and source references, source references/clauses/effective/review/supersession dates/commit pins, draft/review statuses, resolution context/enforcement/confidence/input references/actor approval/supersession metadata, resolved thread status, rule name/severity/status and the source-location binding (file and function symbol), proposal confidence, and material-claim confidence.
+
+No shard stores verification. Whether a rule is verified, and by which method, is read from the markers in the code by `provenance coverage scan --validate-rules`; an unverified rule is the absence of a marker, derived at scan time and never written.
 
 Modern proposal definitions are immutable `proposed` rows. Assertions live in
 `ideation/assertions.jsonl`; dispositions use `ideation/dispositions.jsonl`. Readers accept
@@ -49,6 +51,6 @@ recoverable on next access, and any import command that returns failure leaves t
 Graph reference v1 canonicalizes a selected scope into a JSON object with fixed graph
 families and records sorted by stable ID. JSON object keys are lexicographically ordered
 before SHA-256 hashing. The projection contains the selected manifest scope and its
-sources, domains, requirements, boundaries, topics, questions, resolutions, rules,
-services, service bindings, and edges. Threads, messages, contributions, synthesis
-packets, proposals, assertions, dispositions, cache data, and wiki output are excluded.
+sources, domains, requirements, boundaries, topics, questions, resolutions, rules, and
+edges. Threads, messages, contributions, synthesis packets, proposals, assertions,
+dispositions, cache data, and wiki output are excluded.

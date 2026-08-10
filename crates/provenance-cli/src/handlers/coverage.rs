@@ -3,7 +3,7 @@ use crate::output::{self, OutputFormat};
 use camino::Utf8PathBuf;
 use provenance_core::ScopeId;
 use provenance_store::{layout::ProvenanceLayout, state_store::StateStore};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
 pub(super) fn coverage_scan(
@@ -18,11 +18,10 @@ pub(super) fn coverage_scan(
     } else {
         Vec::new()
     };
-    // Comment annotations cite rule codes; attributes cite rule ids. Accept
-    // either name for either channel.
+    // Both channels — comment annotations and attributes — cite rule ids.
     let known_rules = rules
         .iter()
-        .flat_map(|rule| [rule.rule_code.clone(), rule.id.as_str().to_string()])
+        .map(|rule| rule.id.as_str().to_string())
         .collect::<BTreeSet<_>>();
     let mut scanner_warnings = if validate_rules {
         provenance_scanner::validate_annotations(&scans, known_rules.iter().cloned())
@@ -34,22 +33,26 @@ pub(super) fn coverage_scan(
             &scans,
             known_rules.iter().cloned(),
         ));
-        scanner_warnings.extend(unverified_rule_warnings(&rules, &scans));
     }
-    let warnings = scanner_warnings
-        .into_iter()
-        .map(|warning| provenance_core::coverage::ValidationWarning {
-            rule_code: warning.rule_code,
-            file_path: warning.file_path,
-            line: warning.line,
+    // Scanner warnings all come from a line the scan read, so each keeps its
+    // location. Unverified rules are joined on after, without one.
+    let mut warnings = parse_warnings(&scans);
+    warnings.extend(scanner_warnings.into_iter().map(|warning| {
+        provenance_core::coverage::ValidationWarning {
+            rule_id: warning.rule_id,
+            file_path: Some(warning.file_path),
+            line: Some(warning.line),
             message: warning.message,
-        })
-        .collect::<Vec<_>>();
+        }
+    }));
+    if validate_rules {
+        warnings.extend(unverified_rule_warnings(&rules, &scans));
+    }
     let annotations = scans
         .iter()
         .flat_map(|scan| &scan.annotations)
         .map(|location| provenance_core::coverage::AnnotationResult {
-            rule_code: location.annotation.rule.clone(),
+            rule_id: location.annotation.rule.clone(),
             file_path: location.file_path.clone(),
             line: location.line,
             function_name: location.function_name.clone(),
@@ -77,13 +80,48 @@ pub(super) fn coverage_scan(
     ))
 }
 
+/// What the parser complained about while reading the files: a legacy
+/// `@statesman` marker, a directive with no `key: value`, a confidence outside
+/// the range, an unknown field.
+///
+/// These name a file and a line but no rule. A malformed directive may never
+/// get as far as saying which rule it meant, and inventing one would send a
+/// reader after a rule that does not exist. The empty `rule_id` is what an
+/// absent subject looks like, and the render leaves it out.
+///
+/// They are reported whether or not `--validate-rules` was passed: nothing
+/// here is checked against the graph, so the scan owes them either way. Before
+/// this, every one of them was dropped on the floor.
+fn parse_warnings(
+    scans: &[provenance_scanner::FileScan],
+) -> Vec<provenance_core::coverage::ValidationWarning> {
+    scans
+        .iter()
+        .flat_map(|scan| {
+            scan.warnings
+                .iter()
+                .map(|warning| provenance_core::coverage::ValidationWarning {
+                    rule_id: String::new(),
+                    file_path: Some(scan.file_path.clone()),
+                    line: Some(warning.line),
+                    message: warning.message.clone(),
+                })
+        })
+        .collect()
+}
+
 /// An active rule with no verification site anywhere — no `#[verifies]`
 /// attribute and no comment annotation carrying a `verification:` key — is
 /// unverified. That state is reported, never stored.
+///
+/// These warnings carry no file or line. There is no site to point at: that
+/// is the whole finding. The earlier version named the rule's
+/// `source_document` at line 0, which sent a reader to a policy document that
+/// has nothing to say about the missing test.
 fn unverified_rule_warnings(
     rules: &[provenance_core::Rule],
     scans: &[provenance_scanner::FileScan],
-) -> Vec<provenance_scanner::ValidationWarning> {
+) -> Vec<provenance_core::coverage::ValidationWarning> {
     let verified = scans
         .iter()
         .flat_map(|scan| {
@@ -102,14 +140,11 @@ fn unverified_rule_warnings(
     rules
         .iter()
         .filter(|rule| rule.status == provenance_core::RuleStatus::Active)
-        .filter(|rule| !verified.contains(rule.id.as_str()) && !verified.contains(&rule.rule_code))
-        .map(|rule| provenance_scanner::ValidationWarning {
-            rule_code: rule.id.as_str().to_string(),
-            file_path: rule
-                .source_document
-                .clone()
-                .map_or_else(|| Utf8PathBuf::from(""), Utf8PathBuf::from),
-            line: 0,
+        .filter(|rule| !verified.contains(rule.id.as_str()))
+        .map(|rule| provenance_core::coverage::ValidationWarning {
+            rule_id: rule.id.as_str().to_string(),
+            file_path: None,
+            line: None,
             message: format!("active rule `{}` has no verification", rule.id.as_str()),
         })
         .collect()
@@ -121,6 +156,55 @@ pub(super) fn current_git_commit() -> anyhow::Result<String> {
         .output()?;
     anyhow::ensure!(output.status.success(), "git rev-parse failed");
     Ok(String::from_utf8(output.stdout)?.trim().to_string())
+}
+
+/// Said of a verification site that lives in a different file from the
+/// `#[rule]` attribute it checks.
+const OUTSIDE_DEFINING_MODULE: &str = " (outside defining module)";
+
+/// Where each rule is defined: the file holding its `#[rule]` site, which the
+/// scanner reports as a binding with no verification method.
+///
+/// A rule with no `#[rule]` site in the scanned tree is absent from the map,
+/// and its verification sites are then left unannotated. Nothing is known
+/// about where it belongs, so nothing is claimed.
+fn defining_modules(
+    report: &provenance_core::coverage::CoverageReport,
+) -> BTreeMap<&str, &camino::Utf8Path> {
+    report
+        .bindings
+        .iter()
+        .filter(|binding| binding.verification.is_none())
+        .map(|binding| (binding.rule_id.as_str(), binding.file_path.as_path()))
+        .collect()
+}
+
+/// Whether this site checks a rule defined somewhere else.
+///
+/// This is what a change author wants out of the report: the sites that lean
+/// on the rule from outside the module that owns it, which is where a change
+/// to the rule breaks somebody else's tests.
+fn is_outside_defining_module(
+    binding: &provenance_core::coverage::BindingResult,
+    defining_modules: &BTreeMap<&str, &camino::Utf8Path>,
+) -> bool {
+    binding.verification.is_some()
+        && defining_modules
+            .get(binding.rule_id.as_str())
+            .is_some_and(|defining| *defining != binding.file_path.as_path())
+}
+
+/// The rule a warning is about, ready to sit after the word `Warning`.
+///
+/// Empty for a warning about no rule in particular, and then the line reads
+/// `- Warning in `path`:line: message`. An empty pair of backticks would only
+/// look like a rule whose name went missing.
+fn warning_subject(rule_id: &str) -> String {
+    if rule_id.is_empty() {
+        String::new()
+    } else {
+        format!(" `{rule_id}`")
+    }
 }
 
 pub(super) fn render_coverage(
@@ -136,9 +220,10 @@ pub(super) fn render_coverage(
             writeln!(
                 out,
                 "- `{}` in `{}`:{} ({})",
-                annotation.rule_code, annotation.file_path, annotation.line, annotation.coverage
+                annotation.rule_id, annotation.file_path, annotation.line, annotation.coverage
             )?;
         }
+        let defining_modules = defining_modules(report);
         for binding in &report.bindings {
             let relation = binding.verification.as_ref().map_or_else(
                 || "is the rule".to_string(),
@@ -146,7 +231,7 @@ pub(super) fn render_coverage(
             );
             writeln!(
                 out,
-                "- `{}` {} at `{}`:{}{}",
+                "- `{}` {} at `{}`:{}{}{}",
                 binding.rule_id,
                 relation,
                 binding.file_path,
@@ -155,15 +240,24 @@ pub(super) fn render_coverage(
                     .item_name
                     .as_deref()
                     .map(|name| format!(" ({name})"))
-                    .unwrap_or_default()
+                    .unwrap_or_default(),
+                if is_outside_defining_module(binding, &defining_modules) {
+                    OUTSIDE_DEFINING_MODULE
+                } else {
+                    ""
+                }
             )?;
         }
         for warning in &report.warnings {
-            writeln!(
-                out,
-                "- Warning `{}` in `{}`:{}: {}",
-                warning.rule_code, warning.file_path, warning.line, warning.message
-            )?;
+            let subject = warning_subject(&warning.rule_id);
+            match (&warning.file_path, warning.line) {
+                (Some(file_path), Some(line)) => writeln!(
+                    out,
+                    "- Warning{subject} in `{file_path}`:{line}: {}",
+                    warning.message
+                )?,
+                _ => writeln!(out, "- Warning{subject}: {}", warning.message)?,
+            }
         }
         Ok(out)
     } else {
@@ -203,159 +297,10 @@ pub(super) fn handle(command: CoverageCommand) -> anyhow::Result<()> {
 }
 
 #[cfg(test)]
-mod unverified_rule_warnings_tests {
-    use super::unverified_rule_warnings;
-    use camino::Utf8PathBuf;
-    use provenance_core::{Rule, RuleSeverity, RuleStatus, SchemaVersion, ScopeId, StableId};
-    use provenance_scanner::{
-        Annotation, AnnotationLocation, AttributeBinding, CoverageLevel, FileScan, Language,
-        Verification,
-    };
+mod parse_warning_tests;
 
-    fn rule(id: &str, rule_code: &str, status: RuleStatus) -> Rule {
-        Rule {
-            schema_version: SchemaVersion(1),
-            scope_id: ScopeId::new("default").unwrap(),
-            id: StableId::new(id).unwrap(),
-            rule_code: rule_code.to_string(),
-            name: None,
-            description: None,
-            statement: "Claims must be grouped by participant".to_string(),
-            status,
-            severity: RuleSeverity::High,
-            rule_type: None,
-            modality: None,
-            confidence: None,
-            extraction_method: None,
-            source_document: None,
-            source_section: None,
-            origin_thread: None,
-            origin_message: None,
-        }
-    }
+#[cfg(test)]
+mod render_tests;
 
-    fn empty_scan() -> FileScan {
-        FileScan {
-            file_path: Utf8PathBuf::from("src/lib.rs"),
-            language: Language::Rust,
-            annotations: Vec::new(),
-            bindings: Vec::new(),
-            warnings: Vec::new(),
-        }
-    }
-
-    fn scan_with_binding(rule_id: &str, verification: Option<Verification>) -> FileScan {
-        FileScan {
-            bindings: vec![AttributeBinding {
-                file_path: Utf8PathBuf::from("src/lib.rs"),
-                line: 1,
-                item_name: Some("checks_it".to_string()),
-                rule_id: rule_id.to_string(),
-                verification,
-            }],
-            ..empty_scan()
-        }
-    }
-
-    fn scan_with_annotation(rule_code: &str, verification: Option<Verification>) -> FileScan {
-        FileScan {
-            annotations: vec![AnnotationLocation {
-                file_path: Utf8PathBuf::from("src/lib.rs"),
-                line: 1,
-                function_name: Some("checks_it".to_string()),
-                annotation: Annotation {
-                    rule: rule_code.to_string(),
-                    name: None,
-                    description: None,
-                    tags: Vec::new(),
-                    coverage: CoverageLevel::Full,
-                    confidence: 1.0,
-                    intent: None,
-                    verification,
-                },
-            }],
-            ..empty_scan()
-        }
-    }
-
-    #[test]
-    fn active_rule_with_no_verification_warns() {
-        let active = rule("rule_foo", "FOO-001", RuleStatus::Active);
-
-        let warnings = unverified_rule_warnings(&[active], &[]);
-
-        assert_eq!(warnings.len(), 1);
-        assert_eq!(warnings[0].rule_code, "rule_foo");
-        assert!(warnings[0].message.contains("has no verification"));
-    }
-
-    #[test]
-    fn active_rule_verified_via_attribute_binding_does_not_warn() {
-        let active = rule("rule_foo", "FOO-001", RuleStatus::Active);
-        let scan = scan_with_binding("rule_foo", Some(Verification::Examples));
-
-        let warnings = unverified_rule_warnings(&[active], std::slice::from_ref(&scan));
-
-        assert!(warnings.is_empty());
-    }
-
-    #[test]
-    fn active_rule_verified_via_comment_annotation_does_not_warn() {
-        let active = rule("rule_foo", "FOO-001", RuleStatus::Active);
-        let scan = scan_with_annotation("FOO-001", Some(Verification::Conformance));
-
-        let warnings = unverified_rule_warnings(&[active], std::slice::from_ref(&scan));
-
-        assert!(warnings.is_empty());
-    }
-
-    #[test]
-    fn comment_annotation_without_a_verification_key_does_not_count() {
-        let active = rule("rule_foo", "FOO-001", RuleStatus::Active);
-        let scan = scan_with_annotation("FOO-001", None);
-
-        let warnings = unverified_rule_warnings(&[active], std::slice::from_ref(&scan));
-
-        assert_eq!(warnings.len(), 1);
-    }
-
-    #[test]
-    fn draft_and_deprecated_rules_never_warn() {
-        let draft = rule("rule_draft", "DRAFT-001", RuleStatus::Draft);
-        let deprecated = rule("rule_deprecated", "DEP-001", RuleStatus::Deprecated);
-
-        let warnings = unverified_rule_warnings(&[draft, deprecated], &[]);
-
-        assert!(warnings.is_empty());
-    }
-
-    #[test]
-    fn verification_matches_by_rule_code_as_well_as_rule_id() {
-        let verified_by_code = rule("rule_by_code", "BY-CODE-001", RuleStatus::Active);
-        let verified_by_id = rule("rule_by_id", "BY-ID-001", RuleStatus::Active);
-        // The attribute channel cites the rule id even though the rule also
-        // has a distinct rule_code; the comment channel cites the rule_code.
-        let binding_scan = scan_with_binding("rule_by_id", Some(Verification::Property));
-        let annotation_scan = scan_with_annotation("BY-CODE-001", Some(Verification::Property));
-
-        let warnings = unverified_rule_warnings(
-            &[verified_by_code, verified_by_id],
-            &[binding_scan, annotation_scan],
-        );
-
-        assert!(warnings.is_empty());
-    }
-
-    #[test]
-    fn active_rule_unverified_alongside_verified_rules_only_warns_once() {
-        let verified = rule("rule_verified", "VERIFIED-001", RuleStatus::Active);
-        let unverified = rule("rule_unverified", "UNVERIFIED-001", RuleStatus::Active);
-        let scan = scan_with_binding("rule_verified", Some(Verification::Exhaustion));
-
-        let warnings =
-            unverified_rule_warnings(&[verified, unverified], std::slice::from_ref(&scan));
-
-        assert_eq!(warnings.len(), 1);
-        assert_eq!(warnings[0].rule_code, "rule_unverified");
-    }
-}
+#[cfg(test)]
+mod unverified_tests;

@@ -7,8 +7,9 @@ description: Reverse-engineer candidate requirements from an existing codebase w
 
 Charting in reverse (docs/shaping.md, "Relationship to the swarm backtrace" — canonical;
 where this file diverges, that document wins). Agents partition an existing codebase,
-extract candidate requirements — *what must be true for this code to be correct* — dedup
-keeping **all** evidence sites, challenge every candidate, and land everything as
+extract candidates — *what must be true for this code to be correct*, and which function
+already decides it — dedup keeping **all** evidence sites, challenge every candidate, and
+land everything as
 `proposed` proposals with the codebase (pinned to a commit) as the source.
 
 ## Ground rules
@@ -23,8 +24,11 @@ keeping **all** evidence sites, challenge every candidate, and land everything a
    the pinned commit, not HEAD.
 3. **Evidence discipline** (the output contract, docs/shaping.md): every claim cites
    typed evidence. For this code-backtrace workflow, code evidence must include
-   `file_path` + `line`; other evidence types do not require file locations. Speculation is
-   explicitly marked `unsupported`/`exploratory`; uncertainty is rated with a rationale.
+   `file_path` + `line`, and — wherever the behavior lives in a named function or type —
+   the bare symbol name too. A line is where you looked; the symbol is what decides, and
+   only the symbol survives the next refactor. Other evidence types do not require file
+   locations. Speculation is explicitly marked `unsupported`/`exploratory`; uncertainty is
+   rated with a rationale.
 4. **Only the orchestrator lands this run.** State uses sorted JSONL shards under
    `.provenance/state/`. Concurrent mutations of one shard serialize through an advisory
    lock, preventing lost updates, and atomic shard replacement gives readers a complete old
@@ -72,7 +76,7 @@ partition *and* listed as background reading for the others.
 
 ### 2. Extract (parallel, one agent per partition)
 
-Each extractor reads its partition and returns candidate requirements. Prompt each with:
+Each extractor reads its partition and returns candidates. Prompt each with:
 
 - Its partition paths, the pinned commit, and the anchor question: *what must be true
   for this code to be correct?*
@@ -80,7 +84,8 @@ Each extractor reads its partition and returns candidate requirements. Prompt ea
   implementation detail does not.** "Sessions expire after 30 minutes of inactivity"
   survives; "session TTL is stored in Redis with key prefix `sess:`" does not.
 - Output shape (JSON in the final message, no store writes): per candidate — a
-  statement, `file:line` evidence sites (several where behavior spans files), a
+  statement, its shape (`requirement` or `rule`, below) with the deciding symbol for
+  every rule candidate, `file:line` evidence sites (several where behavior spans files), a
   confidence score 0.0–1.0 with one-line rationale, and open questions. Anything the
   agent suspects but cannot ground in a line of code goes in a separate
   `speculation` list, never mixed into candidates.
@@ -91,6 +96,26 @@ invariant, in domain language, testable without reading the source:
 - Good: "Sync retries are capped at 5 with exponential backoff."
 - Bad (code structure): "`ShiftPublisher` validates via `WorkerAssignmentGuard`."
 - Bad (restated code): "The `MAX_RETRIES` constant is 5."
+
+**Two shapes of candidate.** Every extractor returns both, and must not blur them:
+
+- A **requirement candidate** is prose about what must be true. It survives a rewrite of
+  the code, and it names no symbol because no single symbol owns it — the behavior is
+  spread across the partition, or nothing implements it cleanly. Most output is this shape.
+- A **rule candidate** is a function that *already decides the thing*: one function, or one
+  type whose construction makes the wrong state unconstructible. A rule candidate **names
+  the deciding symbol** — file plus bare function or type name — alongside its statement.
+
+The statement stays domain language in both shapes; naming the symbol is not a licence to
+write code structure into the statement. "Sync retries are capped at 5 with exponential
+backoff" is the statement either way. What changes is that a rule candidate also hands over
+`src/sync/retry.rs` + `retry_budget` as the thing that decides it.
+
+**Never launder the symbol out.** An extractor that finds a single deciding function and
+reports only prose has destroyed the most expensive thing it found: the shaping loop can
+promote a requirement to a rule later, but it cannot recover a symbol you dropped, and
+re-finding it costs another partition read. If you genuinely cannot name one symbol, it is
+a requirement candidate — say that, rather than guessing at a plausible-looking function.
 
 ### 3. Dedup / merge (barrier — wait for all extractors)
 
@@ -105,6 +130,9 @@ meaning, not wording. For each cluster:
   them destroys exactly the information the human needs.
 - Carry the highest-context confidence rationale; note disagreement between extractors
   as a contested point for stage 4.
+- When duplicates disagree about shape — one names a deciding symbol, the other only
+  describes the behavior — keep the symbol and merge as a rule candidate. Stage 4 decides
+  whether one function really carries it; a merge is not the place to drop the claim.
 - Assign each merged candidate a stable `proposal_key`
   (`backtrace/<partition>/<slug>`, or `backtrace/cross/<slug>` for merged
   cross-partition candidates) — this is the dedup identity if the run is repeated.
@@ -113,16 +141,25 @@ meaning, not wording. For each cluster:
 
 Fan out refuters over the merged candidates (batch ~10–20 candidates per agent; give
 each refuter the candidates *with* their evidence sites and read access to the code).
-Each candidate is challenged on two questions:
+Each candidate is challenged on three questions:
 
 1. **Requirement or implementation detail?** Apply the rewrite test again, hostilely.
 2. **Does the evidence actually support it?** Re-read every cited site. A constant
    proves a value exists, not that it is enforced; find the enforcement path or demote.
+3. **Is it really one function?** Rule candidates only. Open the named symbol and read it.
+   Does that one function decide the whole claim, or does it decide part while a caller, a
+   `WHERE` clause, or a schema constraint decides the rest? Several deciding sites means it
+   is not one function: demote it to a requirement candidate and keep **every** site as
+   evidence — the drift between those sites is the finding, and hiding it behind one symbol
+   is worse than never naming one. Check the other direction too: a function that decides
+   three unrelated things is three candidates or none. A type whose construction makes the
+   wrong state unconstructible passes this test — that is a rule of the `construction`
+   kind, not a near-miss.
 
-Refuters return, per candidate: uphold / demote-to-detail / reclassify-as-speculation /
-narrow-the-statement, with an objection string for anything not upheld. Per the output
-contract: demoted-but-possibly-true claims are kept and marked `unsupported` or
-`exploratory` — adversaries mark speculation, they don't delete it.
+Refuters return, per candidate: uphold / demote-rule-to-requirement / demote-to-detail /
+reclassify-as-speculation / narrow-the-statement, with an objection string for anything
+not upheld. Per the output contract: demoted-but-possibly-true claims are kept and marked
+`unsupported` or `exploratory` — adversaries mark speculation, they don't delete it.
 
 ### 5. Land (inline, serial)
 
@@ -179,7 +216,8 @@ Contribution records:
 - one per participant slot (each extractor and refuter);
 - extractor stance is usually `support`;
 - refuter stance is usually `oppose`, `mixed`, or `needs_more_evidence`;
-- code evidence uses `evidence_type: "artifact"` with `file_path` and `line`;
+- code evidence uses `evidence_type: "artifact"` with `file_path` and `line`, and its
+  `summary` names the deciding symbol whenever one exists;
 - hunches stay in `unsupported_recommendations` objects whose `marker` is `"unsupported"`
   or `"exploratory"`.
 
@@ -195,8 +233,19 @@ Proposals:
 
 - one per surviving merged candidate;
 - use `proposal_type: "requirement_candidate"` for behavioral requirements,
-  `"source_gap"` for implied missing policy/spec sources, and `"question"` for candidates
-  that only sharpened into a question;
+  `"rule_candidate"` when one named function or type already decides it, `"source_gap"`
+  for implied missing policy/spec sources, and `"question"` for candidates that only
+  sharpened into a question (all four are legal `ProposalType` variants —
+  `crates/provenance-core/src/model/ideation.rs`);
+- a `rule_candidate` carries its binding where a human can act on it. An evidence
+  reference has no symbol field (`reference_id`, `evidence_type`, `summary`, `file_path`,
+  `line`, and nothing else), so the deciding file goes in `file_path` and the symbol rides
+  in that reference's `summary` and in the proposal's own `summary` —
+  `<file>:<symbol> decides <what>`. A rule candidate whose symbol survives only in an
+  extractor's chat output is a requirement candidate wearing a better label;
+- the backtrace never writes a `#[rule]` binding and never creates a rule record. It hands
+  the shaping loop a symbol to bind after a human accepts the proposal — proposals only
+  (ground rule 1);
 - set structured `confidence` on the proposal (`0.0`-`1.0`) instead of burying the score
   in `summary`;
 - keep ALL merged evidence sites in `traceability.evidence_references`;

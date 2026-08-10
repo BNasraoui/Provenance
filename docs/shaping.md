@@ -18,8 +18,8 @@ The shape is a deliberate hybrid of three sources, each contributing a different
 
 Each is strongest where the other two are silent. The hybrid also adds things none of the
 three have: a graph-computed frontier, fan-out landing, stance tournaments with
-empirically-grounded caveats, and a loop that continues past "shaped" into rules,
-annotated code, coverage, and review triggers.
+empirically-grounded caveats, and a loop that continues past "shaped" into rules, the
+functions that carry them, and the tests that verify them.
 
 ## The map
 
@@ -114,7 +114,9 @@ Worked example — anchor: *"Provenance docs shareable via short-lived link"*; q
 *"How long is short-lived?"* (method: grill). The answer lands as:
 
 - a **Resolution**: "7-day default, configurable ceiling" — position + rationale;
-- which **produces** a **Rule**: "share links MUST expire ≤ 30 days" (severity: high);
+- which **produces** a **Rule**: "share links MUST expire ≤ 30 days" (severity: high),
+  carried in code by the function that decides a link's expiry, marked
+  `#[rule("rule_share_link_expiry")]`;
 - and **spawns** a **Requirement**: "expiry configuration";
 - and **graduates fog**: "access auditing" is now statable as a question
   ("should link accesses be logged as provenance events?").
@@ -218,9 +220,75 @@ material claims may carry `0.0`-`1.0` confidence scores. Its output becomes cons
 context and surfaces for disposition only when later work enters its explicit territory,
 apart from small contested or conflicting sets that already block a decision.
 
+## Rules are code
+
+A rule is not a note filed next to the code. It is the code: the function that decides
+the thing the rule states, marked with the rule's id.
+
+```rust
+#[rule("rule_prov_edge_endpoint_table")]
+pub fn validate_edge_endpoint(
+    edge_type: EdgeType,
+    from: NodeType,
+    to: NodeType,
+) -> Result<(), EdgeValidationError> {
+    // the decision, in one place
+}
+```
+
+Sometimes there is no function to mark, because a type already does the work: a value
+that cannot be built wrong needs no check at the call sites. Then the type carries the
+rule and its construction is the proof.
+
+The marker is a compiled symbol, not a comment. It moves when the function moves, it
+dies when the function is deleted, and the id it cites can be checked against the graph.
+
+Tests say that a rule holds and how it was shown:
+
+```rust
+#[test]
+#[verifies("rule_prov_edge_endpoint_table", exhaustion)]
+fn endpoint_table_conforms_to_rule_leaf() {
+    // every edge type against every endpoint pair
+}
+```
+
+Five methods, and the word is the claim:
+
+- `exhaustion`: every input in a finite domain is tried. Over a finite domain that is
+  proof, not a sample.
+- `property`: generated inputs are checked against a stated property.
+- `examples`: hand-picked cases.
+- `conformance`: a copy of the rule living elsewhere is checked against the rule itself.
+- `construction`: a type or a constraint makes the violation unbuildable. The marker
+  goes on the type, not on a test.
+
+The scan reads both:
+
+```sh
+provenance coverage scan --path . --scope default --validate-rules
+```
+
+`--validate-rules` loads the scope's rules, so a marker citing an id no rule has is
+reported, and so is every active rule with no verification anywhere. Unverified is not a
+field anyone writes. It is absence, worked out at scan time and thrown away after.
+
+How hard that lands is a per-repo dial. Plain, the scan reports and succeeds. With
+`--strict` it exits non-zero on any warning, so a repo that wants every active rule
+verified before merge gets that from CI, while a repo still filling in its rules gets
+the same report with no gate.
+
+Code outside Rust keeps the older channel: `@provenance` comments naming a rule above
+the function. Comments drift from the code they sit above, which is the whole reason for
+the attribute, so they are the legacy tier. They scan alongside attributes.
+
+Rules follow decisions, not code shape. A rule exists because a human decided something,
+and the marked function is where that decision runs. Do not mint one rule per function,
+and do not split one decision across five rules because the match has five arms.
+
 ## Beyond "shaped"
 
 Shape Up ends at the bet; wayfinder ends at "the way is clear." This loop continues:
-resolutions produce rules, rules are annotated in code (`@provenance` markers), the
-scanner reports coverage, and review triggers fire when sources change or rules fail.
-Fog to enforcement, one graph.
+resolutions produce rules, each rule is a marked function, the tests that verify it say
+how, and the scan names every active rule still without one. Fog to working code, one
+graph.

@@ -4,6 +4,22 @@
 
 A reader-facing taxonomy classification for requirements. A derived rule belongs to each Domain of its upstream requirements through the canonical graph relationships.
 
+## Rule
+
+A statement produced by a decision, carried in code by the function that decides it. The function is bound to the rule's graph record by a `#[rule("rule_id")]` marker. Where a type makes the violating value unbuildable, the type carries the rule instead and its construction is the proof.
+
+## Verification
+
+Evidence that a rule holds, carried by a `#[verifies("rule_id", method)]` marker on a test or a type. The method is one of `exhaustion`, `property`, `examples`, `conformance`, or `construction`. Exhaustion over a finite domain is proof, not a sample.
+
+## Enforcement
+
+The live path: the running code that rejects a violation. Verification is evidence about that code; enforcement is the code itself.
+
+## Unverified
+
+An active rule with no verification marker anywhere in the scanned tree. It is absence, not a stored field: `provenance coverage scan --path . --validate-rules` derives it at scan time and reports it, and no shard records it.
+
 ## Topic
 
 A persisted, claimable shaping work area attached to a requirement. A Topic is not a reader taxonomy classification.

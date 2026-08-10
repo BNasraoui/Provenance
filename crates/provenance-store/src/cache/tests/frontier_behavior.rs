@@ -181,7 +181,6 @@ fn find_gaps_reports_the_frontier_taxonomy() {
         .create_rule(CreateRuleInput {
             scope_id: scope.clone(),
             id: sid("rule_orphan"),
-            rule_code: "ORPHAN-001".into(),
             name: None,
             description: None,
             requirement_id: None,
@@ -189,10 +188,6 @@ fn find_gaps_reports_the_frontier_taxonomy() {
             statement: "An unattached rule exists".into(),
             status: RuleStatus::Active,
             severity: RuleSeverity::High,
-            rule_type: None,
-            modality: None,
-            confidence: None,
-            extraction_method: None,
             source_document: None,
             source_section: None,
             origin_thread: None,
