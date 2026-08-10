@@ -3,7 +3,7 @@ use crate::wiki::routes::WikiRoute;
 use crate::wiki::theme::{ICON_DEFS, SEARCH_SCRIPT, THEME_SCRIPT};
 use std::fmt::Write as _;
 
-use super::html::{escape_attr, escape_html, icon_svg};
+use super::html::{escape_attr, escape_html, icon_svg, PageLinksRenderer};
 use super::labels::{kind_class, kind_icon, kind_label};
 
 pub(in crate::wiki::render) fn page_shell(
@@ -187,12 +187,14 @@ pub(in crate::wiki::render) fn title_row(
     html
 }
 
-pub(in crate::wiki::render) fn breadcrumb_from_lineage(lineage: &[LineageEntry]) -> String {
-    let renderer = super::html::PageLinksRenderer::new(lineage.iter().map(|entry| &entry.link));
+pub(in crate::wiki::render) fn breadcrumb_from_lineage(
+    links: &PageLinksRenderer,
+    lineage: &[LineageEntry],
+) -> String {
     let ancestors: Vec<String> = lineage
         .iter()
         .filter(|entry| !entry.is_current)
-        .map(|entry| renderer.link(&entry.link, None))
+        .map(|entry| links.link(&entry.link, None))
         .collect();
     ancestors.join(" <span class=\"sep\">›</span> ")
 }

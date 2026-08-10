@@ -1,6 +1,6 @@
 use crate::wiki::model::{LineageEntry, PageLink};
 use provenance_core::{EdgeType, NodeType, Requirement, Resolution, Rule, StableId};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::context::Assembler;
 use super::page_links::requirement_link;
@@ -38,44 +38,49 @@ impl<'a> Assembler<'a> {
     }
 
     pub(super) fn resolving_resolutions(&self, requirement_id: &StableId) -> Vec<&'a Resolution> {
-        self.state
-            .resolutions
-            .iter()
-            .filter(|resolution| {
-                self.edge_exists(
-                    EdgeType::Resolves,
-                    NodeType::Resolution,
-                    &resolution.id,
-                    NodeType::Requirement,
-                    requirement_id,
-                )
-            })
-            .collect()
+        self.query.resolving_resolutions(requirement_id)
     }
+
     pub(super) fn produced_rules_for_requirement(
         &self,
         requirement_id: &StableId,
     ) -> Vec<&'a Rule> {
-        let resolution_ids: BTreeSet<&str> = self
-            .resolving_resolutions(requirement_id)
-            .into_iter()
-            .map(|resolution| resolution.id.as_str())
-            .collect();
-        self.state
-            .rules
-            .iter()
-            .filter(|rule| {
-                self.edges().any(|edge| {
-                    edge.edge_type == EdgeType::Produces
-                        && edge.to_type == NodeType::Rule
-                        && edge.to_id == rule.id
-                        && ((edge.from_type == NodeType::Requirement
-                            && edge.from_id == *requirement_id)
-                            || (edge.from_type == NodeType::Resolution
-                                && resolution_ids.contains(edge.from_id.as_str())))
-                })
+        self.query.produced_rules_for_requirement(requirement_id)
+    }
+
+    pub(super) fn produced_rules_for_resolution(&self, resolution_id: &StableId) -> Vec<&'a Rule> {
+        self.query.produced_rules_for_resolution(resolution_id)
+    }
+
+    /// The requirements a rule answers to, in record order.
+    ///
+    /// This is the inverse of [`Self::produced_rules_for_requirement`], read
+    /// off one pass of that forward traversal rather than walking `Produces`
+    /// and `Resolves` backwards a second time. A requirement page listing a
+    /// rule and that rule's page listing the requirement are then the same
+    /// fact, not two facts that happen to agree.
+    pub(super) fn requirements_behind_rule(&self, rule_id: &StableId) -> &[&'a Requirement] {
+        self.rule_requirements
+            .get_or_init(|| {
+                let mut attribution: BTreeMap<&'a str, Vec<&'a Requirement>> = BTreeMap::new();
+                for requirement in &self.state.requirements {
+                    for rule in self.produced_rules_for_requirement(&requirement.id) {
+                        let attributed = attribution.entry(rule.id.as_str()).or_default();
+                        // Two rule records sharing an id would otherwise list
+                        // the same requirement twice; the outer loop visits
+                        // each requirement once, so checking the tail is enough.
+                        if attributed
+                            .last()
+                            .is_none_or(|last| last.id != requirement.id)
+                        {
+                            attributed.push(requirement);
+                        }
+                    }
+                }
+                attribution
             })
-            .collect()
+            .get(rule_id.as_str())
+            .map_or(&[], Vec::as_slice)
     }
 
     pub(super) fn sibling_requirements(&self, requirement_id: &StableId) -> Vec<PageLink> {
@@ -107,22 +112,6 @@ impl<'a> Assembler<'a> {
                 } else {
                     None
                 }
-            })
-            .collect()
-    }
-
-    pub(super) fn produced_rules_for_resolution(&self, resolution_id: &StableId) -> Vec<&'a Rule> {
-        self.state
-            .rules
-            .iter()
-            .filter(|rule| {
-                self.edge_exists(
-                    EdgeType::Produces,
-                    NodeType::Resolution,
-                    resolution_id,
-                    NodeType::Rule,
-                    &rule.id,
-                )
             })
             .collect()
     }

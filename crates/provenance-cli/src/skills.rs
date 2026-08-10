@@ -1,4 +1,11 @@
+mod install_decision;
+mod render;
+pub mod stamp;
+
 use anyhow::Context;
+use install_decision::{classify_install, InstallVerdict, TargetEntry, TargetState};
+use provenance_macros::rule;
+use render::frontmatter_field;
 use serde::Serialize;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -35,10 +42,30 @@ pub struct SkillSummary {
     description: String,
 }
 
+/// What an install run did to one file. These five outcomes are the whole
+/// vocabulary of an install report, written both here and by
+/// `legacy_cleanup`, and read back by `combined_status` to describe the run.
+/// The serialised names are the strings the JSON report has always carried,
+/// so the wire format does not depend on the Rust spelling.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FileStatus {
+    /// Already byte-for-byte what provenance would write.
+    Unchanged,
+    /// Newly written where nothing was.
+    Installed,
+    /// Rewritten over something else.
+    Updated,
+    /// A new symlink into the canonical directory.
+    Linked,
+    /// A legacy file deleted by cleanup.
+    Removed,
+}
+
 #[derive(Serialize)]
 pub struct InstallReport {
     global: bool,
-    status: &'static str,
+    status: FileStatus,
     canonical_dir: String,
     claude_dir: String,
     link_mode: &'static str,
@@ -57,7 +84,7 @@ pub struct SkillInstallStatus {
 #[derive(Serialize)]
 struct FileInstallReport {
     path: String,
-    status: &'static str,
+    status: FileStatus,
 }
 
 enum ClaudeInstall {
@@ -172,7 +199,7 @@ fn install_canonical_skill_files(
         .iter()
         .map(|skill| {
             let path = skills_dir.join(skill.directory).join("SKILL.md");
-            write_managed_file(&path, &render_skill_file(skill), force)
+            write_managed_file(&path, &render::skill_file(skill), force)
         })
         .collect()
 }
@@ -186,41 +213,46 @@ fn install_claude_symlink_or_copy(
     let name = skill_name(skill)?;
     let link_path = claude_dir.join(name);
     let target = relative_claude_target(name);
+    let entry = TargetEntry::read(&link_path)?;
+    // A symlink already pointing at the canonical directory is what this
+    // install writes; a directory can be copied into instead of removed.
+    let state = match &entry {
+        TargetEntry::Vacant => TargetState::Clear,
+        TargetEntry::Symlink(current) if current == &target => TargetState::Ours,
+        TargetEntry::Symlink(_) | TargetEntry::Other => TargetState::Foreign,
+        TargetEntry::Directory => TargetState::ForeignDirectory,
+    };
 
-    let status = match std::fs::symlink_metadata(&link_path) {
-        Err(_) => "linked",
-        Ok(metadata) => {
-            if metadata.file_type().is_symlink() {
-                let current_target = std::fs::read_link(&link_path)?;
-                if current_target == target {
-                    return Ok(ClaudeInstall::Symlink(file_report(&link_path, "unchanged")));
-                }
-                anyhow::ensure!(
-                    force,
-                    "{} points at {}; rerun with --force to overwrite",
-                    link_path.display(),
-                    current_target.display()
-                );
-                std::fs::remove_file(&link_path)?;
-            } else if metadata.is_dir() {
-                if !force {
-                    let reason = format!("{} already exists as a directory", link_path.display());
-                    return Ok(ClaudeInstall::CopyFallback {
-                        report: copy_skill_dir(skill, canonical_dir, claude_dir, force)
-                            .with_context(|| reason.clone())?,
-                        reason,
-                    });
-                }
-                std::fs::remove_dir_all(&link_path)?;
-            } else {
-                anyhow::ensure!(
-                    force,
-                    "{} exists and is not a skill directory; rerun with --force to overwrite",
-                    link_path.display()
-                );
-                std::fs::remove_file(&link_path)?;
-            }
-            "updated"
+    let status = match classify_install(state, force) {
+        InstallVerdict::Write => FileStatus::Linked,
+        InstallVerdict::Ours => {
+            return Ok(ClaudeInstall::Symlink(file_report(
+                &link_path,
+                FileStatus::Unchanged,
+            )))
+        }
+        InstallVerdict::CopyInto => {
+            let reason = format!("{} already exists as a directory", link_path.display());
+            return Ok(ClaudeInstall::CopyFallback {
+                report: copy_skill_dir(skill, canonical_dir, claude_dir, force)
+                    .with_context(|| reason.clone())?,
+                reason,
+            });
+        }
+        InstallVerdict::Refuse => match &entry {
+            TargetEntry::Symlink(current) => anyhow::bail!(
+                "{} points at {}; rerun with --force to overwrite",
+                link_path.display(),
+                current.display()
+            ),
+            _ => anyhow::bail!(
+                "{} exists and is not a skill directory; rerun with --force to overwrite",
+                link_path.display()
+            ),
+        },
+        InstallVerdict::Overwrite => {
+            entry.remove(&link_path)?;
+            FileStatus::Updated
         }
     };
 
@@ -240,7 +272,7 @@ fn create_symlink_or_copy(
     claude_dir: &Path,
     link_path: &Path,
     target: &Path,
-    status: &'static str,
+    status: FileStatus,
 ) -> anyhow::Result<ClaudeInstall> {
     if let Some(parent) = link_path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -275,26 +307,34 @@ fn copy_skill_dir(
 ) -> anyhow::Result<FileInstallReport> {
     let name = skill_name(skill)?;
     let destination = claude_dir.join(name);
-    if let Ok(metadata) = std::fs::symlink_metadata(&destination) {
-        if metadata.file_type().is_symlink() {
-            // Replacing our own canonical symlink with a copy keeps identical
-            // content, so it needs no --force; anything else is foreign.
-            let current_target = std::fs::read_link(&destination)?;
-            anyhow::ensure!(
-                force || current_target == relative_claude_target(name),
+    let entry = TargetEntry::read(&destination)?;
+    // A copy wants a directory here, so an existing one is the container it
+    // fills in rather than something in its way. Swapping our own canonical
+    // symlink for a copy keeps identical content, so it needs no --force;
+    // any other symlink is foreign.
+    let state = match &entry {
+        TargetEntry::Vacant | TargetEntry::Directory => TargetState::Clear,
+        TargetEntry::Symlink(current) if current == &relative_claude_target(name) => {
+            TargetState::Ours
+        }
+        TargetEntry::Symlink(_) | TargetEntry::Other => TargetState::Foreign,
+    };
+    match classify_install(state, force) {
+        // Copying is itself the route a diverted install takes, so there is
+        // nowhere gentler to send it.
+        InstallVerdict::Write | InstallVerdict::CopyInto => {}
+        InstallVerdict::Ours | InstallVerdict::Overwrite => entry.remove(&destination)?,
+        InstallVerdict::Refuse => match &entry {
+            TargetEntry::Symlink(current) => anyhow::bail!(
                 "{} is a symlink to {}; rerun with --force to replace it with a copy",
                 destination.display(),
-                current_target.display()
-            );
-            std::fs::remove_file(&destination)?;
-        } else if !metadata.is_dir() {
-            anyhow::ensure!(
-                force,
+                current.display()
+            ),
+            _ => anyhow::bail!(
                 "{} exists and is not a skill directory; rerun with --force to overwrite",
                 destination.display()
-            );
-            std::fs::remove_file(&destination)?;
-        }
+            ),
+        },
     }
 
     let source_file = canonical_dir.join(name).join("SKILL.md");
@@ -307,71 +347,70 @@ fn write_managed_file(
     contents: &str,
     force: bool,
 ) -> anyhow::Result<FileInstallReport> {
-    if path.exists() {
-        let current = std::fs::read_to_string(path)?;
-        if current == contents {
-            return Ok(file_report(path, "unchanged"));
-        }
-        anyhow::ensure!(
-            force,
+    let existing = if path.exists() {
+        Some(std::fs::read_to_string(path)?)
+    } else {
+        None
+    };
+    let state = match &existing {
+        None => TargetState::Clear,
+        Some(current) if current == contents => TargetState::Ours,
+        Some(_) => TargetState::Foreign,
+    };
+    match classify_install(state, force) {
+        InstallVerdict::Ours => return Ok(file_report(path, FileStatus::Unchanged)),
+        InstallVerdict::Refuse => anyhow::bail!(
             "{} exists and differs; rerun with --force to overwrite",
             path.display()
-        );
-        std::fs::write(path, contents)?;
-        return Ok(file_report(path, "updated"));
+        ),
+        InstallVerdict::Overwrite => {
+            std::fs::write(path, contents)?;
+            return Ok(file_report(path, FileStatus::Updated));
+        }
+        // A managed file is never a directory, so no install is ever
+        // diverted here: write.
+        InstallVerdict::Write | InstallVerdict::CopyInto => {}
     }
 
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
     std::fs::write(path, contents)?;
-    Ok(file_report(path, "installed"))
+    Ok(file_report(path, FileStatus::Installed))
 }
 
-fn render_skill_file(skill: &EmbeddedSkill) -> String {
-    const FRONTMATTER_START: &str = "---\n";
-    const FRONTMATTER_END: &str = "\n---\n";
-
-    let header = provenance_header(skill.content);
-    if let Some(rest) = skill.content.strip_prefix(FRONTMATTER_START) {
-        if let Some(end) = rest.find(FRONTMATTER_END) {
-            let insertion = FRONTMATTER_START.len() + end + FRONTMATTER_END.len();
-            return format!(
-                "{}{}\n{}",
-                &skill.content[..insertion],
-                header,
-                &skill.content[insertion..]
-            );
-        }
-    }
-    format!("{header}\n{}", skill.content)
-}
-
-fn provenance_header(content: &str) -> String {
-    format!(
-        "<!-- Installed by provenance {}; content hash fnv1a64:{} -->",
-        env!("CARGO_PKG_VERSION"),
-        fnv1a64(content)
-    )
-}
-
-fn combined_status(files: &[FileInstallReport]) -> &'static str {
+/// An install run reports the strongest change any one of its files
+/// underwent, answering with one of the three outcomes that can describe a
+/// whole run: "unchanged", "installed" or "updated". A file rewritten or
+/// deleted ("updated", "removed") makes the
+/// whole run "updated"; failing that, a file newly written or newly linked
+/// ("installed", "linked") makes it "installed"; only when every file already
+/// matched what provenance would write is the run "unchanged". Order and
+/// repetition carry no weight: the run status depends on which outcomes
+/// occurred, not how many times or in what sequence.
+///
+/// Nothing branches on the answer - `provenance skills install` prints it and
+/// exits - but it is the one line a reader takes as the account of the run, so
+/// it must never claim less than happened (a rewrite reported as "unchanged")
+/// or more (a no-op reported as "updated").
+#[rule("rule_install_run_status")]
+fn combined_status(files: &[FileInstallReport]) -> FileStatus {
     if files
         .iter()
-        .any(|file| matches!(file.status, "updated" | "removed"))
+        .any(|file| matches!(file.status, FileStatus::Updated | FileStatus::Removed))
     {
-        "updated"
+        FileStatus::Updated
     } else if files
         .iter()
-        .any(|file| matches!(file.status, "installed" | "linked"))
+        .any(|file| matches!(file.status, FileStatus::Installed | FileStatus::Linked))
     {
-        "installed"
+        FileStatus::Installed
     } else {
-        "unchanged"
+        FileStatus::Unchanged
     }
 }
 
-fn file_report(path: &Path, status: &'static str) -> FileInstallReport {
+fn file_report(path: &Path, status: FileStatus) -> FileInstallReport {
     FileInstallReport {
         path: path.display().to_string(),
         status,
@@ -403,32 +442,6 @@ fn skill_name(skill: &EmbeddedSkill) -> anyhow::Result<&'static str> {
     Ok(name)
 }
 
-fn frontmatter_field<'a>(content: &'a str, field: &str) -> Option<&'a str> {
-    let mut lines = content.lines();
-    if lines.next()? != "---" {
-        return None;
-    }
-    let prefix = format!("{field}:");
-    for line in lines {
-        if line == "---" {
-            return None;
-        }
-        if let Some(value) = line.strip_prefix(&prefix) {
-            return Some(value.trim());
-        }
-    }
-    None
-}
-
-fn fnv1a64(content: &str) -> String {
-    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
-    for byte in content.as_bytes() {
-        hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    format!("{hash:016x}")
-}
-
 fn home_dir() -> anyhow::Result<PathBuf> {
     home_dir_from_env(|key| std::env::var_os(key))
 }
@@ -448,20 +461,4 @@ fn home_dir_from_env(mut var: impl FnMut(&str) -> Option<OsString>) -> anyhow::R
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn home_dir_uses_userprofile_when_home_is_absent() {
-        let resolved = home_dir_from_env(|key| {
-            if key == "USERPROFILE" {
-                Some(OsString::from(r"C:\Users\Ada"))
-            } else {
-                None
-            }
-        })
-        .unwrap();
-
-        assert_eq!(resolved, PathBuf::from(r"C:\Users\Ada"));
-    }
-}
+mod tests;

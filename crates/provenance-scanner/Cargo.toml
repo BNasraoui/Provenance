@@ -13,4 +13,6 @@ serde.workspace = true
 walkdir.workspace = true
 
 [dev-dependencies]
+provenance-core = { path = "../provenance-core" }
+provenance-macros = { path = "../provenance-macros" }
 tempfile.workspace = true

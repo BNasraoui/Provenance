@@ -1,0 +1,3 @@
+# Canonical graph state merges record by record, not line by line.
+# Each clone must configure the driver once; see docs/cli.md, "JSONL merge driver".
+.provenance/state/**/*.jsonl merge=provenance-jsonl

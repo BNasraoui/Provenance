@@ -240,9 +240,10 @@ pub(super) async fn dispatch(command: Command, quiet: bool) -> anyhow::Result<()
             ours,
             theirs,
             output,
+            path,
             format,
         } => {
-            merge_jsonl::handle(&base, &ours, &theirs, output, format)?;
+            merge_jsonl::handle(&base, &ours, &theirs, output, path.as_deref(), format)?;
         }
     }
     Ok(())

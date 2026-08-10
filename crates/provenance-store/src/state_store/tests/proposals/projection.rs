@@ -4,6 +4,7 @@ use provenance_core::{
     DispositionActor, DispositionDecision, IdeationTarget, IdeationTargetType, IdentityType,
     PromotionState, ScopeId, StableId,
 };
+use provenance_macros::verifies;
 
 #[test]
 fn proposal_projection_rejects_unlisted_disposition_actor() {
@@ -115,6 +116,7 @@ fn modern_proposal_rejects_duplicate_create() {
 }
 
 #[test]
+#[verifies("rule_proposal_surfacing", examples)]
 fn ratification_records_a_disposition_without_mutating_proposal_definition() {
     let (_dir, store, scope) = initialized_store();
     seed_proposal_ready_for_disposition(&store, &scope);

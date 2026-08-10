@@ -57,6 +57,29 @@ where
     ExternalActionCorrelation::deserialize(deserializer).map(Some)
 }
 
+/// Must this disposition rest on an assertion recorded before it?
+///
+/// Accepting a proposal is a claim about its evidence, so an acceptance
+/// normally has to name a proposal a swarm already asserted. Rejecting or
+/// deferring one is not such a claim and needs no assertion.
+///
+/// A fork tournament ends the other way round. A person reads the competing
+/// artifacts, picks one, and lands the decision as a ratified resolution,
+/// which the disposition then names as its canonical artifact. There is no
+/// swarm assertion to wait for and never will be: the artifact the person
+/// ratified is the evidence, and demanding an assertion behind it would make
+/// human acceptance impossible. So an acceptance recorded by a human that
+/// names a canonical artifact stands on that artifact instead.
+///
+/// Both gates that judge an acceptance - the ideation aggregate in this crate
+/// and `provenance-store`'s disposition write gate - ask this one question, so
+/// the two cannot drift apart.
+pub fn disposition_requires_prior_assertion(disposition: &DispositionRecord) -> bool {
+    disposition.decision == DispositionDecision::Accepted
+        && !(disposition.actor.identity_type == IdentityType::Human
+            && disposition.canonical_artifact.is_some())
+}
+
 pub fn validate_disposition_intrinsic(disposition: &DispositionRecord) -> anyhow::Result<()> {
     anyhow::ensure!(
         !disposition.rationale.trim().is_empty(),

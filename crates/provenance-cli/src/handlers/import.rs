@@ -2,8 +2,13 @@ use super::export::ScopeExport;
 use crate::output::{self, OutputFormat};
 use camino::Utf8PathBuf;
 use provenance_core::ScopeId;
+use provenance_macros::rule;
 use provenance_store::layout::ProvenanceLayout;
-use provenance_store::state_store::StateStore;
+use provenance_store::state_store::{
+    assertion_cites_contribution, assertion_cites_synthesis,
+    ensure_asserted_contribution_unchanged, ensure_asserted_synthesis_unchanged, StateStore,
+    CONTRIBUTION_KIND, SYNTHESIS_KIND,
+};
 use serde::Serialize;
 
 mod scope_writer;
@@ -114,6 +119,35 @@ fn ensure_immutable_records_preserved<T: Serialize>(
     Ok(())
 }
 
+/// Evidence an assertion rests on cannot be dropped.
+///
+/// Rewriting such a record is refused by `provenance-store`'s freeze, which an
+/// import asks of every record it replaces. Import is the only path that can
+/// drop one: it stands a whole scope in place of the stored one, so a record
+/// the incoming scope never mentions is gone. Dropping the evidence an
+/// assertion cites takes away the ground the assertion stands on as surely as
+/// rewriting it would, so it is refused too, and in the same breath: a record
+/// no assertion cites may be dropped freely.
+///
+/// The caller reads "cited by an assertion" with `provenance-store`'s reading
+/// for the record's kind, so this and the freeze answer the same question of
+/// the same record.
+#[rule("rule_asserted_evidence_undeletable")]
+fn ensure_asserted_evidence_not_deleted(
+    kind: &str,
+    id: &str,
+    cited_by_assertion: bool,
+) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        !cited_by_assertion,
+        "{kind} {id} is referenced by an assertion and cannot be deleted"
+    );
+    Ok(())
+}
+
+/// Both halves of the freeze over the evidence an import replaces: a record
+/// the incoming scope carries is judged by the store's freeze, and a record it
+/// omits by the deletion rule above.
 fn ensure_asserted_evidence_preserved(
     store: &StateStore,
     scope_id: &ScopeId,
@@ -121,47 +155,35 @@ fn ensure_asserted_evidence_preserved(
 ) -> anyhow::Result<()> {
     let assertions = store.list_assertion_records(scope_id)?;
     for existing in store.list_contributions(scope_id)? {
-        let referenced_by_assertion = assertions.iter().any(|assertion| {
-            existing
-                .material_claims
-                .iter()
-                .any(|claim| assertion.supporting_claim_ids.contains(&claim.claim_id))
-        });
-        if !referenced_by_assertion {
-            continue;
-        }
-        let replacement = incoming
+        match incoming
             .contributions
             .iter()
             .find(|record| record.id == existing.id)
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "contribution {} is referenced by an assertion and cannot be replaced",
-                    existing.id.as_str()
-                )
-            })?;
-        anyhow::ensure!(
-            serde_json::to_value(&existing)? == serde_json::to_value(replacement)?,
-            "contribution {} is referenced by an assertion and cannot be replaced",
-            existing.id.as_str()
-        );
+        {
+            Some(replacement) => {
+                ensure_asserted_contribution_unchanged(&existing, replacement, &assertions)?;
+            }
+            None => ensure_asserted_evidence_not_deleted(
+                CONTRIBUTION_KIND,
+                existing.id.as_str(),
+                assertion_cites_contribution(&existing, &assertions),
+            )?,
+        }
     }
     for existing in store.list_synthesis_packets(scope_id)? {
-        let Some(replacement) = incoming
+        match incoming
             .synthesis_packets
             .iter()
             .find(|record| record.id == existing.id)
-        else {
-            continue;
-        };
-        if serde_json::to_value(&existing)? != serde_json::to_value(replacement)? {
-            anyhow::ensure!(
-                !assertions
-                    .iter()
-                    .any(|assertion| assertion.synthesis_packet_id == existing.id),
-                "synthesis packet {} is referenced by an assertion and cannot be replaced",
-                existing.id.as_str()
-            );
+        {
+            Some(replacement) => {
+                ensure_asserted_synthesis_unchanged(&existing, replacement, &assertions)?;
+            }
+            None => ensure_asserted_evidence_not_deleted(
+                SYNTHESIS_KIND,
+                existing.id.as_str(),
+                assertion_cites_synthesis(&existing, &assertions),
+            )?,
         }
     }
     Ok(())
@@ -314,4 +336,51 @@ pub(super) fn handle(
     let report = import_scope(repo, scope, input, dry_run)?;
     output::print(format, &report)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ensure_asserted_evidence_not_deleted, CONTRIBUTION_KIND, SYNTHESIS_KIND};
+    use provenance_macros::verifies;
+
+    // The decision ranges over two finite axes and nothing else: the kind of
+    // evidence being dropped, and whether an assertion cites it. The kinds are
+    // the two `provenance-store` freezes, named from the store so a third kind
+    // has to be spelled here before it can be dropped silently.
+    const EVIDENCE_KINDS: [(&str, &str); 2] = [
+        (CONTRIBUTION_KIND, "contribution_a"),
+        (SYNTHESIS_KIND, "synthesis_a"),
+    ];
+
+    #[test]
+    #[verifies("rule_asserted_evidence_undeletable", exhaustion)]
+    fn evidence_may_be_dropped_exactly_when_no_assertion_cites_it() {
+        for (kind, id) in EVIDENCE_KINDS {
+            for cited_by_assertion in [false, true] {
+                let outcome = ensure_asserted_evidence_not_deleted(kind, id, cited_by_assertion);
+
+                // Independent restatement of the decision: an assertion's
+                // ground stays where it is, and everything else may go.
+                assert_eq!(
+                    outcome.is_ok(),
+                    !cited_by_assertion,
+                    "{kind} {id} cited={cited_by_assertion}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[verifies("rule_asserted_evidence_undeletable", examples)]
+    fn the_refusal_names_the_record_that_may_not_go() {
+        for (kind, id) in EVIDENCE_KINDS {
+            let error = ensure_asserted_evidence_not_deleted(kind, id, true)
+                .unwrap_err()
+                .to_string();
+            assert_eq!(
+                error,
+                format!("{kind} {id} is referenced by an assertion and cannot be deleted")
+            );
+        }
+    }
 }

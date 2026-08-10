@@ -3,7 +3,9 @@ use std::path::Path;
 use anyhow::Context;
 use camino::{Utf8Path, Utf8PathBuf};
 
-use crate::parser::contains_annotation_marker;
+use std::str::FromStr;
+
+use crate::parser::{contains_annotation_marker, Verification};
 use crate::{parse_annotations, Annotation, ParseWarning};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -38,11 +40,26 @@ pub struct AnnotationLocation {
     pub annotation: Annotation,
 }
 
+/// A `#[rule]` or `#[verifies]` attribute found in source.
+///
+/// `verification` is `None` for a `#[rule]` site (the item is the rule) and
+/// `Some` for a `#[verifies]` site (the item checks the rule, the method
+/// says how).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct AttributeBinding {
+    pub file_path: Utf8PathBuf,
+    pub line: usize,
+    pub item_name: Option<String>,
+    pub rule_id: String,
+    pub verification: Option<Verification>,
+}
+
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct FileScan {
     pub file_path: Utf8PathBuf,
     pub language: Language,
     pub annotations: Vec<AnnotationLocation>,
+    pub bindings: Vec<AttributeBinding>,
     pub warnings: Vec<ParseWarning>,
 }
 
@@ -69,11 +86,25 @@ pub fn scan_path(path: &Utf8Path) -> anyhow::Result<Vec<FileScan>> {
 
 pub fn scan_file(file_path: &Utf8Path, language: Language, content: &str) -> FileScan {
     let mut annotations = Vec::new();
+    let mut bindings = Vec::new();
     let mut warnings = Vec::new();
     let lines = content.lines().collect::<Vec<_>>();
     let mut idx = 0;
     while idx < lines.len() {
         let line = lines[idx];
+        if language == Language::Rust {
+            if let Some((rule_id, verification)) = parse_attribute_line(line) {
+                bindings.push(AttributeBinding {
+                    file_path: file_path.to_path_buf(),
+                    line: idx + 1,
+                    item_name: next_item_name(language, &lines[idx + 1..]),
+                    rule_id,
+                    verification,
+                });
+                idx += 1;
+                continue;
+            }
+        }
         if !contains_annotation_marker(line) {
             idx += 1;
             continue;
@@ -96,8 +127,52 @@ pub fn scan_file(file_path: &Utf8Path, language: Language, content: &str) -> Fil
         file_path: file_path.to_path_buf(),
         language,
         annotations,
+        bindings,
         warnings,
     }
+}
+
+/// Recognizes single-line `#[rule("id")]` and `#[verifies("id", method)]`
+/// attributes. The proc macros reject malformed arguments at compile time, so
+/// anything found in compiling code is well-formed; lines that do not match
+/// are silently skipped.
+fn parse_attribute_line(line: &str) -> Option<(String, Option<Verification>)> {
+    let trimmed = line.trim_start();
+    if let Some(rest) = trimmed.strip_prefix("#[rule(") {
+        return Some((string_literal(rest)?, None));
+    }
+    let rest = trimmed.strip_prefix("#[verifies(")?;
+    let rule_id = string_literal(rest)?;
+    let after_literal = rest.split_once(',')?.1;
+    let method = after_literal.trim().trim_end_matches(")]").trim();
+    Some((rule_id, Some(Verification::from_str(method).ok()?)))
+}
+
+fn string_literal(rest: &str) -> Option<String> {
+    let after_quote = rest.strip_prefix('"')?;
+    let (literal, _) = after_quote.split_once('"')?;
+    (!literal.is_empty()).then(|| literal.to_string())
+}
+
+/// Like `next_function_name`, but looks past other attribute lines such as
+/// `#[test]`, and also accepts type definitions (`construction` bindings sit
+/// on types, not functions).
+fn next_item_name(language: Language, following: &[&str]) -> Option<String> {
+    following
+        .iter()
+        .filter(|line| !line.trim_start().starts_with("#["))
+        .take(6)
+        .find_map(|line| {
+            let line = line.trim();
+            function_name(language, line).or_else(|| type_name(line))
+        })
+}
+
+fn type_name(line: &str) -> Option<String> {
+    ["struct ", "enum ", "type "]
+        .iter()
+        .find(|marker| line.contains(*marker))
+        .and_then(|marker| token_after(line, marker))
 }
 
 fn collect_annotation_comment(lines: &[&str], start: usize) -> (String, usize) {
@@ -171,6 +246,60 @@ mod tests {
             scan.annotations[0].function_name.as_deref(),
             Some("pays_overtime")
         );
+    }
+
+    #[test]
+    fn scans_rule_attribute_with_item_name() {
+        let scan = scan_file(
+            Utf8Path::new("edge_validation.rs"),
+            Language::Rust,
+            "#[rule(\"rule_prov_edge_endpoint_table\")]\npub fn validate_edge_endpoint() {}",
+        );
+
+        assert_eq!(
+            scan.bindings,
+            vec![AttributeBinding {
+                file_path: Utf8Path::new("edge_validation.rs").to_path_buf(),
+                line: 1,
+                item_name: Some("validate_edge_endpoint".to_string()),
+                rule_id: "rule_prov_edge_endpoint_table".to_string(),
+                verification: None,
+            }]
+        );
+    }
+
+    #[test]
+    fn scans_verifies_attribute_past_test_attribute() {
+        let scan = scan_file(
+            Utf8Path::new("edge_validation.rs"),
+            Language::Rust,
+            "#[test]\n#[verifies(\"rule_prov_edge_endpoint_table\", exhaustion)]\nfn endpoint_table_conforms_to_rule_leaf() {}",
+        );
+
+        assert_eq!(scan.bindings.len(), 1);
+        assert_eq!(
+            scan.bindings[0].verification,
+            Some(Verification::Exhaustion)
+        );
+        assert_eq!(
+            scan.bindings[0].item_name.as_deref(),
+            Some("endpoint_table_conforms_to_rule_leaf")
+        );
+    }
+
+    #[test]
+    fn scans_construction_verifies_attribute_on_a_type() {
+        let scan = scan_file(
+            Utf8Path::new("tokens.rs"),
+            Language::Rust,
+            "#[verifies(\"rule_redacted_display\", construction)]\npub struct RedactedToken(String);",
+        );
+
+        assert_eq!(
+            scan.bindings[0].verification,
+            Some(Verification::Construction)
+        );
+        assert_eq!(scan.bindings[0].item_name.as_deref(), Some("RedactedToken"));
     }
 
     #[test]

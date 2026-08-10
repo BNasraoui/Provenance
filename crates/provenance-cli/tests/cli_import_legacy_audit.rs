@@ -7,18 +7,24 @@ fn altered_replaced_or_omitted_shipped_disposition_audit_is_rejected() {
     for attack in ["altered", "replaced", "omitted"] {
         let mut value = baseline.clone();
         let dispositions = value["dispositions"].as_array_mut().unwrap();
+        // Attack a row of the frozen shipped audit, not one of the repo's
+        // modern tournament dispositions that share the array.
+        let target = dispositions
+            .iter()
+            .position(|row| !row["id"].as_str().unwrap().contains("wiki_homepage"))
+            .unwrap();
         match attack {
             "altered" => {
-                dispositions[0]["rationale"] = serde_json::json!(format!(
+                dispositions[target]["rationale"] = serde_json::json!(format!(
                     "{}x",
-                    dispositions[0]["rationale"].as_str().unwrap()
+                    dispositions[target]["rationale"].as_str().unwrap()
                 ));
             }
             "replaced" => {
-                dispositions[0]["id"] = serde_json::json!("disposition_replacement");
+                dispositions[target]["id"] = serde_json::json!("disposition_replacement");
             }
             "omitted" => {
-                dispositions.remove(0);
+                dispositions.remove(target);
             }
             _ => unreachable!(),
         }
@@ -204,6 +210,8 @@ fn init(repo: &std::path::Path) {
             "default",
             "--disposition-actor-id",
             "codex-review-panel-gpt55-medium",
+            "--disposition-actor-id",
+            "ben_nasraoui",
         ])
         .assert()
         .success();

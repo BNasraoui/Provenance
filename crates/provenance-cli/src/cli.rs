@@ -254,6 +254,11 @@ pub enum Command {
         theirs: Utf8PathBuf,
         #[arg(long)]
         output: Option<Utf8PathBuf>,
+        /// Repository path the merged result belongs at. Git merge drivers get
+        /// three temporary files, so this is how the merge learns which record
+        /// type the file holds and which write-time checks to re-apply.
+        #[arg(long)]
+        path: Option<Utf8PathBuf>,
         #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
         format: OutputFormat,
     },

@@ -18,6 +18,18 @@ pub struct AnnotationResult {
     pub confidence: f64,
 }
 
+/// A `#[rule]` or `#[verifies]` attribute site. `verification` is `None` for
+/// a `#[rule]` site (the item is the rule) and the method word for a
+/// `#[verifies]` site.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct BindingResult {
+    pub rule_id: String,
+    pub file_path: Utf8PathBuf,
+    pub line: usize,
+    pub item_name: Option<String>,
+    pub verification: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct CoverageReport {
     pub commit: Option<String>,
@@ -25,6 +37,7 @@ pub struct CoverageReport {
     pub total_annotations: usize,
     pub warnings: Vec<ValidationWarning>,
     pub annotations: Vec<AnnotationResult>,
+    pub bindings: Vec<BindingResult>,
 }
 
 impl CoverageReport {
@@ -32,6 +45,7 @@ impl CoverageReport {
         commit: Option<String>,
         files_scanned: usize,
         annotations: Vec<AnnotationResult>,
+        bindings: Vec<BindingResult>,
         warnings: Vec<ValidationWarning>,
     ) -> Self {
         Self {
@@ -40,6 +54,7 @@ impl CoverageReport {
             total_annotations: annotations.len(),
             warnings,
             annotations,
+            bindings,
         }
     }
 }
@@ -61,6 +76,7 @@ mod tests {
                 coverage: "full".into(),
                 confidence: 1.0,
             }],
+            Vec::new(),
             Vec::new(),
         );
 

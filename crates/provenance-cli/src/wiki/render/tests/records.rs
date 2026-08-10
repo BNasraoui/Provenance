@@ -1,5 +1,6 @@
 use crate::wiki::model::{CorpusCounts, OrphanReport, PageKind, ScopeIndexPage};
 use provenance_core::RequirementStatus;
+use provenance_macros::verifies;
 
 use super::super::{
     render_index, render_not_found, render_requirement, render_resolution, render_rule,
@@ -74,7 +75,10 @@ fn index_page_lists_roots_counts_orphans_and_gaps() {
     assert!(html.contains("<a class=\"entry-title\" href=\"/requirements/req_platform/\">"));
     assert!(html.contains("2 refinements · 1 decision · 1 rule"));
     assert!(html.contains("Orphaned Records"));
-    assert!(html.contains("<a href=\"/rules/rule_orphan/\">ORPH-001</a>"));
+    assert!(html.contains("Rules missing a producer"));
+    assert!(html.contains(
+        "<a href=\"/rules/rule_orphan/\">ORPH-001</a> <span class=\"why\">no resolution produces this rule</span>"
+    ));
     assert!(html.contains("<a href=\"/sources/source_unused/\">Unused API spec</a>"));
     assert!(html.contains("citation gap"));
     assert!(html.contains("source_unused is referenced by nothing"));
@@ -98,6 +102,22 @@ fn index_page_disambiguates_roots_with_identical_titles() {
     let html = render_index("default", &page);
     assert!(html.contains("<span class=\"id-chip\">…hall_pro</span>"));
     assert!(html.contains("<span class=\"id-chip\">…ll_pro_2</span>"));
+}
+
+/// The root list and the orphan panel are separate lists on one page.
+#[test]
+#[verifies("rule_ambiguous_links_disambiguated", examples)]
+fn index_page_disambiguates_a_root_and_an_orphan_sharing_a_title() {
+    let mut page = index_fixture();
+    "ExampleOrg platform".clone_into(&mut page.orphans.rules[0].link.title);
+
+    let html = render_index("default", &page);
+    assert!(html.contains(
+        "<a class=\"entry-title\" href=\"/requirements/req_platform/\">ExampleOrg platform <span class=\"id-chip\">…platform</span></a>"
+    ));
+    assert!(html.contains(
+        "<a href=\"/rules/rule_orphan/\">ExampleOrg platform <span class=\"id-chip\">…e_orphan</span></a>"
+    ));
 }
 
 #[test]
@@ -146,6 +166,7 @@ fn index_page_on_a_truly_empty_scope_shows_the_honest_empty_state() {
 }
 
 #[test]
+#[verifies("rule_requirement_badge", examples)]
 fn index_marks_resolved_requirements_without_decisions_or_rules_unbacked() {
     let mut page = index_fixture();
     page.roots[0].status = RequirementStatus::Resolved;

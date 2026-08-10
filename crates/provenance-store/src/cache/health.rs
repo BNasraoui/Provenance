@@ -1,4 +1,5 @@
 use crate::cache::find_gaps;
+use crate::cache::gaps::{GraphQuery, GraphRecords};
 use crate::layout::ProvenanceLayout;
 use crate::state_store::StateStore;
 use provenance_core::{EdgeType, NodeType, RequirementStatus, ResolutionStatus, RuleSeverity};
@@ -223,6 +224,14 @@ fn coverage_health_locked(
     })
 }
 
+/// Rules whose trace back to a source is incomplete.
+///
+/// A rule is complete only when a requirement produces it, the resolution
+/// that decided it produces it too, and a source reaches the producing
+/// requirement. The producer half of that test is the same join the
+/// `OrphanRule` gap runs, so `orphans` and `gaps` name the same rules;
+/// `orphans` additionally reports the rules whose producing requirement has
+/// no live source behind it.
 pub fn orphan_rules(
     layout: &ProvenanceLayout,
     scope: &provenance_core::ScopeId,
@@ -235,37 +244,19 @@ fn orphan_rules_locked(
     scope: &provenance_core::ScopeId,
     store: &StateStore,
 ) -> anyhow::Result<Vec<OrphanRuleItem>> {
-    let edges: Vec<_> = store
-        .list_edges()?
-        .into_iter()
-        .filter(|edge| edge.scope_id == *scope)
-        .collect();
-    Ok(store
-        .list_rules(scope)?
-        .into_iter()
+    let records = GraphRecords::load(scope, store)?;
+    let graph = records.graph(scope);
+    let query = GraphQuery::new(&graph);
+    Ok(records
+        .rules
+        .iter()
         .filter_map(|rule| {
-            let has_requirement = edges.iter().any(|edge| {
-                edge.edge_type == EdgeType::Produces
-                    && edge.to_id == rule.id
-                    && edge.from_type == NodeType::Requirement
-            });
-            let has_resolution = edges.iter().any(|edge| {
-                edge.edge_type == EdgeType::Produces
-                    && edge.to_id == rule.id
-                    && edge.from_type == NodeType::Resolution
-            });
-            let has_source = has_requirement
-                && edges.iter().any(|edge| {
-                    edge.edge_type == EdgeType::References && edge.to_type == NodeType::Requirement
-                });
-            let mut missing = Vec::new();
-            if !has_requirement {
-                missing.push("requirement".to_string());
-            }
-            if !has_resolution {
-                missing.push("resolution".to_string());
-            }
-            if !has_source {
+            let mut missing: Vec<String> = query
+                .missing_rule_producers(&rule.id)
+                .into_iter()
+                .map(|producer| producer.word().to_string())
+                .collect();
+            if !query.rule_trace_reaches_source(&rule.id) {
                 missing.push("source".to_string());
             }
             (!missing.is_empty()).then(|| OrphanRuleItem {

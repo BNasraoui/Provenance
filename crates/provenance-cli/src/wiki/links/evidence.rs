@@ -1,7 +1,11 @@
 use super::annotate::{is_test_name, tokens, trim_token};
 use super::code_ref::{parse_code_ref, CodeRef};
 use super::remote::{blob_url, parse_git_remote, GitRemote};
+use provenance_macros::rule;
 use serde::Serialize;
+
+#[cfg(test)]
+mod reference_links;
 
 /// An evidence reference resolved for display: the original text plus a
 /// link target when one could be derived. `href` is `None` for prose
@@ -41,6 +45,33 @@ impl LinkResolver {
     }
 
     /// Resolves a reference pinned to a commit when one is known.
+    ///
+    /// A recorded reference is shown as a clickable link only when the link
+    /// would actually work: either the reference is already a web address,
+    /// which is used as it stands, or it reads as a file path that a known
+    /// code host can turn into a real blob URL. Everything else stays plain
+    /// text.
+    ///
+    /// The honest consequence: with no known remote — no `origin` at all, or
+    /// a self-hosted host outside the GitHub/GitLab/Bitbucket allowlist in
+    /// `parse_git_remote` — code references stay plain text. A path like
+    /// `src/UseCase.php` is relative to the repo root, so a browser would
+    /// resolve it against the wiki page's own route and get a 404. Plain
+    /// text the reader can search for beats a link that lies.
+    ///
+    /// This is the composing decision. `href_for` answers the narrower
+    /// question "can this path be turned into a real address", and
+    /// [`Self::annotate`] applies the same decision to spans inside free
+    /// text; both are parts of the rule marked here, not separate rules.
+    ///
+    /// "Reads as a file path" is decided in one place, `parse_code_ref`: a
+    /// directory separator, or a bare name carrying a line group. A bare
+    /// dotted token with neither — `e.g.`, `Fig.`, `v1.2`, and equally
+    /// `payroll.rs` — is prose and stays plain text, even when it is the
+    /// whole field. The resolver has nothing to tell the abbreviation from
+    /// the file name, and a wrong link costs more than a missing one; the
+    /// writer who wants the link adds a directory or a line number.
+    #[rule("rule_wiki_reference_links")]
     pub fn resolve_at(&self, reference: &str, commit: Option<&str>) -> EvidenceRef {
         let label = reference.trim().to_string();
         if label.starts_with("http://") || label.starts_with("https://") {
@@ -82,7 +113,8 @@ impl LinkResolver {
     /// Finds linkable spans in free text: code references, and test-case
     /// names which link to the file of the nearest code reference in the
     /// same text. Bare dotted words without a separator or line group (for
-    /// example `e.g.`) are left alone to avoid false positives.
+    /// example `e.g.`) are left alone to avoid false positives; that
+    /// judgement lives in `parse_code_ref`, which every surface shares.
     pub fn annotate(&self, text: &str) -> Vec<InlineRef> {
         let mut file_refs: Vec<(InlineRef, String)> = Vec::new();
         let mut test_names: Vec<InlineRef> = Vec::new();
@@ -94,30 +126,28 @@ impl LinkResolver {
             let start = token_start + offset;
             let end = start + trimmed.len();
             if let Some(code_ref) = parse_code_ref(trimmed) {
-                if code_ref.path.contains('/') || !code_ref.lines.is_empty() {
-                    // No remote means no link can be built at all; leave the
-                    // token as plain text rather than anchor it to a path
-                    // that would 404 inside the rendered site.
-                    if let Some(href) = self.href_for(&code_ref, None) {
-                        let file_href = self
-                            .href_for(
-                                &CodeRef {
-                                    path: code_ref.path.clone(),
-                                    lines: Vec::new(),
-                                },
-                                None,
-                            )
-                            .unwrap_or_default();
-                        let inline = InlineRef {
-                            start,
-                            end,
-                            label: trimmed.to_string(),
-                            href,
-                        };
-                        file_refs.push((inline, file_href));
-                    }
-                    continue;
+                // No remote means no link can be built at all; leave the
+                // token as plain text rather than anchor it to a path
+                // that would 404 inside the rendered site.
+                if let Some(href) = self.href_for(&code_ref, None) {
+                    let file_href = self
+                        .href_for(
+                            &CodeRef {
+                                path: code_ref.path.clone(),
+                                lines: Vec::new(),
+                            },
+                            None,
+                        )
+                        .unwrap_or_default();
+                    let inline = InlineRef {
+                        start,
+                        end,
+                        label: trimmed.to_string(),
+                        href,
+                    };
+                    file_refs.push((inline, file_href));
                 }
+                continue;
             }
             if is_test_name(trimmed) {
                 test_names.push(InlineRef {
@@ -159,8 +189,10 @@ impl LinkResolver {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use provenance_macros::verifies;
 
     #[test]
+    #[verifies("rule_wiki_reference_links", examples)]
     fn resolve_document_anchors_a_lines_prefixed_section() {
         let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
         let evidence = resolver.resolve_document("src/UseCase.php", Some("lines 153-156"), None);
@@ -171,6 +203,7 @@ mod tests {
     }
 
     #[test]
+    #[verifies("rule_wiki_reference_links", examples)]
     fn resolver_passes_http_urls_through() {
         let resolver = LinkResolver::new(None);
         let evidence = resolver.resolve("https://example.com/handbook");
@@ -182,6 +215,7 @@ mod tests {
     }
 
     #[test]
+    #[verifies("rule_wiki_reference_links", examples)]
     fn resolver_builds_blob_urls_when_a_remote_is_known() {
         let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
         let evidence = resolver.resolve("src/UseCase.php:153-156");
@@ -193,6 +227,7 @@ mod tests {
     }
 
     #[test]
+    #[verifies("rule_wiki_reference_links", examples)]
     fn resolver_pins_blob_urls_to_a_commit_when_given() {
         let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
         let evidence = resolver.resolve_at("src/UseCase.php:153", Some("deadbee"));
@@ -203,6 +238,7 @@ mod tests {
     }
 
     #[test]
+    #[verifies("rule_wiki_reference_links", examples)]
     fn resolver_leaves_code_refs_unlinked_without_a_remote() {
         // A relative path like "src/UseCase.php" would be resolved against
         // the wiki page's own route, not the repo root, so it must never be
@@ -215,6 +251,7 @@ mod tests {
     }
 
     #[test]
+    #[verifies("rule_wiki_reference_links", examples)]
     fn resolver_leaves_prose_references_unlinked() {
         let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
         let evidence = resolver.resolve("Section 7.2 of the award");
@@ -223,6 +260,37 @@ mod tests {
     }
 
     #[test]
+    #[verifies("rule_wiki_reference_links", examples)]
+    fn resolver_leaves_bare_dotted_tokens_unlinked() {
+        // A whole-field reference gets the same reading as a span inside
+        // free text: without a directory or a line group, a dotted token is
+        // prose. "payroll.rs" is here on purpose — the resolver cannot tell
+        // it from "e.g.", so it treats them alike.
+        let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
+        for reference in ["e.g.", "Fig.", "etc.", "v1.2", "payroll.rs"] {
+            let evidence = resolver.resolve(reference);
+            assert_eq!(evidence.label, reference);
+            assert!(
+                evidence.href.is_none(),
+                "`{reference}` is prose but linked to {:?}",
+                evidence.href
+            );
+        }
+    }
+
+    #[test]
+    #[verifies("rule_wiki_reference_links", examples)]
+    fn resolver_links_a_bare_file_name_carrying_a_line_group() {
+        let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
+        let evidence = resolver.resolve("parser.rs:12");
+        assert_eq!(
+            evidence.href.as_deref(),
+            Some("https://github.com/exampleorg/ex-api/blob/HEAD/parser.rs#L12")
+        );
+    }
+
+    #[test]
+    #[verifies("rule_wiki_reference_links", examples)]
     fn resolver_combines_documents_with_line_sections() {
         let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
         let evidence = resolver.resolve_document("src/UseCase.php", Some("153-156"), None);
@@ -234,6 +302,7 @@ mod tests {
     }
 
     #[test]
+    #[verifies("rule_wiki_reference_links", examples)]
     fn resolver_keeps_prose_sections_visible_but_links_the_document() {
         let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
         let evidence = resolver.resolve_document("src/UseCase.php", Some("save flow"), None);
@@ -245,6 +314,7 @@ mod tests {
     }
 
     #[test]
+    #[verifies("rule_wiki_reference_links", examples)]
     fn resolver_leaves_prose_documents_unlinked() {
         let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
         let evidence = resolver.resolve_document("SCHADS Award", Some("clause 10.3"), None);
@@ -253,6 +323,7 @@ mod tests {
     }
 
     #[test]
+    #[verifies("rule_wiki_reference_links", examples)]
     fn annotate_links_file_references_in_free_text() {
         let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
         let text = "Pattern found in src/UseCase.php:153-156, per-portion guard.";
@@ -300,6 +371,7 @@ mod tests {
     }
 
     #[test]
+    #[verifies("rule_wiki_reference_links", examples)]
     fn annotate_leaves_code_refs_unlinked_without_a_remote() {
         let resolver = LinkResolver::new(None);
         let text = "src/UseCase.php:211-233 confirmed by testCreateGapInvoiceOnly.";
@@ -318,6 +390,7 @@ mod tests {
     }
 
     #[test]
+    #[verifies("rule_wiki_reference_links", examples)]
     fn annotate_returns_nothing_for_plain_prose() {
         let resolver = LinkResolver::new(None);
         assert!(resolver

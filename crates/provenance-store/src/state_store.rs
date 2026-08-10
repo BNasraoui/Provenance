@@ -11,6 +11,11 @@ mod shaping_writers;
 mod thread_writers;
 mod writers;
 
+pub use ideation_batches::{
+    assertion_cites_contribution, assertion_cites_synthesis,
+    ensure_asserted_contribution_unchanged, ensure_asserted_synthesis_unchanged, CONTRIBUTION_KIND,
+    SYNTHESIS_KIND,
+};
 pub use inputs::{
     AddSourceReferenceInput, CreateAssertionInput, CreateBoundaryInput, CreateContributionInput,
     CreateDispositionInput, CreateDomainInput, CreateEdgeInput, CreateProposalCardInput,

@@ -4,6 +4,7 @@ use provenance_core::{
     AssertionRecord, Contribution, DispositionRecord, IdeationAggregate, ProposalCard, ScopeId,
     SynthesisPacket,
 };
+use provenance_macros::rule;
 use std::collections::{BTreeMap, BTreeSet};
 
 impl StateStore {
@@ -92,7 +93,14 @@ impl StateStore {
                 |r| r.id.as_str(),
             )?;
             for proposal in &incoming.proposals {
-                provenance_core::validate_proposal_intrinsic(proposal)?;
+                // Read as the aggregate reads it, so the two cannot disagree
+                // about a landing batch: the intrinsic rule is what a live
+                // proposal row may claim, and a terminal row is legacy history
+                // that `validate_ideation_aggregate` judges by its shipped
+                // fingerprint instead.
+                if proposal.promotion_state == provenance_core::PromotionState::Proposed {
+                    provenance_core::validate_proposal_intrinsic(proposal)?;
+                }
             }
             let manifest = self.manifest()?;
             provenance_core::validate_ideation_aggregate(IdeationAggregate {
@@ -155,7 +163,7 @@ impl StateStore {
             &mut dispositions,
         )?;
         for batch in self.list_ideation_landings(scope)? {
-            ensure_asserted_evidence_unchanged(
+            ensure_batch_evidence_unchanged(
                 &contributions,
                 &synthesis_packets,
                 &batch,
@@ -191,20 +199,19 @@ impl StateStore {
         let assertions = self.list_assertion_records(scope)?;
         let dispositions = self.list_dispositions(scope)?;
         validate_legacy_disposition_shard(&legacy_dispositions, &proposals)?;
-        let has_modern_disposition = dispositions.iter().any(|disposition| {
-            proposals.iter().any(|proposal| {
-                proposal.id == disposition.proposal_id
-                    && proposal.promotion_state == provenance_core::PromotionState::Proposed
-            })
-        });
-        let disposition_actor_ids = if has_modern_disposition {
-            self.manifest()?.disposition_actor_ids
-        } else {
-            Vec::new()
-        };
+        // The allowlist is read whatever the scope holds, as every other
+        // caller of the aggregate reads it. When to apply it belongs to
+        // `rule_disposition_actor_allowlist`, which asks only about
+        // dispositions of proposals still claiming `proposed`; a scope holding
+        // no such disposition never reaches the check, so handing it the real
+        // list here decides nothing this read path is entitled to decide. The
+        // one thing the read adds is the read itself: a repository whose
+        // manifest is missing or unreadable now fails here rather than
+        // validating around it, which is what every write path already does.
+        let manifest = self.manifest()?;
         provenance_core::validate_ideation_aggregate(IdeationAggregate {
             legacy_policy: provenance_core::LegacyProposalPolicy::ShippedV1,
-            disposition_actor_ids: &disposition_actor_ids,
+            disposition_actor_ids: &manifest.disposition_actor_ids,
             contributions: &contributions,
             synthesis_packets: &synthesis_packets,
             proposals: &proposals,
@@ -219,7 +226,7 @@ impl StateStore {
     }
 }
 
-fn ensure_asserted_evidence_unchanged(
+fn ensure_batch_evidence_unchanged(
     contributions: &[Contribution],
     synthesis_packets: &[SynthesisPacket],
     batch: &IdeationLandingBatch,
@@ -244,44 +251,88 @@ fn ensure_asserted_evidence_unchanged(
     Ok(())
 }
 
-pub(super) fn ensure_asserted_contribution_unchanged(
-    existing: &provenance_core::Contribution,
-    replacement: &provenance_core::Contribution,
-    assertions: &[AssertionRecord],
+/// Evidence an assertion rests on cannot be edited afterwards.
+///
+/// Once any assertion cites a record, that record is frozen: a replacement is
+/// accepted only when it serializes to exactly what is already stored, and a
+/// replacement that differs is rejected naming the record. A record no
+/// assertion cites may change freely.
+///
+/// The caller supplies the reading of "cited by an assertion" for its record
+/// kind, because that reading differs by kind and the freeze does not: a
+/// contribution is reached through the claim ids an assertion supports, a
+/// synthesis packet through the packet id an assertion names. See
+/// [`assertion_cites_contribution`] and [`assertion_cites_synthesis`] for the
+/// two readings.
+#[rule("rule_asserted_evidence_immutable")]
+pub fn ensure_asserted_evidence_unchanged<T: serde::Serialize>(
+    kind: &str,
+    id: &str,
+    existing: &T,
+    replacement: &T,
+    cited_by_assertion: impl FnOnce() -> bool,
 ) -> anyhow::Result<()> {
     if serde_json::to_value(existing)? == serde_json::to_value(replacement)? {
         return Ok(());
     }
-    let referenced = assertions.iter().any(|assertion| {
-        existing
-            .material_claims
-            .iter()
-            .any(|claim| assertion.supporting_claim_ids.contains(&claim.claim_id))
-    });
     anyhow::ensure!(
-        !referenced,
-        "contribution {} is referenced by an assertion and cannot be replaced",
-        existing.id.as_str()
+        !cited_by_assertion(),
+        "{kind} {id} is referenced by an assertion and cannot be replaced"
     );
     Ok(())
 }
 
-pub(super) fn ensure_asserted_synthesis_unchanged(
-    existing: &provenance_core::SynthesisPacket,
-    replacement: &provenance_core::SynthesisPacket,
+/// The kinds the freeze names, so a caller in another crate spells them the
+/// same way this one does.
+pub const CONTRIBUTION_KIND: &str = "contribution";
+pub const SYNTHESIS_KIND: &str = "synthesis packet";
+
+/// An assertion cites a contribution through the claim ids it supports.
+pub fn assertion_cites_contribution(
+    contribution: &Contribution,
+    assertions: &[AssertionRecord],
+) -> bool {
+    assertions.iter().any(|assertion| {
+        contribution
+            .material_claims
+            .iter()
+            .any(|claim| assertion.supporting_claim_ids.contains(&claim.claim_id))
+    })
+}
+
+/// An assertion cites a synthesis packet by the packet id it names.
+pub fn assertion_cites_synthesis(packet: &SynthesisPacket, assertions: &[AssertionRecord]) -> bool {
+    assertions
+        .iter()
+        .any(|assertion| assertion.synthesis_packet_id == packet.id)
+}
+
+pub fn ensure_asserted_contribution_unchanged(
+    existing: &Contribution,
+    replacement: &Contribution,
     assertions: &[AssertionRecord],
 ) -> anyhow::Result<()> {
-    if serde_json::to_value(existing)? == serde_json::to_value(replacement)? {
-        return Ok(());
-    }
-    anyhow::ensure!(
-        !assertions
-            .iter()
-            .any(|assertion| assertion.synthesis_packet_id == existing.id),
-        "synthesis packet {} is referenced by an assertion and cannot be replaced",
-        existing.id.as_str()
-    );
-    Ok(())
+    ensure_asserted_evidence_unchanged(
+        CONTRIBUTION_KIND,
+        existing.id.as_str(),
+        existing,
+        replacement,
+        || assertion_cites_contribution(existing, assertions),
+    )
+}
+
+pub fn ensure_asserted_synthesis_unchanged(
+    existing: &SynthesisPacket,
+    replacement: &SynthesisPacket,
+    assertions: &[AssertionRecord],
+) -> anyhow::Result<()> {
+    ensure_asserted_evidence_unchanged(
+        SYNTHESIS_KIND,
+        existing.id.as_str(),
+        existing,
+        replacement,
+        || assertion_cites_synthesis(existing, assertions),
+    )
 }
 
 fn insert_all<'a, T: serde::Serialize>(
@@ -372,21 +423,59 @@ fn merge_immutable<T: Clone>(
     Ok(())
 }
 
-fn validate_legacy_disposition_shard(
+/// The retired `promotion_decisions.jsonl` shard holds history, not decisions.
+///
+/// The shard is admitted only when its rows are the shipped-v1 audit itself,
+/// which `provenance-core` pins as a SHA-256 of the records. Membership is a
+/// property of the whole set, so a row appended beside genuine history changes
+/// the fingerprint and takes the whole shard down with it. That closes the way
+/// in that a per-row test left open: a decision taken now belongs to the
+/// modern lifecycle in `dispositions.jsonl`, which checks the actor against
+/// the repository allowlist and demands an assertion behind an acceptance, and
+/// a writer who both dropped a row here and moved its proposal out of
+/// `proposed` used to buy those gates off. An empty shard passes, having
+/// claimed nothing.
+///
+/// The older, weaker half of the test is kept: every row must still name a
+/// proposal that has already left `proposed`. Membership decides every case it
+/// decides - the shipped rows name proposals that shipped terminal - so this
+/// refuses nothing membership would admit on today's records. It is kept
+/// because it is the reading that makes the shard history rather than a
+/// decision surface, and it is cheap to state.
+///
+/// This gate reads the shard as it stands on disk. The same fingerprint is
+/// checked again inside `validate_ideation_aggregate`, over the dispositions
+/// of terminal proposals from every source, so a forged row that reaches the
+/// aggregate by another path is caught there.
+#[rule("rule_legacy_shard_frozen")]
+pub(super) fn validate_legacy_disposition_shard(
     legacy_dispositions: &[DispositionRecord],
     proposals: &[ProposalCard],
 ) -> anyhow::Result<()> {
+    if legacy_dispositions.is_empty() {
+        return Ok(());
+    }
+    anyhow::ensure!(
+        provenance_core::is_shipped_legacy_disposition_audit(legacy_dispositions),
+        LEGACY_SHARD_REFUSAL
+    );
     for disposition in legacy_dispositions {
         anyhow::ensure!(
             proposals.iter().any(|proposal| {
                 proposal.id == disposition.proposal_id
                     && proposal.promotion_state != provenance_core::PromotionState::Proposed
             }),
-            "deprecated promotion_decisions.jsonl accepts only the frozen shipped-v1 disposition audit"
+            LEGACY_SHARD_REFUSAL
         );
     }
     Ok(())
 }
+
+/// One refusal for both halves of the gate: the shard either is the shipped
+/// audit or it is not, and a caller told which half it failed would learn only
+/// how to forge the other.
+const LEGACY_SHARD_REFUSAL: &str =
+    "deprecated promotion_decisions.jsonl accepts only the frozen shipped-v1 disposition audit";
 
 pub(super) fn overlay_records<T>(records: &mut Vec<T>, incoming: Vec<T>, id: impl Fn(&T) -> &str) {
     for record in incoming {

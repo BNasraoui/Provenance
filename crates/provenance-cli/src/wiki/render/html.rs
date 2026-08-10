@@ -1,9 +1,14 @@
 use crate::wiki::links::{EvidenceRef, InlineRef};
 use crate::wiki::model::{PageId, PageLink};
+use provenance_macros::rule;
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
 use super::labels::kind_label;
+
+#[cfg(test)]
+#[path = "tests/disambiguation.rs"]
+mod disambiguation_tests;
 
 pub(in crate::wiki::render) fn escape_html(text: &str) -> String {
     text.replace('&', "&amp;")
@@ -15,14 +20,12 @@ pub(in crate::wiki::render) fn escape_attr(text: &str) -> String {
     escape_html(text).replace('"', "&quot;")
 }
 
-pub(in crate::wiki::render) fn link_html(link: &PageLink) -> String {
-    format!(
-        "<a href=\"{}\">{}</a>",
-        escape_attr(&link.target.route()),
-        escape_html(&link.title)
-    )
-}
-
+/// Renders every titled link on one page.
+///
+/// Build one per page, from every link the page will render, and hand it to
+/// each section. A renderer built per section only knows the titles of that
+/// section, so two records sharing a title in different sections would both
+/// render bare.
 pub(in crate::wiki::render) struct PageLinksRenderer {
     targets_by_title: HashMap<String, Vec<PageId>>,
 }
@@ -56,6 +59,17 @@ impl PageLinksRenderer {
         format!("{}{}", escape_html(&link.title), self.collision_chip(link))
     }
 
+    /// A reader must never face two visually identical links that mean
+    /// different records.
+    ///
+    /// The whole page is one field of view, so the titles compared here are
+    /// every title the page renders, not just the ones beside this link in
+    /// its own list. When links on a page carry the same title, each one
+    /// shows the shortest ending of its record id that tells it apart from
+    /// the others, never fewer than eight characters. When the ids match as
+    /// well, the record kind is shown too. A title nothing else on the page
+    /// shares shows no chip at all.
+    #[rule("rule_ambiguous_links_disambiguated")]
     fn collision_chip(&self, link: &PageLink) -> String {
         let mut html = String::new();
         if let Some(targets) = self.targets_by_title.get(&link.title) {
@@ -83,17 +97,18 @@ impl PageLinksRenderer {
         }
         html
     }
-}
 
-pub(in crate::wiki::render) fn link_list(links: &[PageLink]) -> String {
-    let mut html = String::from("<ul class=\"link-list\">\n");
-    let renderer = PageLinksRenderer::new(links);
-    for link in links {
-        writeln!(html, "<li>{}</li>", renderer.link(link, None))
-            .expect("writing to a String should not fail");
+    /// One section's links as a list. The renderer still speaks for the whole
+    /// page, so a title shared with another section is marked here too.
+    pub(in crate::wiki::render) fn link_list(&self, links: &[PageLink]) -> String {
+        let mut html = String::from("<ul class=\"link-list\">\n");
+        for link in links {
+            writeln!(html, "<li>{}</li>", self.link(link, None))
+                .expect("writing to a String should not fail");
+        }
+        html.push_str("</ul>\n");
+        html
     }
-    html.push_str("</ul>\n");
-    html
 }
 
 fn shortest_distinct_suffix<'a>(target: &'a PageId, colliding_targets: &[PageId]) -> &'a str {

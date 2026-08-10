@@ -66,7 +66,6 @@ def build_fixture():
         "rationale": "Representative decision evidence for homepage-scale evaluation.",
         "status": "approved",
         "review_on": None,
-        "review_triggers": [],
     } for i in range(165)]
     rules = [{
         "schema_version": 1,
@@ -81,8 +80,6 @@ def build_fixture():
         "modality": "obligation",
         "source_document": "representative-corpus",
         "source_section": f"control-{i:03d}",
-        "expression": {},
-        "inputs": [],
     } for i in range(576)]
     edges = [edge(
         "refines_into", "requirement", f"req_{i % 12:03d}",

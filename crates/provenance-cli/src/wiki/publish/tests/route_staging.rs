@@ -1,6 +1,8 @@
 use super::*;
+use provenance_macros::verifies;
 
 #[test]
+#[verifies("rule_page_route_safety", examples)]
 fn rejects_a_route_that_would_escape_the_stage() {
     let temp = tempfile::tempdir().unwrap();
     let stage = utf8(temp.path().join("stage"));
@@ -13,6 +15,7 @@ fn rejects_a_route_that_would_escape_the_stage() {
 }
 
 #[test]
+#[verifies("rule_page_route_safety", examples)]
 fn staging_failure_preserves_the_previous_complete_output() {
     let temp = tempfile::tempdir().unwrap();
     let output = utf8(temp.path().join("wiki"));

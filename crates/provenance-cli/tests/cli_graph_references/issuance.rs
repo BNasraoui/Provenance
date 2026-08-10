@@ -1,4 +1,5 @@
 use super::*;
+use provenance_macros::verifies;
 
 #[test]
 fn issue_is_versioned_deterministic_and_correlation_is_not_identity() {
@@ -85,12 +86,40 @@ fn explicit_commit_allows_dirty_state_and_exact_operations_read_the_pin() {
     }
 }
 
+/// The refusals reach the operator. The four checks are exercised arm by arm
+/// against the typed error in
+/// `provenance-store/tests/graph_reference_verification.rs`; what is at stake
+/// here is that a failed check leaves the command with a non-zero exit and a
+/// message naming the field, rather than printing a graph nobody verified.
 #[test]
-fn verify_reports_typed_mismatch_and_missing_errors() {
+#[verifies("rule_reference_verified", examples)]
+fn refused_references_fail_every_read_verb_and_name_the_field() {
     let temp = committed_store();
-    let mut reference = issue(temp.path(), &[]);
-    reference["graph_digest"] = Value::String(format!("sha256:{}", "0".repeat(64)));
-    let reference_path = write_reference(temp.path(), &reference);
+    let genuine = issue(temp.path(), &[]);
+
+    let mut tampered = genuine.clone();
+    tampered["graph_digest"] = Value::String(format!("sha256:{}", "0".repeat(64)));
+    let reference_path = write_reference(temp.path(), &tampered);
+    for operation in ["show", "verify", "exact-export"] {
+        provenance(temp.path())
+            .args([
+                "graph-reference",
+                operation,
+                "--repo",
+                ".",
+                "--reference",
+                reference_path.to_str().unwrap(),
+            ])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(
+                "mismatched graph reference graph_digest",
+            ));
+    }
+
+    let mut tampered = genuine.clone();
+    tampered["reference_id"] = Value::String(format!("grf1_{}", "0".repeat(64)));
+    let reference_path = write_reference(temp.path(), &tampered);
     provenance(temp.path())
         .args([
             "graph-reference",
@@ -102,10 +131,13 @@ fn verify_reports_typed_mismatch_and_missing_errors() {
         ])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("mismatched"));
+        .stderr(predicate::str::contains(
+            "mismatched graph reference reference_id",
+        ));
 
-    reference["commit"] = Value::String("0".repeat(40));
-    let reference_path = write_reference(temp.path(), &reference);
+    let mut tampered = genuine;
+    tampered["commit"] = Value::String("0".repeat(40));
+    let reference_path = write_reference(temp.path(), &tampered);
     provenance(temp.path())
         .args([
             "graph-reference",
@@ -117,7 +149,7 @@ fn verify_reports_typed_mismatch_and_missing_errors() {
         ])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("missing"));
+        .stderr(predicate::str::contains("missing").and(predicate::str::contains("0".repeat(40))));
 }
 
 #[test]

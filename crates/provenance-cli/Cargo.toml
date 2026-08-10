@@ -19,6 +19,7 @@ fs_at.workspace = true
 jsonschema.workspace = true
 pulldown-cmark.workspace = true
 provenance-core = { path = "../provenance-core" }
+provenance-macros = { path = "../provenance-macros" }
 provenance-scanner = { path = "../provenance-scanner" }
 provenance-store = { path = "../provenance-store" }
 remove_dir_all.workspace = true

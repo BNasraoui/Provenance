@@ -4,6 +4,7 @@ use provenance_core::{
     DispositionActor, DispositionDecision, IdeationTarget, IdeationTargetType, IdentityType,
     PromotionState, StableId,
 };
+use provenance_macros::verifies;
 
 #[test]
 fn legacy_disposition_path_reads_shipped_camel_case_records() {
@@ -23,6 +24,7 @@ fn legacy_disposition_path_reads_shipped_camel_case_records() {
 }
 
 #[test]
+#[verifies("rule_legacy_shard_frozen", examples)]
 fn deprecated_disposition_shard_rejects_modern_records() {
     let (_dir, store, scope) = initialized_store();
     allow_actor(&store, "reviewer");
@@ -47,7 +49,15 @@ fn deprecated_disposition_shard_rejects_modern_records() {
         .unwrap_err()
         .to_string();
 
-    assert!(error.contains("frozen shipped-v1"), "{error}");
+    // The full message, so the assertion cannot be satisfied by the separate
+    // shipped-v1 fingerprint errors that share the phrase "frozen shipped-v1".
+    assert!(
+        error.contains(
+            "deprecated promotion_decisions.jsonl accepts only the frozen shipped-v1 \
+             disposition audit"
+        ),
+        "{error}"
+    );
 }
 
 #[test]
@@ -68,6 +78,7 @@ fn direct_modern_proposal_write_rejects_terminal_ingress() {
 }
 
 #[test]
+#[verifies("rule_disposition_write_gate", examples)]
 fn accepted_disposition_requires_an_assertion() {
     let (_dir, store, scope) = initialized_store();
     seed_blocked_evidence(&store, &scope);
@@ -89,6 +100,7 @@ fn accepted_disposition_requires_an_assertion() {
 }
 
 #[test]
+#[verifies("rule_disposition_write_gate", examples)]
 fn rejected_disposition_does_not_require_an_assertion() {
     let (_dir, store, scope) = initialized_store();
     allow_actor(&store, "ben");

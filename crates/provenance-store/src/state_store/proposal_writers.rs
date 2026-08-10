@@ -1,11 +1,13 @@
+use super::canonical_artifacts::CanonicalArtifactIndex;
 use super::{
     serde_name, CreateAssertionInput, CreateDispositionInput, CreateProposalCardInput, StateStore,
 };
 use crate::shards;
 use provenance_core::{
-    validate_optional_confidence_score, AssertionRecord, DispositionDecision, DispositionRecord,
-    PromotionState, ProposalCard, SchemaVersion, ScopeId, StableId,
+    validate_optional_confidence_score, AssertionRecord, DispositionRecord, PromotionState,
+    ProposalCard, SchemaVersion, ScopeId, StableId,
 };
+use provenance_macros::rule;
 
 impl StateStore {
     pub fn create_asserted_proposal(
@@ -59,13 +61,7 @@ impl StateStore {
     ) -> anyhow::Result<AssertionRecord> {
         let scope = input.scope_id.clone();
         self.with_lifecycle_lock(&scope, || {
-            anyhow::ensure!(
-                !self
-                    .list_dispositions(&scope)?
-                    .iter()
-                    .any(|record| record.proposal_id == input.proposal_id),
-                "a disposed proposal cannot re-enter assertion"
-            );
+            self.ensure_proposal_not_disposed(&scope, &input.proposal_id)?;
             let mut synthesis = self
                 .list_synthesis_packets(&scope)?
                 .into_iter()
@@ -118,6 +114,24 @@ impl StateStore {
         })
     }
 
+    /// A disposition ends a proposal's life, so nothing may assert it
+    /// afterwards. Both assertion entry points ask this, which keeps the
+    /// refusal and its wording in one place.
+    fn ensure_proposal_not_disposed(
+        &self,
+        scope_id: &ScopeId,
+        proposal_id: &StableId,
+    ) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            !self
+                .list_dispositions(scope_id)?
+                .iter()
+                .any(|record| record.proposal_id == *proposal_id),
+            "a disposed proposal cannot re-enter assertion"
+        );
+        Ok(())
+    }
+
     fn write_assertion(&self, input: CreateAssertionInput) -> anyhow::Result<AssertionRecord> {
         let assertion = AssertionRecord {
             schema_version: SchemaVersion(1),
@@ -127,13 +141,7 @@ impl StateStore {
             synthesis_packet_id: input.synthesis_packet_id,
             supporting_claim_ids: input.supporting_claim_ids,
         };
-        anyhow::ensure!(
-            !self
-                .list_dispositions(&input.scope_id)?
-                .iter()
-                .any(|record| record.proposal_id == assertion.proposal_id),
-            "a disposed proposal cannot re-enter assertion"
-        );
+        self.ensure_proposal_not_disposed(&input.scope_id, &assertion.proposal_id)?;
         let path = shards::assertion_records_path(&self.layout, &input.scope_id);
         self.mutate_jsonl_records(&path, |records: &mut Vec<AssertionRecord>| {
             anyhow::ensure!(
@@ -220,43 +228,31 @@ impl StateStore {
             schema_version: SchemaVersion(1),
             scope_id: scope_id.clone(),
             id,
-            proposal_id: proposal_id.clone(),
+            proposal_id,
             decision,
             rationale,
             actor,
             canonical_artifact,
             external_action,
         };
-        anyhow::ensure!(
-            self.list_proposal_definitions(&scope_id)?
-                .iter()
-                .any(|proposal| proposal.id == proposal_id),
-            "proposal does not exist"
-        );
-        anyhow::ensure!(
-            disposition.decision != DispositionDecision::Accepted
-                || self
-                    .list_assertion_records(&scope_id)?
-                    .iter()
-                    .any(|assertion| assertion.proposal_id == proposal_id),
-            "accepted proposal must be asserted before disposition"
-        );
-        self.ensure_canonical_artifact_exists(&scope_id, disposition.canonical_artifact.as_ref())?;
+        let proposals = self.list_proposal_definitions(&scope_id)?;
+        let assertions = self.list_assertion_records(&scope_id)?;
         let mut dispositions = self.list_dispositions(&scope_id)?;
-        anyhow::ensure!(
-            !dispositions.iter().any(|record| {
-                record.id == disposition.id || record.proposal_id == disposition.proposal_id
-            }),
-            "proposal already has an authoritative disposition"
-        );
+        validate_disposition_write_gate(
+            &disposition,
+            &proposals,
+            &assertions,
+            &dispositions,
+            &self.canonical_artifact_index(&scope_id)?,
+        )?;
         dispositions.push(disposition.clone());
         provenance_core::validate_ideation_aggregate(provenance_core::IdeationAggregate {
             legacy_policy: provenance_core::LegacyProposalPolicy::ShippedV1,
             disposition_actor_ids: &self.manifest()?.disposition_actor_ids,
             contributions: &self.list_contributions(&scope_id)?,
             synthesis_packets: &self.list_synthesis_packets(&scope_id)?,
-            proposals: &self.list_proposal_definitions(&scope_id)?,
-            assertions: &self.list_assertion_records(&scope_id)?,
+            proposals: &proposals,
+            assertions: &assertions,
             dispositions: &dispositions,
         })?;
         let dispositions_path = shards::dispositions_path(&self.layout, &scope_id);
@@ -322,6 +318,53 @@ impl StateStore {
             existing.id.as_str()
         );
     }
+}
+
+/// What a person's disposition must satisfy before it is written.
+///
+/// A disposition is the record that ends a proposal's life, so the write is
+/// refused unless all four hold:
+///
+/// 1. the proposal named exists in the scope, so no decision lands on nothing;
+/// 2. an `accepted` decision on a live proposal names one that already carries
+///    an assertion, so nobody accepts a proposal whose evidence was never
+///    recorded (`rejected` and `deferred` need no assertion, because refusing
+///    a proposal is not a claim about its evidence; nor does an acceptance a
+///    human recorded naming a canonical artifact, because that ratified
+///    artifact is the evidence; nor a row that already left `proposed`, which
+///    is legacy history carrying its own audit);
+/// 3. the proposal has no disposition yet and the disposition id is free, so
+///    a person disposes of a proposal exactly once and cannot overwrite the
+///    decision already recorded;
+/// 4. the canonical artifact named, when one is named, exists in the same
+///    scope under the kind it claims, so the decision points at a real
+///    artifact.
+///
+/// The first three are [`provenance_core::validate_disposition_admissible`],
+/// which the ideation aggregate runs over every disposition it reads, so this
+/// gate and that aggregate refuse the same writes for the same reasons in the
+/// same words. The fourth is this gate's alone: only the store can see the
+/// scope's artifacts.
+///
+/// The gate reads state the caller has already loaded and writes nothing; the
+/// caller holds the scope's lifecycle lock across both, so the state it judges
+/// is the state it is judged against. The checks run in the order above, so a
+/// caller who breaks several hears about the first.
+#[rule("rule_disposition_write_gate")]
+pub(super) fn validate_disposition_write_gate(
+    disposition: &DispositionRecord,
+    proposals: &[ProposalCard],
+    assertions: &[AssertionRecord],
+    dispositions: &[DispositionRecord],
+    canonical_artifacts: &CanonicalArtifactIndex,
+) -> anyhow::Result<()> {
+    provenance_core::validate_disposition_admissible(
+        disposition,
+        proposals,
+        assertions,
+        dispositions,
+    )?;
+    canonical_artifacts.ensure_exists(disposition.canonical_artifact.as_ref())
 }
 
 fn proposal_from_input(input: CreateProposalCardInput) -> anyhow::Result<ProposalCard> {

@@ -21,33 +21,44 @@ pub struct CodeRef {
 
 /// Parses a code reference such as `src/UseCase.php:153-156`.
 ///
-/// The path part must look like a file path (no whitespace, and either a
-/// directory separator or a dotted file name). Line groups accept single
-/// lines, `-`/en-dash ranges, and comma-separated lists.
+/// Returns `None` for anything that does not read as a file reference, so
+/// every caller inherits the same prose/path decision. Line groups accept
+/// single lines, `-`/en-dash ranges, and comma-separated lists.
 pub fn parse_code_ref(text: &str) -> Option<CodeRef> {
     let text = text.trim();
     let (path, lines_part) = text
         .split_once(':')
         .map_or((text, None), |(path, lines)| (path, Some(lines)));
-    if !is_file_path(path) {
-        return None;
-    }
     let lines = match lines_part {
         Some(lines_part) => parse_line_ranges(lines_part)?,
         None => Vec::new(),
     };
+    if !reads_as_file_reference(path, &lines) {
+        return None;
+    }
     Some(CodeRef {
         path: path.to_string(),
         lines,
     })
 }
 
-fn is_file_path(path: &str) -> bool {
+/// The one place that decides whether text reads as a file reference rather
+/// than prose. Both the whole-field surface and the free-text surface reach
+/// it through [`parse_code_ref`], so neither can drift from the other.
+///
+/// A directory separator is enough on its own: nobody writes `src/foo` in a
+/// sentence by accident. A bare dotted token is not, because English is full
+/// of them — `e.g.`, `Fig.`, `etc.`, `v1.2` — and nothing in the text tells
+/// `payroll.rs` apart from those. Such a token only reads as a file when a
+/// line group is attached: `payroll.rs:12`.
+fn reads_as_file_reference(path: &str, lines: &[LineRange]) -> bool {
     if path.is_empty() || path.contains("://") || path.chars().any(char::is_whitespace) {
         return false;
     }
-    let file_name = path.rsplit('/').next().unwrap_or(path);
-    path.contains('/') || file_name.contains('.')
+    if path.contains('/') {
+        return true;
+    }
+    path.contains('.') && !lines.is_empty()
 }
 
 /// Strips a leading "line"/"lines" word (case-insensitive), as in the
@@ -152,5 +163,28 @@ mod tests {
         assert!(parse_code_ref("README").is_none());
         assert!(parse_code_ref("12:30pm").is_none());
         assert!(parse_code_ref("").is_none());
+    }
+
+    #[test]
+    fn parse_code_ref_rejects_bare_dotted_tokens() {
+        // Prose punctuation and a real file name are indistinguishable
+        // without a directory or a line group, so both stay prose.
+        for text in ["e.g.", "Fig.", "etc.", "v1.2", "payroll.rs"] {
+            assert!(parse_code_ref(text).is_none(), "`{text}` should be prose");
+        }
+    }
+
+    #[test]
+    fn parse_code_ref_reads_a_bare_file_name_with_a_line_group() {
+        let code_ref = parse_code_ref("parser.rs:12").unwrap();
+        assert_eq!(code_ref.path, "parser.rs");
+        assert_eq!(code_ref.lines, vec![LineRange::new(12, None)]);
+    }
+
+    #[test]
+    fn parse_code_ref_reads_a_directory_path_without_an_extension() {
+        let code_ref = parse_code_ref("src/UseCase").unwrap();
+        assert_eq!(code_ref.path, "src/UseCase");
+        assert!(code_ref.lines.is_empty());
     }
 }

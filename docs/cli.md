@@ -49,6 +49,49 @@ keep. Renames are same-filesystem because staging is a sibling, but durability
 still depends on the filesystem and storage honoring successful writes and
 renames.
 
+## JSONL merge driver
+
+Canonical state is one record per line, so git's line merge invents conflicts
+where two branches touched different records. `provenance merge-jsonl` merges by
+record id instead. The repository `.gitattributes` already routes state files to
+it:
+
+```
+.provenance/state/**/*.jsonl merge=provenance-jsonl
+```
+
+Git does not carry driver commands in the repository, so every clone runs this
+once:
+
+```sh
+git config merge.provenance-jsonl.name "Provenance canonical JSONL merge"
+git config merge.provenance-jsonl.driver "provenance merge-jsonl %O %A %B --output %A --path %P"
+```
+
+Until a clone does, git silently falls back to its usual line merge for those
+files. `provenance` must be on the `PATH` git runs with; otherwise use an
+absolute path to the binary.
+
+The four placeholders are the command's whole contract. `%O %A %B` are the
+positional base, ours, and theirs temporary files. `--output %A` writes the
+merged records back over the ours file, which is what git reads. `--path %P` is
+the repository path the result belongs at: git hands the driver temporary
+files, so this is the only way the merge learns which record type the file
+holds. Run by hand, both flags are optional; `--output` alone also serves as the
+path when no `--path` is given.
+
+The command exits non-zero when the merge conflicts or when the merged records
+would not survive a direct write, and git then leaves the path unmerged for a
+human. Merging is a write, so the merged records face the write-time checks:
+the edges shard is re-checked against the edge endpoint table and a merge that
+would store an invalid edge fails naming that edge, rather than storing it for
+`provenance check` to find later. Per-scope families (requirements, rules,
+sources, and the rest) merge without typed validation today.
+
+The JSON report names each conflicting record, its kind (`add_add`,
+`divergent_edit`, or `delete_modify`), and the base, ours, and theirs
+pre-images.
+
 ## Immutable graph references
 
 Use the commit-then-issue handoff when another system needs an immutable graph input:
@@ -84,8 +127,13 @@ All four operations emit versioned JSON. Reference identity is idempotently deri
 from the Git repository roots, `.provenance/state`, scope, full commit ID, and canonical
 graph digest. Exact exports include only graph-bearing sources, domains, requirements,
 boundaries, topics, questions, resolutions, rules, services, bindings, and edges; they
-do not add proposal, promotion, collaboration, or workflow-specific fields. Failures
-are typed as `missing`, `mismatched`, or `incomplete` in their error text.
+do not add proposal, promotion, collaboration, or workflow-specific fields. The
+exact-export document carries the same `graph_digest` as the reference it was cut
+from, so it verifies offline, with no repository in hand:
+`provenance validate graph-reference-export --input export.json` recomputes the
+digest over the graph that travelled and refuses a document whose recorded digest
+is not that hash. Failures are typed as `missing`, `mismatched`, or `incomplete`
+in their error text.
 
 Inspect the closed JSON Schema contracts with:
 

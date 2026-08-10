@@ -3,6 +3,7 @@ use super::fixtures::{edge, empty_state, requirement, rule, sid};
 use crate::wiki::links::LinkResolver;
 use crate::wiki::model::DomainState;
 use provenance_core::{Domain, EdgeType, NodeType, RequirementStatus, SchemaVersion};
+use provenance_macros::verifies;
 
 fn domain(id: &str, name: &str) -> Domain {
     Domain {
@@ -45,6 +46,7 @@ fn discovery_indexes_requirement_and_rule_titles_and_statements() {
 }
 
 #[test]
+#[verifies("rule_domain_attribution", examples)]
 fn domains_group_rules_through_canonical_requirement_relationships() {
     let mut state = empty_state();
     state.domains = vec![domain("domain_default", "Invoicing")];
@@ -70,6 +72,7 @@ fn domains_group_rules_through_canonical_requirement_relationships() {
 }
 
 #[test]
+#[verifies("rule_domain_attribution", examples)]
 fn domains_group_children_and_rules_by_their_root_requirement_domain() {
     let mut state = empty_state();
     state.domains = vec![domain("domain_default", "Invoicing")];
@@ -117,6 +120,7 @@ fn domains_group_children_and_rules_by_their_root_requirement_domain() {
 }
 
 #[test]
+#[verifies("rule_domain_attribution", examples)]
 fn domains_surface_defined_missing_and_unassigned_without_dropping_rules() {
     let mut state = empty_state();
     state.domains = vec![domain("domain_default", "Invoicing")];

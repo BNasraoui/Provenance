@@ -1,4 +1,4 @@
-use crate::wiki::model::{PageKind, SourcePage};
+use crate::wiki::model::{PageKind, PageLink, SourcePage};
 use std::fmt::Write as _;
 
 use super::super::chrome::{container_html, index_breadcrumb, page_shell, title_row};
@@ -8,11 +8,20 @@ use super::super::fragments::{
     push_classification_block, push_classification_link_row, push_classification_row,
     push_section_open,
 };
-use super::super::html::{escape_attr, escape_html, evidence_html, link_list};
+use super::super::html::{escape_attr, escape_html, evidence_html, PageLinksRenderer};
 use super::super::labels::{format_date_ms, source_type_label, status_badge};
+
+/// Every titled link this page renders: the requirements that reference the
+/// source, and the source that superseded it.
+fn page_links(page: &SourcePage) -> Vec<&PageLink> {
+    let mut links: Vec<&PageLink> = page.referenced_requirements.iter().collect();
+    links.extend(page.superseded_by.iter());
+    links
+}
 
 /// Renders a source detail page.
 pub fn render_source(scope: &str, page: &SourcePage) -> String {
+    let links = PageLinksRenderer::new(page_links(page));
     let mut main = String::new();
     push_reference(&mut main, page);
     if !page.referenced_requirements.is_empty() {
@@ -22,7 +31,7 @@ pub fn render_source(scope: &str, page: &SourcePage) -> String {
             Some("i-git-branch"),
             "Referenced Requirements",
         );
-        main.push_str(&link_list(&page.referenced_requirements));
+        main.push_str(&links.link_list(&page.referenced_requirements));
         main.push_str("</section>\n");
     }
 
@@ -61,7 +70,13 @@ pub fn render_source(scope: &str, page: &SourcePage) -> String {
         );
     }
     if let Some(superseded_by) = &page.superseded_by {
-        push_classification_link_row(&mut rows, "i-book-open", "Superseded by", superseded_by);
+        push_classification_link_row(
+            &mut rows,
+            &links,
+            "i-book-open",
+            "Superseded by",
+            superseded_by,
+        );
     }
     push_classification_block(&mut margin, &rows);
 

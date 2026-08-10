@@ -14,6 +14,11 @@ pub enum WikiRoute<'a> {
 }
 
 impl WikiRoute<'_> {
+    /// Every variant but `Stylesheet` mints a page route, and a page route
+    /// must satisfy `rule_page_route_safety`: bounded by slashes, with plain
+    /// names between them. `Stylesheet` names an asset the publisher writes
+    /// by name, not a page. Nothing here checks the record ids it is handed;
+    /// the publisher refuses a route it cannot stage safely.
     pub fn path(self) -> String {
         match self {
             Self::Index => "/".to_string(),
@@ -57,6 +62,11 @@ fn encode_fragment(fragment: &str) -> String {
     })
 }
 
+/// Reshapes a request path into canonical route form so it can be looked up
+/// among the pages already rendered. It vouches for nothing: `/../secrets/`
+/// comes back unchanged and simply misses the page map, which is safe
+/// because the lookup reads a map in memory and never the filesystem.
+/// `rule_page_route_safety` governs the writing side alone.
 pub fn normalize_request_path(path: &str) -> String {
     let mut route = String::from("/");
     route.push_str(path.trim_matches('/'));

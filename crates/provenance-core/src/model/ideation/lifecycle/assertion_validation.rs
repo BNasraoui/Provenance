@@ -1,9 +1,19 @@
+use super::aggregate_validation::{ensure_supported_schema_version, ASSERTION_KIND};
 use super::{validate_assertion_intrinsic, AssertionRecord, IdeationAggregate};
 use crate::model::{
     Contribution, IdeationEvidenceType, MaterialClaim, PromotionState, ProposalCard, StableId,
     SynthesisPacket,
 };
+use provenance_macros::rule;
 use std::collections::{BTreeMap, BTreeSet};
+
+mod qualification;
+
+pub use qualification::packet_qualifies_proposal;
+use qualification::{
+    blocking_evidence_gap, blocking_human_decision, packet_adjudicates_proposal,
+    packet_owns_proposal_target, qualify_proposal_for_assertion, QualificationFacts,
+};
 
 pub(super) fn validate_assertions(
     aggregate: &IdeationAggregate<'_>,
@@ -12,10 +22,7 @@ pub(super) fn validate_assertions(
 ) -> anyhow::Result<()> {
     let mut asserted_proposals = BTreeSet::new();
     for assertion in aggregate.assertions {
-        anyhow::ensure!(
-            assertion.schema_version.0 == 1,
-            "assertion schema_version must be 1"
-        );
+        ensure_supported_schema_version(ASSERTION_KIND, assertion.schema_version)?;
         validate_assertion_intrinsic(assertion)?;
         let proposal = proposals
             .get(assertion.proposal_id.as_str())
@@ -67,38 +74,33 @@ fn validate_assertion_proposal<'a>(
     Ok(())
 }
 
+/// The may-assert reading of `qualify_proposal_for_assertion`: an assertion is
+/// accepted only against a packet that qualifies its proposal.
+///
+/// The assertion under validation was looked up through this proposal and this
+/// packet, so it already witnesses three of the facts that the must-assert
+/// reading has to establish for itself. The packet asserts this proposal and no
+/// other, by construction. The proposal cites supporting claims, because
+/// `validate_assertion_intrinsic` rejects an assertion with none and
+/// `validate_assertions` requires the assertion's claims to match the
+/// proposal's. None of those claims is contested, because
+/// `validate_supporting_claims` rejects a contested claim and names it. Those
+/// three arrive as data; the rest is read off the packet.
 fn validate_assertion_packet(
     proposal: &ProposalCard,
     packet: &SynthesisPacket,
 ) -> anyhow::Result<()> {
-    anyhow::ensure!(
-        packet.scope_id == proposal.scope_id && packet.target == proposal.traceability.target,
-        "assertion synthesis is not owned by the proposal target"
-    );
-    anyhow::ensure!(
-        packet.suggested_artifacts.iter().any(|suggestion| {
-            suggestion.proposal_id.as_ref() == Some(&proposal.id)
-                && suggestion.proposal_key == proposal.proposal_key
-                && suggestion.proposal_type == proposal.proposal_type
-        }),
-        "synthesis packet does not adjudicate proposal {}",
-        proposal.id.as_str()
-    );
-    anyhow::ensure!(
-        !packet
-            .evidence_gaps
-            .iter()
-            .any(|gap| gap.blocking_promotion),
-        "assertion has a blocking evidence gap"
-    );
-    anyhow::ensure!(
-        !packet
-            .required_human_decisions
-            .iter()
-            .any(|decision| decision.blocks_promotion),
-        "assertion has a blocking human decision"
-    );
-    Ok(())
+    let facts = QualificationFacts {
+        packet_owns_proposal_target: packet_owns_proposal_target(packet, proposal),
+        packet_adjudicates_proposal: packet_adjudicates_proposal(packet, proposal),
+        blocking_evidence_gap: blocking_evidence_gap(packet),
+        blocking_human_decision: blocking_human_decision(packet),
+        packet_asserts_another_proposal: false,
+        proposal_has_supporting_claims: true,
+        proposal_claim_contested: false,
+    };
+    qualify_proposal_for_assertion(facts)
+        .map_err(|unmet| anyhow::anyhow!(unmet.describe(proposal.id.as_str())))
 }
 
 fn validate_supporting_claims(
@@ -214,6 +216,13 @@ fn validate_claim_evidence(
     Ok(())
 }
 
+/// Speculation is not evidence. An assertion may rest only on evidence whose
+/// type claims real backing, so the two speculative types, `Unsupported` and
+/// `Exploratory`, can never stand behind an asserted claim. Both readings of a
+/// supporting claim run through here: the claim's own evidence type
+/// (`validate_claim_owner`) and the type of each evidence reference it cites
+/// (`validate_claim_evidence`).
+#[rule("rule_positive_evidence")]
 const fn is_positive_evidence_type(evidence_type: IdeationEvidenceType) -> bool {
     !matches!(
         evidence_type,
@@ -242,38 +251,115 @@ pub(super) fn ensure_qualifying_assertions(
     Ok(())
 }
 
-fn packet_qualifies_proposal(
-    packet: &SynthesisPacket,
-    proposal: &ProposalCard,
-    assertions: &[AssertionRecord],
-) -> bool {
-    let packet_has_assertion = assertions
-        .iter()
-        .any(|assertion| assertion.synthesis_packet_id == packet.id);
-    packet.scope_id == proposal.scope_id
-        && packet.target == proposal.traceability.target
-        && packet.suggested_artifacts.iter().any(|suggestion| {
-            suggestion.proposal_id.as_ref() == Some(&proposal.id)
-                && suggestion.proposal_key == proposal.proposal_key
-                && suggestion.proposal_type == proposal.proposal_type
-        })
-        && !packet
-            .evidence_gaps
-            .iter()
-            .any(|gap| gap.blocking_promotion)
-        && !packet
-            .required_human_decisions
-            .iter()
-            .any(|decision| decision.blocks_promotion)
-        && (!packet_has_assertion
-            || assertions.iter().any(|assertion| {
-                assertion.synthesis_packet_id == packet.id && assertion.proposal_id == proposal.id
-            }))
-        && !proposal.traceability.supporting_claim_ids.is_empty()
-        && !packet.contested_claims.iter().any(|contested| {
-            proposal
-                .traceability
-                .supporting_claim_ids
-                .contains(&contested.claim_id)
-        })
+#[cfg(test)]
+mod tests {
+    use provenance_macros::verifies;
+
+    use super::is_positive_evidence_type;
+    use crate::model::{IdeationEvidenceType, SpeculationMarker};
+
+    /// The size of the domain. The chained match below forces a new evidence
+    /// type to join the chain, and this count catches a chain that a new
+    /// variant cut short, so the exhaustion proofs stay exhaustive.
+    const EVIDENCE_TYPE_COUNT: usize = 6;
+    const SPECULATION_MARKER_COUNT: usize = 2;
+
+    // The variant lists are derived from exhaustive matches so that adding a
+    // variant fails compilation until the new variant joins the chain.
+    fn all_evidence_types() -> Vec<IdeationEvidenceType> {
+        let mut all = vec![IdeationEvidenceType::Source];
+        while let Some(next) = match all.last().unwrap() {
+            IdeationEvidenceType::Source => Some(IdeationEvidenceType::Artifact),
+            IdeationEvidenceType::Artifact => Some(IdeationEvidenceType::ThreadMessage),
+            IdeationEvidenceType::ThreadMessage => Some(IdeationEvidenceType::DomainKnowledge),
+            IdeationEvidenceType::DomainKnowledge => Some(IdeationEvidenceType::Unsupported),
+            IdeationEvidenceType::Unsupported => Some(IdeationEvidenceType::Exploratory),
+            IdeationEvidenceType::Exploratory => None,
+        } {
+            all.push(next);
+        }
+        all
+    }
+
+    fn all_speculation_markers() -> Vec<SpeculationMarker> {
+        let mut all = vec![SpeculationMarker::Unsupported];
+        while let Some(next) = match all.last().unwrap() {
+            SpeculationMarker::Unsupported => Some(SpeculationMarker::Exploratory),
+            SpeculationMarker::Exploratory => None,
+        } {
+            all.push(next);
+        }
+        all
+    }
+
+    // Independent restatement of the decision, listed rather than matched so
+    // the oracle does not repeat the rule function's shape: these are the
+    // evidence types that name speculation instead of backing. Must not be
+    // implemented by calling the rule function.
+    const SPECULATIVE_EVIDENCE_TYPES: [IdeationEvidenceType; 2] = [
+        IdeationEvidenceType::Unsupported,
+        IdeationEvidenceType::Exploratory,
+    ];
+
+    fn is_speculation_by_oracle(evidence_type: IdeationEvidenceType) -> bool {
+        SPECULATIVE_EVIDENCE_TYPES.contains(&evidence_type)
+    }
+
+    // `SpeculationMarker` is the parallel vocabulary: it names the same two
+    // kinds of speculation for unsupported recommendations and for a synthesis
+    // packet's unsupported speculations, and shares no predicate with this
+    // rule. This mapping is the shared statement the two vocabularies do have,
+    // and the test below holds it to a correspondence in both directions.
+    const fn evidence_type_for_marker(marker: SpeculationMarker) -> IdeationEvidenceType {
+        match marker {
+            SpeculationMarker::Unsupported => IdeationEvidenceType::Unsupported,
+            SpeculationMarker::Exploratory => IdeationEvidenceType::Exploratory,
+        }
+    }
+
+    #[test]
+    #[verifies("rule_positive_evidence", exhaustion)]
+    fn evidence_type_is_positive_unless_it_names_speculation() {
+        let all = all_evidence_types();
+        assert_eq!(
+            all.len(),
+            EVIDENCE_TYPE_COUNT,
+            "the evidence type chain is short of the domain"
+        );
+        for evidence_type in all {
+            assert_eq!(
+                is_positive_evidence_type(evidence_type),
+                !is_speculation_by_oracle(evidence_type),
+                "the rule and the decision disagree on {evidence_type:?}"
+            );
+        }
+    }
+
+    #[test]
+    #[verifies("rule_positive_evidence", exhaustion)]
+    fn speculation_markers_and_non_positive_evidence_types_name_the_same_set() {
+        let markers = all_speculation_markers();
+        assert_eq!(
+            markers.len(),
+            SPECULATION_MARKER_COUNT,
+            "the speculation marker chain is short of the domain"
+        );
+        let mut marked = Vec::new();
+        for marker in markers {
+            let evidence_type = evidence_type_for_marker(marker);
+            assert!(
+                !is_positive_evidence_type(evidence_type),
+                "{marker:?} names {evidence_type:?}, which the rule counts as positive evidence"
+            );
+            marked.push(evidence_type);
+        }
+        for evidence_type in all_evidence_types() {
+            if !is_positive_evidence_type(evidence_type) {
+                assert!(
+                    marked.contains(&evidence_type),
+                    "{evidence_type:?} is not positive evidence but no speculation marker names it"
+                );
+            }
+        }
+    }
 }

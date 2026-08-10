@@ -1,4 +1,5 @@
 #[test]
+#[verifies("rule_proposal_authored_as_proposed", examples)]
 fn modern_proposal_cannot_select_asserted_or_terminal_state() {
     for state in ["asserted", "accepted", "rejected", "deferred"] {
         let proposal: crate::ProposalCard = serde_json::from_value(serde_json::json!({
@@ -27,6 +28,7 @@ fn modern_proposal_cannot_select_asserted_or_terminal_state() {
 }
 
 #[test]
+#[verifies("rule_proposal_authored_as_proposed", examples)]
 fn modern_proposal_cannot_embed_disposition_authority() {
     let mut proposal = proposal_json("proposal_a", "assertion_parent");
     proposal.as_object_mut().unwrap().remove("builds_on");
@@ -40,6 +42,7 @@ fn modern_proposal_cannot_embed_disposition_authority() {
 }
 
 #[test]
+#[verifies("rule_proposal_lineage_acyclic", examples)]
 fn lineage_rejects_missing_immutable_assertion_id() {
     let proposal: crate::ProposalCard = serde_json::from_value(serde_json::json!({
         "schema_version": 1,
@@ -75,6 +78,7 @@ fn lineage_rejects_missing_immutable_assertion_id() {
 }
 
 #[test]
+#[verifies("rule_proposal_lineage_acyclic", examples)]
 fn lineage_rejects_cycles_through_assertion_owners() {
     let proposals: Vec<crate::ProposalCard> = serde_json::from_value(serde_json::json!([
         proposal_json("proposal_a", "assertion_b"),
@@ -122,6 +126,7 @@ fn assertion_json(id: &str, proposal_id: &str) -> serde_json::Value {
 }
 
 #[test]
+#[verifies("rule_positive_evidence", examples)]
 fn assertion_rejects_unsupported_and_exploratory_evidence() {
     for evidence_type in ["unsupported", "exploratory"] {
         let (mut contribution, synthesis, proposal, assertion) = lifecycle_fixture();
@@ -186,6 +191,7 @@ fn assertion_rejects_evidence_reference_owned_by_multiple_contributions() {
 }
 
 #[test]
+#[verifies("rule_qualified_proposal_assertion", examples)]
 fn assertion_requires_unblocked_uncontested_adjudication() {
     let (contribution, mut synthesis, proposal, assertion) = lifecycle_fixture();
     synthesis["evidence_gaps"] = serde_json::json!([{
@@ -239,6 +245,7 @@ fn assertion_claim_matching_is_order_independent() {
 }
 
 #[test]
+#[verifies("rule_proposal_effective_state", examples)]
 fn effective_state_is_derived_from_immutable_assertion_and_disposition() {
     let (_, _, proposal, assertion) = lifecycle_fixture();
     let proposal: crate::ProposalCard = serde_json::from_value(proposal).unwrap();
@@ -317,6 +324,7 @@ fn modern_policy_rejects_terminal_proposal_rows() {
 }
 
 #[test]
+#[verifies("rule_proposal_effective_state", examples)]
 fn frozen_terminal_effective_state_ignores_lifecycle_records() {
     let (_, _, mut proposal, assertion) = lifecycle_fixture();
     proposal["promotion_state"] = serde_json::json!("rejected");

@@ -11,6 +11,7 @@ use provenance_core::{
     ArtifactChangeType, ContributionStance, EvidenceQuality, IdeationEvidenceType,
     IdeationTargetType, PromotionState, ProposalType, SpeculationMarker, UncertaintyLevel,
 };
+use provenance_store::graph_reference::{graph_digest, GraphExport};
 use serde_json::{json, Value};
 
 fn enum_values_at(schema: &Value, pointer: &str) -> Vec<String> {
@@ -235,7 +236,21 @@ fn schema_show_enum_values_match_model_serialization() {
     );
 }
 
+/// The digest a document must carry for `graph`, derived rather than written
+/// down so the fixture cannot claim a hash its graph does not have.
+fn derived_digest(graph: &Value) -> String {
+    let graph: GraphExport =
+        serde_json::from_value(graph.clone()).expect("the fixture graph is a pinned graph");
+    graph_digest(&graph).expect("a graph can be canonicalized")
+}
+
 fn minimal_exact_export() -> Value {
+    let mut document = minimal_exact_export_without_digest();
+    document["graph_digest"] = json!(derived_digest(&document["graph"]));
+    document
+}
+
+fn minimal_exact_export_without_digest() -> Value {
     json!({
         "schema_version": 1,
         "operation": "exact-export",
@@ -265,7 +280,7 @@ fn minimal_exact_export() -> Value {
                 "title": "Apply policy", "position": "Apply it", "rationale": "Required",
                 "status": "approved", "inputs": [{
                     "input_type": "source_material", "reference": "source_policy", "summary": "Policy"
-                }], "review_on": null, "review_triggers": []
+                }], "review_on": null
             }],
             "rules": [],
             "services": [], "service_bindings": [], "edges": []
@@ -282,6 +297,15 @@ fn graph_reference_export_schema_validates_record_structure() {
     assert!(validator.is_valid(&valid));
 
     let malformed_cases = [
+        // The digest is not optional: a document without it cannot be checked
+        // against the graph it carries, and one that is not a sha256 digest
+        // cannot be compared with the reference's.
+        minimal_exact_export_without_digest(),
+        {
+            let mut value = minimal_exact_export();
+            value["graph_digest"] = json!("0".repeat(64));
+            value
+        },
         {
             let mut value = minimal_exact_export();
             value["graph"]["sources"] = json!([{}]);

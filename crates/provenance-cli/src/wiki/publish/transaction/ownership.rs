@@ -3,6 +3,7 @@ use super::{
 };
 use crate::wiki::publish::PublishError;
 use camino::Utf8Path;
+use provenance_macros::rule;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
@@ -12,7 +13,7 @@ pub(in crate::wiki::publish) fn acquire_lock(
 ) -> Result<PublicationLock, PublishError> {
     let paths = &transaction.paths;
     let lock = transaction
-        .create_file(&transaction.lock_leaf)
+        .create_file(&transaction.leaves.lock)
         .map_err(|error| PublishError::io("create publication lock", &paths.lock, error))?;
     let identity_file = lock
         .try_clone()
@@ -46,6 +47,38 @@ pub(in crate::wiki::publish) fn acquire_lock(
     Ok(lock)
 }
 
+/// Decides whether a publication may start against the path it was pointed at.
+///
+/// Publication replaces a whole directory tree, so it refuses to start from
+/// any state it cannot reason about. It stops before writing a byte when:
+///
+/// - The output is a symlink. Following it would let a link redirect the
+///   replacement onto a tree the caller never named, so the link is refused
+///   rather than resolved.
+/// - The output exists and is not a directory. A regular file, a device, or a
+///   socket at the output path belongs to the caller, and the only move this
+///   code knows is replacing a directory.
+/// - Any artifact of an earlier run is still beside the output: the lock, the
+///   lock cleanup, the stage, the stage cleanup, or the backup. Their presence
+///   means a previous publication was interrupted, and a lock leaf that is not
+///   a regular file is worse still, because something other than a lock is
+///   standing where the lock goes.
+///
+/// Crash residue is reported by path and left exactly as found. Only an
+/// operator can tell whether a leftover backup holds the live wiki or a
+/// half-written one, so this code never adopts residue as its own work and
+/// never deletes it to clear the way. The refusal is the whole response.
+///
+/// All five artifacts are probed before that refusal is built, so the operator
+/// is told about everything an interrupted run left rather than about whichever
+/// leftover happened to be looked at first. Clearing one artifact and retrying
+/// only to be sent back for the next is the failure this avoids. A lock that is
+/// not a regular file is named as such alongside the list, being an extra fact
+/// about one of the paths and not a refusal of its own.
+///
+/// An absent output and a directory this generator is allowed to own both
+/// pass, and only then does the run proceed.
+#[rule("rule_publish_preflight")]
 pub(in crate::wiki::publish) fn preflight(
     output: &PublicationOutput,
     transaction: &TransactionDirectory,
@@ -69,31 +102,34 @@ pub(in crate::wiki::publish) fn preflight(
     let output_state = transaction.output_identity(&transaction.output_leaf, &output.path)?;
     transaction.validate_output(&transaction.output_leaf, &output.path, output.policy)?;
 
-    if let Some(kind) = child_kind(&transaction.parent, &transaction.lock_leaf)
-        .map_err(|error| PublishError::io("inspect publication lock", &paths.lock, error))?
-    {
-        if kind != ChildKind::File {
-            return Err(PublishError::UnsafeLockPath {
-                path: paths.lock.clone(),
-            });
-        }
-        return Err(PublishError::AmbiguousArtifacts {
-            paths: vec![paths.lock.clone()],
-        });
-    }
     let mut ambiguous = Vec::new();
-    for (leaf, path) in [
-        (&transaction.lock_cleanup_leaf, &paths.lock_cleanup),
-        (&transaction.stage_leaf, &paths.stage),
-        (&transaction.stage_cleanup_leaf, &paths.stage_cleanup),
-        (&transaction.backup_leaf, &paths.backup),
+    let mut unsafe_lock = None;
+    for (leaf, path, is_lock) in [
+        (&transaction.leaves.lock, &paths.lock, true),
+        (&transaction.leaves.lock_cleanup, &paths.lock_cleanup, false),
+        (&transaction.leaves.stage, &paths.stage, false),
+        (
+            &transaction.leaves.stage_cleanup,
+            &paths.stage_cleanup,
+            false,
+        ),
+        (&transaction.leaves.backup, &paths.backup, false),
     ] {
-        if transaction.child_exists(leaf).unwrap_or(true) {
-            ambiguous.push(path.clone());
+        let Some(kind) = child_kind(&transaction.parent, leaf)
+            .map_err(|error| PublishError::io("inspect publication artifact", path, error))?
+        else {
+            continue;
+        };
+        if is_lock && kind != ChildKind::File {
+            unsafe_lock = Some(path.clone());
         }
+        ambiguous.push(path.clone());
     }
     if !ambiguous.is_empty() {
-        return Err(PublishError::AmbiguousArtifacts { paths: ambiguous });
+        return Err(PublishError::AmbiguousArtifacts {
+            paths: ambiguous,
+            unsafe_lock,
+        });
     }
     Ok(output_state)
 }

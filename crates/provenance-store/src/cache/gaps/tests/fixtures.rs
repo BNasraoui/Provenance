@@ -47,7 +47,6 @@ pub fn resolution(id: &str) -> Resolution {
         approved_at: None,
         superseded_by: None,
         review_on: None,
-        review_triggers: serde_json::json!([]),
         origin_thread: None,
         origin_message: None,
     }
@@ -72,17 +71,19 @@ pub fn rule(id: &str) -> Rule {
         source_section: None,
         origin_thread: None,
         origin_message: None,
-        expression: serde_json::json!({}),
-        inputs: serde_json::json!([]),
     }
 }
 
 pub fn topic(id: &str, status: TopicStatus) -> Topic {
+    topic_for(id, "req_topic", status)
+}
+
+pub fn topic_for(id: &str, requirement_id: &str, status: TopicStatus) -> Topic {
     Topic {
         schema_version: SchemaVersion(1),
         scope_id: scope_id(),
         id: sid(id),
-        requirement_id: sid("req_topic"),
+        requirement_id: sid(requirement_id),
         title: id.to_string(),
         status,
         claimed_by: None,
@@ -92,12 +93,21 @@ pub fn topic(id: &str, status: TopicStatus) -> Topic {
 }
 
 pub fn question(id: &str, topic_id: &str, status: QuestionStatus) -> Question {
+    question_for(id, topic_id, "req_topic", status)
+}
+
+pub fn question_for(
+    id: &str,
+    topic_id: &str,
+    requirement_id: &str,
+    status: QuestionStatus,
+) -> Question {
     Question {
         schema_version: SchemaVersion(1),
         scope_id: scope_id(),
         id: sid(id),
         topic_id: sid(topic_id),
-        requirement_id: sid("req_topic"),
+        requirement_id: sid(requirement_id),
         question: "What remains?".to_string(),
         resolution_method: ResolutionMethod::Grill,
         status,

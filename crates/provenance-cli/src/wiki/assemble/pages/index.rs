@@ -1,4 +1,4 @@
-use crate::wiki::model::{CorpusCounts, IndexEntry, OrphanReport, ScopeIndexPage};
+use crate::wiki::model::{CorpusCounts, IndexEntry, OrphanReport, OrphanRule, ScopeIndexPage};
 use provenance_core::{EdgeType, NodeType};
 
 use super::super::context::Assembler;
@@ -38,8 +38,11 @@ impl Assembler<'_> {
                         .rules
                         .iter()
                         .find(|rule| rule.id.as_str() == gap.node_id)
+                        .map(|rule| OrphanRule {
+                            link: rule_link(rule),
+                            reason: gap.reason.clone(),
+                        })
                 })
-                .map(rule_link)
                 .collect(),
             resolutions: self
                 .gaps

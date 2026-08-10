@@ -1,4 +1,5 @@
 use crate::wiki::model::{LineageEntry, PageKind};
+use provenance_macros::verifies;
 
 use super::super::render_requirement;
 use super::fixtures::{gappy_requirement_fixture, link, requirement_fixture};
@@ -50,6 +51,7 @@ fn requirement_page_shows_lineage_with_the_current_entry_unlinked() {
 }
 
 #[test]
+#[verifies("rule_ambiguous_links_disambiguated", examples)]
 fn requirement_page_disambiguates_colliding_refined_into_links() {
     let mut page = requirement_fixture();
     page.children = super::fixtures::colliding_requirement_links();
@@ -64,7 +66,55 @@ fn requirement_page_disambiguates_colliding_refined_into_links() {
     ));
 }
 
+/// Refined Into and Related are separate lists. A renderer built per list
+/// would find each title uncontested and mark neither link.
 #[test]
+#[verifies("rule_ambiguous_links_disambiguated", examples)]
+fn requirement_page_disambiguates_a_title_split_across_two_sections() {
+    let mut page = requirement_fixture();
+    let mut colliding = super::fixtures::colliding_requirement_links();
+    page.siblings = vec![colliding.remove(1)];
+    page.children = colliding;
+
+    let html = render_requirement("default", &page);
+    assert!(html.contains(">Refined Into</h2>"));
+    assert!(html.contains(">Related</h2>"));
+    assert!(html.contains(
+        "<a href=\"/requirements/req_sah_participant_budget_summary_shall_pro/\">Participant budget summary shall pro-rate services <span class=\"id-chip\">…hall_pro</span></a>"
+    ));
+    assert!(html.contains(
+        "<a href=\"/requirements/req_sah_participant_budget_summary_shall_pro_2/\">Participant budget summary shall pro-rate services <span class=\"id-chip\">…ll_pro_2</span></a>"
+    ));
+}
+
+/// The resolving decision, the source citation and the refinements are three
+/// different parts of the page; a title shared between them still reads apart.
+#[test]
+#[verifies("rule_ambiguous_links_disambiguated", examples)]
+fn requirement_page_disambiguates_a_decision_a_source_and_a_child_sharing_a_title() {
+    let mut page = requirement_fixture();
+    "Shared title".clone_into(&mut page.decisions[0].link.title);
+    "Shared title".clone_into(&mut page.sources[0].link.title);
+    page.children = vec![link(
+        PageKind::Requirement,
+        "req_shared_child",
+        "Shared title",
+    )];
+
+    let html = render_requirement("default", &page);
+    assert!(html.contains(
+        "<h3 class=\"decision-title\"><a href=\"/resolutions/res_split/\">Shared title <span class=\"id-chip\">…es_split</span></a></h3>"
+    ));
+    assert!(html.contains(
+        "<a href=\"/sources/source_schads/\">Shared title <span class=\"id-chip\">…e_schads</span></a>"
+    ));
+    assert!(html.contains(
+        "<a href=\"/requirements/req_shared_child/\">Shared title <span class=\"id-chip\">…ed_child</span></a>"
+    ));
+}
+
+#[test]
+#[verifies("rule_ambiguous_links_disambiguated", examples)]
 fn requirement_page_keeps_unique_refined_into_markup_unchanged() {
     let mut page = requirement_fixture();
     page.children = super::fixtures::unique_requirement_links();
@@ -76,6 +126,7 @@ fn requirement_page_keeps_unique_refined_into_markup_unchanged() {
 }
 
 #[test]
+#[verifies("rule_ambiguous_links_disambiguated", examples)]
 fn lineage_and_breadcrumb_disambiguate_collisions_including_current_text() {
     let mut page = requirement_fixture();
     page.lineage = vec![
@@ -102,6 +153,7 @@ fn lineage_and_breadcrumb_disambiguate_collisions_including_current_text() {
 }
 
 #[test]
+#[verifies("rule_ambiguous_links_disambiguated", examples)]
 fn unique_lineage_and_breadcrumb_markup_remains_unchanged() {
     let html = render_requirement("default", &requirement_fixture());
 
@@ -194,6 +246,7 @@ fn gappy_page_keeps_the_fog_visible() {
 }
 
 #[test]
+#[verifies("rule_requirement_badge", examples)]
 fn resolved_requirement_without_decisions_or_rules_is_marked_unbacked() {
     let html = render_requirement("default", &gappy_requirement_fixture());
 

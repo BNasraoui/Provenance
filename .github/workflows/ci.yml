@@ -39,6 +39,19 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace
 
+  rule-coverage:
+    name: Rule Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # Report-only for now: the report is printed but the step never fails.
+      # Add --strict once the four wiki homepage rules are verified or
+      # demoted (rule_wiki_homepage_entry_order, rule_wiki_homepage_plain_language,
+      # rule_wiki_homepage_search_coverage, rule_wiki_homepage_traceability_summary).
+      - run: cargo run -p provenance-cli -- coverage scan --repo . --path crates --scope default --validate-rules
+
   wiki-dom:
     name: Wiki DOM
     runs-on: ubuntu-latest

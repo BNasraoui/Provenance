@@ -72,16 +72,26 @@ pub(super) fn add_resolution_gaps(query: &GraphQuery<'_, '_>, gaps: &mut Vec<Gap
     }
 }
 
+/// A rule is fully traced only when both the requirement it serves and the
+/// resolution that decided it are recorded as producing it. One producer
+/// alone leaves the chain half-written, so the gap fires and names the end
+/// that is missing.
 pub(super) fn add_rule_gaps(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapItem>) {
     for rule in query.graph.rules {
-        if !query.rule_has_existing_producer(&rule.id) {
-            gaps.push(GapItem::new(
-                GapKind::OrphanRule,
-                NodeType::Rule,
-                &rule.id,
-                "no resolution or requirement produces this rule",
-            ));
+        let missing = query.missing_rule_producers(&rule.id);
+        if missing.is_empty() {
+            continue;
         }
+        let reason = match missing.as_slice() {
+            [producer] => format!("no {} produces this rule", producer.word()),
+            _ => "no requirement or resolution produces this rule".to_string(),
+        };
+        gaps.push(GapItem::new(
+            GapKind::OrphanRule,
+            NodeType::Rule,
+            &rule.id,
+            reason,
+        ));
     }
 }
 

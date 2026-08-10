@@ -18,7 +18,7 @@ use crate::wiki::links::{detect_remote_url, LinkResolver};
 use crate::wiki::model::WikiCorpus;
 use camino::Utf8PathBuf;
 use context::Assembler;
-use provenance_store::cache::{compute_gaps, GapGraph};
+use provenance_store::cache::{compute_gaps, GapGraph, GraphQuery};
 
 /// Loads the scope's state from disk and assembles the wiki corpus, using
 /// the repo's `origin` remote (if any) to build evidence links.
@@ -32,7 +32,7 @@ pub fn load_corpus(repo: Utf8PathBuf, scope: String) -> anyhow::Result<WikiCorpu
 /// Assembles the wiki corpus from already-loaded scope state.
 pub fn build_corpus(state: &ScopeExport, resolver: &LinkResolver) -> WikiCorpus {
     let scope_id = provenance_core::ScopeId::new(&state.scope).expect("export scope is valid");
-    let gaps = compute_gaps(&GapGraph {
+    let graph = GapGraph {
         scope: &scope_id,
         sources: &state.sources,
         requirements: &state.requirements,
@@ -42,11 +42,14 @@ pub fn build_corpus(state: &ScopeExport, resolver: &LinkResolver) -> WikiCorpus 
         questions: &state.questions,
         edges: &state.edges,
         threads: &state.threads,
-    });
+    };
+    let gaps = compute_gaps(&graph);
     let assembler = Assembler {
         state,
         resolver,
         gaps: &gaps,
+        query: GraphQuery::new(&graph),
+        rule_requirements: std::cell::OnceCell::new(),
     };
     let requirements = state
         .requirements

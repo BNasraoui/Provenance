@@ -7,6 +7,7 @@ use super::{
 use crate::wiki::model::WikiCorpus;
 use crate::wiki::{render, theme};
 use camino::Utf8Path;
+use provenance_macros::rule;
 use std::fs::File;
 use std::io::Write;
 
@@ -129,28 +130,72 @@ pub(super) fn write_page(stage: &Utf8Path, route: &str, html: &str) -> Result<()
     write_page_in(&stage_directory, stage, route, html)
 }
 
+/// What the publisher may do with a route it was asked to write.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum RouteVerdict<'a> {
+    /// Safe to stage, and these are the directory names it names, in order.
+    Safe(Vec<&'a str>),
+    /// The route does not begin and end with a slash.
+    Unbounded,
+    /// A segment cannot be used as a name under the staging directory.
+    UnsafeSegment(&'a str),
+}
+
+/// Decides whether a generated page may be written to a route.
+///
+/// A page's route becomes the directories the publisher creates under the
+/// staging root, so a hostile or buggy route must not be able to name
+/// anything outside it. A route is safe only when it begins and ends with a
+/// slash and every segment between those slashes is a plain name: never `.`
+/// or `..`, never empty, and free of the separators (`\`) and terminators
+/// (`\0`) another platform or a syscall could read as further path
+/// structure. `/` is the one route with no segments at all; every other
+/// route names at least one directory. Nothing here reshapes a route: a
+/// route is either used exactly as given or refused.
+#[rule("rule_page_route_safety")]
+pub(super) fn classify_route(route: &str) -> RouteVerdict<'_> {
+    if route == "/" {
+        return RouteVerdict::Safe(Vec::new());
+    }
+    let Some(inner) = route
+        .strip_prefix('/')
+        .and_then(|rest| rest.strip_suffix('/'))
+    else {
+        return RouteVerdict::Unbounded;
+    };
+    let mut segments = Vec::new();
+    for segment in inner.split('/') {
+        if segment.is_empty() || matches!(segment, "." | "..") || segment.contains(['\\', '\0']) {
+            return RouteVerdict::UnsafeSegment(segment);
+        }
+        segments.push(segment);
+    }
+    RouteVerdict::Safe(segments)
+}
+
 fn write_page_in(
     stage_directory: &StageDirectory,
     stage: &Utf8Path,
     route: &str,
     html: &str,
 ) -> Result<(), PublishError> {
-    if !route.starts_with('/') || !route.ends_with('/') {
-        return Err(PublishError::InvalidRoute {
-            route: route.to_string(),
-            detail: "routes must begin and end with '/'".to_string(),
-        });
-    }
-    let mut relative = Vec::new();
-    let mut path = stage.to_path_buf();
-    for segment in route.split('/').filter(|segment| !segment.is_empty()) {
-        if matches!(segment, "." | "..") || segment.contains(['\\', '\0']) {
+    let mut relative = match classify_route(route) {
+        RouteVerdict::Safe(segments) => segments,
+        RouteVerdict::Unbounded => {
+            return Err(PublishError::InvalidRoute {
+                route: route.to_string(),
+                detail: "routes must begin and end with '/'".to_string(),
+            })
+        }
+        RouteVerdict::UnsafeSegment(segment) => {
             return Err(PublishError::InvalidRoute {
                 route: route.to_string(),
                 detail: format!("unsafe path segment {segment:?}"),
-            });
+            })
         }
-        relative.push(segment);
+    };
+    let mut path = stage.to_path_buf();
+    for segment in &relative {
         path.push(segment);
     }
     relative.push("index.html");

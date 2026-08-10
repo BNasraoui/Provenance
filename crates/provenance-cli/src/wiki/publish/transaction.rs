@@ -35,11 +35,7 @@ pub(super) struct TransactionDirectory {
     parent: File,
     pub paths: TransactionPaths,
     output_leaf: String,
-    lock_leaf: String,
-    lock_cleanup_leaf: String,
-    stage_leaf: String,
-    stage_cleanup_leaf: String,
-    backup_leaf: String,
+    leaves: ArtifactLeaves,
 }
 
 impl TransactionDirectory {
@@ -54,21 +50,16 @@ impl TransactionDirectory {
             .file_name()
             .expect("validated output leaf")
             .to_string();
-        let leaf = |role: &str| format!(".{output_leaf}.provenance-wiki.{role}");
         Ok(Self {
             parent,
             paths,
-            lock_leaf: leaf("lock"),
-            lock_cleanup_leaf: leaf("lock.cleanup"),
-            stage_leaf: leaf("stage"),
-            stage_cleanup_leaf: leaf("stage.cleanup"),
-            backup_leaf: leaf("backup"),
+            leaves: ArtifactLeaves::beside(&output_leaf),
             output_leaf,
         })
     }
 
     pub(super) fn create_stage(&self) -> std::io::Result<File> {
-        fs_at::OpenOptions::default().mkdir_at(&self.parent, &self.stage_leaf)
+        fs_at::OpenOptions::default().mkdir_at(&self.parent, &self.leaves.stage)
     }
 
     fn create_file(&self, leaf: &str) -> std::io::Result<File> {
@@ -85,7 +76,7 @@ impl TransactionDirectory {
     }
 
     fn child_identity(&self, leaf: &str) -> std::io::Result<same_file::Handle> {
-        let file = if leaf == self.lock_leaf || leaf == self.lock_cleanup_leaf {
+        let file = if leaf == self.leaves.lock || leaf == self.leaves.lock_cleanup {
             let mut options = fs_at::OpenOptions::default();
             options.read(true).follow(false);
             options.open_at(&self.parent, leaf)?
@@ -93,10 +84,6 @@ impl TransactionDirectory {
             self.open_dir(leaf)?
         };
         same_file::Handle::from_file(file)
-    }
-
-    fn child_exists(&self, leaf: &str) -> std::io::Result<bool> {
-        ownership::child_kind(&self.parent, leaf).map(|kind| kind.is_some())
     }
 
     fn rename(&self, from: &str, to: &str) -> std::io::Result<()> {
@@ -122,6 +109,37 @@ impl TransactionDirectory {
     }
 }
 
+/// The five leaf names an interrupted publication can leave beside an output.
+///
+/// This is the only place the names are built. Both the handle-based
+/// transaction directory and the display paths it reports come from here, so
+/// the names the publisher opens and the names it prints cannot drift apart.
+/// A transaction directory keeps one of these, so the five names are carried,
+/// passed and reasoned about as the one set they are.
+pub(super) struct ArtifactLeaves {
+    pub lock: String,
+    pub lock_cleanup: String,
+    pub stage: String,
+    pub stage_cleanup: String,
+    pub backup: String,
+}
+
+impl ArtifactLeaves {
+    /// Mints the artifact leaf names that sit beside an output named
+    /// `output_leaf`, one per role, all hidden and all carrying the output's
+    /// own name so two outputs in one directory never collide.
+    pub(super) fn beside(output_leaf: &str) -> Self {
+        let leaf = |role: &str| format!(".{output_leaf}.provenance-wiki.{role}");
+        Self {
+            lock: leaf("lock"),
+            lock_cleanup: leaf("lock.cleanup"),
+            stage: leaf("stage"),
+            stage_cleanup: leaf("stage.cleanup"),
+            backup: leaf("backup"),
+        }
+    }
+}
+
 pub(super) struct TransactionPaths {
     pub lock: Utf8PathBuf,
     pub lock_cleanup: Utf8PathBuf,
@@ -142,12 +160,13 @@ impl TransactionPaths {
                 path: output.to_path_buf(),
                 detail: "path has no file name".to_string(),
             })?;
+        let leaves = ArtifactLeaves::beside(leaf);
         Ok(Self {
-            lock: parent.join(format!(".{leaf}.provenance-wiki.lock")),
-            lock_cleanup: parent.join(format!(".{leaf}.provenance-wiki.lock.cleanup")),
-            stage: parent.join(format!(".{leaf}.provenance-wiki.stage")),
-            stage_cleanup: parent.join(format!(".{leaf}.provenance-wiki.stage.cleanup")),
-            backup: parent.join(format!(".{leaf}.provenance-wiki.backup")),
+            lock: parent.join(leaves.lock),
+            lock_cleanup: parent.join(leaves.lock_cleanup),
+            stage: parent.join(leaves.stage),
+            stage_cleanup: parent.join(leaves.stage_cleanup),
+            backup: parent.join(leaves.backup),
         })
     }
 }

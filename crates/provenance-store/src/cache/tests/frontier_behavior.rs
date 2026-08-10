@@ -1,5 +1,6 @@
 use super::super::*;
 use super::fixtures::*;
+use super::gap_rule_behavior::all_gap_kinds;
 use crate::state_store::{
     AddSourceReferenceInput, CreateEdgeInput, CreateProposalCardInput, CreateQuestionInput,
     CreateResolutionInput, CreateRuleInput, CreateSourceInput, CreateTopicInput, StateStore,
@@ -9,6 +10,7 @@ use provenance_core::{
     ProposalType, QuestionStatus, RequirementStatus, ResolutionMethod, ResolutionStatus,
     RuleSeverity, RuleStatus, SourceType, TopicStatus,
 };
+use provenance_macros::verifies;
 
 fn add_topic_question(
     store: &StateStore,
@@ -90,6 +92,7 @@ fn ordinary_prime_does_not_expand_into_a_global_proposal_queue() {
 
 #[test]
 #[allow(clippy::too_many_lines)]
+#[verifies("rule_graph_gaps", examples)]
 fn find_gaps_reports_the_frontier_taxonomy() {
     let (_dir, layout, scope) = empty_layout();
     let store = StateStore::new(layout.clone());
@@ -262,6 +265,14 @@ fn find_gaps_reports_the_frontier_taxonomy() {
     ] {
         assert_gap(&gaps, kind, node_type, id);
     }
+    // Every kind has to survive the trip through the state store, not just
+    // through `compute_gaps` on hand-built records.
+    for kind in all_gap_kinds() {
+        assert!(
+            gaps.iter().any(|gap| gap.kind == kind),
+            "the taxonomy graph reports no {kind:?} gap; got {gaps:#?}"
+        );
+    }
     let contradiction = gaps
         .iter()
         .find(|gap| gap.kind == GapKind::UnresolvedContradictsPair)
@@ -312,6 +323,7 @@ fn prime_renders_frontier_gap_subjects() {
 }
 
 #[test]
+#[verifies("rule_graph_gaps", examples)]
 fn prime_renders_blocked_on_human_questions_with_status() {
     let (_dir, layout, scope) = empty_layout();
     let store = StateStore::new(layout.clone());

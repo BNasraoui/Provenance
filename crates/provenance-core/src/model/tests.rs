@@ -1,3 +1,5 @@
+use provenance_macros::verifies;
+
 include!("tests/artifacts.rs");
 include!("tests/collaboration.rs");
 include!("tests/graph.rs");

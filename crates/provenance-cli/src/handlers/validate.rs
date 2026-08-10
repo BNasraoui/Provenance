@@ -4,9 +4,12 @@ use crate::{
 };
 use anyhow::Context;
 use camino::Utf8Path;
+// Validating one artifact file asks the same question the ideation aggregate
+// asks of a whole scope, so it is the same function: the rule lives in
+// `provenance-core` and the message names the record kind.
 use provenance_core::{
-    validate_optional_confidence_score, AssertionRecord, Contribution, DispositionRecord,
-    ProposalCard, SchemaVersion, SynthesisPacket,
+    ensure_supported_schema_version as ensure_schema_version, validate_optional_confidence_score,
+    AssertionRecord, Contribution, DispositionRecord, ProposalCard, SynthesisPacket,
 };
 use provenance_store::graph_reference::{ExactExport, GraphReference};
 use serde::Serialize;
@@ -54,12 +57,12 @@ pub(super) fn validate_file(
         }
         IdeationArtifactKind::Assertion => {
             let assertion: AssertionRecord = serde_json::from_str(&json)?;
-            ensure_schema_version(assertion.schema_version)?;
+            ensure_schema_version("assertion", assertion.schema_version)?;
             provenance_core::validate_assertion_intrinsic(&assertion)?;
         }
         IdeationArtifactKind::Disposition => {
             let disposition: DispositionRecord = serde_json::from_str(&json)?;
-            ensure_schema_version(disposition.schema_version)?;
+            ensure_schema_version("disposition", disposition.schema_version)?;
             provenance_core::validate_disposition_intrinsic(&disposition)?;
         }
         IdeationArtifactKind::GraphReference => {
@@ -75,7 +78,7 @@ pub(super) fn validate_file(
 }
 
 pub(super) fn validate_contribution_record(contribution: &Contribution) -> anyhow::Result<()> {
-    ensure_schema_version(contribution.schema_version)?;
+    ensure_schema_version("contribution", contribution.schema_version)?;
     for claim in &contribution.material_claims {
         validate_optional_confidence_score(claim.confidence).with_context(|| {
             format!(
@@ -90,19 +93,11 @@ pub(super) fn validate_contribution_record(contribution: &Contribution) -> anyho
 pub(super) fn validate_synthesis_packet_record(
     synthesis_packet: &SynthesisPacket,
 ) -> anyhow::Result<()> {
-    ensure_schema_version(synthesis_packet.schema_version)
-}
-
-fn ensure_schema_version(schema_version: SchemaVersion) -> anyhow::Result<()> {
-    anyhow::ensure!(
-        schema_version == SchemaVersion(1),
-        "schema_version must be 1"
-    );
-    Ok(())
+    ensure_schema_version("synthesis", synthesis_packet.schema_version)
 }
 
 pub(super) fn validate_proposal_card_record(proposal: &ProposalCard) -> anyhow::Result<()> {
-    ensure_schema_version(proposal.schema_version)?;
+    ensure_schema_version("proposal", proposal.schema_version)?;
     provenance_core::validate_proposal_intrinsic(proposal)?;
     validate_optional_confidence_score(proposal.confidence)
         .with_context(|| format!("proposal {} confidence is invalid", proposal.id.as_str()))?;

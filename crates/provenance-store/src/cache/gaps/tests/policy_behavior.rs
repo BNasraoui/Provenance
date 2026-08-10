@@ -1,8 +1,10 @@
 use super::super::GapKind;
 use super::fixtures::*;
 use provenance_core::{EdgeType, NodeType, QuestionStatus, SourceReference, TopicStatus};
+use provenance_macros::verifies;
 
 #[test]
+#[verifies("rule_graph_gaps", examples)]
 fn shared_resolving_resolution_suppresses_unresolved_contradiction_gap() {
     let requirements = vec![requirement("req_left"), requirement("req_right")];
     let resolutions = vec![resolution("res_shared")];
@@ -28,6 +30,7 @@ fn shared_resolving_resolution_suppresses_unresolved_contradiction_gap() {
 }
 
 #[test]
+#[verifies("rule_graph_gaps", examples)]
 fn supersedes_edge_suppresses_unresolved_contradiction_gap() {
     let requirements = vec![requirement("req_left"), requirement("req_right")];
     let edges = vec![
@@ -47,6 +50,7 @@ fn supersedes_edge_suppresses_unresolved_contradiction_gap() {
 }
 
 #[test]
+#[verifies("rule_graph_gaps", examples)]
 fn answered_questions_and_explored_topics_are_not_frontier_gaps() {
     let requirements = vec![requirement("req_topic")];
     let topics = vec![topic("topic_explored", TopicStatus::Explored)];
@@ -61,6 +65,7 @@ fn answered_questions_and_explored_topics_are_not_frontier_gaps() {
 }
 
 #[test]
+#[verifies("rule_graph_gaps", examples)]
 fn rule_produced_by_missing_resolution_is_orphaned_and_has_dangling_edge_gap() {
     let rules = vec![rule("rule_orphaned")];
     let edges = vec![edge(
@@ -85,6 +90,7 @@ fn rule_produced_by_missing_resolution_is_orphaned_and_has_dangling_edge_gap() {
 }
 
 #[test]
+#[verifies("rule_graph_gaps", examples)]
 fn unresolved_contradiction_pair_is_reported_once_for_bidirectional_edges() {
     let sources = vec![source("source_anchor")];
     let mut requirements = vec![requirement("req_left"), requirement("req_right")];

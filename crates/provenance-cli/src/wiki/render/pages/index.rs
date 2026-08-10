@@ -1,14 +1,27 @@
-use crate::wiki::model::{PageKind, ScopeIndexPage};
+use crate::wiki::model::{PageKind, PageLink, ScopeIndexPage};
 use std::fmt::Write as _;
 
 use super::super::chrome::{container_html, page_shell, title_row};
 use super::super::citations::push_gap_citations;
-use super::super::fragments::{push_classification_row, push_orphan_group, push_section_open};
+use super::super::fragments::{
+    push_classification_row, push_orphan_group, push_orphan_rules, push_section_open,
+};
 use super::super::html::PageLinksRenderer;
 use super::super::labels::{counted, requirement_status_badge};
 
+/// Every titled link this page renders: the root requirements and the three
+/// orphan groups, so a root and an orphan sharing a title are told apart.
+fn page_links(page: &ScopeIndexPage) -> Vec<&PageLink> {
+    let mut links: Vec<&PageLink> = page.roots.iter().map(|entry| &entry.link).collect();
+    links.extend(page.orphans.rules.iter().map(|rule| &rule.link));
+    links.extend(&page.orphans.resolutions);
+    links.extend(&page.orphans.sources);
+    links
+}
+
 /// Renders the scope index page.
 pub fn render_index(scope: &str, page: &ScopeIndexPage) -> String {
+    let links = PageLinksRenderer::new(page_links(page));
     let mut main = String::new();
     push_section_open(
         &mut main,
@@ -20,15 +33,10 @@ pub fn render_index(scope: &str, page: &ScopeIndexPage) -> String {
         main.push_str("<p class=\"prose\">No requirements recorded in this scope.</p>\n");
     } else {
         main.push_str("<ul class=\"index-list\">\n");
-        let link_renderer = PageLinksRenderer::new(page.roots.iter().map(|entry| &entry.link));
         for entry in &page.roots {
             main.push_str("<li>\n");
-            writeln!(
-                main,
-                "{}",
-                link_renderer.link(&entry.link, Some("entry-title"))
-            )
-            .expect("writing to a String should not fail");
+            writeln!(main, "{}", links.link(&entry.link, Some("entry-title")))
+                .expect("writing to a String should not fail");
             main.push_str(&requirement_status_badge(
                 &entry.status,
                 entry.resolutions,
@@ -50,14 +58,21 @@ pub fn render_index(scope: &str, page: &ScopeIndexPage) -> String {
     if !page.orphans.is_empty() {
         push_section_open(&mut main, "", None, "Orphaned Records");
         main.push_str("<div class=\"orphan-card\">\n");
-        push_orphan_group(&mut main, "Rules nothing produces", &page.orphans.rules);
+        push_orphan_rules(
+            &mut main,
+            &links,
+            "Rules missing a producer",
+            &page.orphans.rules,
+        );
         push_orphan_group(
             &mut main,
+            &links,
             "Resolutions resolving nothing",
             &page.orphans.resolutions,
         );
         push_orphan_group(
             &mut main,
+            &links,
             "Sources nothing references",
             &page.orphans.sources,
         );

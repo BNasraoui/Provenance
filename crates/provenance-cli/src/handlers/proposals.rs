@@ -1,4 +1,6 @@
-use super::common::{ideation_target, parse_json_arg, stable_ids, warn_if_skills_missing};
+use super::common::{
+    complete_flag_set, ideation_target, parse_json_arg, stable_ids, warn_if_skills_missing,
+};
 use crate::cli::ideation::ProposalsCommand;
 use crate::output;
 use provenance_core::{
@@ -125,13 +127,21 @@ pub(super) fn handle(command: ProposalsCommand, quiet: bool) -> anyhow::Result<(
             format,
         } => {
             warn_if_skills_missing(&repo, quiet)?;
-            let targets = match (target_type, target_id) {
-                (Some(target_type), Some(target_id)) => {
-                    vec![ideation_target(&target_type, target_id)?]
-                }
-                (None, None) => Vec::new(),
-                _ => anyhow::bail!("--target-type and --target-id must be provided together"),
-            };
+            anyhow::ensure!(
+                complete_flag_set(
+                    &[
+                        usize::from(target_type.is_some()),
+                        usize::from(target_id.is_some()),
+                    ],
+                    &[],
+                ),
+                "--target-type and --target-id must be provided together"
+            );
+            let targets = target_type
+                .zip(target_id)
+                .map(|(target_type, target_id)| ideation_target(&target_type, target_id))
+                .transpose()?
+                .map_or_else(Vec::new, |target| vec![target]);
             let surfaced = StateStore::new(ProvenanceLayout::new(repo)).surface_proposals(
                 &ScopeId::new(scope)?,
                 &ProposalDemand::new(changed_path, targets),

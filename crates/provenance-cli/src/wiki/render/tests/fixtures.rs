@@ -1,9 +1,9 @@
 use crate::wiki::links::{EvidenceRef, LinkResolver};
 use crate::wiki::model::{
     CorpusCounts, DecisionSection, DomainGroup, DomainIndexPage, DomainState, EvidenceThread,
-    FieldNote, GapKind, GapNotice, IndexEntry, InputCitation, LineageEntry, OrphanReport, PageId,
-    PageKind, PageLink, RecordKind, RequirementPage, ResolutionPage, RuleCard, RulePage,
-    ScopeIndexPage, SearchEntry, SearchIndexPage, SourceCitation, SourcePage, WikiCorpus,
+    FieldNote, GapKind, GapNotice, IndexEntry, InputCitation, LineageEntry, OrphanReport,
+    OrphanRule, PageId, PageKind, PageLink, RecordKind, RequirementPage, ResolutionPage, RuleCard,
+    RulePage, ScopeIndexPage, SearchEntry, SearchIndexPage, SourceCitation, SourcePage, WikiCorpus,
 };
 use provenance_core::{
     MessageRole, NodeType, RequirementStatus, ResolutionInputType, ResolutionStatus, RuleModality,
@@ -339,7 +339,10 @@ pub(super) fn index_fixture() -> ScopeIndexPage {
             detail: "source_unused is referenced by nothing".to_string(),
         }],
         orphans: OrphanReport {
-            rules: vec![link(PageKind::Rule, "rule_orphan", "ORPH-001")],
+            rules: vec![OrphanRule {
+                link: link(PageKind::Rule, "rule_orphan", "ORPH-001"),
+                reason: "no resolution produces this rule".to_string(),
+            }],
             resolutions: vec![],
             sources: vec![link(PageKind::Source, "source_unused", "Unused API spec")],
         },

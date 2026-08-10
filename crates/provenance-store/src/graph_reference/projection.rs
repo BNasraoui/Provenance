@@ -2,11 +2,29 @@ use super::GraphReferenceError;
 use crate::{layout::ProvenanceLayout, state_store::StateStore};
 use camino::Utf8Path;
 use provenance_core::{
-    Boundary, Domain, Edge, Question, Requirement, Resolution, Rule, SchemaVersion, Scope, ScopeId,
-    Service, ServiceBinding, Source, Topic,
+    Boundary, Domain, Edge, Question, Requirement, Resolution, Rule, Scope, ScopeId, Service,
+    ServiceBinding, Source, Topic, SUPPORTED_SCHEMA_VERSION,
 };
+use provenance_macros::rule;
 use serde::{Deserialize, Serialize};
 
+/// The families that travel in a pinned graph.
+///
+/// A pinned graph carries the canonical families and nothing else: sources,
+/// domains, requirements, boundaries, topics, questions, resolutions, rules,
+/// services, service bindings, and edges. The collaboration and ideation
+/// records the repository also holds (proposals, assertions, dispositions,
+/// contributions, synthesis packets, threads) say who was talking and what
+/// they were still arguing about. They are not what the graph asserts, and
+/// they never enter the projection.
+///
+/// This field list is the rule, not a check laid over it. There is no
+/// predicate to run and nothing to remember: a family with no field here
+/// cannot leave (`load_projection` has nowhere to put it) and cannot come
+/// back (`deny_unknown_fields` refuses a document that names it). Both
+/// directions read the same list, so they cannot drift apart. Adding a field
+/// is how the rule changes; there is no other way to break it.
+#[rule("rule_pinned_graph_families")]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GraphExport {
@@ -42,7 +60,7 @@ pub(super) fn load_projection(
                 }
             }
         })?;
-    if manifest_version.0 != 1 {
+    if manifest_version != SUPPORTED_SCHEMA_VERSION {
         return Err(incomplete(format!(
             "unsupported manifest schema_version {}",
             manifest_version.0
@@ -53,7 +71,7 @@ pub(super) fn load_projection(
     })?;
 
     let mut graph = GraphExport {
-        schema_version: 1,
+        schema_version: SUPPORTED_SCHEMA_VERSION.0,
         scope: selected_scope,
         sources: store.closed_sources(&scope_id).map_err(incomplete)?,
         domains: store.closed_domains(&scope_id).map_err(incomplete)?,
@@ -81,13 +99,14 @@ impl GraphExport {
         macro_rules! require_v1 {
             ($records:expr, $kind:literal) => {
                 for record in $records {
-                    if record.schema_version != SchemaVersion(1) {
+                    if record.schema_version != SUPPORTED_SCHEMA_VERSION {
                         return Err(GraphReferenceError::Incomplete {
                             detail: format!(
-                                "{} '{}' has unsupported schema_version {}; expected 1",
+                                "{} '{}' has unsupported schema_version {}; expected {}",
                                 $kind,
                                 record.id.as_str(),
-                                record.schema_version.0
+                                record.schema_version.0,
+                                SUPPORTED_SCHEMA_VERSION.0
                             ),
                         });
                     }
@@ -108,61 +127,95 @@ impl GraphExport {
         Ok(())
     }
 
-    pub(super) fn validate_no_collaboration_fields(&self) -> Result<(), GraphReferenceError> {
-        macro_rules! reject_field {
-            ($records:expr, $field:ident) => {
-                if $records.iter().any(|record| record.$field.is_some()) {
-                    return Err(GraphReferenceError::Incomplete {
-                        detail: format!(
-                            "exact export must not contain collaboration field '{}'",
-                            stringify!($field)
-                        ),
-                    });
-                }
-            };
-        }
-
-        reject_field!(&self.sources, origin_thread);
-        reject_field!(&self.sources, origin_message);
-        reject_field!(&self.requirements, origin_thread);
-        reject_field!(&self.requirements, origin_message);
-        reject_field!(&self.topics, claimed_by);
-        reject_field!(&self.topics, claimed_at);
-        reject_field!(&self.questions, claimed_by);
-        reject_field!(&self.questions, claimed_at);
-        reject_field!(&self.resolutions, origin_thread);
-        reject_field!(&self.resolutions, origin_message);
-        reject_field!(&self.rules, origin_thread);
-        reject_field!(&self.rules, origin_message);
-        Ok(())
+    /// Refuses a graph that arrives still carrying collaboration state.
+    ///
+    /// The import half of `visit_collaboration_fields`: it asks the same
+    /// walk which fields exist and refuses the graph if any of them is
+    /// set, naming the first one so the holder can find it.
+    pub(super) fn validate_no_collaboration_fields(&mut self) -> Result<(), GraphReferenceError> {
+        let mut populated = None;
+        visit_collaboration_fields(self, &mut |name, field| {
+            if populated.is_none() && field.is_populated() {
+                populated = Some(name);
+            }
+        });
+        populated.map_or(Ok(()), |name| {
+            Err(GraphReferenceError::Incomplete {
+                detail: format!("exact export must not contain collaboration field '{name}'"),
+            })
+        })
     }
 }
 
+/// A record field holding collaboration state, seen without its type.
+///
+/// The walk below hands each field out as one of these so a visitor can
+/// ask whether it is set, or clear it, without knowing whether it holds a
+/// record id, an actor name, or a timestamp.
+trait CollaborationField {
+    fn is_populated(&self) -> bool;
+    fn clear(&mut self);
+}
+
+impl<T> CollaborationField for Option<T> {
+    fn is_populated(&self) -> bool {
+        self.is_some()
+    }
+
+    fn clear(&mut self) {
+        *self = None;
+    }
+}
+
+/// Decides which fields a graph must shed before it leaves the repository.
+///
+/// A graph shared outside the repository carries no trace of who was
+/// talking or who claimed what. Thread and message origins, and the claims
+/// on topics and questions, are collaboration state: they name people and
+/// conversations, they say nothing about what the graph asserts, and they
+/// must not travel with it.
+///
+/// This walk is the only place that list of fields is written down. Export
+/// clears every field it visits (`strip_collaboration_fields`) and import
+/// refuses a graph in which any field it visits is set
+/// (`GraphExport::validate_no_collaboration_fields`), so the two halves
+/// cannot drift: a field added here is both stripped and rejected at once,
+/// and a field missing here is neither.
+///
+/// Visiting is field-major, every record of a kind for one field before the
+/// next field, so which field a refusal names does not depend on which
+/// record happens to carry it.
+#[rule("rule_export_strips_collaboration")]
+fn visit_collaboration_fields(
+    graph: &mut GraphExport,
+    visit: &mut dyn FnMut(&'static str, &mut dyn CollaborationField),
+) {
+    macro_rules! visit_field {
+        ($records:expr, $field:ident) => {
+            for record in $records {
+                visit(stringify!($field), &mut record.$field);
+            }
+        };
+    }
+    visit_field!(&mut graph.sources, origin_thread);
+    visit_field!(&mut graph.sources, origin_message);
+    visit_field!(&mut graph.requirements, origin_thread);
+    visit_field!(&mut graph.requirements, origin_message);
+    visit_field!(&mut graph.topics, claimed_by);
+    visit_field!(&mut graph.topics, claimed_at);
+    visit_field!(&mut graph.questions, claimed_by);
+    visit_field!(&mut graph.questions, claimed_at);
+    visit_field!(&mut graph.resolutions, origin_thread);
+    visit_field!(&mut graph.resolutions, origin_message);
+    visit_field!(&mut graph.rules, origin_thread);
+    visit_field!(&mut graph.rules, origin_message);
+}
+
+/// Clears every collaboration field on the way out.
+///
+/// The export half of `visit_collaboration_fields`.
 fn strip_collaboration_fields(graph: &mut GraphExport) {
-    for source in &mut graph.sources {
-        source.origin_thread = None;
-        source.origin_message = None;
-    }
-    for requirement in &mut graph.requirements {
-        requirement.origin_thread = None;
-        requirement.origin_message = None;
-    }
-    for topic in &mut graph.topics {
-        topic.claimed_by = None;
-        topic.claimed_at = None;
-    }
-    for question in &mut graph.questions {
-        question.claimed_by = None;
-        question.claimed_at = None;
-    }
-    for resolution in &mut graph.resolutions {
-        resolution.origin_thread = None;
-        resolution.origin_message = None;
-    }
-    for rule in &mut graph.rules {
-        rule.origin_thread = None;
-        rule.origin_message = None;
-    }
+    visit_collaboration_fields(graph, &mut |_, field| field.clear());
 }
 
 fn sort_records(graph: &mut GraphExport) {
@@ -197,6 +250,17 @@ fn sort_records(graph: &mut GraphExport) {
     graph.edges.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
 }
 
+/// Decides whether a pinned graph may travel as the scope it claims to be.
+///
+/// A pinned graph names one scope, and everything downstream reads its digest,
+/// its record counts, and its contents as facts about that scope alone. A
+/// single record carrying a different scope id would smuggle another scope's
+/// data into the handover and make those counts lie, so every record of every
+/// family must carry the claimed scope id. The first record that does not is
+/// named in the refusal, so the holder can find it. Both directions are
+/// guarded here: what the store hands out (`load_projection`) and what an
+/// exact export brings back in (`ExactExport::from_json`).
+#[rule("rule_pinned_scope_ownership")]
 pub(super) fn validate_scope_ownership(
     graph: &GraphExport,
     scope: &ScopeId,
@@ -237,3 +301,6 @@ fn incomplete(error: impl std::fmt::Display) -> GraphReferenceError {
         detail: error.to_string(),
     }
 }
+
+#[cfg(test)]
+mod tests;

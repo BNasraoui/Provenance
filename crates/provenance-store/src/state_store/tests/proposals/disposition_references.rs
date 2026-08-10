@@ -4,8 +4,10 @@ use provenance_core::{
     CanonicalArtifact, CanonicalArtifactType, DispositionActor, DispositionDecision,
     ExternalActionCorrelation, IdentityType, PromotionState, ScopeId, StableId,
 };
+use provenance_macros::verifies;
 
 #[test]
+#[verifies("rule_disposition_write_gate", examples)]
 fn direct_disposition_rejects_missing_canonical_artifact_without_writing() {
     let (_dir, store, scope) = initialized_store();
     allow_actor(&store);
@@ -207,6 +209,7 @@ fn batch_rejects_a_misfiled_canonical_artifact_without_landing() {
 }
 
 #[test]
+#[verifies("rule_disposition_write_gate", examples)]
 fn duplicate_disposition_cannot_mutate_frozen_external_action() {
     let (_dir, store, scope) = initialized_store();
     allow_actor(&store);
@@ -342,7 +345,7 @@ fn misfiled_canonical_records() -> [(&'static str, &'static str); 4] {
         ),
         (
             "resolution",
-            r#"{"schema_version":1,"scope_id":"other","id":"artifact_misfiled","title":"Misfiled","position":"No","rationale":"No","status":"approved","inputs":[],"review_on":null,"review_triggers":[]}"#,
+            r#"{"schema_version":1,"scope_id":"other","id":"artifact_misfiled","title":"Misfiled","position":"No","rationale":"No","status":"approved","inputs":[],"review_on":null}"#,
         ),
         (
             "rule",

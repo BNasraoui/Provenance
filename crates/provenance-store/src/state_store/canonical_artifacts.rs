@@ -73,15 +73,6 @@ impl StateStore {
     ) -> anyhow::Result<CanonicalArtifactIndex> {
         CanonicalArtifactIndex::load(self, scope_id)
     }
-
-    pub(super) fn ensure_canonical_artifact_exists(
-        &self,
-        scope_id: &ScopeId,
-        artifact: Option<&CanonicalArtifact>,
-    ) -> anyhow::Result<()> {
-        self.canonical_artifact_index(scope_id)?
-            .ensure_exists(artifact)
-    }
 }
 
 fn key(artifact_type: CanonicalArtifactType, artifact_id: &StableId) -> CanonicalArtifactKey {

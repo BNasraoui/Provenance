@@ -6,6 +6,10 @@ pub fn provenance() -> Command {
 }
 
 pub fn init_repo(repo: &Path, disposition_actor_id: Option<&str>) {
+    init_repo_with_actors(repo, disposition_actor_id.as_slice());
+}
+
+pub fn init_repo_with_actors(repo: &Path, disposition_actor_ids: &[&str]) {
     let mut command = provenance();
     command.args([
         "init",
@@ -14,7 +18,7 @@ pub fn init_repo(repo: &Path, disposition_actor_id: Option<&str>) {
         "--scope",
         "default",
     ]);
-    if let Some(actor_id) = disposition_actor_id {
+    for actor_id in disposition_actor_ids {
         command.args(["--disposition-actor-id", actor_id]);
     }
     command.assert().success();

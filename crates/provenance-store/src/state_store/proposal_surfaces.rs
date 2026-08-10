@@ -2,6 +2,7 @@ use provenance_core::{
     ArtifactLinkTargetType, IdeationTarget, IdeationTargetType, PromotionState, ProposalCard,
     ScopeId, Topic,
 };
+use provenance_macros::rule;
 use serde::Serialize;
 
 use super::StateStore;
@@ -98,24 +99,43 @@ impl StateStore {
         Ok(self
             .list_proposal_cards(scope)?
             .into_iter()
-            .filter(|proposal| {
-                matches!(
-                    proposal.promotion_state,
-                    PromotionState::Proposed | PromotionState::Asserted
-                )
-            })
             .filter_map(|proposal| {
-                let reasons = matching_reasons(&proposal, demand);
+                let reasons = surfacing_reasons(&proposal, demand);
                 (!reasons.is_empty()).then_some(SurfacedProposal { proposal, reasons })
             })
             .collect())
     }
 }
 
-fn matching_reasons(
+/// A proposal nobody has disposed of surfaces to a worker when the work
+/// touches ground the proposal already claims. The returned reasons are those
+/// overlaps; an empty list means the proposal stays out of the worker's way.
+///
+/// Undisposed is the precondition, and it is read from the projected promotion
+/// state rather than the state the stored row claims: only `proposed` and
+/// `asserted` pass. Once a human accepts, rejects, or defers a proposal, or it
+/// is marked duplicate or superseded, it never surfaces again, however well it
+/// matches.
+///
+/// Either trigger alone surfaces the proposal:
+/// - evidence site: the work touches a file the proposal cited as evidence;
+/// - territory: the work lands on the artifact the proposal is about.
+///
+/// Every reason names the overlap that produced it, so the worker can see why
+/// the proposal arrived. An evidence-site reason names a path the proposal
+/// cited and the work touched; a territory reason names a demanded target that
+/// equals the proposal's own target, matched on both artifact type and id.
+#[rule("rule_proposal_surfacing")]
+pub(super) fn surfacing_reasons(
     proposal: &ProposalCard,
     demand: &ProposalDemand,
 ) -> Vec<ProposalSurfaceReason> {
+    if !matches!(
+        proposal.promotion_state,
+        PromotionState::Proposed | PromotionState::Asserted
+    ) {
+        return Vec::new();
+    }
     let mut reasons = Vec::new();
     for path in &demand.changed_paths {
         if proposal

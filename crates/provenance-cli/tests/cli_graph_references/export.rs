@@ -1,4 +1,86 @@
 use super::*;
+use provenance_macros::verifies;
+use provenance_store::graph_reference::{graph_digest, GraphExport};
+use serde_json::json;
+
+/// The exported document, read back away from the repository that produced it.
+///
+/// The command is run from an unrelated directory with no `.provenance` state
+/// and no Git history, so anything it can say about the document it has to get
+/// from the document.
+fn validate_elsewhere(document: &Value) -> assert_cmd::assert::Assert {
+    let elsewhere = tempfile::tempdir().unwrap();
+    let path = elsewhere.path().join("export.json");
+    std::fs::write(&path, serde_json::to_vec(document).unwrap()).unwrap();
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .current_dir(elsewhere.path())
+        .args([
+            "validate",
+            "graph-reference-export",
+            "--input",
+            path.to_str().unwrap(),
+            "--format",
+            "json",
+        ])
+        .assert()
+}
+
+/// The document a reference hands out carries the digest the reference names,
+/// and is checkable on its own: a record edited inside it is refused by a
+/// holder with no repository, in an error naming the digest claimed and the
+/// digest the graph in front of them hashes to.
+#[test]
+fn exported_document_verifies_itself_away_from_its_repository() {
+    let temp = committed_store();
+    provenance(temp.path())
+        .args([
+            "sources",
+            "create",
+            "--repo",
+            ".",
+            "--scope",
+            "default",
+            "--id",
+            "source_policy",
+            "--name",
+            "Retention policy",
+        ])
+        .assert()
+        .success();
+    git(temp.path(), &["add", ".provenance/state"]);
+    git(temp.path(), &["commit", "-qm", "add pinned source"]);
+    let reference = issue(temp.path(), &[]);
+    let reference_path = write_reference(temp.path(), &reference);
+    let output = provenance(temp.path())
+        .args([
+            "graph-reference",
+            "exact-export",
+            "--repo",
+            ".",
+            "--reference",
+            reference_path.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let mut document: Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(document["graph_digest"], reference["graph_digest"]);
+    validate_elsewhere(&document).success();
+
+    document["graph"]["sources"][0]["name"] = json!("Retention policy (superseded)");
+    let edited: GraphExport = serde_json::from_value(document["graph"].clone()).unwrap();
+    let edited = graph_digest(&edited).unwrap();
+    validate_elsewhere(&document)
+        .failure()
+        .stderr(predicate::str::contains(
+            reference["graph_digest"].as_str().unwrap(),
+        ))
+        .stderr(predicate::str::contains(edited));
+}
 
 #[test]
 fn explicit_commit_issues_from_pin_despite_relevant_staged_and_worktree_changes() {
@@ -20,6 +102,7 @@ fn explicit_commit_issues_from_pin_despite_relevant_staged_and_worktree_changes(
 }
 
 #[test]
+#[verifies("rule_pinned_graph_families", construction)]
 fn exact_export_contains_only_canonical_graph_families() {
     let temp = committed_store();
     let proposal_dir = temp
@@ -72,6 +155,7 @@ fn exact_export_contains_only_canonical_graph_families() {
 }
 
 #[test]
+#[verifies("rule_export_strips_collaboration", examples)]
 fn collaboration_claims_do_not_change_digest_or_appear_in_exact_export() {
     let temp = committed_store();
     provenance(temp.path())
