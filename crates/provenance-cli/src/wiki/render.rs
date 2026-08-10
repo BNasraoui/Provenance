@@ -108,6 +108,8 @@ mod tests {
     mod discovery;
     #[path = "fixtures.rs"]
     mod fixtures;
+    #[path = "fixtures_discovery.rs"]
+    mod fixtures_discovery;
     #[path = "formatting.rs"]
     mod formatting;
     #[path = "homepage.rs"]

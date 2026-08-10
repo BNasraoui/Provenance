@@ -1,11 +1,10 @@
 use crate::wiki::links::LinkResolver;
 use crate::wiki::model::{
-    CodeScan, CorpusCounts, DecisionIndexPage, DecisionSection, DomainGroup, DomainIndexPage,
-    DomainState, EvidenceThread, FieldNote, GapKind, GapNotice, HomepageDomain, IndexEntry,
-    InputCitation, LineageEntry, OrphanRecord, OrphanReport, PageId, PageKind, PageLink,
-    RecordKind, RequirementPage, ResolutionPage, RuleCard, RuleFunction, RulePage, ScopeIndexPage,
-    SearchEntry, SearchIndexPage, SourceCitation, SourcePage, UnfinishedPage, VerificationSite,
-    WikiCorpus,
+    CodeScan, CorpusCounts, DecisionSection, DomainGroup, DomainIndexPage, DomainState,
+    EvidenceThread, FieldNote, GapKind, GapNotice, HomepageDomain, IndexEntry, InputCitation,
+    LineageEntry, OrphanRecord, OrphanReport, PageId, PageKind, PageLink, RecordKind,
+    RequirementPage, ResolutionPage, RuleCard, RuleFunction, RulePage, ScopeIndexPage, SearchEntry,
+    SourceCitation, SourcePage, VerificationSite, WikiCorpus,
 };
 use provenance_core::coverage::{CoverageReport, CoverageScan, ScannedFile};
 use provenance_core::{
@@ -13,6 +12,8 @@ use provenance_core::{
     RuleStatus, SourceType, ThreadStatus,
 };
 use std::fmt::Write as _;
+
+pub(super) use super::fixtures_discovery::{decisions_fixture, search_fixture, unfinished_fixture};
 
 pub(super) const REMOTE: &str = "git@github.com:exampleorg/ex-api.git";
 /// The fixture scan commit; binding links pin to it as real scans do.
@@ -463,70 +464,5 @@ pub(super) fn domain_index_fixture() -> DomainIndexPage {
             link: link(PageKind::Rule, "rule_sah_inv_016", "Suppress line emission"),
             statement: "No invoice lines shall be emitted for zero claims".to_string(),
         }],
-    }
-}
-
-pub(super) fn search_fixture() -> SearchIndexPage {
-    SearchIndexPage {
-        scope: "default".to_string(),
-        title: "Search project records".to_string(),
-        coverage: "Search covers requirements, decisions, rules, and sources.".to_string(),
-        example: Some("Invoice & participant".to_string()),
-        entries: vec![SearchEntry {
-            link: link(
-                PageKind::Requirement,
-                "req_saveinvoice_split",
-                "Invoice & participant",
-            ),
-            statement: "Invoice & participant statement".to_string(),
-        }],
-    }
-}
-
-pub(super) fn decisions_fixture() -> DecisionIndexPage {
-    DecisionIndexPage {
-        scope: "default".to_string(),
-        title: "Decisions".to_string(),
-        entries: vec![SearchEntry {
-            link: link(PageKind::Resolution, "res_split", "Per-portion split"),
-            statement: "Adopt the split".to_string(),
-        }],
-    }
-}
-
-pub(super) fn unfinished_fixture() -> UnfinishedPage {
-    UnfinishedPage {
-        scope: "default".to_string(),
-        title: "Unfinished".to_string(),
-        gaps: vec![
-            GapNotice {
-                kind: GapKind::DanglingReference,
-                subject: None,
-                related: None,
-                detail: "A requirement points to a source that is missing.".to_string(),
-            },
-            GapNotice {
-                kind: GapKind::MissingSourceRefs,
-                subject: None,
-                related: None,
-                detail: "A requirement has no source references.".to_string(),
-            },
-            GapNotice {
-                kind: GapKind::NoResolvingDecision,
-                subject: None,
-                related: None,
-                detail: "A requirement is marked resolved but has no resolving decision."
-                    .to_string(),
-            },
-        ],
-        orphans: OrphanReport {
-            rules: vec![],
-            resolutions: vec![],
-            sources: vec![OrphanRecord {
-                link: link(PageKind::Source, "source_unused", "Unused API spec"),
-                reason: "referenced by nothing".to_string(),
-            }],
-        },
-        open_questions: vec![],
     }
 }
