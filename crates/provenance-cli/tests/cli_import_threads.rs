@@ -1,0 +1,123 @@
+use assert_cmd::Command;
+use predicates::prelude::PredicateBooleanExt;
+
+#[test]
+fn import_rejects_duplicate_thread_ids_and_names_the_offender() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    let export = prepare_export(&repo, dir.path());
+    let mut value = read_export(&export);
+    value["threads"] = serde_json::json!([
+        thread("thread_duplicate", "resolved", 1),
+        thread("thread_duplicate", "archived", 2)
+    ]);
+    write_export(&export, &value);
+
+    import(&repo, &export)
+        .failure()
+        .stderr(predicates::str::contains(
+            "duplicate thread id thread_duplicate",
+        ));
+}
+
+#[test]
+fn import_rejects_multiple_active_threads_and_names_the_parent_and_threads() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    let export = prepare_export(&repo, dir.path());
+    let mut value = read_export(&export);
+    value["threads"] = serde_json::json!([
+        thread("thread_first", "active", 1),
+        thread("thread_second", "active", 2),
+        thread("thread_innocent", "resolved", 3)
+    ]);
+    write_export(&export, &value);
+
+    import(&repo, &export).failure().stderr(
+        predicates::str::contains("multiple active threads for requirement req_parent")
+            .and(predicates::str::contains("thread_first"))
+            .and(predicates::str::contains("thread_second"))
+            .and(predicates::str::contains("thread_innocent").not()),
+    );
+}
+
+fn prepare_export(repo: &std::path::Path, output_dir: &std::path::Path) -> std::path::PathBuf {
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "init",
+            "--path",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+        ])
+        .assert()
+        .success();
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "requirements",
+            "create",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--id",
+            "req_parent",
+            "--statement",
+            "Thread parent",
+        ])
+        .assert()
+        .success();
+    let export = output_dir.join("scope.json");
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "export",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--format",
+            "json",
+            "--output",
+            export.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    export
+}
+
+fn thread(id: &str, status: &str, created_at: i64) -> serde_json::Value {
+    serde_json::json!({
+        "schema_version": 1,
+        "scope_id": "default",
+        "id": id,
+        "parent": {"node_type": "requirement", "node_id": "req_parent"},
+        "status": status,
+        "created_at": created_at
+    })
+}
+
+fn read_export(path: &std::path::Path) -> serde_json::Value {
+    serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap()
+}
+
+fn write_export(path: &std::path::Path, value: &serde_json::Value) {
+    std::fs::write(path, serde_json::to_vec(value).unwrap()).unwrap();
+}
+
+fn import(repo: &std::path::Path, input: &std::path::Path) -> assert_cmd::assert::Assert {
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "import",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--input",
+            input.to_str().unwrap(),
+        ])
+        .assert()
+}

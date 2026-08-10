@@ -27,10 +27,11 @@ pub fn choose_canonical_active_thread(threads: &[Thread]) -> Option<&Thread> {
 /// archived keep the status they have, and threads belonging to other records
 /// are left alone.
 ///
-/// This reconciles rather than refuses: no write is rejected for adding a
-/// second active thread, and nothing sweeps the whole shard. A record that
-/// somehow gained duplicates is repaired the next time anyone posts to it, and
-/// a record nobody posts to keeps them.
+/// Posting reconciles rather than refuses: nothing sweeps the whole shard. A
+/// record that somehow gained active siblings is repaired the next time anyone
+/// posts to it, and a record nobody posts to keeps them. Whole-scope import is
+/// stricter and rejects active siblings rather than choosing on the importer's
+/// behalf.
 #[rule("rule_thread_siblings_archived")]
 pub fn archive_non_canonical_siblings(
     threads: &mut [Thread],

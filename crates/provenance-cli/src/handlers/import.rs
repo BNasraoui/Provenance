@@ -28,7 +28,8 @@ pub(super) fn import_scope(
     input: Utf8PathBuf,
     dry_run: bool,
 ) -> anyhow::Result<ImportReport> {
-    let exported: ScopeExport = serde_json::from_str(&std::fs::read_to_string(input)?)?;
+    let input = std::fs::read_to_string(input)?;
+    let exported = deserialize_scope_export(&input)?;
     anyhow::ensure!(
         exported.scope == scope,
         "import scope does not match --scope"
@@ -93,6 +94,26 @@ pub(super) fn import_scope(
         dry_run,
         records,
     })
+}
+
+fn deserialize_scope_export(input: &str) -> anyhow::Result<ScopeExport> {
+    match serde_json::from_str(input) {
+        Ok(exported) => Ok(exported),
+        Err(error) if has_removed_service_family(input) => anyhow::bail!(
+            "this export predates the service family removal; re-export from current provenance"
+        ),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn has_removed_service_family(input: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(input)
+        .ok()
+        .is_some_and(|value| {
+            value.as_object().is_some_and(|object| {
+                object.contains_key("services") || object.contains_key("service_bindings")
+            })
+        })
 }
 
 fn ensure_immutable_records_preserved<T: Serialize>(
