@@ -4,6 +4,7 @@ use provenance_core::{
     ScopeId, StableId,
 };
 
+mod disposition_allowlist;
 mod disposition_references;
 mod disposition_write_gate;
 mod legacy_shard;

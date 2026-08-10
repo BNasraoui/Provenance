@@ -34,7 +34,10 @@ fn proposal_projection_rejects_unlisted_disposition_actor() {
     .unwrap();
 
     let error = store.list_proposal_cards(&scope).unwrap_err().to_string();
-    assert!(error.contains("repository allowlist"), "{error}");
+    assert!(
+        error.contains("no disposition actors configured"),
+        "{error}"
+    );
 }
 
 #[test]

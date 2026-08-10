@@ -256,10 +256,9 @@ fn actor_outside_the_allowlist_cannot_dispose_a_live_proposal() {
 fn empty_allowlist_rejects_every_disposition() {
     // Spelled out rather than read from the rule: an unlisted actor is told
     // that the list itself is unset, because no id would have passed.
-    let expected = "disposition actor is not in the repository allowlist; \
-                    the repository manifest allowlists no disposition actors - \
-                    seed it with provenance init --disposition-actor-id \
-                    or edit .provenance/state/manifest.json";
+    let expected = "no disposition actors configured: repository manifest \
+                    disposition_actor_ids is empty; set it with \
+                    provenance init --disposition-actor-id <ACTOR_ID>";
     for actor in ["reviewer", "auditor", "agent_1"] {
         let error = validate_allowlist_case(&[], actor, true)
             .unwrap_err()

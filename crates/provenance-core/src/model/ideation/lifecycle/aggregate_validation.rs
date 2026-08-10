@@ -1,6 +1,6 @@
 use super::{
-    assertion_validation, legacy_validation, lineage_validation, validate_proposal_intrinsic,
-    AssertionRecord, IdeationAggregate,
+    assertion_validation, effective_proposal_state, legacy_validation, lineage_validation,
+    validate_proposal_intrinsic, AssertionRecord, IdeationAggregate,
 };
 use crate::model::{
     disposition_requires_prior_assertion, validate_disposition_intrinsic, DispositionRecord,
@@ -98,7 +98,7 @@ pub(super) fn validate(aggregate: IdeationAggregate<'_>) -> anyhow::Result<()> {
         .iter()
         .map(|proposal| (proposal.id.as_str(), proposal))
         .collect::<BTreeMap<_, _>>();
-    validate_actor_allowlist(&aggregate, &proposals)?;
+    validate_actor_allowlists(&aggregate, &proposals)?;
     lineage_validation::validate(aggregate.proposals, aggregate.assertions)?;
     let synthesis_packets = aggregate
         .synthesis_packets
@@ -144,9 +144,9 @@ fn validate_disposition_intrinsics(dispositions: &[DispositionRecord]) -> anyhow
 /// Who may dispose of a live proposal.
 ///
 /// A disposition ends a proposal's life, so only an actor named in the
-/// repository's manifest may record one. The check bites on a live proposal,
-/// meaning a row that still claims `proposed`; a legacy terminal row is frozen
-/// by its shipped fingerprint and carries its own audit.
+/// repository's manifest may record one. The check bites on a proposal whose
+/// effective pre-disposition state is live (`proposed` or `asserted`); a legacy
+/// terminal row is frozen by its shipped fingerprint and carries its own audit.
 ///
 /// The allowlist is manifest state, written at `provenance repo init` and read
 /// on every write path that validates the aggregate. An empty list therefore
@@ -156,41 +156,51 @@ fn validate_disposition_intrinsics(dispositions: &[DispositionRecord]) -> anyhow
 /// The actor id is an attestation, not proof of identity. Nothing here checks
 /// a key or a signature: the id records who claims to have decided, and write
 /// access to the repository is the only gate behind that claim.
-#[rule("rule_disposition_actor_allowlist")]
-fn validate_actor_allowlist(
+fn validate_actor_allowlists(
     aggregate: &IdeationAggregate<'_>,
     proposals: &BTreeMap<&str, &ProposalCard>,
 ) -> anyhow::Result<()> {
     for disposition in aggregate.dispositions {
-        if proposals
-            .get(disposition.proposal_id.as_str())
-            .is_some_and(|proposal| proposal.promotion_state == PromotionState::Proposed)
-        {
-            anyhow::ensure!(
-                aggregate
-                    .disposition_actor_ids
-                    .iter()
-                    .any(|id| id == &disposition.actor.id),
-                "{}",
-                allowlist_refusal(aggregate.disposition_actor_ids)
-            );
+        if let Some(proposal) = proposals.get(disposition.proposal_id.as_str()) {
+            validate_actor_allowlist(
+                proposal,
+                aggregate.assertions,
+                &disposition.actor.id,
+                aggregate.disposition_actor_ids,
+            )?;
         }
     }
     Ok(())
 }
 
-/// What the refusal says, and the one case where it says more.
-///
-/// The first clause is the message this refusal has always carried, and
-/// callers outside this crate match on it, so it is not reworded. An empty
-/// allowlist refuses every disposition alike, and the actor id is then a red
-/// herring: nothing is wrong with the id, the repository has simply never said
-/// who decides. That case adds the fact and the two ways to fix it.
+#[rule("rule_disposition_actor_allowlist")]
+fn validate_actor_allowlist(
+    proposal: &ProposalCard,
+    assertions: &[AssertionRecord],
+    actor_id: &str,
+    disposition_actor_ids: &[String],
+) -> anyhow::Result<()> {
+    let requires_allowlisted_actor = matches!(
+        effective_proposal_state(proposal, assertions, &[]),
+        PromotionState::Proposed | PromotionState::Asserted
+    );
+    if requires_allowlisted_actor {
+        anyhow::ensure!(
+            disposition_actor_ids.iter().any(|id| id == actor_id),
+            "{}",
+            allowlist_refusal(disposition_actor_ids)
+        );
+    }
+    Ok(())
+}
+
+/// An empty allowlist means configuration is absent, not that every possible
+/// actor was deliberately denied, so its refusal names the field and setup
+/// command rather than blaming the supplied actor ID.
 const fn allowlist_refusal(disposition_actor_ids: &[String]) -> &'static str {
     if disposition_actor_ids.is_empty() {
-        "disposition actor is not in the repository allowlist; the repository manifest \
-         allowlists no disposition actors - seed it with \
-         provenance init --disposition-actor-id or edit .provenance/state/manifest.json"
+        "no disposition actors configured: repository manifest disposition_actor_ids is empty; \
+         set it with provenance init --disposition-actor-id <ACTOR_ID>"
     } else {
         "disposition actor is not in the repository allowlist"
     }
@@ -360,5 +370,42 @@ mod schema_version_tests {
             let error = ensure_supported_schema_version(kind, SchemaVersion(2)).unwrap_err();
             assert_eq!(error.to_string(), message);
         }
+    }
+}
+
+#[cfg(test)]
+mod disposition_actor_trigger_tests {
+    use serde_json::json;
+
+    use super::validate_actor_allowlist;
+    use crate::model::{AssertionRecord, PromotionState, ProposalCard};
+
+    #[test]
+    fn trigger_uses_the_proposals_derived_effective_state() {
+        let mut proposal: ProposalCard = serde_json::from_value(json!({
+            "schema_version": 1, "scope_id": "default", "id": "proposal_a",
+            "proposal_key": "proposal_a", "proposal_type": "question",
+            "title": "Proposal", "summary": "Proposal",
+            "traceability": {
+                "target": {"artifact_type": "requirement", "artifact_id": "req_a"},
+                "source_ids": [], "evidence_references": [], "supporting_claim_ids": []
+            },
+            "promotion_state": "proposed"
+        }))
+        .unwrap();
+        let assertion: AssertionRecord = serde_json::from_value(json!({
+            "schema_version": 1, "scope_id": "default", "id": "assertion_a",
+            "proposal_id": "proposal_a", "synthesis_packet_id": "synthesis_a",
+            "supporting_claim_ids": ["claim_a"]
+        }))
+        .unwrap();
+
+        let error = validate_actor_allowlist(&proposal, &[assertion], "reviewer", &[])
+            .unwrap_err()
+            .to_string();
+        assert!(error.starts_with("no disposition actors configured"));
+
+        proposal.promotion_state = PromotionState::Accepted;
+        validate_actor_allowlist(&proposal, &[], "reviewer", &[]).unwrap();
     }
 }
