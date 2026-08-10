@@ -168,6 +168,19 @@ fn source_page_shows_the_commit_pin_and_referenced_requirements() {
 }
 
 #[test]
+fn source_page_keeps_a_local_file_url_plain_with_a_note() {
+    let mut page = source_fixture();
+    page.url = Some("file://docs/award.md".to_string());
+
+    let html = render_source("default", &page);
+
+    assert!(html.contains(
+        "file://docs/award.md <span class=\"reference-note\">(local file URL is unavailable to wiki readers)</span>"
+    ));
+    assert!(!html.contains("href=\"file://"));
+}
+
+#[test]
 fn not_found_page_names_the_missing_path() {
     let html = render_not_found("default", "/rules/missing/");
     assert!(html.contains("Page not found"));

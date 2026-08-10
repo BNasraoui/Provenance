@@ -23,18 +23,24 @@ fn resolver() -> LinkResolver {
     let report = CoverageScan {
         report: CoverageReport::new(
             Some(SCAN_COMMIT.to_string()),
-            1,
+            2,
             Vec::new(),
             Vec::new(),
             Vec::new(),
         ),
-        scanned_files: vec![ScannedFile {
-            file_path: "src/UseCase.php".into(),
-            content: (1..=240).fold(String::new(), |mut content, line| {
-                writeln!(content, "source line {line}").unwrap();
-                content
-            }),
-        }],
+        scanned_files: vec![
+            ScannedFile {
+                file_path: "src/UseCase.php".into(),
+                content: (1..=240).fold(String::new(), |mut content, line| {
+                    writeln!(content, "source line {line}").unwrap();
+                    content
+                }),
+            },
+            ScannedFile {
+                file_path: "tests/UseCaseTest.php".into(),
+                content: String::new(),
+            },
+        ],
     };
     LinkResolver::new(Some(REMOTE)).with_coverage(&report)
 }

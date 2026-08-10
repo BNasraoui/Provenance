@@ -115,13 +115,27 @@ fn push_reference(main: &mut String, page: &SourcePage) {
     push_section_open(main, "sh-source", Some("i-book-open"), "Reference");
     main.push_str("<ul class=\"link-list\">\n");
     if let Some(url) = &page.url {
-        writeln!(
-            main,
-            "<li><a href=\"{}\">{}</a></li>",
-            escape_attr(url),
-            escape_html(url)
-        )
-        .expect("writing to a String should not fail");
+        if is_web_url(url) {
+            writeln!(
+                main,
+                "<li><a href=\"{}\">{}</a></li>",
+                escape_attr(url),
+                escape_html(url)
+            )
+            .expect("writing to a String should not fail");
+        } else {
+            writeln!(
+                main,
+                "<li>{} <span class=\"reference-note\">({})</span></li>",
+                escape_html(url),
+                if has_scheme(url, "file://") {
+                    "local file URL is unavailable to wiki readers"
+                } else {
+                    "URL is unavailable to wiki readers"
+                }
+            )
+            .expect("writing to a String should not fail");
+        }
     }
     if let Some(reference) = &page.reference {
         writeln!(main, "<li>{}</li>", evidence_html(reference))
@@ -139,4 +153,13 @@ fn push_reference(main: &mut String, page: &SourcePage) {
         main.push_str("<li>No reference recorded.</li>\n");
     }
     main.push_str("</ul>\n</section>\n");
+}
+
+fn is_web_url(url: &str) -> bool {
+    has_scheme(url, "http://") || has_scheme(url, "https://")
+}
+
+fn has_scheme(url: &str, scheme: &str) -> bool {
+    url.get(..scheme.len())
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case(scheme))
 }
