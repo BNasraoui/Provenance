@@ -2,7 +2,8 @@ use super::super::{build_corpus_with_coverage, repository_relative_path};
 use super::fixtures::*;
 use crate::wiki::links::LinkResolver;
 use camino::Utf8PathBuf;
-use provenance_core::coverage::{BindingResult, CoverageReport};
+use provenance_core::coverage::{BindingResult, CoverageReport, CoverageScan, ScannedFile};
+use std::fmt::Write as _;
 
 fn binding(
     file_path: &str,
@@ -21,27 +22,36 @@ fn binding(
 
 #[test]
 fn coverage_bindings_become_commit_pinned_rule_function_and_verification_sites() {
-    let report = CoverageReport::new(
-        Some("abc1234".to_string()),
-        2,
-        Vec::new(),
-        vec![
-            binding("src/rules.rs", 7, "decide_rule", None),
-            binding(
-                "src/rules.rs",
-                21,
-                "rule_holds_by_exhaustion",
-                Some("exhaustion"),
-            ),
-            binding(
-                "tests/rules.rs",
-                12,
-                "rule_holds_for_examples",
-                Some("examples"),
-            ),
-        ],
-        Vec::new(),
-    );
+    let report = CoverageScan {
+        report: CoverageReport::new(
+            Some("abc1234".to_string()),
+            2,
+            Vec::new(),
+            vec![
+                binding("src/rules.rs", 7, "decide_rule", None),
+                binding(
+                    "src/rules.rs",
+                    21,
+                    "rule_holds_by_exhaustion",
+                    Some("exhaustion"),
+                ),
+                binding(
+                    "tests/rules.rs",
+                    12,
+                    "rule_holds_for_examples",
+                    Some("examples"),
+                ),
+            ],
+            Vec::new(),
+        ),
+        scanned_files: vec![ScannedFile {
+            file_path: "src/UseCase.php".into(),
+            content: (1..=200).fold(String::new(), |mut content, line| {
+                writeln!(content, "line {line}").unwrap();
+                content
+            }),
+        }],
+    };
     let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
 
     let corpus = build_corpus_with_coverage(&fixture_state(), &resolver, Some(&report));
@@ -61,6 +71,22 @@ fn coverage_bindings_become_commit_pinned_rule_function_and_verification_sites()
         page.code_scan.as_ref().unwrap().commit.as_deref(),
         Some("abc1234")
     );
+    let requirement = requirement_page(&corpus, "req_child");
+    assert_eq!(
+        requirement.produced_rules[0].evidence[0].href.as_deref(),
+        Some("https://github.com/exampleorg/ex-api/blob/abc1234/src/UseCase.php#L59-L69")
+    );
+    let references = requirement
+        .threads
+        .iter()
+        .flat_map(|thread| &thread.messages)
+        .flat_map(|message| &message.refs)
+        .collect::<Vec<_>>();
+    assert!(!references.is_empty());
+    assert!(references.iter().all(|reference| reference
+        .href
+        .as_deref()
+        .is_some_and(|href| href.contains("/blob/abc1234/"))));
 }
 
 /// A build given no report must leave `code_scan` unset, so the page can say
@@ -79,13 +105,16 @@ fn a_corpus_built_without_a_report_records_no_code_scan() {
 
 #[test]
 fn an_uncommitted_scan_is_recorded_without_a_commit() {
-    let report = CoverageReport::new(
-        None,
-        1,
-        Vec::new(),
-        vec![binding("src/rules.rs", 7, "decide_rule", None)],
-        Vec::new(),
-    );
+    let report = CoverageScan {
+        report: CoverageReport::new(
+            None,
+            1,
+            Vec::new(),
+            vec![binding("src/rules.rs", 7, "decide_rule", None)],
+            Vec::new(),
+        ),
+        scanned_files: Vec::new(),
+    };
     let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
 
     let corpus = build_corpus_with_coverage(&fixture_state(), &resolver, Some(&report));

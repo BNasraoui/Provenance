@@ -18,8 +18,8 @@ use crate::wiki::model::WikiCorpus;
 use crate::wiki::routes::WikiRoute;
 
 pub use pages::{
-    render_domains, render_findings, render_index, render_not_found, render_requirement,
-    render_resolution, render_rule, render_search, render_source,
+    render_decisions, render_domains, render_index, render_not_found, render_requirement,
+    render_resolution, render_rule, render_search, render_source, render_unfinished,
 };
 
 /// One rendered page: its canonical route, title, and full HTML document.
@@ -51,9 +51,14 @@ pub fn render_corpus(corpus: &WikiCorpus) -> Vec<RenderedPage> {
             render_search(scope, &corpus.search),
         ),
         rendered(
-            WikiRoute::Findings,
-            &corpus.findings.title,
-            render_findings(scope, &corpus.findings),
+            WikiRoute::Decisions,
+            &corpus.decisions.title,
+            render_decisions(scope, &corpus.decisions),
+        ),
+        rendered(
+            WikiRoute::Unfinished,
+            &corpus.unfinished.title,
+            render_unfinished(scope, &corpus.unfinished),
         ),
     ];
     for page in &corpus.requirements {
@@ -103,6 +108,8 @@ mod tests {
     mod discovery;
     #[path = "fixtures.rs"]
     mod fixtures;
+    #[path = "fixtures_discovery.rs"]
+    mod fixtures_discovery;
     #[path = "formatting.rs"]
     mod formatting;
     #[path = "homepage.rs"]

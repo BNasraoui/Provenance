@@ -1,8 +1,10 @@
 use super::annotate::{is_test_name, tokens, trim_token};
 use super::code_ref::{parse_code_ref, CodeRef};
 use super::remote::{blob_url, parse_git_remote, GitRemote};
+use provenance_core::coverage::CoverageScan;
 use provenance_macros::rule;
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 #[cfg(test)]
 mod reference_links;
@@ -15,6 +17,14 @@ pub struct EvidenceRef {
     pub label: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub href: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snippet: Option<EvidenceSnippet>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct EvidenceSnippet {
+    pub label: String,
+    pub content: String,
 }
 
 /// A linkable span inside free text (byte offsets into the original text).
@@ -23,19 +33,50 @@ pub struct InlineRef {
     pub start: usize,
     pub end: usize,
     pub label: String,
-    pub href: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub href: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snippet: Option<EvidenceSnippet>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct ScanContext {
+    commit: Option<String>,
+    files: BTreeMap<String, String>,
 }
 
 /// Resolves evidence references against an optional git remote.
 #[derive(Debug, Clone, Default)]
 pub struct LinkResolver {
     remote: Option<GitRemote>,
+    scan: Option<ScanContext>,
 }
 
 impl LinkResolver {
     pub fn new(remote_url: Option<&str>) -> Self {
         Self {
             remote: remote_url.and_then(parse_git_remote),
+            scan: None,
+        }
+    }
+
+    pub fn with_coverage(&self, scan: &CoverageScan) -> Self {
+        let files = scan
+            .scanned_files
+            .iter()
+            .map(|file| {
+                (
+                    normalized_path(file.file_path.as_str()).to_string(),
+                    file.content.clone(),
+                )
+            })
+            .collect();
+        Self {
+            remote: self.remote.clone(),
+            scan: Some(ScanContext {
+                commit: scan.commit.clone(),
+                files,
+            }),
         }
     }
 
@@ -66,10 +107,23 @@ impl LinkResolver {
         let label = reference.trim().to_string();
         if label.starts_with("http://") || label.starts_with("https://") {
             let href = Some(label.clone());
-            return EvidenceRef { label, href };
+            return EvidenceRef {
+                label,
+                href,
+                snippet: None,
+            };
         }
-        let href = parse_code_ref(&label).and_then(|code_ref| self.href_for(&code_ref, commit));
-        EvidenceRef { label, href }
+        let (href, snippet) = parse_code_ref(&label).map_or((None, None), |code_ref| {
+            (
+                self.href_for(&code_ref, commit),
+                self.snippet_for(&code_ref, commit),
+            )
+        });
+        EvidenceRef {
+            label,
+            href,
+            snippet,
+        }
     }
 
     /// Resolves a document/section pair, as stored on rules
@@ -92,6 +146,7 @@ impl LinkResolver {
                 return EvidenceRef {
                     label: combined,
                     href,
+                    snippet: self.snippet_for(&code_ref, commit),
                 };
             }
         }
@@ -106,7 +161,7 @@ impl LinkResolver {
     /// example `e.g.`) are left alone to avoid false positives; that
     /// judgement lives in `parse_code_ref`, which every surface shares.
     pub fn annotate(&self, text: &str) -> Vec<InlineRef> {
-        let mut file_refs: Vec<(InlineRef, String)> = Vec::new();
+        let mut file_refs: Vec<(InlineRef, Option<String>)> = Vec::new();
         let mut test_names: Vec<InlineRef> = Vec::new();
         for (token_start, token) in tokens(text) {
             let (offset, trimmed) = trim_token(token);
@@ -116,27 +171,27 @@ impl LinkResolver {
             let start = token_start + offset;
             let end = start + trimmed.len();
             if let Some(code_ref) = parse_code_ref(trimmed) {
-                // No remote means no link can be built at all; leave the
-                // token as plain text rather than anchor it to a path
-                // that would 404 inside the rendered site.
-                if let Some(href) = self.href_for(&code_ref, None) {
-                    let file_href = self
-                        .href_for(
-                            &CodeRef {
-                                path: code_ref.path.clone(),
-                                lines: Vec::new(),
-                            },
-                            None,
-                        )
-                        .unwrap_or_default();
-                    let inline = InlineRef {
-                        start,
-                        end,
-                        label: trimmed.to_string(),
-                        href,
-                    };
-                    file_refs.push((inline, file_href));
+                if !self.scan_contains(&code_ref.path) {
+                    continue;
                 }
+                // Only paths present in the scan reach this point. A remote
+                // and commit may add an anchor; scanned content can still
+                // provide a local snippet when no safe anchor exists.
+                let file_href = self.href_for(
+                    &CodeRef {
+                        path: code_ref.path.clone(),
+                        lines: Vec::new(),
+                    },
+                    None,
+                );
+                let inline = InlineRef {
+                    start,
+                    end,
+                    label: trimmed.to_string(),
+                    href: self.href_for(&code_ref, None),
+                    snippet: self.snippet_for(&code_ref, None),
+                };
+                file_refs.push((inline, file_href));
                 continue;
             }
             if is_test_name(trimmed) {
@@ -144,7 +199,8 @@ impl LinkResolver {
                     start,
                     end,
                     label: trimmed.to_string(),
-                    href: String::new(),
+                    href: None,
+                    snippet: None,
                 });
             }
         }
@@ -155,8 +211,8 @@ impl LinkResolver {
                 .rev()
                 .find(|(inline, _)| inline.start < test_name.start)
                 .or_else(|| file_refs.first());
-            if let Some((_, file_href)) = nearest {
-                test_name.href.clone_from(file_href);
+            if let Some((_, Some(file_href))) = nearest {
+                test_name.href = Some(file_href.clone());
                 refs.push(test_name);
             }
         }
@@ -170,221 +226,95 @@ impl LinkResolver {
     /// repo root, not to the wiki page it would be rendered on, so it would
     /// always 404 as an `<a href>` inside the generated site.
     fn href_for(&self, code_ref: &CodeRef, commit: Option<&str>) -> Option<String> {
+        let reference = commit
+            .map(str::to_string)
+            .or_else(|| self.scan.as_ref().and_then(|scan| scan.commit.clone()))
+            .or_else(|| self.scan.is_none().then(|| "HEAD".to_string()))?;
         self.remote
             .as_ref()
-            .map(|remote| blob_url(remote, commit.unwrap_or("HEAD"), code_ref))
+            .map(|remote| blob_url(remote, &reference, code_ref))
     }
+
+    fn scan_contains(&self, path: &str) -> bool {
+        self.scan
+            .as_ref()
+            .is_some_and(|scan| scan.files.contains_key(normalized_path(path)))
+    }
+
+    fn snippet_for(&self, code_ref: &CodeRef, commit: Option<&str>) -> Option<EvidenceSnippet> {
+        if code_ref.lines.is_empty() {
+            return None;
+        }
+        let scan = self.scan.as_ref()?;
+        if commit.is_some_and(|commit| {
+            !scan
+                .commit
+                .as_deref()
+                .is_some_and(|scan_commit| commit_matches(scan_commit, commit))
+        }) {
+            return None;
+        }
+        let content = scan.files.get(normalized_path(&code_ref.path))?;
+        let lines = content.lines().collect::<Vec<_>>();
+        let mut selected = Vec::new();
+        let mut displayed_ranges = Vec::new();
+        for range in &code_ref.lines {
+            let start = range.start as usize;
+            let requested_end = range.end.unwrap_or(range.start) as usize;
+            if start == 0 || start > lines.len() {
+                continue;
+            }
+            let displayed_end = requested_end.min(lines.len()).min(start.saturating_add(11));
+            let mut content = lines[start - 1..displayed_end].join("\n");
+            if displayed_end < requested_end {
+                content.push_str("\n…");
+            }
+            selected.push(content);
+            displayed_ranges.push(if displayed_end == start {
+                start.to_string()
+            } else {
+                format!("{start}-{displayed_end}")
+            });
+        }
+        let requested_ranges = format_ranges(code_ref);
+        let displayed_ranges = displayed_ranges.join(", ");
+        (!selected.is_empty()).then(|| EvidenceSnippet {
+            label: if displayed_ranges == requested_ranges {
+                format!("{}:{requested_ranges}", code_ref.path)
+            } else {
+                format!(
+                    "{}:{displayed_ranges} (requested {requested_ranges})",
+                    code_ref.path
+                )
+            },
+            content: selected.join("\n…\n"),
+        })
+    }
+}
+
+fn format_ranges(code_ref: &CodeRef) -> String {
+    code_ref
+        .lines
+        .iter()
+        .map(|range| {
+            range.end.map_or_else(
+                || range.start.to_string(),
+                |end| format!("{}-{end}", range.start),
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn commit_matches(scan_commit: &str, requested_commit: &str) -> bool {
+    scan_commit
+        .get(..requested_commit.len())
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case(requested_commit))
+}
+
+fn normalized_path(path: &str) -> &str {
+    path.strip_prefix("./").unwrap_or(path)
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use provenance_macros::verifies;
-
-    #[test]
-    #[verifies("rule_wiki_reference_links", examples)]
-    fn resolve_document_anchors_a_lines_prefixed_section() {
-        let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
-        let evidence = resolver.resolve_document("src/UseCase.php", Some("lines 153-156"), None);
-        assert_eq!(
-            evidence.href.as_deref(),
-            Some("https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php#L153-L156")
-        );
-    }
-
-    #[test]
-    #[verifies("rule_wiki_reference_links", examples)]
-    fn resolver_passes_http_urls_through() {
-        let resolver = LinkResolver::new(None);
-        let evidence = resolver.resolve("https://example.com/handbook");
-        assert_eq!(evidence.label, "https://example.com/handbook");
-        assert_eq!(
-            evidence.href.as_deref(),
-            Some("https://example.com/handbook")
-        );
-    }
-
-    #[test]
-    #[verifies("rule_wiki_reference_links", examples)]
-    fn resolver_builds_blob_urls_when_a_remote_is_known() {
-        let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
-        let evidence = resolver.resolve("src/UseCase.php:153-156");
-        assert_eq!(evidence.label, "src/UseCase.php:153-156");
-        assert_eq!(
-            evidence.href.as_deref(),
-            Some("https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php#L153-L156")
-        );
-    }
-
-    #[test]
-    #[verifies("rule_wiki_reference_links", examples)]
-    fn resolver_pins_blob_urls_to_a_commit_when_given() {
-        let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
-        let evidence = resolver.resolve_at("src/UseCase.php:153", Some("deadbee"));
-        assert_eq!(
-            evidence.href.as_deref(),
-            Some("https://github.com/exampleorg/ex-api/blob/deadbee/src/UseCase.php#L153")
-        );
-    }
-
-    #[test]
-    #[verifies("rule_wiki_reference_links", examples)]
-    fn resolver_leaves_code_refs_unlinked_without_a_remote() {
-        // A relative path like "src/UseCase.php" would be resolved against
-        // the wiki page's own route, not the repo root, so it must never be
-        // rendered as a real anchor when there is no remote to build a
-        // proper blob URL from.
-        let resolver = LinkResolver::new(None);
-        let evidence = resolver.resolve("src/UseCase.php:153-156");
-        assert_eq!(evidence.label, "src/UseCase.php:153-156");
-        assert!(evidence.href.is_none());
-    }
-
-    #[test]
-    #[verifies("rule_wiki_reference_links", examples)]
-    fn resolver_leaves_prose_references_unlinked() {
-        let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
-        let evidence = resolver.resolve("Section 7.2 of the award");
-        assert_eq!(evidence.label, "Section 7.2 of the award");
-        assert!(evidence.href.is_none());
-    }
-
-    #[test]
-    #[verifies("rule_wiki_reference_links", examples)]
-    fn resolver_leaves_bare_dotted_tokens_unlinked() {
-        // A whole-field reference gets the same reading as a span inside
-        // free text: without a directory or a line group, a dotted token is
-        // prose. "payroll.rs" is here on purpose — the resolver cannot tell
-        // it from "e.g.", so it treats them alike.
-        let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
-        for reference in ["e.g.", "Fig.", "etc.", "v1.2", "payroll.rs"] {
-            let evidence = resolver.resolve(reference);
-            assert_eq!(evidence.label, reference);
-            assert!(
-                evidence.href.is_none(),
-                "`{reference}` is prose but linked to {:?}",
-                evidence.href
-            );
-        }
-    }
-
-    #[test]
-    #[verifies("rule_wiki_reference_links", examples)]
-    fn resolver_links_a_bare_file_name_carrying_a_line_group() {
-        let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
-        let evidence = resolver.resolve("parser.rs:12");
-        assert_eq!(
-            evidence.href.as_deref(),
-            Some("https://github.com/exampleorg/ex-api/blob/HEAD/parser.rs#L12")
-        );
-    }
-
-    #[test]
-    #[verifies("rule_wiki_reference_links", examples)]
-    fn resolver_combines_documents_with_line_sections() {
-        let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
-        let evidence = resolver.resolve_document("src/UseCase.php", Some("153-156"), None);
-        assert_eq!(evidence.label, "src/UseCase.php:153-156");
-        assert_eq!(
-            evidence.href.as_deref(),
-            Some("https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php#L153-L156")
-        );
-    }
-
-    #[test]
-    #[verifies("rule_wiki_reference_links", examples)]
-    fn resolver_keeps_prose_sections_visible_but_links_the_document() {
-        let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
-        let evidence = resolver.resolve_document("src/UseCase.php", Some("save flow"), None);
-        assert_eq!(evidence.label, "src/UseCase.php (save flow)");
-        assert_eq!(
-            evidence.href.as_deref(),
-            Some("https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php")
-        );
-    }
-
-    #[test]
-    #[verifies("rule_wiki_reference_links", examples)]
-    fn resolver_leaves_prose_documents_unlinked() {
-        let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
-        let evidence = resolver.resolve_document("SCHADS Award", Some("clause 10.3"), None);
-        assert_eq!(evidence.label, "SCHADS Award (clause 10.3)");
-        assert!(evidence.href.is_none());
-    }
-
-    #[test]
-    #[verifies("rule_wiki_reference_links", examples)]
-    fn annotate_links_file_references_in_free_text() {
-        let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
-        let text = "Pattern found in src/UseCase.php:153-156, per-portion guard.";
-        let refs = resolver.annotate(text);
-        assert_eq!(refs.len(), 1);
-        assert_eq!(&text[refs[0].start..refs[0].end], "src/UseCase.php:153-156");
-        assert_eq!(refs[0].label, "src/UseCase.php:153-156");
-        assert_eq!(
-            refs[0].href,
-            "https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php#L153-L156"
-        );
-    }
-
-    #[test]
-    fn annotate_links_test_case_names_to_the_nearby_file_reference() {
-        let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
-        let text = "src/UseCase.php:211-233 confirmed by testCreateGapInvoiceOnly.";
-        let refs = resolver.annotate(text);
-        assert_eq!(refs.len(), 2);
-        assert_eq!(refs[1].label, "testCreateGapInvoiceOnly");
-        assert_eq!(
-            &text[refs[1].start..refs[1].end],
-            "testCreateGapInvoiceOnly"
-        );
-        assert_eq!(
-            refs[1].href,
-            "https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php"
-        );
-    }
-
-    #[test]
-    fn annotate_links_a_leading_test_name_to_the_next_file_reference() {
-        // When a test name appears before any file reference, there is no
-        // "nearby" ref behind it, so annotate() falls back to the first
-        // file reference found anywhere in the text.
-        let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
-        let text = "testCreateGapInvoiceOnly confirmed later at src/UseCase.php:211-233.";
-        let refs = resolver.annotate(text);
-        assert_eq!(refs.len(), 2);
-        assert_eq!(refs[0].label, "testCreateGapInvoiceOnly");
-        assert_eq!(
-            refs[0].href,
-            "https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php"
-        );
-    }
-
-    #[test]
-    #[verifies("rule_wiki_reference_links", examples)]
-    fn annotate_leaves_code_refs_unlinked_without_a_remote() {
-        let resolver = LinkResolver::new(None);
-        let text = "src/UseCase.php:211-233 confirmed by testCreateGapInvoiceOnly.";
-        assert!(
-            resolver.annotate(text).is_empty(),
-            "no remote means no dead-link anchors for the file ref or the test name"
-        );
-    }
-
-    #[test]
-    fn annotate_skips_test_names_without_a_file_reference() {
-        let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
-        assert!(resolver
-            .annotate("Confirmed by testCreateGapInvoiceOnly.")
-            .is_empty());
-    }
-
-    #[test]
-    #[verifies("rule_wiki_reference_links", examples)]
-    fn annotate_returns_nothing_for_plain_prose() {
-        let resolver = LinkResolver::new(None);
-        assert!(resolver
-            .annotate("The award requires overtime pay.")
-            .is_empty());
-    }
-}
+mod tests;

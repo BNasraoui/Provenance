@@ -3,7 +3,20 @@ pub(super) fn tokens(text: &str) -> Vec<(usize, &str)> {
     let mut start = None;
     for (index, ch) in text.char_indices() {
         if ch.is_whitespace() {
-            if let Some(begin) = start.take() {
+            if let Some(begin) = start {
+                let candidate = &text[begin..index];
+                let continues_line_group = text[index..]
+                    .trim_start()
+                    .chars()
+                    .next()
+                    .is_some_and(|next| next.is_ascii_digit());
+                if candidate.contains(':')
+                    && candidate.trim_end().ends_with(',')
+                    && continues_line_group
+                {
+                    continue;
+                }
+                start = None;
                 tokens.push((begin, &text[begin..index]));
             }
         } else if start.is_none() {

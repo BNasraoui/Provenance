@@ -31,7 +31,7 @@ expression: "render_index(\"default\", &index_fixture())"
 <div class="chrome-inner">
 <span class="wordmark">Provenance<span class="scope">default</span></span>
 <nav aria-label="Breadcrumb"></nav>
-<nav class="global-nav" aria-label="Wiki"><a href="/">Home</a><a href="/domains/">Domains</a><a href="/search/">Search</a></nav>
+<nav class="global-nav" aria-label="Wiki"><a href="/">Home</a><a href="/domains/">Domains</a><a href="/decisions/">Decisions</a><a href="/search/">Search</a></nav>
 <label class="theme-select">Theme
 <select id="theme-select">
 <option value="statesman" selected>Statesman</option>
@@ -61,15 +61,15 @@ expression: "render_index(\"default\", &index_fixture())"
 <form class="search-box" role="search" action="/search/" method="get">
 <label for="homepage-search">Search by title or text</label>
 <div><input id="homepage-search" name="q" type="search" autocomplete="off" placeholder="e.g. Invoice &amp; participant"><button type="submit">Search</button></div>
-</form><p class="search-summary">Search covers requirements and rules.</p></section>
+</form><p class="search-summary">Search covers requirements, decisions, rules, and sources.</p></section>
 <section data-homepage-domains><h2>Browse by area</h2>
 <article class="domain-group" data-homepage-domain-row><h3><a href="/domains/#domain-domain_default">Invoicing</a></h3>
 <p class="prose">Invoice behavior</p>
 <p class="entry-counts">1 requirement · 1 rule</p></article>
 <a class="browse-all" href="/domains/">Browse 1 area</a></section>
-<section data-homepage-traceability><h2>Missing evidence</h2>
-<p>See the complete list of places where project records need stronger support.</p>
-<a class="traceability-link" href="/findings/">Review 4 missing evidence findings</a></section>
+<section data-homepage-traceability><h2>Unfinished</h2>
+<p>See all gaps, orphans, and open questions in one place.</p>
+<a class="traceability-link" href="/unfinished/">Review 4 unfinished items</a></section>
 </div>
 <aside class="body-margin">
 <div class="classification" data-record-counts>

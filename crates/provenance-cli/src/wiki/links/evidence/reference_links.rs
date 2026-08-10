@@ -221,7 +221,7 @@ fn whole_field_hrefs(resolver: &LinkResolver, reference: &str) -> Vec<String> {
             resolver
                 .annotate(&free_text(reference, seed))
                 .into_iter()
-                .map(|inline| inline.href),
+                .filter_map(|inline| inline.href),
         );
     }
     hrefs

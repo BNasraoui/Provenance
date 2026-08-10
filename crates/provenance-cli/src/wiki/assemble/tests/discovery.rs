@@ -1,7 +1,8 @@
 use super::super::build_corpus;
-use super::fixtures::{edge, empty_state, requirement, rule, sid};
+use super::fixtures::{edge, empty_state, requirement, resolution, rule, sid, source};
 use crate::wiki::links::LinkResolver;
 use crate::wiki::model::DomainState;
+use crate::wiki::render::render_corpus;
 use provenance_core::{Domain, EdgeType, NodeType, RequirementStatus, SchemaVersion};
 use provenance_macros::verifies;
 
@@ -18,7 +19,7 @@ fn domain(id: &str, name: &str) -> Domain {
 
 #[test]
 #[verifies("rule_wiki_homepage_search_coverage", examples)]
-fn discovery_indexes_requirement_and_rule_titles_and_statements() {
+fn discovery_indexes_every_reader_facing_record_kind() {
     let mut state = empty_state();
     state.requirements = vec![requirement(
         "req_invoice",
@@ -27,10 +28,12 @@ fn discovery_indexes_requirement_and_rule_titles_and_statements() {
         vec![],
     )];
     state.rules = vec![rule("rule_invoice", Some("Group invoices"))];
+    state.resolutions = vec![resolution("res_invoice", "Choose invoice grouping", vec![])];
+    state.sources = vec![source("source_award", "Invoice award")];
 
     let corpus = build_corpus(&state, &LinkResolver::new(None));
 
-    assert_eq!(corpus.search.entries.len(), 2);
+    assert_eq!(corpus.search.entries.len(), 4);
     assert_eq!(
         corpus.search.entries[0].link.title,
         "Invoices shall identify the participant"
@@ -39,14 +42,71 @@ fn discovery_indexes_requirement_and_rule_titles_and_statements() {
         corpus.search.entries[0].statement,
         "Invoices shall identify the participant"
     );
-    assert_eq!(corpus.search.entries[1].link.title, "Group invoices");
     assert_eq!(
-        corpus.search.entries[1].statement,
+        corpus.search.entries[1].link.title,
+        "Choose invoice grouping"
+    );
+    assert_eq!(corpus.search.entries[1].statement, "Adopt the split");
+    assert_eq!(corpus.search.entries[2].link.title, "Group invoices");
+    assert_eq!(
+        corpus.search.entries[2].statement,
         "Claim items shall be grouped by participant"
     );
+    assert_eq!(corpus.search.entries[3].link.title, "Invoice award");
     assert_eq!(
         corpus.search.coverage,
-        "Search covers requirements and rules."
+        "Search covers requirements, decisions, rules, and sources."
+    );
+    assert_eq!(
+        corpus.index.search_coverage,
+        "Search covers requirements, decisions, rules, and sources."
+    );
+
+    let decisions = render_corpus(&corpus)
+        .into_iter()
+        .find(|page| page.route == "/decisions/")
+        .expect("the decisions index must be rendered");
+    assert!(decisions.html.contains("Choose invoice grouping"));
+    assert!(decisions.html.contains("Adopt the split"));
+    assert!(decisions
+        .html
+        .contains("href=\"/resolutions/res_invoice/\""));
+}
+
+#[test]
+fn rule_display_names_use_title_then_statement_clause_then_desnaked_id() {
+    let mut state = empty_state();
+    let mut explicit_rule = rule("rule_titled", Some("  Titled rule  "));
+    explicit_rule.statement = "Ignored statement".to_string();
+    let mut stated = rule("rule_stated", None);
+    stated.statement = "First clause; second clause.".to_string();
+    let mut desnaked = rule("rule_invoice_retry_policy", Some("  "));
+    desnaked.statement = "  ".to_string();
+    let mut dotted = rule("rule_dotted", None);
+    dotted.statement = "Apply 1.5 times the rate. Keep the result.".to_string();
+    state.rules = vec![explicit_rule, stated, desnaked, dotted];
+
+    let corpus = build_corpus(&state, &LinkResolver::new(None));
+    let page_titles = corpus
+        .rules
+        .iter()
+        .map(|page| page.title.as_str())
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        page_titles,
+        vec![
+            "Titled rule",
+            "First clause",
+            "Rule invoice retry policy",
+            "Apply 1.5 times the rate",
+        ]
+    );
+    assert_eq!(corpus.search.entries[0].link.title, "Titled rule");
+    assert_eq!(corpus.search.entries[1].link.title, "First clause");
+    assert_eq!(
+        corpus.search.entries[2].link.title,
+        "Rule invoice retry policy"
     );
 }
 

@@ -569,6 +569,11 @@
       .theme-select { display: none; }
     }
 
+    @media (max-width: 520px) {
+      .chrome-inner { flex-wrap: wrap; gap: 0.35rem 0.75rem; }
+      .global-nav { order: 2; width: 100%; margin-left: 0; justify-content: flex-start; }
+    }
+
     /* ============================================================
        RENDERER EXTENSIONS
        Additional page kinds, statuses, and list shapes the mockup

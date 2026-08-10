@@ -4,7 +4,7 @@ use super::super::{
     render_not_found, render_requirement, render_resolution, render_rule, render_source,
 };
 use super::fixtures::{
-    gappy_requirement_fixture, resolution_fixture, rule_fixture, source_fixture,
+    gappy_requirement_fixture, resolution_fixture, rule_fixture, source_fixture, SCAN_COMMIT,
 };
 
 #[test]
@@ -14,7 +14,9 @@ fn resolution_page_renders_inputs_as_citations_and_attribution() {
     assert!(html.contains("status-badge approved"));
     assert!(html.contains("<span class=\"cite-num\">[1]</span>"));
     assert!(html.contains("<span class=\"cite-type\">Technical</span>"));
-    assert!(html.contains("https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php#L59-L69"));
+    assert!(html.contains(&format!(
+        "https://github.com/exampleorg/ex-api/blob/{SCAN_COMMIT}/src/UseCase.php#L59-L69"
+    )));
     assert!(html.contains("Ben Nasraoui"));
     assert!(html.contains("18 Apr 2026"));
     assert!(html.contains("97%"));

@@ -9,11 +9,12 @@ fn publishes_a_complete_fresh_custom_output() {
 
     let report = publish(&empty_corpus(), PublicationOutput::custom(output.clone())).unwrap();
 
-    assert_eq!(report.page_count, 4);
+    assert_eq!(report.page_count, 5);
     assert!(output.join("index.html").is_file());
     assert!(output.join("domains/index.html").is_file());
     assert!(output.join("search/index.html").is_file());
-    assert!(output.join("findings/index.html").is_file());
+    assert!(output.join("decisions/index.html").is_file());
+    assert!(output.join("unfinished/index.html").is_file());
     assert!(output.join("assets/provenance-wiki.css").is_file());
     assert!(output.join(OWNERSHIP_MANIFEST).is_file());
     assert_no_transaction_artifacts(&output);

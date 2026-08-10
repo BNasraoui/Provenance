@@ -47,7 +47,8 @@ fn linkify_body_wraps_ref_spans_in_anchors_and_escapes_the_rest() {
         start: 4,
         end: 27,
         label: "src/UseCase.php:153-156".to_string(),
-        href: "https://example.test/blob".to_string(),
+        href: Some("https://example.test/blob".to_string()),
+        snippet: None,
     }];
     assert_eq!(
         linkify_body(body, &refs),

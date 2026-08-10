@@ -9,4 +9,7 @@ pub use parser::{
     parse_annotations, Annotation, CoverageLevel, ParseResult, ParseWarning, Verification,
 };
 pub use validate::{validate_annotations, validate_bindings, ValidationWarning};
-pub use walker::{scan_file, scan_path, AnnotationLocation, AttributeBinding, FileScan, Language};
+pub use walker::{
+    scan_file, scan_path, scan_path_with_content, AnnotationLocation, AttributeBinding, FileScan,
+    FileScanWithContent, Language,
+};

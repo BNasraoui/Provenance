@@ -3,8 +3,8 @@ use super::{
     TransactionPaths, OWNERSHIP_MANIFEST,
 };
 use crate::wiki::model::{
-    CorpusCounts, DomainIndexPage, FindingsPage, OrphanReport, PageId, RecordKind, RequirementPage,
-    ScopeIndexPage, SearchIndexPage, WikiCorpus,
+    CorpusCounts, DecisionIndexPage, DomainIndexPage, OrphanReport, PageId, RecordKind,
+    RequirementPage, ScopeIndexPage, SearchIndexPage, UnfinishedPage, WikiCorpus,
 };
 use camino::Utf8PathBuf;
 use provenance_core::RequirementStatus;
@@ -27,11 +27,12 @@ fn empty_corpus() -> WikiCorpus {
             roots: Vec::new(),
             gaps: Vec::new(),
             orphans: OrphanReport::default(),
-            search_coverage: "Search covers requirements and rules.".to_string(),
+            search_coverage: "Search covers requirements, decisions, rules, and sources."
+                .to_string(),
             search_example: None,
             domains: Vec::new(),
             authored_domain_count: 0,
-            finding_count: 0,
+            unfinished_count: 0,
         },
         domains: DomainIndexPage {
             scope: "default".to_string(),
@@ -43,15 +44,22 @@ fn empty_corpus() -> WikiCorpus {
         },
         search: SearchIndexPage {
             scope: "default".to_string(),
-            title: "Search requirements and rules".to_string(),
-            coverage: "Search covers requirements and rules.".to_string(),
+            title: "Search project records".to_string(),
+            coverage: "Search covers requirements, decisions, rules, and sources.".to_string(),
             example: None,
             entries: Vec::new(),
         },
-        findings: FindingsPage {
+        decisions: DecisionIndexPage {
             scope: "default".to_string(),
-            title: "Missing evidence".to_string(),
-            findings: Vec::new(),
+            title: "Decisions".to_string(),
+            entries: Vec::new(),
+        },
+        unfinished: UnfinishedPage {
+            scope: "default".to_string(),
+            title: "Unfinished".to_string(),
+            gaps: Vec::new(),
+            orphans: OrphanReport::default(),
+            open_questions: Vec::new(),
         },
         requirements: Vec::new(),
         resolutions: Vec::new(),

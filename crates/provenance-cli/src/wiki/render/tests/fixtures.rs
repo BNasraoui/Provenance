@@ -1,20 +1,43 @@
 use crate::wiki::links::LinkResolver;
 use crate::wiki::model::{
     CodeScan, CorpusCounts, DecisionSection, DomainGroup, DomainIndexPage, DomainState,
-    EvidenceThread, FieldNote, FindingsPage, GapKind, GapNotice, HomepageDomain, IndexEntry,
-    InputCitation, LineageEntry, OrphanReport, OrphanRule, PageId, PageKind, PageLink, RecordKind,
+    EvidenceThread, FieldNote, GapKind, GapNotice, HomepageDomain, IndexEntry, InputCitation,
+    LineageEntry, OrphanRecord, OrphanReport, PageId, PageKind, PageLink, RecordKind,
     RequirementPage, ResolutionPage, RuleCard, RuleFunction, RulePage, ScopeIndexPage, SearchEntry,
-    SearchIndexPage, SourceCitation, SourcePage, VerificationSite, WikiCorpus,
+    SourceCitation, SourcePage, VerificationSite, WikiCorpus,
 };
+use provenance_core::coverage::{CoverageReport, CoverageScan, ScannedFile};
 use provenance_core::{
     MessageRole, NodeType, RequirementStatus, ResolutionInputType, ResolutionStatus, RuleSeverity,
     RuleStatus, SourceType, ThreadStatus,
 };
+use std::fmt::Write as _;
+
+pub(super) use super::fixtures_discovery::{decisions_fixture, search_fixture, unfinished_fixture};
 
 pub(super) const REMOTE: &str = "git@github.com:exampleorg/ex-api.git";
-/// The commit the fixture's scan ran against; its binding links are pinned
-/// to it, as a real scan's would be.
+/// The fixture scan commit; binding links pin to it as real scans do.
 pub(super) const SCAN_COMMIT: &str = "9f2c1ab4e5f6";
+
+fn resolver() -> LinkResolver {
+    let report = CoverageScan {
+        report: CoverageReport::new(
+            Some(SCAN_COMMIT.to_string()),
+            1,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        ),
+        scanned_files: vec![ScannedFile {
+            file_path: "src/UseCase.php".into(),
+            content: (1..=240).fold(String::new(), |mut content, line| {
+                writeln!(content, "source line {line}").unwrap();
+                content
+            }),
+        }],
+    };
+    LinkResolver::new(Some(REMOTE)).with_coverage(&report)
+}
 
 pub(super) fn link(kind: PageKind, id: &str, title: &str) -> PageLink {
     let kind = match kind {
@@ -25,7 +48,8 @@ pub(super) fn link(kind: PageKind, id: &str, title: &str) -> PageLink {
         PageKind::ScopeIndex
         | PageKind::DomainIndex
         | PageKind::SearchIndex
-        | PageKind::Findings => {
+        | PageKind::DecisionIndex
+        | PageKind::Unfinished => {
             panic!("singleton pages are not record links")
         }
     };
@@ -72,7 +96,6 @@ pub(super) fn rule_card(resolver: &LinkResolver) -> RuleCard {
             "rule_sah_inv_016",
             "Suppress line emission for fully zero claim items",
         ),
-        name: Some("Suppress line emission for fully zero claim items".to_string()),
         statement: "If a claim item's participant, government, and gap portions are all <= 0 \
                     after markup, no invoice lines shall be emitted for that claim item."
             .to_string(),
@@ -131,7 +154,7 @@ pub(super) fn decision(resolver: &LinkResolver) -> DecisionSection {
 }
 
 pub(super) fn requirement_fixture() -> RequirementPage {
-    let resolver = LinkResolver::new(Some(REMOTE));
+    let resolver = resolver();
     RequirementPage {
         id: PageId::new(RecordKind::Requirement, "req_saveinvoice_split"),
         title: "SaveInvoice shall split each claim item into portions".to_string(),
@@ -234,7 +257,7 @@ pub(super) fn gappy_requirement_fixture() -> RequirementPage {
 }
 
 pub(super) fn resolution_fixture() -> ResolutionPage {
-    let resolver = LinkResolver::new(Some(REMOTE));
+    let resolver = resolver();
     ResolutionPage {
         id: PageId::new(RecordKind::Resolution, "res_split"),
         title: "SaveInvoice per-portion split & $0 suppression extraction".to_string(),
@@ -267,7 +290,7 @@ pub(super) fn resolution_fixture() -> ResolutionPage {
 }
 
 pub(super) fn rule_fixture() -> RulePage {
-    let resolver = LinkResolver::new(Some(REMOTE));
+    let resolver = resolver();
     RulePage {
         id: PageId::new(RecordKind::Rule, "rule_sah_inv_016"),
         title: "Suppress line emission for fully zero claim items".to_string(),
@@ -309,7 +332,7 @@ pub(super) fn rule_fixture() -> RulePage {
 }
 
 pub(super) fn source_fixture() -> SourcePage {
-    let resolver = LinkResolver::new(Some(REMOTE));
+    let resolver = resolver();
     SourcePage {
         id: PageId::new(RecordKind::Source, "source_schads"),
         title: "SCHADS Award mapping".to_string(),
@@ -354,14 +377,17 @@ pub(super) fn index_fixture() -> ScopeIndexPage {
             detail: "A source is not referenced by a requirement.".to_string(),
         }],
         orphans: OrphanReport {
-            rules: vec![OrphanRule {
+            rules: vec![OrphanRecord {
                 link: link(PageKind::Rule, "rule_orphan", "ORPH-001"),
                 reason: "no resolution produces this rule".to_string(),
             }],
             resolutions: vec![],
-            sources: vec![link(PageKind::Source, "source_unused", "Unused API spec")],
+            sources: vec![OrphanRecord {
+                link: link(PageKind::Source, "source_unused", "Unused API spec"),
+                reason: "referenced by nothing".to_string(),
+            }],
         },
-        search_coverage: "Search covers requirements and rules.".to_string(),
+        search_coverage: "Search covers requirements, decisions, rules, and sources.".to_string(),
         search_example: Some("Invoice & participant".to_string()),
         domains: vec![HomepageDomain {
             id: "domain_default".to_string(),
@@ -371,7 +397,7 @@ pub(super) fn index_fixture() -> ScopeIndexPage {
             rules: 1,
         }],
         authored_domain_count: 1,
-        finding_count: 4,
+        unfinished_count: 4,
     }
 }
 
@@ -381,7 +407,8 @@ pub(super) fn corpus_fixture() -> WikiCorpus {
         index: index_fixture(),
         domains: domain_index_fixture(),
         search: search_fixture(),
-        findings: findings_fixture(),
+        decisions: decisions_fixture(),
+        unfinished: unfinished_fixture(),
         requirements: vec![requirement_fixture(), gappy_requirement_fixture()],
         resolutions: vec![resolution_fixture()],
         rules: vec![rule_fixture()],
@@ -437,56 +464,5 @@ pub(super) fn domain_index_fixture() -> DomainIndexPage {
             link: link(PageKind::Rule, "rule_sah_inv_016", "Suppress line emission"),
             statement: "No invoice lines shall be emitted for zero claims".to_string(),
         }],
-    }
-}
-
-pub(super) fn search_fixture() -> SearchIndexPage {
-    SearchIndexPage {
-        scope: "default".to_string(),
-        title: "Search requirements and rules".to_string(),
-        coverage: "Search covers requirements and rules.".to_string(),
-        example: Some("Invoice & participant".to_string()),
-        entries: vec![SearchEntry {
-            link: link(
-                PageKind::Requirement,
-                "req_saveinvoice_split",
-                "Invoice & participant",
-            ),
-            statement: "Invoice & participant statement".to_string(),
-        }],
-    }
-}
-
-pub(super) fn findings_fixture() -> FindingsPage {
-    FindingsPage {
-        scope: "default".to_string(),
-        title: "Missing evidence".to_string(),
-        findings: vec![
-            GapNotice {
-                kind: GapKind::UnreferencedSource,
-                subject: None,
-                related: None,
-                detail: "A source is not referenced by a requirement.".to_string(),
-            },
-            GapNotice {
-                kind: GapKind::DanglingReference,
-                subject: None,
-                related: None,
-                detail: "A requirement points to a source that is missing.".to_string(),
-            },
-            GapNotice {
-                kind: GapKind::MissingSourceRefs,
-                subject: None,
-                related: None,
-                detail: "A requirement has no source references.".to_string(),
-            },
-            GapNotice {
-                kind: GapKind::NoResolvingDecision,
-                subject: None,
-                related: None,
-                detail: "A requirement is marked resolved but has no resolving decision."
-                    .to_string(),
-            },
-        ],
     }
 }

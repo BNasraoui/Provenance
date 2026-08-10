@@ -54,7 +54,6 @@ impl Assembler<'_> {
     pub(super) fn rule_card(&self, rule: &Rule) -> RuleCard {
         RuleCard {
             link: rule_link(rule),
-            name: rule.name.clone(),
             statement: rule.statement.clone(),
             status: rule.status.clone(),
             severity: rule.severity.clone(),

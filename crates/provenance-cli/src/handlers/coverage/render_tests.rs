@@ -5,7 +5,9 @@
 use super::{render_coverage, OUTSIDE_DEFINING_MODULE};
 use crate::output::OutputFormat;
 use camino::Utf8PathBuf;
-use provenance_core::coverage::{BindingResult, CoverageReport, ValidationWarning};
+use provenance_core::coverage::{
+    BindingResult, CoverageReport, CoverageScan, ScannedFile, ValidationWarning,
+};
 
 fn binding(rule_id: &str, file_path: &str, verification: Option<&str>) -> BindingResult {
     BindingResult {
@@ -17,8 +19,25 @@ fn binding(rule_id: &str, file_path: &str, verification: Option<&str>) -> Bindin
     }
 }
 
-fn report(bindings: Vec<BindingResult>, warnings: Vec<ValidationWarning>) -> CoverageReport {
-    CoverageReport::new(None, 1, Vec::new(), bindings, warnings)
+fn report(bindings: Vec<BindingResult>, warnings: Vec<ValidationWarning>) -> CoverageScan {
+    CoverageScan {
+        report: CoverageReport::new(None, 1, Vec::new(), bindings, warnings),
+        scanned_files: Vec::new(),
+    }
+}
+
+#[test]
+fn json_output_keeps_scanned_source_content() {
+    let mut report = report(Vec::new(), Vec::new());
+    report.scanned_files = vec![ScannedFile {
+        file_path: "src/rules.rs".into(),
+        content: "fn rule() {}\n".to_string(),
+    }];
+
+    let json = render_coverage(OutputFormat::Json, &report).unwrap();
+
+    assert!(json.contains("scanned_files"));
+    assert!(json.contains("fn rule() {}"));
 }
 
 #[test]

@@ -31,7 +31,7 @@ expression: "render_rule(\"default\", &rule_fixture())"
 <div class="chrome-inner">
 <span class="wordmark">Provenance<span class="scope">default</span></span>
 <nav aria-label="Breadcrumb"><a href="/">default</a></nav>
-<nav class="global-nav" aria-label="Wiki"><a href="/">Home</a><a href="/domains/">Domains</a><a href="/search/">Search</a></nav>
+<nav class="global-nav" aria-label="Wiki"><a href="/">Home</a><a href="/domains/">Domains</a><a href="/decisions/">Decisions</a><a href="/search/">Search</a></nav>
 <label class="theme-select">Theme
 <select id="theme-select">
 <option value="statesman" selected>Statesman</option>
@@ -68,7 +68,7 @@ expression: "render_rule(\"default\", &rule_fixture())"
 </section>
 <section>
 <h2 class="section-head sh-rule">Rule Function</h2>
-<p class="code-site"><code>suppress_zero_claim_items</code><span class="site-separator"> — </span><a href="https://github.com/exampleorg/ex-api/blob/9f2c1ab4e5f6/src/UseCase.php#L153">src/UseCase.php:153</a></p>
+<p class="code-site"><code>suppress_zero_claim_items</code><span class="site-separator"> — </span><a href="https://github.com/exampleorg/ex-api/blob/9f2c1ab4e5f6/src/UseCase.php#L153">src/UseCase.php:153</a><span class="local-snippet"><br><span class="snippet-label">Local snippet · src/UseCase.php:153</span><br><code>source line 153</code></span></p>
 </section>
 <section>
 <h2 class="section-head sh-rule"><svg class="icon"><use href="#i-check-circle"/></svg>Verification</h2>

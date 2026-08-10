@@ -11,9 +11,13 @@ pub(super) fn coverage_scan(
     path: &Utf8PathBuf,
     scope: String,
     validate_rules: bool,
-) -> anyhow::Result<provenance_core::coverage::CoverageReport> {
-    let commit = current_git_commit(&repo).ok();
-    let scans = provenance_scanner::scan_path(path)?;
+) -> anyhow::Result<provenance_core::coverage::CoverageScan> {
+    let scanned = provenance_scanner::scan_path_with_content(path)?;
+    let scans = scanned
+        .iter()
+        .map(|file| file.scan.clone())
+        .collect::<Vec<_>>();
+    let commit = scan_commit(&repo, &scans);
     let rules = if validate_rules {
         StateStore::new(ProvenanceLayout::new(repo)).list_rules(&ScopeId::new(scope)?)?
     } else {
@@ -72,13 +76,23 @@ pub(super) fn coverage_scan(
             verification: binding.verification.map(|method| method.to_string()),
         })
         .collect::<Vec<_>>();
-    Ok(provenance_core::coverage::CoverageReport::new(
-        commit,
-        scans.len(),
-        annotations,
-        bindings,
-        warnings,
-    ))
+    let scanned_files = scanned
+        .iter()
+        .map(|file| provenance_core::coverage::ScannedFile {
+            file_path: file.scan.file_path.clone(),
+            content: file.content.clone(),
+        })
+        .collect();
+    Ok(provenance_core::coverage::CoverageScan {
+        report: provenance_core::coverage::CoverageReport::new(
+            commit,
+            scans.len(),
+            annotations,
+            bindings,
+            warnings,
+        ),
+        scanned_files,
+    })
 }
 
 /// What the parser complained about while reading the files: the legacy
@@ -153,11 +167,43 @@ fn unverified_rule_warnings(
 
 pub(super) fn current_git_commit(repo: &camino::Utf8Path) -> anyhow::Result<String> {
     let output = std::process::Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
+        .args(["rev-parse", "HEAD"])
         .current_dir(repo)
         .output()?;
     anyhow::ensure!(output.status.success(), "git rev-parse failed");
     Ok(String::from_utf8(output.stdout)?.trim().to_string())
+}
+
+fn scan_commit(repo: &camino::Utf8Path, scans: &[provenance_scanner::FileScan]) -> Option<String> {
+    if scans.is_empty() {
+        return current_git_commit(repo).ok();
+    }
+    let mut command = std::process::Command::new("git");
+    command
+        .args([
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+            "--ignored=matching",
+            "--",
+        ])
+        .current_dir(repo);
+    for scan in scans {
+        let path = scan
+            .file_path
+            .strip_prefix(repo)
+            .or_else(|_| scan.file_path.strip_prefix("."))
+            .unwrap_or(&scan.file_path);
+        command.arg(if path.as_str().is_empty() {
+            camino::Utf8Path::new(".")
+        } else {
+            path
+        });
+    }
+    let status = command.output().ok()?;
+    (status.status.success() && status.stdout.is_empty())
+        .then(|| current_git_commit(repo).ok())
+        .flatten()
 }
 
 /// Said of a verification site that lives in a different file from the
@@ -211,7 +257,7 @@ fn warning_subject(rule_id: &str) -> String {
 
 pub(super) fn render_coverage(
     format: OutputFormat,
-    report: &provenance_core::coverage::CoverageReport,
+    report: &provenance_core::coverage::CoverageScan,
 ) -> anyhow::Result<String> {
     if matches!(format, OutputFormat::Markdown) {
         let mut out = String::from("# Coverage Scan\n\n");

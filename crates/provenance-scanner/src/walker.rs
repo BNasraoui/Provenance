@@ -66,7 +66,20 @@ pub struct FileScan {
     pub warnings: Vec<ParseWarning>,
 }
 
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct FileScanWithContent {
+    pub scan: FileScan,
+    pub content: String,
+}
+
 pub fn scan_path(path: &Utf8Path) -> anyhow::Result<Vec<FileScan>> {
+    Ok(scan_path_with_content(path)?
+        .into_iter()
+        .map(|file| file.scan)
+        .collect())
+}
+
+pub fn scan_path_with_content(path: &Utf8Path) -> anyhow::Result<Vec<FileScanWithContent>> {
     let mut scans = Vec::new();
     for entry in walkdir::WalkDir::new(path) {
         let entry = entry?;
@@ -81,9 +94,12 @@ pub fn scan_path(path: &Utf8Path) -> anyhow::Result<Vec<FileScan>> {
         };
         let content = std::fs::read_to_string(&file_path)
             .with_context(|| format!("read source file {file_path}"))?;
-        scans.push(scan_file(&file_path, language, &content));
+        scans.push(FileScanWithContent {
+            scan: scan_file(&file_path, language, &content),
+            content,
+        });
     }
-    scans.sort_by(|a, b| a.file_path.cmp(&b.file_path));
+    scans.sort_by(|a, b| a.scan.file_path.cmp(&b.scan.file_path));
     Ok(scans)
 }
 

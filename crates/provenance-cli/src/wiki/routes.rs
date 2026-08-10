@@ -9,7 +9,8 @@ pub enum WikiRoute<'a> {
     Index,
     Domains,
     Search,
-    Findings,
+    Decisions,
+    Unfinished,
     Stylesheet,
     Record(&'a PageId),
 }
@@ -25,7 +26,8 @@ impl WikiRoute<'_> {
             Self::Index => "/".to_string(),
             Self::Domains => "/domains/".to_string(),
             Self::Search => "/search/".to_string(),
-            Self::Findings => "/findings/".to_string(),
+            Self::Decisions => "/decisions/".to_string(),
+            Self::Unfinished => "/unfinished/".to_string(),
             Self::Stylesheet => WIKI_CSS_ROUTE.to_string(),
             Self::Record(id) => {
                 let collection = match id.kind {
@@ -86,7 +88,8 @@ mod tests {
     fn canonical_routes_cover_singletons_records_and_requests() {
         assert_eq!(WikiRoute::Domains.path(), "/domains/");
         assert_eq!(WikiRoute::Search.path(), "/search/");
-        assert_eq!(WikiRoute::Findings.path(), "/findings/");
+        assert_eq!(WikiRoute::Decisions.path(), "/decisions/");
+        assert_eq!(WikiRoute::Unfinished.path(), "/unfinished/");
         assert_eq!(normalize_request_path("domains"), "/domains/");
         assert_eq!(normalize_request_path("/"), "/");
         assert_eq!(
