@@ -99,7 +99,7 @@ pub(super) fn import_scope(
 fn deserialize_scope_export(input: &str) -> anyhow::Result<ScopeExport> {
     match serde_json::from_str(input) {
         Ok(exported) => Ok(exported),
-        Err(error) if has_removed_service_family(input) => anyhow::bail!(
+        Err(_) if has_removed_service_family(input) => anyhow::bail!(
             "this export predates the service family removal; re-export from current provenance"
         ),
         Err(error) => Err(error.into()),
