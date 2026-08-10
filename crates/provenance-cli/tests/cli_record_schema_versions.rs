@@ -16,7 +16,11 @@ fn a_hand_edited_requirement_version_is_refused_by_every_reader() {
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path().to_str().unwrap().to_string();
     init(&repo);
-    create_requirement(&repo);
+    create_requirement(
+        &repo,
+        "req_overtime",
+        "Overtime must follow the award thresholds",
+    );
     let path = dir
         .path()
         .join(".provenance/state/scopes/default/requirements/req.jsonl");
@@ -55,6 +59,65 @@ fn a_hand_edited_requirement_version_is_refused_by_every_reader() {
     }
 }
 
+/// Writing to a shard that holds a hand-edited record changes nothing.
+///
+/// A write reads the shard first and writes all of it back, so an unguarded
+/// write was worse than an unguarded read: `requirements create` for an
+/// unrelated id used to succeed, re-serialise the version-2 neighbour from
+/// whatever fields the current struct still recognised, and drop the rest -
+/// laundering into the supported layout exactly the record every reader
+/// refuses. The shard is compared byte for byte because "the command failed"
+/// is not the claim; the claim is that the file on disk was not touched.
+#[test]
+#[verifies("rule_reads_supported_version_only", examples)]
+fn a_write_beside_a_hand_edited_record_is_refused_and_changes_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().to_str().unwrap().to_string();
+    init(&repo);
+    create_requirement(
+        &repo,
+        "req_overtime",
+        "Overtime must follow the award thresholds",
+    );
+    let path = dir
+        .path()
+        .join(".provenance/state/scopes/default/requirements/req.jsonl");
+    let planted = std::fs::read_to_string(&path)
+        .unwrap()
+        .replace("\"schema_version\":1", "\"schema_version\":2 ")
+        .replace(
+            "\"statement\"",
+            "\"unknown_to_this_build\":\"keep me\",\"statement\"",
+        );
+    std::fs::write(&path, &planted).unwrap();
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "requirements",
+            "create",
+            "--repo",
+            repo.as_str(),
+            "--scope",
+            "default",
+            "--id",
+            "req_penalty_rates",
+            "--statement",
+            "Penalty rates apply on public holidays",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .failure()
+        .stderr(contains("requirements/req.jsonl line 1"))
+        .stderr(contains("record req_overtime"))
+        .stderr(contains(
+            "has schema_version 2, but this build reads schema_version 1 only",
+        ));
+
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), planted);
+}
+
 fn init(repo: &str) {
     Command::cargo_bin("provenance")
         .unwrap()
@@ -63,7 +126,7 @@ fn init(repo: &str) {
         .success();
 }
 
-fn create_requirement(repo: &str) {
+fn create_requirement(repo: &str, id: &str, statement: &str) {
     Command::cargo_bin("provenance")
         .unwrap()
         .args([
@@ -74,9 +137,9 @@ fn create_requirement(repo: &str) {
             "--scope",
             "default",
             "--id",
-            "req_overtime",
+            id,
             "--statement",
-            "Overtime must follow the award thresholds",
+            statement,
             "--format",
             "json",
         ])

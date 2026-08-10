@@ -5,7 +5,7 @@ mod ideation_writers;
 mod inputs;
 mod proposal_surfaces;
 mod proposal_writers;
-mod readers;
+pub(crate) mod readers;
 mod rule_writers;
 mod shaping_writers;
 mod thread_writers;

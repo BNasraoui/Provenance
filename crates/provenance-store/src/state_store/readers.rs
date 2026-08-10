@@ -58,13 +58,24 @@ fn record_from_line<T: DeserializeOwned>(
 /// record if the line carries an id, and both versions, because the fix is to
 /// find that line and decide what it should say.
 ///
+/// Reading is not the only way a stored line becomes a record. Every write is
+/// a read first: `mutate_jsonl_locked` loads the shard, hands the records to
+/// the caller, and writes the whole shard back. Left unguarded that path was
+/// the worse half of the same hole, because it does not merely misread the
+/// row, it rewrites it: an unrecognised field on a future-version record is
+/// dropped on the way out, so an unrelated `create` would launder a record the
+/// readers refuse. That path therefore calls this same function, on the same
+/// raw JSON, before any record is built - see `crate::jsonl`. A write against
+/// a shard holding an unsupported row fails before the mutation runs, and the
+/// shard is left byte for byte as it was.
+///
 /// A line with no `schema_version` at all makes no claim about its layout;
 /// there is nothing to compare, and its own deserializer says whether the
 /// field was required. The version is read from the raw JSON rather than from
 /// a struct because the struct is what we refuse to build until the version is
 /// known.
 #[rule("rule_reads_supported_version_only")]
-fn ensure_supported_record_version(
+pub fn ensure_supported_record_version(
     path: &Utf8Path,
     line_number: usize,
     value: &serde_json::Value,
@@ -325,9 +336,19 @@ mod read_guard_tests {
     // calling the guard.
     const READABLE_LAYOUT_VERSIONS: [u32; 1] = [1];
 
-    // Both ways a stored line can be turned into a record. Neither is allowed
-    // to load a version the other would refuse.
-    const FIELD_POLICIES: [Fields; 2] = [Fields::Open, Fields::Closed];
+    // One way of turning a stored line into a record, named for the assertion.
+    type Loader = fn(&str) -> anyhow::Result<()>;
+
+    // Every way a stored line can become a record: the read choke point's two
+    // field policies, and the read a write is built on, which loads the shard
+    // and then writes all of it back. None of them may load a version another
+    // one refuses - least of all the write, which would rewrite the row it
+    // misread.
+    const LOADERS: [(&str, Loader); 3] = [
+        ("an open read", load_open),
+        ("a closed read", load_closed),
+        ("the read inside a write", load_through_a_write),
+    ];
 
     fn layout_is_readable_by_oracle(version: u32) -> bool {
         READABLE_LAYOUT_VERSIONS.contains(&version)
@@ -342,16 +363,43 @@ mod read_guard_tests {
         record_from_line(path(), 7, line, value, fields)
     }
 
+    fn load_open(line: &str) -> anyhow::Result<()> {
+        load(line, Fields::Open).map(drop)
+    }
+
+    fn load_closed(line: &str) -> anyhow::Result<()> {
+        load(line, Fields::Closed).map(drop)
+    }
+
+    // The mutation empties the shard, so the loader fails loudly if the write
+    // path ever stops guarding: the record reaches the caller, the file is
+    // rewritten without it, and the call returns the success the assertion
+    // below refuses at every version but 1.
+    fn load_through_a_write(line: &str) -> anyhow::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let shard = camino::Utf8PathBuf::from_path_buf(dir.path().join("req.jsonl"))
+            .expect("temporary directory path must be UTF-8");
+        std::fs::write(&shard, format!("{line}\n"))?;
+        crate::jsonl::mutate_jsonl_locked(
+            &shard,
+            &shard.with_extension("lock"),
+            |records: &mut Vec<Value>| {
+                records.clear();
+                Ok(())
+            },
+        )
+    }
+
     #[test]
     #[verifies("rule_reads_supported_version_only", exhaustion)]
     fn only_the_supported_version_loads() {
-        for fields in FIELD_POLICIES {
+        for (loader_name, load_line) in LOADERS {
             for version in VERSION_RANGE {
                 let line = json!({"schema_version": version, "id": "req_a"}).to_string();
                 assert_eq!(
-                    load(&line, fields).is_ok(),
+                    load_line(&line).is_ok(),
                     layout_is_readable_by_oracle(version),
-                    "the guard and the decision disagree on {fields:?} at version {version}"
+                    "the guard and the decision disagree on {loader_name} at version {version}"
                 );
             }
         }
