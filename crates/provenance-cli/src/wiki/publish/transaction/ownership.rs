@@ -263,7 +263,11 @@ fn resolve_existing_parent_prefix(parent: &Path) -> std::io::Result<PathBuf> {
             _ => break,
         }
     }
-    let mut resolved = std::fs::canonicalize(existing)?;
+    let mut resolved = if existing.as_os_str().is_empty() {
+        std::fs::canonicalize(".")?
+    } else {
+        std::fs::canonicalize(existing)?
+    };
     for leaf in created_below.iter().rev() {
         resolved.push(leaf);
     }
