@@ -1,3 +1,5 @@
+mod binding_lexer;
+
 pub mod parser;
 pub mod validate;
 pub mod walker;

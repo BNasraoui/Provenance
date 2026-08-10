@@ -1,10 +1,11 @@
-use std::path::Path;
-
 use anyhow::Context;
 use camino::{Utf8Path, Utf8PathBuf};
 
 use std::str::FromStr;
 
+use crate::binding_lexer::{
+    block_comment_state, call_arguments, code_outside_multiline_string, MultilineStyle,
+};
 use crate::parser::{contains_annotation_marker, Verification};
 use crate::{parse_annotations, Annotation, ParseWarning};
 
@@ -40,7 +41,7 @@ pub struct AnnotationLocation {
     pub annotation: Annotation,
 }
 
-/// A `#[rule]` or `#[verifies]` attribute found in source.
+/// A rule or verification binding found in source.
 ///
 /// `verification` is `None` for a `#[rule]` site (the item is the rule) and
 /// `Some` for a `#[verifies]` site (the item checks the rule, the method
@@ -90,22 +91,41 @@ pub fn scan_file(file_path: &Utf8Path, language: Language, content: &str) -> Fil
     let mut warnings = Vec::new();
     let lines = content.lines().collect::<Vec<_>>();
     let mut idx = 0;
+    let mut in_block_comment = false;
+    let mut multiline_delimiter = None;
     while idx < lines.len() {
-        let line = lines[idx];
-        if language == Language::Rust {
-            if let Some((rule_id, verification)) = parse_attribute_line(line) {
-                bindings.push(AttributeBinding {
-                    file_path: file_path.to_path_buf(),
-                    line: idx + 1,
-                    item_name: next_item_name(language, &lines[idx + 1..]),
-                    rule_id,
-                    verification,
-                });
-                idx += 1;
-                continue;
-            }
+        let Some(line) = code_outside_multiline_string(
+            lines[idx],
+            multiline_style(language),
+            &mut multiline_delimiter,
+            in_block_comment,
+        ) else {
+            idx += 1;
+            continue;
+        };
+        let started_in_block_comment = in_block_comment;
+        let next_block_comment = if language == Language::Python {
+            false
+        } else {
+            block_comment_state(line, in_block_comment)
+        };
+        if let Some((rule_id, verification)) = parse_binding_line(language, line, in_block_comment)
+        {
+            bindings.push(AttributeBinding {
+                file_path: file_path.to_path_buf(),
+                line: idx + 1,
+                item_name: binding_item_name(language, &lines, idx, verification),
+                rule_id,
+                verification,
+            });
+            in_block_comment = next_block_comment;
+            idx += 1;
+            continue;
         }
-        if !contains_annotation_marker(line) {
+        in_block_comment = next_block_comment;
+        if !is_annotation_comment_line(language, line, started_in_block_comment)
+            || !contains_annotation_marker(line)
+        {
             idx += 1;
             continue;
         }
@@ -121,6 +141,11 @@ pub fn scan_file(file_path: &Utf8Path, language: Language, content: &str) -> Fil
                 annotation,
             });
         }
+        if language != Language::Python {
+            for consumed_line in lines.iter().take(end_idx + 1).skip(idx + 1) {
+                in_block_comment = block_comment_state(consumed_line, in_block_comment);
+            }
+        }
         idx = end_idx + 1;
     }
     FileScan {
@@ -130,6 +155,99 @@ pub fn scan_file(file_path: &Utf8Path, language: Language, content: &str) -> Fil
         bindings,
         warnings,
     }
+}
+
+const fn multiline_style(language: Language) -> MultilineStyle {
+    match language {
+        Language::JavaScript | Language::TypeScript | Language::Go => MultilineStyle::Backtick,
+        Language::Python => MultilineStyle::TripleBoth,
+        Language::Java => MultilineStyle::TripleDouble,
+        Language::Rust => MultilineStyle::RustRaw,
+    }
+}
+
+fn is_annotation_comment_line(
+    language: Language,
+    line: &str,
+    started_in_block_comment: bool,
+) -> bool {
+    if started_in_block_comment {
+        return true;
+    }
+    let trimmed = line.trim_start();
+    trimmed.starts_with("//")
+        || trimmed.starts_with("/*")
+        || trimmed.starts_with('*')
+        || (language == Language::Python && trimmed.starts_with('#'))
+}
+
+fn parse_binding_line(
+    language: Language,
+    line: &str,
+    in_block_comment: bool,
+) -> Option<(String, Option<Verification>)> {
+    match language {
+        Language::Rust => (!in_block_comment)
+            .then(|| parse_attribute_line(line))
+            .flatten(),
+        Language::Python => parse_python_decorator(line),
+        Language::JavaScript | Language::TypeScript => parse_script_call(line, in_block_comment),
+        Language::Go | Language::Java => parse_rule_call(line, in_block_comment),
+    }
+}
+
+fn parse_python_decorator(line: &str) -> Option<(String, Option<Verification>)> {
+    let trimmed = line.trim_start();
+    let decorator = trimmed.strip_prefix('@')?;
+    let rest = decorator.strip_prefix("rule(").or_else(|| {
+        decorator
+            .split_once(".rule(")
+            .filter(|(qualifier, _)| !qualifier.is_empty())
+            .map(|(_, rest)| rest)
+    })?;
+    Some((quoted_literal(rest)?.0, None))
+}
+
+fn parse_script_call(line: &str, in_block_comment: bool) -> Option<(String, Option<Verification>)> {
+    if let Some(rest) = call_arguments(line, in_block_comment, "verifies") {
+        let (rule_id, after_id) = quoted_literal(rest)?;
+        let method = argument_after_comma(after_id)?;
+        return Some((rule_id, Some(Verification::from_str(method).ok()?)));
+    }
+    parse_rule_call(line, in_block_comment)
+}
+
+fn parse_rule_call(line: &str, in_block_comment: bool) -> Option<(String, Option<Verification>)> {
+    let rest = call_arguments(line, in_block_comment, "rule")?;
+    let (rule_id, after_id) = quoted_literal(rest)?;
+    after_id
+        .trim_start()
+        .starts_with(',')
+        .then_some((rule_id, None))
+}
+
+fn quoted_literal(rest: &str) -> Option<(String, &str)> {
+    let rest = rest.trim_start();
+    let quote = rest.chars().next()?;
+    if !matches!(quote, '\'' | '"' | '`') {
+        return None;
+    }
+    let after_quote = &rest[quote.len_utf8()..];
+    let end = after_quote.find(quote)?;
+    let literal = &after_quote[..end];
+    if literal.is_empty() {
+        return None;
+    }
+    Some((literal.to_string(), &after_quote[end + quote.len_utf8()..]))
+}
+
+fn argument_after_comma(rest: &str) -> Option<&str> {
+    let argument = rest.trim_start().strip_prefix(',')?.trim_start();
+    let unquoted = argument.strip_prefix(['\'', '"', '`']).unwrap_or(argument);
+    let method = unquoted
+        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .next()?;
+    (!method.is_empty()).then_some(method)
 }
 
 /// Recognizes single-line `#[rule("id")]` and `#[verifies("id", method)]`
@@ -152,6 +270,69 @@ fn string_literal(rest: &str) -> Option<String> {
     let after_quote = rest.strip_prefix('"')?;
     let (literal, _) = after_quote.split_once('"')?;
     (!literal.is_empty()).then(|| literal.to_string())
+}
+
+fn binding_item_name(
+    language: Language,
+    lines: &[&str],
+    idx: usize,
+    verification: Option<Verification>,
+) -> Option<String> {
+    if matches!(language, Language::Rust | Language::Python) {
+        return next_item_name(language, &lines[idx + 1..]);
+    }
+    assignment_name(lines[idx]).or_else(|| {
+        if verification.is_some() {
+            enclosing_script_function(lines, idx)
+        } else {
+            preceding_assignment_name(lines, idx)
+        }
+    })
+}
+
+fn assignment_name(line: &str) -> Option<String> {
+    let before_equals = line.split_once('=')?.0.trim_end();
+    if let Some(name) = ["const ", "let ", "var "]
+        .iter()
+        .find_map(|marker| token_after(before_equals, marker))
+    {
+        return Some(name);
+    }
+    before_equals
+        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .next_back()
+        .filter(|name| !name.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn preceding_assignment_name(lines: &[&str], idx: usize) -> Option<String> {
+    lines[..idx]
+        .iter()
+        .rev()
+        .find(|line| !line.trim().is_empty())
+        .filter(|line| line.trim_end().ends_with('='))
+        .and_then(|line| assignment_name(line))
+}
+
+fn enclosing_script_function(lines: &[&str], idx: usize) -> Option<String> {
+    let mut depth = 0;
+    for line in lines[..idx].iter().rev() {
+        let line = line.trim();
+        depth += line.matches('}').count();
+        let item_name = if line.contains("function ") {
+            token_after(line, "function ")
+        } else if line.contains("=>") {
+            assignment_name(line)
+        } else {
+            None
+        };
+        let openings = line.matches('{').count();
+        if item_name.is_some() && openings > depth {
+            return item_name;
+        }
+        depth = depth.saturating_sub(openings);
+    }
+    None
 }
 
 /// Like `next_function_name`, but looks past other attribute lines such as
@@ -225,9 +406,6 @@ fn token_after(line: &str, marker: &str) -> Option<String> {
         .next()?;
     (!name.is_empty()).then(|| name.to_string())
 }
-
-#[allow(dead_code)]
-const fn _assert_path(_: &Path) {}
 
 #[cfg(test)]
 mod tests {

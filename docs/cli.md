@@ -37,8 +37,27 @@ time and never stored, so no shard can disagree with the code.
 first. That is the dial each repository sets for itself: strict in CI once a repository
 wants every active rule verified, plain while it is still filling them in.
 
-Code outside Rust uses the older comment channel, `@provenance rule: <rule-id>` above the
-function. It is the legacy tier, and it scans alongside the attributes.
+The scanner is line-oriented. Its native binding patterns and current limits are:
+
+| Language | Rule function binding | Verification binding | Recognition grade |
+| --- | --- | --- | --- |
+| Rust | `#[rule("id")]` | `#[verifies("id", method)]` | Binding-grade for both |
+| TypeScript | `const name = rule("id", fn)` | `verifies("id", "method")` inside a named function or function-valued `const` | Binding-grade for both |
+| JavaScript | `const name = rule("id", fn)` | `verifies("id", "method")` inside a named function or function-valued `const` | Binding-grade for both |
+| Python | `@rule("id")` above `def` | Comment channel | Binding-grade rule; comment-only verification |
+| Go | `var name = rule("id", func...)` | Comment channel | Binding-grade rule; comment-only verification |
+| Java | assigned `rule("id", lambda)` static-helper call | Comment channel | Binding-grade rule; comment-only verification |
+
+Keep the helper name, opening parenthesis, and quoted id on one line. An assignment may
+start on that line or, for the Java-style field layout, immediately above it. Copyable
+identity-helper implementations and their exact constraints are in
+[`rule-bindings.md`](rule-bindings.md); the TypeScript-first npm package source is under
+`packages/provenance-rules-js/`.
+
+The universal floor in every language remains the comment channel:
+`@provenance rule: <rule-id>` immediately above the function. Add
+`@provenance verification: <method>` for a verification site. Comments scan alongside
+native bindings, but are honestly the weaker tier: they can drift away from the symbol.
 
 ## Wiki publication safety
 
