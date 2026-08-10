@@ -237,6 +237,7 @@ fn every_refusal_keeps_the_marker_message() {
                 assert!(
                     message.contains("outside the repository cache")
                         || message.contains("is not a directory")
+                        || message.contains("symlink component")
                         || error.downcast_ref::<std::io::Error>().is_some(),
                     "transactions {transactions:?}, leaf {leaf:?}, shape {shape}: {message}"
                 );
