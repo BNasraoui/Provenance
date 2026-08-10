@@ -4,9 +4,13 @@ use provenance_macros::verifies;
 use std::fmt::Write as _;
 
 fn scanned_resolver(path: &str) -> LinkResolver {
+    scanned_resolver_at(path, "HEAD")
+}
+
+fn scanned_resolver_at(path: &str, commit: &str) -> LinkResolver {
     let report = CoverageScan {
         report: CoverageReport::new(
-            Some("HEAD".to_string()),
+            Some(commit.to_string()),
             1,
             Vec::new(),
             Vec::new(),
@@ -169,6 +173,54 @@ fn snippets_separate_and_label_noncontiguous_ranges() {
 
     assert_eq!(snippet.label, "src/UseCase.php:10, 100");
     assert_eq!(snippet.content, "line 10\n…\nline 100");
+}
+
+#[test]
+fn annotate_keeps_spaced_noncontiguous_ranges_together() {
+    let text = "See src/UseCase.php:10, 100 for both branches.";
+    let refs = scanned_resolver("src/UseCase.php").annotate(text);
+
+    assert_eq!(refs.len(), 1);
+    assert_eq!(refs[0].label, "src/UseCase.php:10, 100");
+    assert_eq!(
+        refs[0].snippet.as_ref().unwrap().content,
+        "line 10\n…\nline 100"
+    );
+}
+
+#[test]
+fn long_snippets_label_the_lines_they_actually_show() {
+    let evidence = scanned_resolver("src/UseCase.php").resolve("src/UseCase.php:10-30");
+    let snippet = evidence.snippet.unwrap();
+
+    assert_eq!(snippet.label, "src/UseCase.php:10-21 (requested 10-30)");
+    assert!(snippet.content.ends_with("line 21\n…"));
+}
+
+#[test]
+fn snippets_are_suppressed_when_the_link_targets_another_commit() {
+    let evidence =
+        scanned_resolver("src/UseCase.php").resolve_at("src/UseCase.php:10", Some("deadbee"));
+
+    assert!(evidence.snippet.is_none());
+}
+
+#[test]
+fn abbreviated_source_pins_match_the_full_scan_commit() {
+    let resolver = scanned_resolver_at(
+        "src/UseCase.php",
+        "abcdef1234567890abcdef1234567890abcdef12",
+    );
+    let evidence = resolver.resolve_at("src/UseCase.php:10", Some("ABCDEF1"));
+
+    assert!(evidence.snippet.is_some());
+}
+
+#[test]
+fn snippets_need_an_explicit_line_location() {
+    let evidence = scanned_resolver("src/UseCase.php").resolve("src/UseCase.php");
+
+    assert!(evidence.snippet.is_none());
 }
 
 #[test]

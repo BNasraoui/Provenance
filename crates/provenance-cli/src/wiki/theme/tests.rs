@@ -229,6 +229,12 @@ fn css_styles_domain_navigation_and_search_responsively() {
 }
 
 #[test]
+fn global_navigation_wraps_below_the_reader_viewport_width() {
+    assert!(WIKI_CSS.contains("@media (max-width: 520px)"));
+    assert!(WIKI_CSS.contains(".global-nav { order: 2; width: 100%;"));
+}
+
+#[test]
 fn css_uses_readable_base_type_with_an_eleven_pixel_floor() {
     assert!(css_rule("body").contains("font-size: 15px;"));
     for declaration in WIKI_CSS.split("font-size:").skip(1) {

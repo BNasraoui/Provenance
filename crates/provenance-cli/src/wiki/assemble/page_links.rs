@@ -28,16 +28,11 @@ pub(super) fn rule_title(rule: &Rule) -> String {
         .map(str::trim)
         .filter(|name| !name.is_empty())
         .map(str::to_string)
-        .or_else(|| first_statement_clause(&rule.statement))
+        .or_else(|| {
+            let title = reader_title(&rule.statement);
+            (!title.is_empty()).then_some(title)
+        })
         .unwrap_or_else(|| desnaked_id(rule.id.as_str()))
-}
-
-fn first_statement_clause(statement: &str) -> Option<String> {
-    statement
-        .split([';', '.', '\n'])
-        .map(str::trim)
-        .find(|clause| !clause.is_empty())
-        .map(str::to_string)
 }
 
 fn desnaked_id(id: &str) -> String {

@@ -2,7 +2,7 @@ use crate::wiki::model::{LineageEntry, PageKind};
 use provenance_macros::verifies;
 
 use super::super::render_requirement;
-use super::fixtures::{gappy_requirement_fixture, link, requirement_fixture};
+use super::fixtures::{gappy_requirement_fixture, link, requirement_fixture, SCAN_COMMIT};
 
 #[test]
 fn requirement_page_carries_the_mockup_structure() {
@@ -48,15 +48,15 @@ fn produced_rule_titles_are_disambiguated_across_the_whole_page() {
 fn requirement_page_links_every_code_reference() {
     let html = render_requirement("default", &requirement_fixture());
     // Rule evidence links to the host blob URL with line anchors.
-    assert!(
-        html.contains("https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php#L153-L156")
-    );
+    assert!(html.contains(&format!(
+        "https://github.com/exampleorg/ex-api/blob/{SCAN_COMMIT}/src/UseCase.php#L153-L156"
+    )));
     // Source citation reference pins to the source commit.
     assert!(html.contains("https://github.com/exampleorg/ex-api/blob/abc1234/docs/award.md"));
     // Field-note bodies linkify code refs and test-case names.
-    assert!(
-        html.contains("https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php#L211-L233")
-    );
+    assert!(html.contains(&format!(
+        "https://github.com/exampleorg/ex-api/blob/{SCAN_COMMIT}/src/UseCase.php#L211-L233"
+    )));
     assert!(html.contains(">testCreateGapInvoiceOnly</a>"));
 }
 

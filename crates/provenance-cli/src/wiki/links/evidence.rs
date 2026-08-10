@@ -116,7 +116,7 @@ impl LinkResolver {
         let (href, snippet) = parse_code_ref(&label).map_or((None, None), |code_ref| {
             (
                 self.href_for(&code_ref, commit),
-                self.snippet_for(&code_ref),
+                self.snippet_for(&code_ref, commit),
             )
         });
         EvidenceRef {
@@ -146,7 +146,7 @@ impl LinkResolver {
                 return EvidenceRef {
                     label: combined,
                     href,
-                    snippet: self.snippet_for(&code_ref),
+                    snippet: self.snippet_for(&code_ref, commit),
                 };
             }
         }
@@ -189,7 +189,7 @@ impl LinkResolver {
                     end,
                     label: trimmed.to_string(),
                     href: self.href_for(&code_ref, None),
-                    snippet: self.snippet_for(&code_ref),
+                    snippet: self.snippet_for(&code_ref, None),
                 };
                 file_refs.push((inline, file_href));
                 continue;
@@ -241,53 +241,75 @@ impl LinkResolver {
             .is_some_and(|scan| scan.files.contains_key(normalized_path(path)))
     }
 
-    fn snippet_for(&self, code_ref: &CodeRef) -> Option<EvidenceSnippet> {
-        let content = self
-            .scan
-            .as_ref()?
-            .files
-            .get(normalized_path(&code_ref.path))?;
+    fn snippet_for(&self, code_ref: &CodeRef, commit: Option<&str>) -> Option<EvidenceSnippet> {
+        if code_ref.lines.is_empty() {
+            return None;
+        }
+        let scan = self.scan.as_ref()?;
+        if commit.is_some_and(|commit| {
+            !scan
+                .commit
+                .as_deref()
+                .is_some_and(|scan_commit| commit_matches(scan_commit, commit))
+        }) {
+            return None;
+        }
+        let content = scan.files.get(normalized_path(&code_ref.path))?;
         let lines = content.lines().collect::<Vec<_>>();
-        let ranges = if code_ref.lines.is_empty() {
-            vec![(1_usize, lines.len().min(12))]
-        } else {
-            code_ref
-                .lines
-                .iter()
-                .map(|range| {
-                    let start = range.start as usize;
-                    let end = range.end.unwrap_or(range.start) as usize;
-                    (start, end.min(start.saturating_add(11)))
-                })
-                .collect()
-        };
         let mut selected = Vec::new();
-        for (start, end) in &ranges {
-            if *start == 0 || *start > lines.len() {
+        let mut displayed_ranges = Vec::new();
+        for range in &code_ref.lines {
+            let start = range.start as usize;
+            let requested_end = range.end.unwrap_or(range.start) as usize;
+            if start == 0 || start > lines.len() {
                 continue;
             }
-            selected.push(lines[*start - 1..(*end).min(lines.len())].join("\n"));
-        }
-        (!selected.is_empty()).then(|| EvidenceSnippet {
-            label: if code_ref.lines.is_empty() {
-                code_ref.path.clone()
+            let displayed_end = requested_end.min(lines.len()).min(start.saturating_add(11));
+            let mut content = lines[start - 1..displayed_end].join("\n");
+            if displayed_end < requested_end {
+                content.push_str("\n…");
+            }
+            selected.push(content);
+            displayed_ranges.push(if displayed_end == start {
+                start.to_string()
             } else {
-                let ranges = code_ref
-                    .lines
-                    .iter()
-                    .map(|range| {
-                        range.end.map_or_else(
-                            || range.start.to_string(),
-                            |end| format!("{}-{end}", range.start),
-                        )
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                format!("{}:{ranges}", code_ref.path)
+                format!("{start}-{displayed_end}")
+            });
+        }
+        let requested_ranges = format_ranges(code_ref);
+        let displayed_ranges = displayed_ranges.join(", ");
+        (!selected.is_empty()).then(|| EvidenceSnippet {
+            label: if displayed_ranges == requested_ranges {
+                format!("{}:{requested_ranges}", code_ref.path)
+            } else {
+                format!(
+                    "{}:{displayed_ranges} (requested {requested_ranges})",
+                    code_ref.path
+                )
             },
             content: selected.join("\n…\n"),
         })
     }
+}
+
+fn format_ranges(code_ref: &CodeRef) -> String {
+    code_ref
+        .lines
+        .iter()
+        .map(|range| {
+            range.end.map_or_else(
+                || range.start.to_string(),
+                |end| format!("{}-{end}", range.start),
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn commit_matches(scan_commit: &str, requested_commit: &str) -> bool {
+    scan_commit
+        .get(..requested_commit.len())
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case(requested_commit))
 }
 
 fn normalized_path(path: &str) -> &str {

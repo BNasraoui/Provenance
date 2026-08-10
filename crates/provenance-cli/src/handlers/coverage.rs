@@ -167,7 +167,7 @@ fn unverified_rule_warnings(
 
 pub(super) fn current_git_commit(repo: &camino::Utf8Path) -> anyhow::Result<String> {
     let output = std::process::Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
+        .args(["rev-parse", "HEAD"])
         .current_dir(repo)
         .output()?;
     anyhow::ensure!(output.status.success(), "git rev-parse failed");

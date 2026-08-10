@@ -22,7 +22,7 @@ pub(super) const SCAN_COMMIT: &str = "9f2c1ab4e5f6";
 fn resolver() -> LinkResolver {
     let report = CoverageScan {
         report: CoverageReport::new(
-            Some("HEAD".to_string()),
+            Some(SCAN_COMMIT.to_string()),
             1,
             Vec::new(),
             Vec::new(),

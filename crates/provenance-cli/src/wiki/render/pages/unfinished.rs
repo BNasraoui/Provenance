@@ -10,9 +10,19 @@ use super::super::labels::counted;
 
 pub fn render_unfinished(scope: &str, page: &UnfinishedPage) -> String {
     let mut main = String::new();
-    push_gaps(&mut main, page);
-    push_orphans(&mut main, page);
-    push_open_questions(&mut main, page);
+    let links = PageLinksRenderer::new(
+        gap_links(&page.gaps)
+            .into_iter()
+            .chain(orphan_links(page))
+            .chain(
+                page.open_questions
+                    .iter()
+                    .filter_map(|question| question.requirement.as_ref()),
+            ),
+    );
+    push_gaps(&mut main, page, &links);
+    push_orphans(&mut main, page, &links);
+    push_open_questions(&mut main, page, &links);
     let margin = format!(
         "<h3 class=\"margin-head\">Unfinished</h3><p class=\"prose\">{}</p>",
         counted(page.item_count(), "unfinished item", "unfinished items")
@@ -36,32 +46,29 @@ pub fn render_unfinished(scope: &str, page: &UnfinishedPage) -> String {
     )
 }
 
-fn push_gaps(html: &mut String, page: &UnfinishedPage) {
+fn push_gaps(html: &mut String, page: &UnfinishedPage, links: &PageLinksRenderer) {
     html.push_str("<section><h2>Gaps</h2>\n");
     if page.gaps.is_empty() {
         html.push_str("<p class=\"empty-note\">No gaps are recorded.</p>\n");
     } else {
-        let links = PageLinksRenderer::new(gap_links(&page.gaps));
-        push_gap_citations(html, &links, &page.gaps);
+        push_gap_citations(html, links, &page.gaps);
     }
     html.push_str("</section>\n");
 }
 
-fn push_orphans(html: &mut String, page: &UnfinishedPage) {
+fn push_orphans(html: &mut String, page: &UnfinishedPage, links: &PageLinksRenderer) {
     html.push_str("<section><h2>Orphans</h2>\n");
-    let links = orphan_links(page);
-    if links.is_empty() {
+    if orphan_links(page).is_empty() {
         html.push_str("<p class=\"empty-note\">No orphan records are present.</p>\n");
         html.push_str("</section>\n");
         return;
     }
-    let renderer = PageLinksRenderer::new(links.iter().copied());
     html.push_str("<ul class=\"link-list\">\n");
     for orphan in &page.orphans.rules {
         writeln!(
             html,
             "<li>{} — {}</li>",
-            renderer.link(&orphan.link, None),
+            links.link(&orphan.link, None),
             escape_html(&orphan.reason)
         )
         .expect("writing to a String should not fail");
@@ -70,7 +77,7 @@ fn push_orphans(html: &mut String, page: &UnfinishedPage) {
         writeln!(
             html,
             "<li>{} — {}</li>",
-            renderer.link(&orphan.link, None),
+            links.link(&orphan.link, None),
             escape_html(&orphan.reason)
         )
         .expect("writing to a String should not fail");
@@ -88,18 +95,13 @@ fn orphan_links(page: &UnfinishedPage) -> Vec<&PageLink> {
         .collect()
 }
 
-fn push_open_questions(html: &mut String, page: &UnfinishedPage) {
+fn push_open_questions(html: &mut String, page: &UnfinishedPage, links: &PageLinksRenderer) {
     html.push_str("<section><h2>Open questions</h2>\n");
     if page.open_questions.is_empty() {
         html.push_str("<p class=\"empty-note\">No open questions are recorded.</p>\n");
         html.push_str("</section>\n");
         return;
     }
-    let links = PageLinksRenderer::new(
-        page.open_questions
-            .iter()
-            .filter_map(|question| question.requirement.as_ref()),
-    );
     html.push_str("<ul class=\"question-list\">\n");
     for question in &page.open_questions {
         let status = match question.status {

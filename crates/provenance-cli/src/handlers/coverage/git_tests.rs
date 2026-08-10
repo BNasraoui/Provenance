@@ -20,7 +20,7 @@ fn coverage_commit_is_read_from_the_selected_repository() {
         "fixture",
     ]);
 
-    let expected = git_stdout(["-C", repo.as_str(), "rev-parse", "--short", "HEAD"]);
+    let expected = git_stdout(["-C", repo.as_str(), "rev-parse", "HEAD"]);
 
     assert_eq!(current_git_commit(&repo).unwrap(), expected);
     let scan = provenance_scanner::scan_file(

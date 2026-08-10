@@ -1,9 +1,9 @@
 use provenance_macros::verifies;
 
 use super::super::pages::index::{homepage_entry_order_is_valid, homepage_plain_language_is_valid};
-use super::super::render_corpus;
-use super::fixtures::corpus_fixture;
-use crate::wiki::model::{DomainGroup, DomainState, HomepageDomain};
+use super::super::{pages::render_unfinished, render_corpus};
+use super::fixtures::{corpus_fixture, link, unfinished_fixture};
+use crate::wiki::model::{DomainGroup, DomainState, HomepageDomain, PageKind};
 
 const RATIFIED_VIEWPORTS: [(u16, u16); 2] = [(1440, 900), (390, 844)];
 
@@ -79,6 +79,25 @@ fn unfinished_route_renders_every_kind_summarized_by_the_homepage() {
         assert!(unfinished.html.contains(detail), "missing {detail:?}");
     }
     assert_eq!(unfinished.html.matches("citation gap").count(), 3);
+}
+
+#[test]
+fn unfinished_disambiguates_titles_across_all_sections() {
+    let mut page = unfinished_fixture();
+    page.gaps[0].subject = Some(link(PageKind::Requirement, "req_shared", "Shared title"));
+    page.gaps[0].detail = "{subject} points to a source that is missing.".to_string();
+    page.orphans.sources[0].link.title = "Shared title".to_string();
+
+    let html = render_unfinished("default", &page);
+
+    assert!(
+        html.contains("Shared title <span class=\"id-chip\">…q_shared</span>"),
+        "{html}"
+    );
+    assert!(
+        html.contains("Shared title <span class=\"id-chip\">…e_unused</span>"),
+        "{html}"
+    );
 }
 
 #[test]

@@ -89,7 +89,7 @@ expression: "render_requirement(\"default\", &requirement_fixture())"
 <span class="rcode"><span class="id-chip">rule_sah_inv_016</span></span>
 <span class="rmeta"><span class="sev high">high</span></span>
 <span class="rstatement">If a claim item's participant, government, and gap portions are all &lt;= 0 after markup, no invoice lines shall be emitted for that claim item.</span>
-<span class="rref"><a href="https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php#L153-L156">src/UseCase.php:153-156</a><span class="local-snippet"><br><span class="snippet-label">Local snippet · src/UseCase.php:153-156</span><br><code>source line 153<br>source line 154<br>source line 155<br>source line 156</code></span></span>
+<span class="rref"><a href="https://github.com/exampleorg/ex-api/blob/9f2c1ab4e5f6/src/UseCase.php#L153-L156">src/UseCase.php:153-156</a><span class="local-snippet"><br><span class="snippet-label">Local snippet · src/UseCase.php:153-156</span><br><code>source line 153<br>source line 154<br>source line 155<br>source line 156</code></span></span>
 </li>
 </ul>
 </div>
@@ -150,9 +150,9 @@ expression: "render_requirement(\"default\", &requirement_fixture())"
 <span class="role-badge"><svg class="icon"><use href="#i-bot"/></svg>Assistant</span>
 <div class="fn-body">
 <div class="fn-meta"><span class="who">Assistant</span><time datetime="2024-05-04">4 May 2024</time></div>
-<p class="fn-content">Per-portion guard at <a class="src" href="https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php#L211-L233">src/UseCase.php:211-233</a>.
-Confirmed by <a class="src" href="https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php">testCreateGapInvoiceOnly</a>.</p>
-<span class="local-snippet"><br><span class="snippet-label">Local snippet · src/UseCase.php:211-233</span><br><code>source line 211<br>source line 212<br>source line 213<br>source line 214<br>source line 215<br>source line 216<br>source line 217<br>source line 218<br>source line 219<br>source line 220<br>source line 221<br>source line 222</code></span></div>
+<p class="fn-content">Per-portion guard at <a class="src" href="https://github.com/exampleorg/ex-api/blob/9f2c1ab4e5f6/src/UseCase.php#L211-L233">src/UseCase.php:211-233</a>.
+Confirmed by <a class="src" href="https://github.com/exampleorg/ex-api/blob/9f2c1ab4e5f6/src/UseCase.php">testCreateGapInvoiceOnly</a>.</p>
+<span class="local-snippet"><br><span class="snippet-label">Local snippet · src/UseCase.php:211-222 (requested 211-233)</span><br><code>source line 211<br>source line 212<br>source line 213<br>source line 214<br>source line 215<br>source line 216<br>source line 217<br>source line 218<br>source line 219<br>source line 220<br>source line 221<br>source line 222<br>…</code></span></div>
 </div>
 </div>
 </div>

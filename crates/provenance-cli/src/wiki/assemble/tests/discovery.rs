@@ -82,7 +82,9 @@ fn rule_display_names_use_title_then_statement_clause_then_desnaked_id() {
     stated.statement = "First clause; second clause.".to_string();
     let mut desnaked = rule("rule_invoice_retry_policy", Some("  "));
     desnaked.statement = "  ".to_string();
-    state.rules = vec![explicit_rule, stated, desnaked];
+    let mut dotted = rule("rule_dotted", None);
+    dotted.statement = "Apply 1.5 times the rate. Keep the result.".to_string();
+    state.rules = vec![explicit_rule, stated, desnaked, dotted];
 
     let corpus = build_corpus(&state, &LinkResolver::new(None));
     let page_titles = corpus
@@ -93,7 +95,12 @@ fn rule_display_names_use_title_then_statement_clause_then_desnaked_id() {
 
     assert_eq!(
         page_titles,
-        vec!["Titled rule", "First clause", "Rule invoice retry policy"]
+        vec![
+            "Titled rule",
+            "First clause",
+            "Rule invoice retry policy",
+            "Apply 1.5 times the rate",
+        ]
     );
     assert_eq!(corpus.search.entries[0].link.title, "Titled rule");
     assert_eq!(corpus.search.entries[1].link.title, "First clause");
