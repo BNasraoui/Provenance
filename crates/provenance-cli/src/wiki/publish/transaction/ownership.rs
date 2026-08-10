@@ -408,7 +408,7 @@ pub(super) fn open_child_directory_no_follow(parent: &File, leaf: &str) -> std::
     use std::os::windows::fs::MetadataExt;
 
     let mut options = fs_at::OpenOptions::default();
-    options.follow(false);
+    options.read(true).follow(false);
     let directory = options.open_dir_at(parent, leaf)?;
     if directory.metadata()?.file_attributes() & 0x0000_0400 != 0 {
         return Err(std::io::Error::new(
