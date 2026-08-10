@@ -10,16 +10,17 @@ pub(super) fn note_html(body: &str, refs: &[InlineRef]) -> String {
     let content = structured_body(body, refs);
     let takeaway = takeaway(body);
     if body.chars().count() > COLLAPSE_CHARS || body.lines().count() > COLLAPSE_LINES {
-        let preview = takeaway.unwrap_or_else(|| first_nonempty_line(body).unwrap_or("Note"));
-        let preview_class = if takeaway.is_some() {
-            "fn-takeaway"
-        } else {
-            "fn-preview"
-        };
-        return format!(
-            "<details class=\"fn-collapsible\">\n<summary><span class=\"{preview_class}\">{}</span><span class=\"fn-expand\">Expand note</span></summary>\n<div class=\"fn-content\">\n{content}</div>\n</details>\n",
-            escape_html(preview)
-        );
+        if let Some(preview) = takeaway.or_else(|| first_nonempty_line(body)) {
+            let preview_class = if takeaway.is_some() {
+                "fn-takeaway"
+            } else {
+                "fn-preview"
+            };
+            return format!(
+                "<details class=\"fn-collapsible\">\n<summary><span class=\"{preview_class}\">{}</span><span class=\"fn-expand\">Expand note</span></summary>\n<div class=\"fn-content\">\n{content}</div>\n</details>\n",
+                escape_html(preview)
+            );
+        }
     }
 
     let mut html = String::new();
@@ -174,6 +175,7 @@ fn render_list(
     let tag = if ordered { "ol" } else { "ul" };
     writeln!(html, "<{tag} class=\"fn-list-block\">").expect("writing to a String should not fail");
     let mut index = start;
+    let mut expected_number: u64 = 1;
     while index < lines.len() {
         let line = &body[lines[index].0..lines[index].1];
         let item = if ordered {
@@ -182,10 +184,24 @@ fn render_list(
             unordered_item(line)
         };
         let Some(content_offset) = item else { break };
+        // Keep the authored number when it breaks sequence, so "1., 3., 7."
+        // stays 1., 3., 7. instead of being silently renumbered by the
+        // browser's default <ol> counting.
+        let mut value_attr = String::new();
+        if ordered {
+            if let Some(number) = ordered_number(line) {
+                if number != expected_number {
+                    write!(value_attr, " value=\"{number}\"")
+                        .expect("writing to a String should not fail");
+                }
+                expected_number = number;
+            }
+        }
+        expected_number = expected_number.saturating_add(1);
         let content_start = lines[index].0 + content_offset;
         writeln!(
             html,
-            "<li>{}</li>",
+            "<li{value_attr}>{}</li>",
             linkify_range(body, refs, content_start, lines[index].1)
         )
         .expect("writing to a String should not fail");
@@ -193,6 +209,12 @@ fn render_list(
     }
     writeln!(html, "</{tag}>").expect("writing to a String should not fail");
     index
+}
+
+fn ordered_number(line: &str) -> Option<u64> {
+    let text = line.trim_start();
+    let digits = text.bytes().take_while(u8::is_ascii_digit).count();
+    text[..digits].parse().ok()
 }
 
 fn ordered_item(line: &str) -> Option<usize> {

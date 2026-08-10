@@ -283,6 +283,27 @@ fn discussion_notes_render_numbered_findings_as_a_real_list() {
 }
 
 #[test]
+fn discussion_lists_keep_authored_numbers_when_the_sequence_skips() {
+    let mut page = requirement_fixture();
+    page.threads[0].messages[0].body =
+        "Numbering:\n1. first\n3. third as written\n7) seventh as written\n8. eighth".to_string();
+    page.threads[0].messages[0].refs.clear();
+
+    let html = render_requirement("default", &page);
+
+    assert!(html.contains("<li>first</li>"), "{html}");
+    assert!(
+        html.contains("<li value=\"3\">third as written</li>"),
+        "{html}"
+    );
+    assert!(
+        html.contains("<li value=\"7\">seventh as written</li>"),
+        "{html}"
+    );
+    assert!(html.contains("<li>eighth</li>"), "{html}");
+}
+
+#[test]
 fn discussion_notes_render_fenced_and_bare_json_as_code() {
     let mut page = requirement_fixture();
     page.threads[0].messages[0].body =
