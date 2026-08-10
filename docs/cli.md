@@ -54,6 +54,10 @@ identity-helper implementations and their exact constraints are in
 [`rule-bindings.md`](rule-bindings.md); the TypeScript-first npm package source is under
 `packages/provenance-rules-js/`.
 
+The scanner matches by shape, not by what the name resolves to: a call to anything named
+`rule` with a quoted string id can bind, even when it is not the identity helper. Ids that
+match no rule then show up as warnings under `--validate-rules`.
+
 The universal floor in every language remains the comment channel:
 `@provenance rule: <rule-id>` immediately above the function. Add
 `@provenance verification: <method>` for a verification site. Comments scan alongside
