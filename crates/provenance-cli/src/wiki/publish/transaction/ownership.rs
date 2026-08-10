@@ -268,10 +268,38 @@ fn resolve_existing_parent_prefix(parent: &Path) -> std::io::Result<PathBuf> {
     } else {
         std::fs::canonicalize(existing)?
     };
+    #[cfg(windows)]
+    {
+        resolved = normalize_verbatim_prefix_for_walk(&resolved);
+    }
     for leaf in created_below.iter().rev() {
         resolved.push(leaf);
     }
     Ok(resolved)
+}
+
+#[cfg(windows)]
+fn normalize_verbatim_prefix_for_walk(path: &Path) -> PathBuf {
+    use std::ffi::OsString;
+    use std::path::Prefix;
+
+    let mut components = path.components();
+    let Some(Component::Prefix(prefix)) = components.next() else {
+        return path.to_path_buf();
+    };
+    let mut normalized = match prefix.kind() {
+        Prefix::VerbatimDisk(drive) => PathBuf::from(format!("{}:", char::from(drive))),
+        Prefix::VerbatimUNC(server, share) => {
+            let mut root = OsString::from(r"\\");
+            root.push(server);
+            root.push(r"\");
+            root.push(share);
+            PathBuf::from(root)
+        }
+        _ => return path.to_path_buf(),
+    };
+    normalized.extend(components);
+    normalized
 }
 
 pub(super) fn open_or_create_parent(
