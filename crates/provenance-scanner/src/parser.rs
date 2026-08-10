@@ -1,6 +1,6 @@
 use std::{fmt, str::FromStr};
 
-use crate::string_context::obvious_string_is_open;
+use crate::string_context::marker_is_inside_quoted_region;
 
 pub(crate) const PRIMARY_ANNOTATION_MARKER: &str = "@provenance";
 const LEGACY_ANNOTATION_MARKER: &str = "@statesman";
@@ -315,7 +315,7 @@ fn annotation_marker(line: &str) -> Option<(&'static str, usize)> {
         .iter()
         .flat_map(|marker| {
             line.match_indices(marker)
-                .filter(|(position, _)| !obvious_string_is_open(&line[..*position]))
+                .filter(|(position, _)| !marker_is_inside_quoted_region(line, *position))
                 .map(|(position, _)| (*marker, position))
         })
         .min_by_key(|(_, position)| *position)

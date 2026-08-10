@@ -5,14 +5,18 @@ pub fn call_arguments<'a>(
     function: &str,
 ) -> Option<&'a str> {
     let marker = format!("{function}(");
-    scan_line(line, starts_in_block_comment, Some(&marker))
+    scan_line(line, starts_in_block_comment, Some(&marker), false)
         .0
         .map(|start| &line[start + marker.len()..])
 }
 
 /// Carries C-style block-comment state between source lines.
-pub fn block_comment_state(line: &str, starts_in_block_comment: bool) -> bool {
-    scan_line(line, starts_in_block_comment, None).1
+pub fn block_comment_state(
+    line: &str,
+    starts_in_block_comment: bool,
+    rust_char_literals: bool,
+) -> bool {
+    scan_line(line, starts_in_block_comment, None, rust_char_literals).1
 }
 
 #[derive(Clone, Copy)]
@@ -179,6 +183,7 @@ fn scan_line(
     line: &str,
     mut in_block_comment: bool,
     marker: Option<&str>,
+    rust_char_literals: bool,
 ) -> (Option<usize>, bool) {
     let bytes = line.as_bytes();
     let mut quote = None;
@@ -213,6 +218,10 @@ fn scan_line(
             idx += 2;
             continue;
         }
+        if bytes[idx] == b'\'' && rust_char_literals {
+            idx = rust_character_literal_end(line, idx + 1).unwrap_or(idx) + 1;
+            continue;
+        }
         if matches!(bytes[idx], b'\'' | b'"' | b'`') {
             quote = Some(bytes[idx]);
             idx += 1;
@@ -229,4 +238,21 @@ fn scan_line(
         idx += 1;
     }
     (None, in_block_comment)
+}
+
+pub fn rust_character_literal_end(line: &str, index: usize) -> Option<usize> {
+    let bytes = line.as_bytes();
+    let content_end = if bytes.get(index) == Some(&b'\\') {
+        match bytes.get(index + 1) {
+            Some(b'x') => index + 4,
+            Some(b'u') if bytes.get(index + 2) == Some(&b'{') => {
+                index + 3 + bytes[index + 3..].iter().position(|byte| *byte == b'}')? + 1
+            }
+            Some(_) => index + 2,
+            None => return None,
+        }
+    } else {
+        index + line.get(index..)?.chars().next()?.len_utf8()
+    };
+    (bytes.get(content_end) == Some(&b'\'')).then_some(content_end)
 }
