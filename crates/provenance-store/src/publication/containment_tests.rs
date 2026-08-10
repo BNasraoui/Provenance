@@ -165,6 +165,12 @@ fn every_step_is_a_real_directory_in_the_cache(
                 Ok(metadata) if metadata.is_dir() && !metadata.is_symlink() => {}
                 _ => return false,
             }
+        } else {
+            // The leaf may be gone, but a symlink lingering there is still a
+            // symlink component of the written path.
+            if std::fs::symlink_metadata(&written).is_ok_and(|metadata| metadata.is_symlink()) {
+                return false;
+            }
         }
         match step {
             Utf8Component::CurDir => {}
@@ -211,14 +217,17 @@ fn recovery_touches_only_real_directories_inside_the_cache() {
 #[verifies("rule_recovery_stays_in_cache", property)]
 fn clearing_a_marker_checks_the_place_the_directory_claimed() {
     for transactions in PLANTINGS {
-        let layouts = Layouts::build(transactions, Planted::Absent);
-        for (shape, candidate) in layouts.candidates("gone") {
-            let decision = validate_missing_transaction_dir(&layouts.layout, &candidate);
-            assert_eq!(
-                decision.is_ok(),
-                every_step_is_a_real_directory_in_the_cache(&layouts.cache, &candidate, false),
-                "transactions {transactions:?}, shape {shape}: the rule answered {decision:?}"
-            );
+        for leaf in PLANTINGS {
+            let layouts = Layouts::build(transactions, leaf);
+            for (shape, candidate) in layouts.candidates("t") {
+                let decision = validate_missing_transaction_dir(&layouts.layout, &candidate);
+                assert_eq!(
+                    decision.is_ok(),
+                    every_step_is_a_real_directory_in_the_cache(&layouts.cache, &candidate, false),
+                    "transactions {transactions:?}, leaf {leaf:?}, shape {shape}: \
+                     the rule answered {decision:?}"
+                );
+            }
         }
     }
 }

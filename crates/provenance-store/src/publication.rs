@@ -213,12 +213,14 @@ enum RecoveryUse {
 }
 
 /// Publication recovery may only touch a directory named as a direct child
-/// inside this repository's cache.
+/// inside this repository's cache, and callers must operate on the returned
+/// contained path, never the written one.
 ///
-/// The path is judged as written: no relative component may be a symlink, even when its target remains inside the cache.
-/// The cache root must already be a real directory, established by
-/// [`create_real_directory`]. An [`RecoveryUse::AlreadyGone`] leaf is exempt
-/// from the directory-kind check because there is no entry left to inspect.
+/// The path is judged as written: no relative component may be a symlink,
+/// even when its target remains inside the cache. The cache root must
+/// already be a real directory, established by [`create_real_directory`].
+/// An [`RecoveryUse::AlreadyGone`] leaf may be absent, but a symlink
+/// lingering at the leaf is still refused.
 #[rule("rule_recovery_stays_in_cache")]
 fn recovery_dir_inside_cache(
     canonical_container: &Utf8Path,
@@ -275,7 +277,14 @@ fn ensure_written_path_has_no_symlinks(
     for (index, component) in relative.components().enumerate() {
         written.push(component.as_str());
         if recovery_use == RecoveryUse::AlreadyGone && index + 1 == component_count {
-            continue;
+            match std::fs::symlink_metadata(&written) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error.into()),
+                Ok(metadata) => {
+                    anyhow::ensure!(!metadata.file_type().is_symlink(), TRANSACTION_HAS_SYMLINK);
+                    continue;
+                }
+            }
         }
         let metadata = std::fs::symlink_metadata(&written)?;
         anyhow::ensure!(!metadata.file_type().is_symlink(), TRANSACTION_HAS_SYMLINK);
