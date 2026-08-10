@@ -17,7 +17,7 @@ pub(in crate::wiki::publish) fn replace_output(
         stage_identity,
         |_, _| Ok(()),
         |_| Ok(()),
-        |backup| transaction.validate_output(&transaction.backup_leaf, backup, policy),
+        |backup| transaction.validate_output(&transaction.leaves.backup, backup, policy),
     )
 }
 
@@ -61,7 +61,7 @@ fn replace_output_with_validation(
     verify_stage_identity(
         stage_identity,
         transaction,
-        &transaction.stage_leaf,
+        &transaction.leaves.stage,
         &paths.stage,
         "staging directory was replaced during generation",
     )?;
@@ -75,7 +75,7 @@ fn replace_output_with_validation(
         rename(output, &paths.backup)
             .map_err(|error| PublishError::io("move previous output to backup", output, error))?;
         let validation = validate_backup(&paths.backup).and_then(|()| {
-            match transaction.output_identity(&transaction.backup_leaf, &paths.backup)? {
+            match transaction.output_identity(&transaction.leaves.backup, &paths.backup)? {
                 OutputState::Existing(actual_identity)
                     if actual_identity.0 == expected_identity.0 =>
                 {

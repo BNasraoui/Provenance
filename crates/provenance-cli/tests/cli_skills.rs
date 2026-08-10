@@ -1,5 +1,6 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
+use provenance_macros::verifies;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
@@ -60,11 +61,7 @@ fn skills_install_default_writes_canonical_files_and_relative_claude_symlinks() 
     let dir = tempfile::tempdir().unwrap();
     let skill = "provenance-fork-tournament";
 
-    Command::cargo_bin("provenance")
-        .unwrap()
-        .current_dir(dir.path())
-        .args(["skills", "install", "--format", "json"])
-        .assert()
+    install(dir.path(), &[])
         .success()
         .stdout(predicate::str::contains(r#""link_mode": "symlink""#));
 
@@ -112,11 +109,7 @@ fn skills_install_copy_flag_copies_claude_skills_instead_of_symlinking() {
     let dir = tempfile::tempdir().unwrap();
     let skill = "provenance-swarm-backtrace";
 
-    Command::cargo_bin("provenance")
-        .unwrap()
-        .current_dir(dir.path())
-        .args(["skills", "install", "--copy", "--format", "json"])
-        .assert()
+    install(dir.path(), &["--copy"])
         .success()
         .stdout(predicate::str::contains(r#""link_mode": "copy""#));
 
@@ -144,6 +137,7 @@ fn skills_install_copy_flag_copies_claude_skills_instead_of_symlinking() {
 
 #[test]
 #[cfg(unix)]
+#[verifies("rule_install_never_clobbers", examples)]
 fn skills_install_copy_replaces_own_symlink_but_foreign_symlink_requires_force() {
     let dir = tempfile::tempdir().unwrap();
     let skill = "provenance-shaping";
@@ -151,18 +145,8 @@ fn skills_install_copy_replaces_own_symlink_but_foreign_symlink_requires_force()
 
     // Default install, then --copy: our own canonical symlink is replaced
     // with a real directory without needing --force.
-    Command::cargo_bin("provenance")
-        .unwrap()
-        .current_dir(dir.path())
-        .args(["skills", "install", "--format", "json"])
-        .assert()
-        .success();
-    Command::cargo_bin("provenance")
-        .unwrap()
-        .current_dir(dir.path())
-        .args(["skills", "install", "--copy", "--format", "json"])
-        .assert()
-        .success();
+    install(dir.path(), &[]).success();
+    install(dir.path(), &["--copy"]).success();
     let metadata = std::fs::symlink_metadata(&link).unwrap();
     assert!(metadata.is_dir());
     assert!(!metadata.file_type().is_symlink());
@@ -170,11 +154,7 @@ fn skills_install_copy_replaces_own_symlink_but_foreign_symlink_requires_force()
     // A foreign symlink is not silently destroyed.
     std::fs::remove_dir_all(&link).unwrap();
     std::os::unix::fs::symlink("../../elsewhere", &link).unwrap();
-    Command::cargo_bin("provenance")
-        .unwrap()
-        .current_dir(dir.path())
-        .args(["skills", "install", "--copy", "--format", "json"])
-        .assert()
+    install(dir.path(), &["--copy"])
         .failure()
         .stderr(predicate::str::contains("rerun with --force"));
     assert_eq!(
@@ -182,53 +162,59 @@ fn skills_install_copy_replaces_own_symlink_but_foreign_symlink_requires_force()
         PathBuf::from("../../elsewhere")
     );
 
-    Command::cargo_bin("provenance")
-        .unwrap()
-        .current_dir(dir.path())
-        .args(["skills", "install", "--copy", "--force", "--format", "json"])
-        .assert()
-        .success();
+    install(dir.path(), &["--copy", "--force"]).success();
     assert!(std::fs::symlink_metadata(&link).unwrap().is_dir());
 }
 
+/// A plain file where a skill directory belongs: the symlink path and the
+/// copy path both refuse it, and `--force` is what gets past it. The user's
+/// file survives every refusal.
 #[test]
+#[verifies("rule_install_never_clobbers", examples)]
+fn skills_install_refuses_a_file_where_a_skill_directory_belongs() {
+    let dir = tempfile::tempdir().unwrap();
+    let occupied = dir.path().join(".claude/skills/provenance-fork-tournament");
+    std::fs::create_dir_all(occupied.parent().unwrap()).unwrap();
+    std::fs::write(&occupied, "not a skill directory\n").unwrap();
+
+    for arguments in [vec![], vec!["--copy"]] {
+        install(dir.path(), &arguments)
+            .failure()
+            .stderr(predicate::str::contains(
+                "exists and is not a skill directory; rerun with --force to overwrite",
+            ));
+        assert_eq!(
+            std::fs::read_to_string(&occupied).unwrap(),
+            "not a skill directory\n"
+        );
+    }
+
+    install(dir.path(), &["--force"]).success();
+    assert!(std::fs::metadata(&occupied).unwrap().is_dir());
+    assert!(occupied.join("SKILL.md").exists());
+}
+
+/// The run-level `status` is read out of the parsed report rather than
+/// matched anywhere in the output, so a per-file entry carrying the same word
+/// cannot stand in for it.
+#[test]
+#[verifies("rule_install_never_clobbers", examples)]
+#[verifies("rule_install_run_status", examples)]
 fn skills_install_is_idempotent_and_requires_force_for_canonical_drift() {
     let dir = tempfile::tempdir().unwrap();
     let installed = dir
         .path()
         .join(".agents/skills/provenance-fork-tournament/SKILL.md");
 
-    Command::cargo_bin("provenance")
-        .unwrap()
-        .current_dir(dir.path())
-        .args(["skills", "install", "--format", "json"])
-        .assert()
-        .success();
-
-    Command::cargo_bin("provenance")
-        .unwrap()
-        .current_dir(dir.path())
-        .args(["skills", "install", "--format", "json"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains(r#""status": "unchanged""#));
+    assert_eq!(install_status(dir.path(), &[]), "installed");
+    assert_eq!(install_status(dir.path(), &[]), "unchanged");
 
     std::fs::write(&installed, "local edit\n").unwrap();
-    Command::cargo_bin("provenance")
-        .unwrap()
-        .current_dir(dir.path())
-        .args(["skills", "install", "--format", "json"])
-        .assert()
+    install(dir.path(), &[])
         .failure()
         .stderr(predicate::str::contains("exists and differs"));
 
-    Command::cargo_bin("provenance")
-        .unwrap()
-        .current_dir(dir.path())
-        .args(["skills", "install", "--force", "--format", "json"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains(r#""status": "updated""#));
+    assert_eq!(install_status(dir.path(), &["--force"]), "updated");
 }
 
 #[test]
@@ -299,12 +285,7 @@ fn prime_reports_skill_install_status_and_install_command() {
         .stdout(predicate::str::contains(r#""installed": false"#))
         .stdout(predicate::str::contains("provenance skills install"));
 
-    Command::cargo_bin("provenance")
-        .unwrap()
-        .current_dir(&repo)
-        .args(["skills", "install", "--copy"])
-        .assert()
-        .success();
+    install(&repo, &["--copy"]).success();
 
     Command::cargo_bin("provenance")
         .unwrap()
@@ -328,12 +309,7 @@ fn install_status_uses_canonical_agents_skill_files_as_source_of_truth() {
     let repo = temp.path().join("repo");
     init_repo(&repo);
 
-    Command::cargo_bin("provenance")
-        .unwrap()
-        .current_dir(&repo)
-        .args(["skills", "install", "--copy"])
-        .assert()
-        .success();
+    install(&repo, &["--copy"]).success();
     std::fs::remove_file(repo.join(".agents/skills/provenance-fork-tournament/SKILL.md")).unwrap();
     assert!(repo
         .join(".claude/skills/provenance-fork-tournament/SKILL.md")
@@ -414,6 +390,29 @@ fn shaping_and_ideation_commands_emit_suppressible_skill_install_hint() {
         .assert()
         .success()
         .stderr(predicate::str::is_empty());
+}
+
+/// Runs `provenance skills install` in `dir`, always asking for the JSON
+/// report so a caller can read the run out of it.
+fn install(dir: &std::path::Path, arguments: &[&str]) -> assert_cmd::assert::Assert {
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .current_dir(dir)
+        .args(["skills", "install"])
+        .args(arguments)
+        .args(["--format", "json"])
+        .assert()
+}
+
+/// The run-level `status` field of a successful install's JSON report.
+fn install_status(dir: &std::path::Path, arguments: &[&str]) -> String {
+    let output = install(dir, arguments)
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let report: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    report["status"].as_str().unwrap().to_string()
 }
 
 fn init_repo(repo: &std::path::Path) {

@@ -6,6 +6,7 @@ use provenance_core::{
     Contribution, ContributionStance, IdeationTarget, IdeationTargetType, SchemaVersion, StableId,
     SynthesisPacket, UncertaintyLevel, UncertaintyRating,
 };
+use provenance_macros::verifies;
 
 #[test]
 fn ideation_output_records_are_written_deterministically() {
@@ -225,6 +226,7 @@ fn composite_ideation_list_holds_publication_lock_between_reads() {
 }
 
 #[test]
+#[verifies("rule_asserted_evidence_immutable", examples)]
 fn direct_replacement_cannot_retarget_asserted_evidence() {
     let (_dir, store, scope) = initialized_store();
     let batch: IdeationLandingBatch = serde_json::from_value(serde_json::json!({

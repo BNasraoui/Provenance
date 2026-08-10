@@ -68,9 +68,9 @@ expression: "render_index(\"default\", &index_fixture())"
 <section>
 <h2 class="section-head">Orphaned Records</h2>
 <div class="orphan-card">
-<h3>Rules nothing produces</h3>
+<h3>Rules missing a producer</h3>
 <ul class="link-list">
-<li><a href="/rules/rule_orphan/">ORPH-001</a></li>
+<li><a href="/rules/rule_orphan/">ORPH-001</a> <span class="why">no resolution produces this rule</span></li>
 </ul>
 <h3>Sources nothing references</h3>
 <ul class="link-list">

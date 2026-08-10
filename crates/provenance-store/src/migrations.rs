@@ -14,6 +14,7 @@ pub const COMMIT_PIN_CONFIDENCE_MIGRATION_ID: &str = "011";
 pub const PROPOSAL_LIFECYCLE_MIGRATION_ID: &str = "012";
 pub const DISPOSITION_TERMINOLOGY_MIGRATION_ID: &str = "013";
 pub const DISPOSITION_EXTERNAL_ACTION_MIGRATION_ID: &str = "014";
+pub const DROP_RUNTIME_LEFTOVERS_MIGRATION_ID: &str = "015";
 const INITIAL_SQL: &str = include_str!("../migrations/001_initial_cache.sql");
 const SOURCE_REQUIREMENT_SQL: &str =
     include_str!("../migrations/002_sources_requirements_edges.sql");
@@ -32,6 +33,8 @@ const DISPOSITION_TERMINOLOGY_SQL: &str =
     include_str!("../migrations/013_disposition_terminology.sql");
 const DISPOSITION_EXTERNAL_ACTION_SQL: &str =
     include_str!("../migrations/014_disposition_external_action.sql");
+const DROP_RUNTIME_LEFTOVERS_SQL: &str =
+    include_str!("../migrations/015_drop_runtime_leftovers.sql");
 
 pub async fn run_migrations(pool: &SqlitePool) -> anyhow::Result<Vec<String>> {
     pool.execute("CREATE TABLE IF NOT EXISTS _schema_migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").await?;
@@ -63,6 +66,10 @@ pub async fn run_migrations(pool: &SqlitePool) -> anyhow::Result<Vec<String>> {
         (
             DISPOSITION_EXTERNAL_ACTION_MIGRATION_ID,
             DISPOSITION_EXTERNAL_ACTION_SQL,
+        ),
+        (
+            DROP_RUNTIME_LEFTOVERS_MIGRATION_ID,
+            DROP_RUNTIME_LEFTOVERS_SQL,
         ),
     ] {
         let already_applied: Option<String> =
@@ -103,7 +110,7 @@ mod tests {
             run_migrations(&pool).await.unwrap(),
             vec![
                 "001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012",
-                "013", "014"
+                "013", "014", "015"
             ]
         );
         assert!(run_migrations(&pool).await.unwrap().is_empty());
@@ -111,7 +118,7 @@ mod tests {
             applied_migrations(&pool).await.unwrap(),
             vec![
                 "001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012",
-                "013", "014"
+                "013", "014", "015"
             ]
         );
     }

@@ -1,10 +1,47 @@
 use assert_cmd::Command;
-use serde_json::json;
+use provenance_macros::verifies;
+use provenance_store::graph_reference::{graph_digest, GraphExport};
+use serde_json::{json, Value};
 
 fn write_json(dir: &tempfile::TempDir, name: &str, json: &str) -> String {
     let path = dir.path().join(name);
     std::fs::write(&path, json).unwrap();
     path.to_string_lossy().to_string()
+}
+
+/// A pinned graph carrying one source and nothing else.
+fn graph_with_source(source: &Value) -> Value {
+    json!({
+        "schema_version": 1,
+        "scope": {"id": "default", "path_prefix": "."},
+        "sources": [source],
+        "domains": [],
+        "requirements": [],
+        "boundaries": [],
+        "topics": [],
+        "questions": [],
+        "resolutions": [],
+        "rules": [],
+        "services": [],
+        "service_bindings": [],
+        "edges": []
+    })
+}
+
+/// An exact-export document carrying `graph` and the digest that graph hashes
+/// to. The digest is derived here rather than written down, so no fixture
+/// claims a hash its graph does not have and each refusal below is earned by
+/// the field its test set out to break.
+fn export_document(graph: &Value) -> Value {
+    let parsed: GraphExport =
+        serde_json::from_value(graph.clone()).expect("the fixture graph is a pinned graph");
+    json!({
+        "schema_version": 1,
+        "operation": "exact-export",
+        "reference_id": format!("grf1_{}", "0".repeat(64)),
+        "graph_digest": graph_digest(&parsed).expect("a graph can be canonicalized"),
+        "graph": graph
+    })
 }
 
 #[test]
@@ -362,33 +399,14 @@ fn validate_rejects_nested_invalid_stable_ids() {
 #[test]
 fn validate_rejects_forbidden_graph_reference_export_fields() {
     let dir = tempfile::tempdir().unwrap();
-    let export = json!({
+    let export = export_document(&graph_with_source(&json!({
         "schema_version": 1,
-        "operation": "exact-export",
-        "reference_id": format!("grf1_{}", "0".repeat(64)),
-        "graph": {
-            "schema_version": 1,
-            "scope": {"id": "default", "path_prefix": "."},
-            "sources": [{
-                "schema_version": 1,
-                "scope_id": "default",
-                "id": "source_policy",
-                "name": "Policy",
-                "source_type": "policy",
-                "url": null
-            }],
-            "domains": [],
-            "requirements": [],
-            "boundaries": [],
-            "topics": [],
-            "questions": [],
-            "resolutions": [],
-            "rules": [],
-            "services": [],
-            "service_bindings": [],
-            "edges": []
-        }
-    });
+        "scope_id": "default",
+        "id": "source_policy",
+        "name": "Policy",
+        "source_type": "policy",
+        "url": null
+    })));
 
     for (name, field, value) in [
         ("collaboration", "origin_thread", json!("thread_private")),
@@ -418,35 +436,17 @@ fn validate_rejects_forbidden_graph_reference_export_fields() {
 }
 
 #[test]
+#[verifies("rule_pinned_scope_ownership", examples)]
 fn validate_rejects_graph_reference_export_records_from_another_scope() {
     let dir = tempfile::tempdir().unwrap();
-    let export = json!({
+    let export = export_document(&graph_with_source(&json!({
         "schema_version": 1,
-        "operation": "exact-export",
-        "reference_id": format!("grf1_{}", "0".repeat(64)),
-        "graph": {
-            "schema_version": 1,
-            "scope": {"id": "default", "path_prefix": "."},
-            "sources": [{
-                "schema_version": 1,
-                "scope_id": "other",
-                "id": "source_policy",
-                "name": "Policy",
-                "source_type": "policy",
-                "url": null
-            }],
-            "domains": [],
-            "requirements": [],
-            "boundaries": [],
-            "topics": [],
-            "questions": [],
-            "resolutions": [],
-            "rules": [],
-            "services": [],
-            "service_bindings": [],
-            "edges": []
-        }
-    });
+        "scope_id": "other",
+        "id": "source_policy",
+        "name": "Policy",
+        "source_type": "policy",
+        "url": null
+    })));
     let path = write_json(
         &dir,
         "cross-scope-export.json",

@@ -1,8 +1,14 @@
 use crate::wiki::links::InlineRef;
+use crate::wiki::model::PageLink;
 
-use super::super::html::{escape_attr, escape_html, link_list, linkify_body};
+use super::super::html::{escape_attr, escape_html, linkify_body, PageLinksRenderer};
 use super::super::labels::{format_confidence, format_date_ms};
 use super::fixtures::{colliding_requirement_links, unique_requirement_links};
+
+/// A page holding one list and nothing else.
+fn link_list(links: &[PageLink]) -> String {
+    PageLinksRenderer::new(links).link_list(links)
+}
 
 #[test]
 fn escape_html_escapes_markup_characters() {

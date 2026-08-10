@@ -10,7 +10,10 @@ use camino::Utf8PathBuf;
 use provenance_core::RequirementStatus;
 
 mod ownership_output_validation;
+#[cfg(unix)]
+mod preflight_domain;
 mod replacement_rollback;
+mod route_safety;
 mod route_staging;
 mod staging_artifact_safety;
 

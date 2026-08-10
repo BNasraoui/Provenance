@@ -57,7 +57,6 @@ impl StateStore {
                 approved_at,
                 superseded_by,
                 review_on: None,
-                review_triggers: serde_json::json!([]),
                 origin_thread,
                 origin_message,
             };
@@ -152,8 +151,6 @@ impl StateStore {
                 source_section,
                 origin_thread,
                 origin_message,
-                expression: serde_json::json!({}),
-                inputs: serde_json::json!([]),
             };
             anyhow::ensure!(
                 !records.iter().any(|record| record.id == rule.id),

@@ -2,7 +2,10 @@ use serde::{Deserialize, Serialize};
 
 use super::ids::{SchemaVersion, ScopeId, StableId};
 use super::parsing::normalize_enum_value;
-use super::validation::{deserialize_optional_commit_pin, deserialize_optional_confidence};
+use super::validation::{
+    deserialize_optional_commit_pin, deserialize_optional_confidence,
+    validate_resolution_input_content,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SourceType {
@@ -236,14 +239,6 @@ impl RuleModality {
     }
 }
 
-const fn empty_array() -> serde_json::Value {
-    serde_json::json!([])
-}
-
-fn empty_object() -> serde_json::Value {
-    serde_json::json!({})
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Source {
     pub schema_version: SchemaVersion,
@@ -330,11 +325,37 @@ pub struct Requirement {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "ResolutionInputFields")]
 pub struct ResolutionInput {
-    #[serde(alias = "inputType")]
     pub input_type: ResolutionInputType,
     pub reference: String,
     pub summary: String,
+}
+
+/// The fields of a [`ResolutionInput`] as they arrive on the wire, before
+/// `validate_resolution_input_content` has passed judgement on them. Serde
+/// reads this, the conversion below either builds the record or refuses it, so
+/// a blank input cannot enter the graph through a file the way it can through
+/// a struct literal.
+#[derive(Deserialize)]
+struct ResolutionInputFields {
+    #[serde(alias = "inputType")]
+    input_type: ResolutionInputType,
+    reference: String,
+    summary: String,
+}
+
+impl TryFrom<ResolutionInputFields> for ResolutionInput {
+    type Error = anyhow::Error;
+
+    fn try_from(fields: ResolutionInputFields) -> anyhow::Result<Self> {
+        validate_resolution_input_content(&fields.reference, &fields.summary)?;
+        Ok(Self {
+            input_type: fields.input_type,
+            reference: fields.reference,
+            summary: fields.summary,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -372,8 +393,6 @@ pub struct Resolution {
     pub superseded_by: Option<StableId>,
     #[serde(alias = "reviewOn")]
     pub review_on: Option<String>,
-    #[serde(default = "empty_array", alias = "reviewTriggers")]
-    pub review_triggers: serde_json::Value,
     #[serde(
         default,
         alias = "originThread",
@@ -442,8 +461,4 @@ pub struct Rule {
         skip_serializing_if = "Option::is_none"
     )]
     pub origin_message: Option<StableId>,
-    #[serde(default = "empty_object")]
-    pub expression: serde_json::Value,
-    #[serde(default = "empty_array")]
-    pub inputs: serde_json::Value,
 }

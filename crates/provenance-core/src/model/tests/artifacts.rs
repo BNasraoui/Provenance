@@ -56,6 +56,7 @@ fn enriched_source_and_requirement_records_roundtrip_without_schema_bump() {
 }
 
 #[test]
+#[verifies("rule_source_commit_pin", examples)]
 fn source_commit_pin_must_be_hex_git_commit() {
     let source = serde_json::json!({
         "schema_version": 1,
@@ -83,7 +84,6 @@ fn enriched_resolution_and_rule_records_roundtrip_without_schema_bump() {
         "rationale": "Needs human review",
         "status": "draft",
         "review_on": null,
-        "review_triggers": [],
         "context": "Codebase scan",
         "enforcement": "specification",
         "confidence": 0.91,
@@ -115,8 +115,6 @@ fn enriched_resolution_and_rule_records_roundtrip_without_schema_bump() {
         "extraction_method": "manual",
         "source_document": "Example-API-main/src/example.php",
         "source_section": "lines 1-3",
-        "expression": {},
-        "inputs": [],
         "originThread": "thread_req_origin",
         "originMessage": "msg_000001"
     });
@@ -183,4 +181,94 @@ fn requirement_fog_roundtrips_as_unstructured_text() {
         .unwrap()
         .get("fog")
         .is_none());
+}
+
+/// Rule `expression`/`inputs` and resolution `review_triggers` were Statesman
+/// leftovers, never written with content and never read. They are gone. An
+/// export taken before the deletion still carries them, and reading one drops
+/// them rather than failing: the keys held nothing, so nothing is lost, and a
+/// hard failure would strand old exports for no gain. The keys do not come
+/// back out the other side.
+#[test]
+fn pre_deletion_exports_carrying_the_removed_keys_read_and_drop_them() {
+    let resolution = serde_json::json!({
+        "schema_version": 1,
+        "scope_id": "default",
+        "id": "res_legacy",
+        "title": "Legacy export",
+        "position": "Keep",
+        "rationale": "Kept",
+        "status": "approved",
+        "inputs": [],
+        "review_on": null,
+        "review_triggers": []
+    });
+    let rule = serde_json::json!({
+        "schema_version": 1,
+        "scope_id": "default",
+        "id": "rule_legacy",
+        "rule_code": "LEGACY-001",
+        "statement": "Legacy rule stays legible",
+        "status": "active",
+        "severity": "high",
+        "expression": {},
+        "inputs": []
+    });
+
+    let resolution: Resolution = serde_json::from_value(resolution).unwrap();
+    let rule: Rule = serde_json::from_value(rule).unwrap();
+
+    let resolution = serde_json::to_value(resolution).unwrap();
+    let rule = serde_json::to_value(rule).unwrap();
+
+    assert!(resolution.get("review_triggers").is_none());
+    assert!(rule.get("expression").is_none());
+    assert!(rule.get("inputs").is_none());
+    assert_eq!(resolution["status"], "approved");
+    assert_eq!(rule["rule_code"], "LEGACY-001");
+}
+
+/// A resolution carrying a blank input is refused whole, on the way in. The
+/// record is the unit of refusal: there is no half-read resolution with the
+/// bad input dropped, because dropping it would leave a decision claiming
+/// inputs it does not have.
+#[test]
+#[verifies("rule_resolution_input_content", examples)]
+fn a_resolution_with_a_blank_input_field_is_refused_on_read() {
+    let with_blank_reference = resolution_with_input("", "Program rules reviewed");
+    let with_blank_summary = resolution_with_input("SAH program manual", "   ");
+    let with_both = resolution_with_input("SAH program manual", "Program rules reviewed");
+
+    assert_eq!(
+        serde_json::from_value::<Resolution>(with_blank_reference)
+            .unwrap_err()
+            .to_string(),
+        "resolution input reference must not be blank"
+    );
+    assert_eq!(
+        serde_json::from_value::<Resolution>(with_blank_summary)
+            .unwrap_err()
+            .to_string(),
+        "resolution input summary must not be blank"
+    );
+    let accepted: Resolution = serde_json::from_value(with_both).unwrap();
+    assert_eq!(accepted.inputs[0].reference, "SAH program manual");
+}
+
+fn resolution_with_input(reference: &str, summary: &str) -> serde_json::Value {
+    serde_json::json!({
+        "schema_version": 1,
+        "scope_id": "default",
+        "id": "res_sah",
+        "title": "SAH extraction",
+        "position": "Keep as draft extraction",
+        "rationale": "Needs human review",
+        "status": "draft",
+        "review_on": null,
+        "inputs": [{
+            "inputType": "regulatory",
+            "reference": reference,
+            "summary": summary
+        }]
+    })
 }

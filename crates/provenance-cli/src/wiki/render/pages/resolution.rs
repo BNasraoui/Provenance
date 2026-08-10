@@ -1,4 +1,4 @@
-use crate::wiki::model::{PageKind, ResolutionPage};
+use crate::wiki::model::{PageKind, PageLink, ResolutionPage};
 use std::fmt::Write as _;
 
 use super::super::chrome::{container_html, index_breadcrumb, page_shell, title_row};
@@ -8,11 +8,21 @@ use super::super::fragments::{
     push_attribution, push_classification_block, push_classification_link_row,
     push_classification_row, push_prose_section, push_rule_territory_card, push_section_open,
 };
-use super::super::html::{escape_html, link_list};
+use super::super::html::{escape_html, PageLinksRenderer};
 use super::super::labels::{format_confidence, resolution_status_word, status_badge};
+
+/// Every titled link this page renders: the requirements it resolves, the
+/// requirements it spawned, and the resolution that superseded it.
+fn page_links(page: &ResolutionPage) -> Vec<&PageLink> {
+    let mut links: Vec<&PageLink> = page.resolves.iter().collect();
+    links.extend(&page.spawned);
+    links.extend(page.superseded_by.iter());
+    links
+}
 
 /// Renders a resolution detail page.
 pub fn render_resolution(scope: &str, page: &ResolutionPage) -> String {
+    let links = PageLinksRenderer::new(page_links(page));
     let mut main = String::new();
     push_section_open(&mut main, "sh-resolution", Some("i-scale"), "Position");
     writeln!(
@@ -39,7 +49,7 @@ pub fn render_resolution(scope: &str, page: &ResolutionPage) -> String {
             Some("i-git-branch"),
             "Resolves",
         );
-        main.push_str(&link_list(&page.resolves));
+        main.push_str(&links.link_list(&page.resolves));
         main.push_str("</section>\n");
     }
     if !page.spawned.is_empty() {
@@ -49,7 +59,7 @@ pub fn render_resolution(scope: &str, page: &ResolutionPage) -> String {
             Some("i-git-branch"),
             "Spawned Requirements",
         );
-        main.push_str(&link_list(&page.spawned));
+        main.push_str(&links.link_list(&page.spawned));
         main.push_str("</section>\n");
     }
     if !page.produced_rules.is_empty() {
@@ -66,30 +76,7 @@ pub fn render_resolution(scope: &str, page: &ResolutionPage) -> String {
         resolution_status_word(&page.status),
     );
 
-    let mut margin = String::new();
-    margin.push_str("<h3 class=\"margin-head\">Inputs</h3>\n");
-    push_gap_citations(&mut margin, &page.gaps);
-    push_input_citations(&mut margin, &page.inputs);
-    let mut rows = String::new();
-    if let Some(enforcement) = &page.enforcement {
-        push_classification_row(&mut rows, "i-shield", "Enforcement", enforcement, false);
-    }
-    if let Some(confidence) = page.confidence {
-        push_classification_row(
-            &mut rows,
-            "i-gauge",
-            "Confidence",
-            &format_confidence(confidence),
-            false,
-        );
-    }
-    if let Some(review_on) = &page.review_on {
-        push_classification_row(&mut rows, "i-calendar", "Review on", review_on, false);
-    }
-    if let Some(superseded_by) = &page.superseded_by {
-        push_classification_link_row(&mut rows, "i-scale", "Superseded by", superseded_by);
-    }
-    push_classification_block(&mut margin, &rows);
+    let margin = margin_html(page, &links);
 
     let index = (
         crate::wiki::routes::WikiRoute::Index.path(),
@@ -115,4 +102,33 @@ pub fn render_resolution(scope: &str, page: &ResolutionPage) -> String {
         &container,
         &field_notes(&page.threads, &page.id),
     )
+}
+
+/// The scholarly margin: inputs as citations, then the classification rows.
+fn margin_html(page: &ResolutionPage, links: &PageLinksRenderer) -> String {
+    let mut margin = String::new();
+    margin.push_str("<h3 class=\"margin-head\">Inputs</h3>\n");
+    push_gap_citations(&mut margin, &page.gaps);
+    push_input_citations(&mut margin, &page.inputs);
+    let mut rows = String::new();
+    if let Some(enforcement) = &page.enforcement {
+        push_classification_row(&mut rows, "i-shield", "Enforcement", enforcement, false);
+    }
+    if let Some(confidence) = page.confidence {
+        push_classification_row(
+            &mut rows,
+            "i-gauge",
+            "Confidence",
+            &format_confidence(confidence),
+            false,
+        );
+    }
+    if let Some(review_on) = &page.review_on {
+        push_classification_row(&mut rows, "i-calendar", "Review on", review_on, false);
+    }
+    if let Some(superseded_by) = &page.superseded_by {
+        push_classification_link_row(&mut rows, links, "i-scale", "Superseded by", superseded_by);
+    }
+    push_classification_block(&mut margin, &rows);
+    margin
 }

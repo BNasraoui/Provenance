@@ -26,11 +26,14 @@ pub enum PublishError {
         path: Utf8PathBuf,
         version: u32,
     },
-    UnsafeLockPath {
-        path: Utf8PathBuf,
-    },
+    /// Every transaction artifact found beside the output, reported in one
+    /// refusal so the operator sees the whole of what an interrupted run left.
+    /// `unsafe_lock` names the lock when the entry standing in its place is not
+    /// a regular file, which is a fact about one of the listed paths rather
+    /// than a separate refusal.
     AmbiguousArtifacts {
         paths: Vec<Utf8PathBuf>,
+        unsafe_lock: Option<Utf8PathBuf>,
     },
     InvalidRoute {
         route: String,
@@ -98,15 +101,17 @@ impl fmt::Display for PublishError {
                 formatter,
                 "unsupported wiki ownership manifest version {version} at {path}; upgrade Provenance or choose another output"
             ),
-            Self::UnsafeLockPath { path } => write!(
-                formatter,
-                "unsafe wiki publication lock {path}; it must be absent (a symlink or non-regular entry was left untouched)"
-            ),
-            Self::AmbiguousArtifacts { paths } => write!(
-                formatter,
-                "wiki publication cannot safely continue because transaction artifacts are present: {}; inspect them and explicitly move or remove them before retrying",
-                paths.iter().map(|path| path.as_str()).collect::<Vec<_>>().join(", ")
-            ),
+            Self::AmbiguousArtifacts { paths, unsafe_lock } => {
+                write!(
+                    formatter,
+                    "wiki publication cannot safely continue because transaction artifacts are present: {}; inspect them and explicitly move or remove them before retrying",
+                    paths.iter().map(|path| path.as_str()).collect::<Vec<_>>().join(", ")
+                )?;
+                unsafe_lock.as_ref().map_or(Ok(()), |path| write!(
+                    formatter,
+                    "; the entry at {path} is not a regular file, so something other than a publication lock is standing where the lock goes"
+                ))
+            }
             Self::InvalidRoute { route, detail } => {
                 write!(formatter, "unsafe generated wiki route {route:?}: {detail}")
             }

@@ -1,9 +1,18 @@
 use assert_cmd::Command;
 use predicates::str::contains;
 
+/// A stored record at an unreadable version stops `check`.
+///
+/// The refusal comes from the store's read guard rather than from the ideation
+/// aggregate: the record never loads, so nothing gets as far as validating a
+/// scope of them. The aggregate's own statement of the rule is what an
+/// imported document is still held to, which the next test covers.
 #[test]
 fn check_rejects_unsupported_contribution_and_synthesis_versions() {
-    for kind in ["contribution", "synthesis"] {
+    for (kind, file) in [
+        ("contribution", "contributions.jsonl"),
+        ("synthesis", "synthesis_packets.jsonl"),
+    ] {
         let dir = tempfile::tempdir().unwrap();
         init(dir.path());
         write_unsupported_record(dir.path(), kind);
@@ -18,7 +27,11 @@ fn check_rejects_unsupported_contribution_and_synthesis_versions() {
             ])
             .assert()
             .failure()
-            .stderr(contains(format!("{kind} schema_version must be 1")));
+            .stderr(contains(format!("{file} line 1")))
+            .stderr(contains(format!(
+                "record {kind}_future has schema_version 2, \
+                 but this build reads schema_version 1 only"
+            )));
     }
 }
 

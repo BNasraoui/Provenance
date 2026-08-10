@@ -5,6 +5,8 @@ use provenance_core::{
 };
 
 mod disposition_references;
+mod disposition_write_gate;
+mod legacy_shard;
 mod lifecycle_validation;
 mod projection;
 

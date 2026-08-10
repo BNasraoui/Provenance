@@ -1,6 +1,7 @@
 use assert_cmd::Command;
 use predicates::prelude::PredicateBooleanExt;
 use predicates::str::contains;
+use provenance_macros::verifies;
 
 use super::support::init_repo;
 
@@ -111,6 +112,54 @@ fn proposals_surface_for_changed_evidence_and_explicit_territory() {
     .success()
     .stdout(contains(r#""id": "proposal_overtime""#))
     .stdout(contains(r#""trigger": "territory""#));
+}
+
+/// `--target-type` and `--target-id` name one territory between them, so half
+/// the family names nothing to surface against. The refusal reads back both
+/// flags, which is the whole remedy the operator needs.
+#[test]
+#[verifies("rule_flag_sets_complete", examples)]
+fn surfacing_against_half_a_target_family_names_both_flags() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo").to_string_lossy().to_string();
+    init_repo(&repo);
+    create_requirement_topic_and_proposal(&repo);
+
+    provenance(
+        &repo,
+        &[
+            "proposals",
+            "surface",
+            "--scope",
+            "default",
+            "--target-type",
+            "requirement",
+            "--format",
+            "json",
+        ],
+    )
+    .failure()
+    .stderr(contains(
+        "--target-type and --target-id must be provided together",
+    ));
+
+    provenance(
+        &repo,
+        &[
+            "proposals",
+            "surface",
+            "--scope",
+            "default",
+            "--target-id",
+            "req_overtime",
+            "--format",
+            "json",
+        ],
+    )
+    .failure()
+    .stderr(contains(
+        "--target-type and --target-id must be provided together",
+    ));
 }
 
 #[test]

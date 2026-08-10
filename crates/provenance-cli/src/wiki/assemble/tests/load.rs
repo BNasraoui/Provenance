@@ -8,6 +8,13 @@ fn load_corpus_reads_state_from_disk() {
     let dir = tempfile::tempdir().unwrap();
     let repo = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
     let layout = provenance_store::layout::ProvenanceLayout::new(repo.clone());
+    let manifest_path = layout.manifest_path();
+    std::fs::create_dir_all(manifest_path.parent().unwrap()).unwrap();
+    std::fs::write(
+        &manifest_path,
+        r#"{"schema_version":1,"disposition_actor_ids":[],"scopes":[{"id":"default","path_prefix":"."}]}"#,
+    )
+    .unwrap();
     provenance_store::jsonl::write_jsonl_atomic(
         &provenance_store::shards::requirements_path(&layout, &scope_id()),
         &[requirement(

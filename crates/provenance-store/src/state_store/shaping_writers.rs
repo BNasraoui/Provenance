@@ -4,9 +4,15 @@ use super::{
 };
 use crate::shards;
 use provenance_core::{
-    ArtifactLink, ArtifactLinkTargetType, Boundary, Question, QuestionStatus, SchemaVersion,
-    ScopeId, StableId, Topic, TopicStatus,
+    Boundary, Question, QuestionStatus, SchemaVersion, ScopeId, StableId, Topic, TopicStatus,
 };
+use provenance_macros::rule;
+
+mod artifact_links;
+#[cfg(test)]
+mod claim_eligibility_tests;
+
+use artifact_links::sort_artifact_links;
 
 impl StateStore {
     pub fn create_boundary(&self, input: CreateBoundaryInput) -> anyhow::Result<Boundary> {
@@ -171,14 +177,17 @@ impl StateStore {
                 .into_iter()
                 .find(|topic| &topic.id == id)
                 .ok_or_else(|| anyhow::anyhow!("topic does not exist"))?;
+            if let Some(blocking) =
+                claim_blocking_status(ShapingStatus::Topic(current_topic.status))
+            {
+                anyhow::bail!(
+                    "topic {} is {blocking} and cannot be claimed",
+                    current_topic.id.as_str()
+                );
+            }
             let surfaced_proposals =
                 self.surface_proposals(scope_id, &ProposalDemand::for_topic(&current_topic))?;
             let topic = self.update_topic(scope_id, id, |topic| {
-                anyhow::ensure!(
-                    topic.status != TopicStatus::Closed,
-                    "topic {} is closed and cannot be claimed",
-                    topic.id.as_str()
-                );
                 if let Some(holder) = &topic.claimed_by {
                     anyhow::bail!("topic {} is already claimed by {holder}", topic.id.as_str());
                 }
@@ -209,8 +218,7 @@ impl StateStore {
     pub fn close_topic(&self, scope_id: &ScopeId, id: &StableId) -> anyhow::Result<Topic> {
         self.update_topic(scope_id, id, |topic| {
             topic.status = TopicStatus::Closed;
-            topic.claimed_by = None;
-            topic.claimed_at = None;
+            clear_topic_claim_on_exit(topic);
             Ok(())
         })
     }
@@ -224,16 +232,12 @@ impl StateStore {
         let actor = validated_actor(actor)?;
         let claimed_at = now_ms()?;
         self.mutate_question(scope_id, id, |question| {
-            match question.status {
-                QuestionStatus::Open => {}
-                QuestionStatus::BlockedOnHuman => anyhow::bail!(
-                    "question {} is blocked_on_human and cannot be claimed",
+            let status = ShapingStatus::Question(question.status);
+            if let Some(blocking) = claim_blocking_status(status) {
+                anyhow::bail!(
+                    "question {} is {blocking} and cannot be claimed",
                     question.id.as_str()
-                ),
-                QuestionStatus::Answered => anyhow::bail!(
-                    "question {} is answered and cannot be claimed",
-                    question.id.as_str()
-                ),
+                );
             }
             if let Some(holder) = &question.claimed_by {
                 anyhow::bail!(
@@ -294,8 +298,7 @@ impl StateStore {
             if resolution_id.is_some() {
                 question.resolution_id = resolution_id;
             }
-            question.claimed_by = None;
-            question.claimed_at = None;
+            clear_question_claim_on_exit(question);
             Ok(())
         })
     }
@@ -342,10 +345,7 @@ impl StateStore {
                     "use questions answer --answer to answer a question"
                 );
                 question.status = status;
-                if status != QuestionStatus::Open {
-                    question.claimed_by = None;
-                    question.claimed_at = None;
-                }
+                clear_question_claim_on_exit(question);
             }
             if let Some(links) = links {
                 question.links = links;
@@ -390,34 +390,65 @@ impl StateStore {
             Ok(question.clone())
         })
     }
+}
 
-    fn validate_artifact_links(
-        &self,
-        scope_id: &ScopeId,
-        links: &[ArtifactLink],
-    ) -> anyhow::Result<()> {
-        for link in links {
-            let exists = match link.target_type {
-                ArtifactLinkTargetType::Source => self
-                    .list_sources(scope_id)?
-                    .iter()
-                    .any(|source| source.id == link.target_id),
-                ArtifactLinkTargetType::Requirement => self
-                    .list_requirements(scope_id)?
-                    .iter()
-                    .any(|requirement| requirement.id == link.target_id),
-                ArtifactLinkTargetType::Resolution => self
-                    .list_resolutions(scope_id)?
-                    .iter()
-                    .any(|resolution| resolution.id == link.target_id),
-                ArtifactLinkTargetType::Rule => self
-                    .list_rules(scope_id)?
-                    .iter()
-                    .any(|rule| rule.id == link.target_id),
-            };
-            anyhow::ensure!(exists, "linked artifact does not exist");
-        }
-        Ok(())
+/// The status of a shaping record an actor is trying to claim.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ShapingStatus {
+    Topic(TopicStatus),
+    Question(QuestionStatus),
+}
+
+/// Shaping work may be claimed only while its record is still open for work.
+///
+/// A closed topic and an answered question are finished, and a question
+/// blocked on a human is waiting on someone the claimant is not; none of the
+/// three wants a worker. Every other status is live work, so an explored topic
+/// stays claimable. The decision reads the status alone: who already holds the
+/// claim is a separate question, answered after this one.
+///
+/// Returns the status word to name in the refusal, or `None` when the record
+/// may be claimed.
+#[rule("rule_claim_eligibility")]
+const fn claim_blocking_status(status: ShapingStatus) -> Option<&'static str> {
+    match status {
+        ShapingStatus::Topic(TopicStatus::Open | TopicStatus::Explored)
+        | ShapingStatus::Question(QuestionStatus::Open) => None,
+        ShapingStatus::Topic(TopicStatus::Closed) => Some("closed"),
+        ShapingStatus::Question(QuestionStatus::BlockedOnHuman) => Some("blocked_on_human"),
+        ShapingStatus::Question(QuestionStatus::Answered) => Some("answered"),
+    }
+}
+
+/// A claim does not survive the record leaving the claimable state.
+///
+/// The dual of [`claim_blocking_status`]: that one guards the entry, this one
+/// guards the exit, so the write that closes a topic or answers a question
+/// takes the claim with it and nobody is left holding work that is over. The
+/// two read the same six statuses and agree on every one of them, which is
+/// what makes a held claim mean the same thing as a grantable one.
+#[rule("rule_claim_cleared_on_exit")]
+const fn claim_survives(status: ShapingStatus) -> bool {
+    matches!(
+        status,
+        ShapingStatus::Topic(TopicStatus::Open | TopicStatus::Explored)
+            | ShapingStatus::Question(QuestionStatus::Open)
+    )
+}
+
+/// Drops a topic's claim when the status just written no longer holds one.
+fn clear_topic_claim_on_exit(topic: &mut Topic) {
+    if !claim_survives(ShapingStatus::Topic(topic.status)) {
+        topic.claimed_by = None;
+        topic.claimed_at = None;
+    }
+}
+
+/// Drops a question's claim when the status just written no longer holds one.
+fn clear_question_claim_on_exit(question: &mut Question) {
+    if !claim_survives(ShapingStatus::Question(question.status)) {
+        question.claimed_by = None;
+        question.claimed_at = None;
     }
 }
 
@@ -433,22 +464,4 @@ fn now_ms() -> anyhow::Result<i64> {
             .duration_since(std::time::UNIX_EPOCH)?
             .as_millis(),
     )?)
-}
-
-fn sort_artifact_links(links: &mut Vec<ArtifactLink>) {
-    links.sort_by(|a, b| {
-        artifact_link_target_key(a.target_type)
-            .cmp(artifact_link_target_key(b.target_type))
-            .then(a.target_id.as_str().cmp(b.target_id.as_str()))
-    });
-    links.dedup();
-}
-
-const fn artifact_link_target_key(target_type: ArtifactLinkTargetType) -> &'static str {
-    match target_type {
-        ArtifactLinkTargetType::Source => "source",
-        ArtifactLinkTargetType::Requirement => "requirement",
-        ArtifactLinkTargetType::Resolution => "resolution",
-        ArtifactLinkTargetType::Rule => "rule",
-    }
 }

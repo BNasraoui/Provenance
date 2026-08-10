@@ -1,5 +1,6 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
+use provenance_macros::verifies;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
@@ -13,6 +14,7 @@ const LEGACY_NAMES: [&str; 4] = [
 ];
 
 #[test]
+#[verifies("rule_legacy_cleanup_ownership", examples)]
 fn cleanup_validates_payload_hash_and_header_placement() {
     let dir = tempfile::tempdir().unwrap();
     let roots = [".claude/skills", ".agents/skills"];
@@ -38,6 +40,7 @@ fn cleanup_validates_payload_hash_and_header_placement() {
 }
 
 #[test]
+#[verifies("rule_legacy_cleanup_ownership", examples)]
 fn cleanup_preserves_modified_payload_and_misplaced_valid_header() {
     let dir = tempfile::tempdir().unwrap();
     let modified = legacy_dir(dir.path(), ".claude/skills", "shaping");
@@ -68,6 +71,7 @@ fn cleanup_preserves_modified_payload_and_misplaced_valid_header() {
 }
 
 #[test]
+#[verifies("rule_legacy_cleanup_ownership", examples)]
 fn cleanup_removes_only_skill_file_and_keeps_user_files() {
     let dir = tempfile::tempdir().unwrap();
     let legacy = legacy_dir(dir.path(), ".claude/skills", "swarm-backtrace");

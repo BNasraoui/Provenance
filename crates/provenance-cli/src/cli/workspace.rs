@@ -79,6 +79,10 @@ pub enum CoverageCommand {
         scope: String,
         #[arg(long)]
         validate_rules: bool,
+        /// Exit non-zero when the report contains any warnings. The report is
+        /// still printed first.
+        #[arg(long)]
+        strict: bool,
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
         #[arg(long)]

@@ -3,9 +3,21 @@ use crate::wiki::routes::{domain_anchor, WikiRoute, UNASSIGNED_DOMAIN_ANCHOR};
 use std::fmt::Write as _;
 
 use super::super::chrome::{container_html, index_breadcrumb, page_shell, title_row};
-use super::super::html::{escape_attr, escape_html, link_list};
+use super::super::html::{escape_attr, escape_html, PageLinksRenderer};
+
+/// Every titled link this page renders: the requirements and rules of every
+/// domain group, gathered so one group's title collides visibly with another's.
+fn page_links(page: &DomainIndexPage) -> Vec<&PageLink> {
+    let mut links: Vec<&PageLink> = Vec::new();
+    for group in &page.groups {
+        links.extend(&group.requirements);
+        links.extend(&group.rules);
+    }
+    links
+}
 
 pub fn render_domains(scope: &str, page: &DomainIndexPage) -> String {
+    let links = PageLinksRenderer::new(page_links(page));
     let mut main = String::new();
     if page.groups.is_empty() {
         main.push_str(
@@ -72,11 +84,12 @@ pub fn render_domains(scope: &str, page: &DomainIndexPage) -> String {
         } else {
             push_group(
                 &mut main,
+                &links,
                 "Requirements",
                 "requirement",
                 &group.requirements,
             );
-            push_group(&mut main, "Rules", "rule", &group.rules);
+            push_group(&mut main, &links, "Rules", "rule", &group.rules);
         }
         main.push_str("</section>\n");
     }
@@ -103,15 +116,21 @@ pub fn render_domains(scope: &str, page: &DomainIndexPage) -> String {
     )
 }
 
-fn push_group(html: &mut String, heading: &str, class_name: &str, links: &[PageLink]) {
-    if links.is_empty() {
+fn push_group(
+    html: &mut String,
+    links: &PageLinksRenderer,
+    heading: &str,
+    class_name: &str,
+    group: &[PageLink],
+) {
+    if group.is_empty() {
         return;
     }
     writeln!(
         html,
         "<div class=\"domain-records {class_name}\"><h3>{}</h3>{}</div>",
         escape_html(heading),
-        link_list(links)
+        links.link_list(group)
     )
     .expect("writing to a String should not fail");
 }

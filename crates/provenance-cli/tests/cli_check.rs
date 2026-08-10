@@ -134,9 +134,9 @@ fn check_rejects_dangling_disposition_proposal_id() {
         r#"{"schema_version":1,"scope_id":"default","id":"disposition_missing_proposal","proposal_id":"proposal_missing","decision":"accepted","rationale":"Looks good.","actor":{"identity_type":"human","id":"ben"}}"#,
     );
 
-    provenance(dir.path()).failure().stderr(contains(
-        "disposition proposal proposal_missing does not exist",
-    ));
+    provenance(dir.path())
+        .failure()
+        .stderr(contains("proposal does not exist"));
 }
 
 #[test]

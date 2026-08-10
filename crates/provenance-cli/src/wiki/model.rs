@@ -86,10 +86,18 @@ pub struct GapNotice {
     pub detail: String,
 }
 
+/// A rule whose trace back to a requirement and a resolution is incomplete,
+/// carrying the gap's own words for which end is missing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct OrphanRule {
+    pub link: PageLink,
+    pub reason: String,
+}
+
 /// Records that exist but are attached to nothing, listed on the index.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct OrphanReport {
-    pub rules: Vec<PageLink>,
+    pub rules: Vec<OrphanRule>,
     pub resolutions: Vec<PageLink>,
     pub sources: Vec<PageLink>,
 }

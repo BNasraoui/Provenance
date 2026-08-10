@@ -1,4 +1,5 @@
 use super::*;
+use provenance_macros::verifies;
 
 #[test]
 fn concurrent_first_access_creates_publication_lock_directories_idempotently() {
@@ -22,6 +23,7 @@ fn concurrent_first_access_creates_publication_lock_directories_idempotently() {
 }
 
 #[test]
+#[verifies("rule_recovery_stays_in_cache", examples)]
 fn recovery_rejects_traversal_outside_import_transactions() {
     let directory = tempfile::tempdir().unwrap();
     let root = Utf8PathBuf::from_path_buf(directory.path().to_path_buf()).unwrap();
@@ -52,6 +54,7 @@ fn recovery_rejects_traversal_outside_import_transactions() {
 
 #[cfg(unix)]
 #[test]
+#[verifies("rule_recovery_stays_in_cache", examples)]
 fn recovery_rejects_symlinked_import_transactions_outside_repository() {
     let directory = tempfile::tempdir().unwrap();
     let root = Utf8PathBuf::from_path_buf(directory.path().join("repo")).unwrap();
@@ -85,6 +88,7 @@ fn recovery_rejects_symlinked_import_transactions_outside_repository() {
 
 #[cfg(unix)]
 #[test]
+#[verifies("rule_recovery_stays_in_cache", examples)]
 fn recovery_rejects_symlinked_import_transactions_inside_repository() {
     let directory = tempfile::tempdir().unwrap();
     let root = Utf8PathBuf::from_path_buf(directory.path().join("repo")).unwrap();
@@ -116,6 +120,7 @@ fn recovery_rejects_symlinked_import_transactions_inside_repository() {
 }
 
 #[test]
+#[verifies("rule_recovery_stays_in_cache", examples)]
 fn recovery_clears_published_marker_when_transaction_is_missing() {
     let directory = tempfile::tempdir().unwrap();
     let root = Utf8PathBuf::from_path_buf(directory.path().to_path_buf()).unwrap();
@@ -138,6 +143,85 @@ fn recovery_clears_published_marker_when_transaction_is_missing() {
 
     assert!(layout.state_dir().is_dir());
     assert!(!layout.publication_marker_path().exists());
+}
+
+#[test]
+#[verifies("rule_recovery_stays_in_cache", examples)]
+fn recovery_rejects_a_transaction_that_is_a_regular_file() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(directory.path().to_path_buf()).unwrap();
+    let layout = ProvenanceLayout::new(root);
+    std::fs::create_dir_all(layout.state_dir()).unwrap();
+    std::fs::create_dir_all(layout.import_transactions_dir()).unwrap();
+    let transaction = layout.import_transactions_dir().join("interrupted");
+    std::fs::write(&transaction, "not a directory").unwrap();
+    std::fs::write(
+        layout.publication_marker_path(),
+        serde_json::to_vec(&serde_json::json!({
+            "schema_version": 1,
+            "transaction_dir": transaction,
+            "phase": "backup_created"
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let error = recover_pending_publication(&layout)
+        .unwrap_err()
+        .to_string();
+
+    assert!(error.contains("is not a directory"), "{error}");
+    assert_eq!(
+        std::fs::read_to_string(&transaction).unwrap(),
+        "not a directory"
+    );
+    assert!(layout.publication_marker_path().is_file());
+}
+
+/// The rule assumes the cache itself is a real directory and leaves proving it
+/// to `create_real_directory`. This checks the two halves compose where they
+/// meet: with a symlink standing in for the cache, the entry point every
+/// caller goes through refuses before recovery reads a marker or touches the
+/// tree the link points at.
+#[cfg(unix)]
+#[test]
+#[verifies("rule_recovery_stays_in_cache", examples)]
+fn a_symlinked_cache_is_refused_before_recovery_runs() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(directory.path().join("repo")).unwrap();
+    let elsewhere = Utf8PathBuf::from_path_buf(directory.path().join("elsewhere")).unwrap();
+    let layout = ProvenanceLayout::new(root);
+    let transaction = elsewhere.join("import-transactions/interrupted");
+    std::fs::create_dir_all(layout.provenance_dir()).unwrap();
+    std::fs::create_dir_all(layout.state_dir()).unwrap();
+    std::fs::create_dir_all(&transaction).unwrap();
+    std::fs::write(transaction.join("sentinel"), "keep").unwrap();
+    std::os::unix::fs::symlink(&elsewhere, layout.cache_dir()).unwrap();
+    std::fs::write(
+        layout.publication_marker_path(),
+        serde_json::to_vec(&serde_json::json!({
+            "schema_version": 1,
+            "transaction_dir": transaction,
+            "phase": "backup_created"
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let mut operation_ran = false;
+    let error = with_repository_publication(&layout, || {
+        operation_ran = true;
+        Ok(())
+    })
+    .unwrap_err()
+    .to_string();
+
+    assert!(error.contains("symlink component"), "{error}");
+    assert!(!operation_ran);
+    assert_eq!(
+        std::fs::read_to_string(transaction.join("sentinel")).unwrap(),
+        "keep"
+    );
 }
 
 #[test]

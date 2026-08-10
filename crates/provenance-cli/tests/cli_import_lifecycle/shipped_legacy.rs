@@ -1,4 +1,7 @@
-use super::support::{export_scope, import_scope, init_repo, provenance, shipped_repo, write_json};
+use super::support::{
+    export_scope, import_scope, init_repo, init_repo_with_actors, provenance, shipped_repo,
+    write_json,
+};
 
 #[test]
 fn shipped_legacy_export_imports_into_fresh_repo_and_materializes() {
@@ -6,7 +9,7 @@ fn shipped_legacy_export_imports_into_fresh_repo_and_materializes() {
     let fresh = dir.path().join("fresh");
     let export = dir.path().join("shipped.json");
     export_scope(&shipped_repo(), &export).success();
-    init_repo(&fresh, Some("codex-review-panel-gpt55-medium"));
+    init_repo_with_actors(&fresh, &["codex-review-panel-gpt55-medium", "ben_nasraoui"]);
     import_scope(&fresh, &export).success();
     for command in ["check", "materialize"] {
         run_repo_command(command, &fresh);
@@ -27,6 +30,13 @@ fn historical_shipped_manifest_without_actor_allowlist_remains_readable() {
         .unwrap()
         .remove("disposition_actor_ids");
     write_json(&manifest_path, &manifest);
+    // A historical repo predates the modern disposition lifecycle; the live
+    // repo's modern dispositions do not belong in the simulated history.
+    let modern_dispositions =
+        repo.join(".provenance/state/scopes/default/ideation/dispositions.jsonl");
+    if modern_dispositions.exists() {
+        std::fs::remove_file(&modern_dispositions).unwrap();
+    }
 
     for command in ["check", "materialize"] {
         run_repo_command(command, &repo);

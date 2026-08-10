@@ -1,9 +1,7 @@
-use crate::wiki::model::{DecisionSection, LineageEntry, PageLink, RuleCard};
+use crate::wiki::model::{DecisionSection, LineageEntry, OrphanRule, PageLink, RuleCard};
 use std::fmt::Write as _;
 
-use super::html::{
-    escape_attr, escape_html, evidence_html, icon_svg, link_html, link_list, PageLinksRenderer,
-};
+use super::html::{escape_attr, escape_html, evidence_html, icon_svg, PageLinksRenderer};
 use super::labels::{capitalize, format_date_ms, modality_word, sev_chip, severity_word};
 
 pub(in crate::wiki::render) fn push_section_open(
@@ -44,13 +42,14 @@ pub(in crate::wiki::render) fn push_prose_section(
 
 pub(in crate::wiki::render) fn push_decision_sections(
     html: &mut String,
+    links: &PageLinksRenderer,
     decision: &DecisionSection,
 ) {
     push_section_open(html, "sh-resolution", Some("i-scale"), "Resolving Decision");
     write!(
         html,
         "<h3 class=\"decision-title\">{}</h3>\n<blockquote class=\"position\">{}</blockquote>\n</section>\n",
-        link_html(&decision.link),
+        links.link(&decision.link, None),
         escape_html(&decision.position)
     )
     .expect("writing to a String should not fail");
@@ -185,6 +184,7 @@ pub(in crate::wiki::render) fn push_classification_row(
 
 pub(in crate::wiki::render) fn push_classification_link_row(
     html: &mut String,
+    links: &PageLinksRenderer,
     icon: &str,
     key: &str,
     link: &PageLink,
@@ -193,27 +193,30 @@ pub(in crate::wiki::render) fn push_classification_link_row(
         html,
         "<div class=\"row\">{}<span class=\"k\">{key}</span><span class=\"v\">{}</span></div>",
         icon_svg(icon),
-        link_html(link)
+        links.link(link, None)
     )
     .expect("writing to a String should not fail");
 }
 
-pub(in crate::wiki::render) fn push_lineage(html: &mut String, lineage: &[LineageEntry]) {
+pub(in crate::wiki::render) fn push_lineage(
+    html: &mut String,
+    links: &PageLinksRenderer,
+    lineage: &[LineageEntry],
+) {
     if lineage.is_empty() {
         return;
     }
     html.push_str("<div class=\"lineage\">\n<h3 class=\"margin-head\">Lineage</h3>\n<ol>\n");
-    let renderer = PageLinksRenderer::new(lineage.iter().map(|entry| &entry.link));
     for entry in lineage {
         if entry.is_current {
             writeln!(
                 html,
                 "<li class=\"current\">{}</li>",
-                renderer.text(&entry.link)
+                links.text(&entry.link)
             )
             .expect("writing to a String should not fail");
         } else {
-            writeln!(html, "<li>{}</li>", renderer.link(&entry.link, None))
+            writeln!(html, "<li>{}</li>", links.link(&entry.link, None))
                 .expect("writing to a String should not fail");
         }
     }
@@ -222,12 +225,48 @@ pub(in crate::wiki::render) fn push_lineage(html: &mut String, lineage: &[Lineag
 
 pub(in crate::wiki::render) fn push_orphan_group(
     html: &mut String,
+    links: &PageLinksRenderer,
     head: &str,
-    links: &[PageLink],
+    group: &[PageLink],
 ) {
-    if links.is_empty() {
+    if group.is_empty() {
         return;
     }
-    write!(html, "<h3>{}</h3>\n{}", escape_html(head), link_list(links))
+    write!(
+        html,
+        "<h3>{}</h3>\n{}",
+        escape_html(head),
+        links.link_list(group)
+    )
+    .expect("writing to a String should not fail");
+}
+
+/// The orphan rules, each with the end of its trace that is missing. The
+/// reason comes from the gap that named the rule, so the panel says which
+/// producer is absent rather than leaving the reader to guess.
+pub(in crate::wiki::render) fn push_orphan_rules(
+    html: &mut String,
+    links: &PageLinksRenderer,
+    head: &str,
+    rules: &[OrphanRule],
+) {
+    if rules.is_empty() {
+        return;
+    }
+    write!(
+        html,
+        "<h3>{}</h3>\n<ul class=\"link-list\">\n",
+        escape_html(head)
+    )
+    .expect("writing to a String should not fail");
+    for rule in rules {
+        writeln!(
+            html,
+            "<li>{} <span class=\"why\">{}</span></li>",
+            links.link(&rule.link, None),
+            escape_html(&rule.reason)
+        )
         .expect("writing to a String should not fail");
+    }
+    html.push_str("</ul>\n");
 }

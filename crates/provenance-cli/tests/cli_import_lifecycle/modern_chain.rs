@@ -130,12 +130,14 @@ impl ModernLifecycleFixture {
                 "contribution contribution_a is referenced by an assertion and cannot be replaced",
             ));
 
+        // The stored contribution is not in the incoming scope at all, so it
+        // is dropped rather than replaced.
         let mut retargeted_claim = self.lifecycle.clone();
         retargeted_claim["contributions"][0]["id"] = serde_json::json!("contribution_b");
         self.import_value("retargeted-claim.json", &retargeted_claim)
             .failure()
             .stderr(predicates::str::contains(
-                "contribution contribution_a is referenced by an assertion and cannot be replaced",
+                "contribution contribution_a is referenced by an assertion and cannot be deleted",
             ));
 
         let mut changed_synthesis = self.lifecycle.clone();
@@ -144,6 +146,19 @@ impl ModernLifecycleFixture {
             .failure()
             .stderr(predicates::str::contains(
                 "synthesis packet synthesis_a is referenced by an assertion and cannot be replaced",
+            ));
+
+        // Dropping the packet has no import that reaches it: the assertion
+        // naming the packet is immutable, so an import that drops the packet
+        // either keeps the assertion and fails the aggregate, or drops it and
+        // fails the immutable-record check first. The deletion rule stands
+        // behind both; `handlers::import`'s unit test walks it for both kinds.
+        let mut dropped_synthesis = self.lifecycle.clone();
+        dropped_synthesis["synthesis_packets"] = serde_json::json!([]);
+        self.import_value("dropped-synthesis.json", &dropped_synthesis)
+            .failure()
+            .stderr(predicates::str::contains(
+                "assertion synthesis packet does not exist",
             ));
     }
 }

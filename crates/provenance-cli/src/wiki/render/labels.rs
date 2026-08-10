@@ -4,6 +4,8 @@ use provenance_core::{
     RuleStatus, RuleType, SourceType, ThreadStatus,
 };
 
+use provenance_macros::rule;
+
 use super::html::icon_svg;
 
 pub(in crate::wiki::render) fn status_badge(word: &str) -> String {
@@ -21,6 +23,11 @@ fn status_badge_with_label(class_word: &str, label: &str) -> String {
     )
 }
 
+/// A requirement marked resolved that has no decisions and no rules behind it
+/// is labelled "Resolved (no decisions or rules)", never plain "Resolved".
+/// The badge must not let "resolved" lie: a reader who sees the plain word
+/// is entitled to assume a decision or a rule stands behind it.
+#[rule("rule_requirement_badge")]
 pub(in crate::wiki::render) fn requirement_status_badge(
     status: &RequirementStatus,
     decisions: usize,
@@ -240,4 +247,88 @@ const fn civil_from_days(days: i64) -> (i64, i64, i64) {
 )]
 pub(in crate::wiki::render) fn format_confidence(confidence: f64) -> String {
     format!("{}%", (confidence * 100.0).round() as u32)
+}
+
+#[cfg(test)]
+mod tests {
+    use provenance_macros::verifies;
+
+    use super::{requirement_status_badge, RequirementStatus};
+
+    /// The status list is derived from an exhaustive match so that adding a
+    /// `RequirementStatus` variant fails compilation until the new variant
+    /// joins the chain, keeping the exhaustion proof below complete.
+    fn all_requirement_statuses() -> Vec<RequirementStatus> {
+        let mut all = vec![RequirementStatus::Active];
+        while let Some(next) = match all.last().unwrap() {
+            RequirementStatus::Active => Some(RequirementStatus::Discovery),
+            RequirementStatus::Discovery => Some(RequirementStatus::Refinement),
+            RequirementStatus::Refinement => Some(RequirementStatus::Resolved),
+            RequirementStatus::Resolved => None,
+        } {
+            all.push(next);
+        }
+        all
+    }
+
+    /// The badge reads counts only as zero or nonzero, so these three
+    /// representatives cover the whole count axis: the empty case, the
+    /// smallest nonzero case, and a larger nonzero case.
+    const COUNTS: [usize; 3] = [0, 1, 7];
+
+    /// Pulls the visible label out of a rendered badge: everything after the
+    /// icon's last `>` and before the closing `</span>`.
+    fn badge_label(badge: &str) -> &str {
+        let inner = badge
+            .strip_suffix("</span>")
+            .expect("badge is a single span element");
+        inner.rsplit_once('>').expect("badge opens a tag").1
+    }
+
+    /// Independent restatement of the badge-honesty decision, used as the
+    /// oracle below. Must not be implemented by calling the badge.
+    ///
+    /// A badge is honest when the plain word "Resolved" appears exactly when
+    /// the requirement is resolved and something stands behind it, and the
+    /// admission of missing backing appears exactly when it is resolved and
+    /// nothing does. Every other status is left alone.
+    fn badge_is_honest(
+        status: &RequirementStatus,
+        decisions: usize,
+        rules: usize,
+        label: &str,
+    ) -> bool {
+        let resolved = matches!(status, RequirementStatus::Resolved);
+        let backed = decisions > 0 || rules > 0;
+        let claims_resolved_outright = label == "Resolved";
+        let admits_no_backing = label.contains("no decisions or rules");
+        claims_resolved_outright == (resolved && backed)
+            && admits_no_backing == (resolved && !backed)
+    }
+
+    #[test]
+    #[verifies("rule_requirement_badge", exhaustion)]
+    fn badge_never_lets_resolved_lie() {
+        for status in all_requirement_statuses() {
+            for decisions in COUNTS {
+                for rules in COUNTS {
+                    let badge = requirement_status_badge(&status, decisions, rules);
+                    let label = badge_label(&badge);
+                    assert!(
+                        badge_is_honest(&status, decisions, rules, label),
+                        "badge for {status:?} with {decisions} decisions and {rules} rules \
+                         reads {label:?}, which the honesty property forbids"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    #[verifies("rule_requirement_badge", examples)]
+    fn unbacked_resolved_requirement_says_so() {
+        let badge = requirement_status_badge(&RequirementStatus::Resolved, 0, 0);
+        assert!(badge.contains("status-badge resolved-unbacked"));
+        assert_eq!(badge_label(&badge), "Resolved (no decisions or rules)");
+    }
 }

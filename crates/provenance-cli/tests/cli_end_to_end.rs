@@ -133,7 +133,6 @@ fn import_export_roundtrip_preserves_enriched_v1_cloud_fields() {
     "rationale": "Needs human review",
     "status": "draft",
     "review_on": null,
-    "review_triggers": [],
     "context": "Codebase scan",
     "enforcement": "specification",
     "confidence": 0.91
@@ -153,9 +152,7 @@ fn import_export_roundtrip_preserves_enriched_v1_cloud_fields() {
     "confidence": 0.98,
     "extraction_method": "manual",
     "source_document": "Example-API-main/src/example.php",
-    "source_section": "lines 1-3",
-    "expression": {},
-    "inputs": []
+    "source_section": "lines 1-3"
   }],
   "edges": [],
   "threads": [],

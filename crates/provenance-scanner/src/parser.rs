@@ -36,6 +36,43 @@ impl FromStr for CoverageLevel {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Verification {
+    Exhaustion,
+    Property,
+    Examples,
+    Conformance,
+    Construction,
+}
+
+impl fmt::Display for Verification {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Exhaustion => write!(f, "exhaustion"),
+            Self::Property => write!(f, "property"),
+            Self::Examples => write!(f, "examples"),
+            Self::Conformance => write!(f, "conformance"),
+            Self::Construction => write!(f, "construction"),
+        }
+    }
+}
+
+impl FromStr for Verification {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.to_ascii_lowercase().as_str() {
+            "exhaustion" => Ok(Self::Exhaustion),
+            "property" => Ok(Self::Property),
+            "examples" => Ok(Self::Examples),
+            "conformance" => Ok(Self::Conformance),
+            "construction" => Ok(Self::Construction),
+            other => Err(format!("invalid verification method: {other}")),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct Annotation {
     pub rule: String,
@@ -45,6 +82,7 @@ pub struct Annotation {
     pub coverage: CoverageLevel,
     pub confidence: f64,
     pub intent: Option<String>,
+    pub verification: Option<Verification>,
 }
 
 impl Default for Annotation {
@@ -57,6 +95,7 @@ impl Default for Annotation {
             coverage: CoverageLevel::Full,
             confidence: 1.0,
             intent: None,
+            verification: None,
         }
     }
 }
@@ -111,6 +150,7 @@ pub fn parse_annotations(comment_text: &str) -> ParseResult {
                 coverage: shared.coverage,
                 confidence: shared.confidence,
                 intent: shared.intent.clone(),
+                verification: shared.verification,
             }),
             "name" => set_field(&mut annotations, &mut shared, |ann| {
                 ann.name = Some(value.to_string());
@@ -136,20 +176,27 @@ pub fn parse_annotations(comment_text: &str) -> ParseResult {
                     message: format!("invalid coverage level `{value}`, using default"),
                 }),
             },
-            "confidence" => match value.parse::<f64>() {
-                Ok(confidence) if confidence.is_finite() => {
-                    set_field(&mut annotations, &mut shared, |ann| {
-                        ann.confidence = confidence.clamp(0.0, 1.0);
-                    });
-                }
-                Ok(_) | Err(_) => warnings.push(ParseWarning {
+            "confidence" => match parse_confidence(value) {
+                Ok(confidence) => set_field(&mut annotations, &mut shared, |ann| {
+                    ann.confidence = confidence;
+                }),
+                Err(rejection) => warnings.push(ParseWarning {
                     line,
-                    message: format!("invalid confidence `{value}`, using default"),
+                    message: rejection.warning(value),
                 }),
             },
             "intent" => set_field(&mut annotations, &mut shared, |ann| {
                 ann.intent = Some(value.to_string());
             }),
+            "verification" => match Verification::from_str(value) {
+                Ok(method) => set_field(&mut annotations, &mut shared, |ann| {
+                    ann.verification = Some(method);
+                }),
+                Err(_) => warnings.push(ParseWarning {
+                    line,
+                    message: format!("invalid verification method `{value}`, ignoring"),
+                }),
+            },
             other => warnings.push(ParseWarning {
                 line,
                 message: format!("unknown field `{other}`"),
@@ -167,6 +214,53 @@ pub fn parse_annotations(comment_text: &str) -> ParseResult {
     ParseResult {
         annotations,
         warnings,
+    }
+}
+
+/// Why an annotated confidence was not used.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ConfidenceRejection {
+    /// The text is not a number, or is a NaN or an infinity.
+    Unreadable,
+    /// A real number, but not one between 0.0 and 1.0.
+    OutOfRange,
+}
+
+impl ConfidenceRejection {
+    fn warning(self, value: &str) -> String {
+        match self {
+            Self::Unreadable => format!("invalid confidence `{value}`, using default"),
+            Self::OutOfRange => format!("confidence `{value}` is outside 0.0-1.0, using default"),
+        }
+    }
+}
+
+/// The scanner's copy of `rule_confidence_range`, whose deciding function is
+/// `validate_confidence_score` in `provenance-core/src/model/validation.rs`.
+/// The scanner needs the range before any record exists, so it holds the range
+/// itself; it must agree with core on the verdict and may differ only in what
+/// it does about it. The conformance test in
+/// `provenance-scanner/tests/confidence_conformance.rs` holds the two in step.
+fn confidence_in_range(confidence: f64) -> bool {
+    confidence.is_finite() && (0.0..=1.0).contains(&confidence)
+}
+
+/// Reads an annotated confidence, refusing anything outside 0.0 to 1.0.
+///
+/// An out-of-range score is refused rather than pulled to the nearest end: the
+/// caller warns and keeps the default, so a reader of the report sees that the
+/// annotation said something the graph would not accept, instead of a 1.0 that
+/// looks like a choice somebody made.
+fn parse_confidence(value: &str) -> Result<f64, ConfidenceRejection> {
+    let confidence = value
+        .parse::<f64>()
+        .ok()
+        .filter(|confidence| confidence.is_finite())
+        .ok_or(ConfidenceRejection::Unreadable)?;
+    if confidence_in_range(confidence) {
+        Ok(confidence)
+    } else {
+        Err(ConfidenceRejection::OutOfRange)
     }
 }
 
@@ -252,15 +346,24 @@ mod tests {
         }
     }
 
+    /// Out of range is refused, not pulled to the nearest end: the graph
+    /// rejects such a score outright (`rule_confidence_range`), and a scan
+    /// that quietly clamped would report a confidence nobody wrote.
     #[test]
-    fn clamps_out_of_range_confidence() {
-        for (value, expected) in [("-0.25", 0.0), ("1.25", 1.0)] {
+    fn refuses_out_of_range_confidence_and_keeps_the_default() {
+        for value in ["-0.25", "1.25", "-1", "2", "100"] {
             let parsed = parse_annotations(&format!(
                 "@provenance confidence: {value}\n@provenance rule: RULE-001"
             ));
 
-            assert!((parsed.annotations[0].confidence - expected).abs() < f64::EPSILON);
-            assert!(parsed.warnings.is_empty());
+            assert!((parsed.annotations[0].confidence - 1.0).abs() < f64::EPSILON);
+            assert_eq!(
+                parsed.warnings,
+                vec![ParseWarning {
+                    line: 1,
+                    message: format!("confidence `{value}` is outside 0.0-1.0, using default"),
+                }]
+            );
         }
     }
 

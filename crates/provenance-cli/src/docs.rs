@@ -1,7 +1,8 @@
 use crate::output::{self, OutputFormat};
 use anyhow::{bail, Context};
 use camino::Utf8PathBuf;
-use pulldown_cmark::{Event, Parser, Tag};
+use provenance_macros::rule;
+use pulldown_cmark::{Event, Options, Parser, Tag};
 use serde::Serialize;
 use std::{
     collections::BTreeMap,
@@ -11,6 +12,20 @@ use std::{
 use walkdir::WalkDir;
 
 mod web;
+
+/// How this site reads markdown, written down once.
+///
+/// `docs check` and `docs serve` are two readings of one document, and a
+/// document read two ways can be checked as one thing and served as
+/// another: a footnote definition is a link definition to a parser without
+/// `ENABLE_FOOTNOTES` and a footnote to a parser with it. Both sides parse
+/// with these options, so a destination the check resolves is a
+/// destination the server rewrites, and a destination the check never sees
+/// is one the server never renders as a link.
+const MARKDOWN_OPTIONS: Options = Options::ENABLE_TABLES
+    .union(Options::ENABLE_STRIKETHROUGH)
+    .union(Options::ENABLE_TASKLISTS)
+    .union(Options::ENABLE_FOOTNOTES);
 
 #[derive(Debug, Clone)]
 struct DocsSite {
@@ -209,6 +224,28 @@ impl DocsSite {
         bail!(message);
     }
 
+    /// Decides which of the docs tree's markdown links do not resolve.
+    ///
+    /// A link that names a local document is a promise about this site: the
+    /// document it names has to be a page the site actually publishes.
+    /// Every destination that names a `.md` file relative to the page it is
+    /// written on is joined onto that page's directory, normalized, and
+    /// looked up among the pages loaded from the repo. The site's own page
+    /// list is the authority: a markdown file that exists on disk but that
+    /// the site does not publish (a `README.md` shadowed by `docs/index.md`,
+    /// say) is not a target.
+    ///
+    /// Deliberately out of scope, and never reported: a bare `#anchor`, an
+    /// absolute path, any destination carrying a URL scheme, a destination
+    /// that does not end in `.md`, the fragment hanging off a local
+    /// destination (the page has to exist, the heading inside it need not),
+    /// and images.
+    ///
+    /// The server resolves a link with the same two functions
+    /// (`local_markdown_path` and `resolve_markdown_link`) before rewriting
+    /// it to a route, so what this decision accepts is exactly what `docs
+    /// serve` can turn into a link a reader can follow.
+    #[rule("rule_docs_links_resolve")]
     fn broken_links(&self) -> Vec<BrokenLink> {
         let mut broken = Vec::new();
         for page in &self.pages {
@@ -229,9 +266,22 @@ impl DocsSite {
     }
 }
 
+/// Collects the destinations of every link on a page that names a local
+/// document.
+///
+/// Reach: inline links (`[text](x.md)`) and every reference form
+/// (`[text][ref]`, `[ref][]`, `[ref]`), which the parser hands back already
+/// resolved to the destination in the definition. Images are a different
+/// tag and are not collected, so a picture is never a broken docs link.
+///
+/// The page is parsed with `MARKDOWN_OPTIONS`, the options the server
+/// renders with, so what counts as a link here is what the reader will be
+/// offered as one. A footnote is the case where that matters: `[^1]` with a
+/// `[^1]: guide/gone.md` block below it is a footnote to both sides, and
+/// neither reports nor renders a link.
 fn markdown_links(markdown: &str) -> Vec<String> {
     let mut links = Vec::new();
-    for event in Parser::new(markdown) {
+    for event in Parser::new_ext(markdown, MARKDOWN_OPTIONS) {
         if let Event::Start(Tag::Link { dest_url, .. }) = event {
             if local_markdown_path(&dest_url).is_some() {
                 links.push(dest_url.to_string());
@@ -247,6 +297,9 @@ fn resolve_markdown_link(page: &DocPage, destination: &str) -> Option<PathBuf> {
     Some(normalize_path(&target_path))
 }
 
+/// Splits a destination that names a local document into the path it names
+/// and the fragment trailing it, or `None` when the destination is out of
+/// the docs link decision's scope.
 fn local_markdown_path(destination: &str) -> Option<(&str, &str)> {
     if destination.starts_with('#') || destination.starts_with('/') || has_url_scheme(destination) {
         return None;
@@ -374,3 +427,6 @@ fn slash_path(path: &Path) -> String {
         .collect::<Vec<_>>()
         .join("/")
 }
+
+#[cfg(test)]
+mod tests;

@@ -5,6 +5,9 @@ use provenance_core::{
     IdeationTarget, IdeationTargetType, PromotionState, ProposalTraceability, ProposalType,
     StableId, Topic, TopicStatus,
 };
+use provenance_macros::verifies;
+
+mod properties;
 
 fn proposal_input(
     scope: &provenance_core::ScopeId,
@@ -110,6 +113,7 @@ fn seed_asserted_proposal(
 }
 
 #[test]
+#[verifies("rule_proposal_surfacing", examples)]
 fn changed_paths_surface_only_undisposed_proposals_with_matching_evidence_sites() {
     let (_dir, store, scope) = initialized_store();
     for input in [
@@ -149,6 +153,7 @@ fn changed_paths_surface_only_undisposed_proposals_with_matching_evidence_sites(
 }
 
 #[test]
+#[verifies("rule_proposal_surfacing", examples)]
 fn combined_demand_reports_deduplicated_reasons_in_deterministic_order() {
     let (_dir, store, scope) = initialized_store();
     store
@@ -196,6 +201,7 @@ fn combined_demand_reports_deduplicated_reasons_in_deterministic_order() {
 }
 
 #[test]
+#[verifies("rule_proposal_surfacing", examples)]
 fn topic_claim_atomically_surfaces_matching_asserted_proposal_with_derived_state() {
     let (_dir, store, scope) = initialized_store();
     seed_asserted_proposal(&store, &scope);

@@ -1,4 +1,4 @@
-use crate::wiki::model::{PageKind, RequirementPage};
+use crate::wiki::model::{PageKind, PageLink, RequirementPage};
 use std::fmt::Write as _;
 
 use super::super::chrome::{breadcrumb_from_lineage, container_html, page_shell, title_row};
@@ -8,12 +8,25 @@ use super::super::fragments::{
     push_attribution, push_classification_block, push_classification_row, push_decision_sections,
     push_lineage, push_prose_section, push_rule_territory_card, push_section_open,
 };
-use super::super::html::{escape_attr, escape_html, icon_svg, link_list};
+use super::super::html::{escape_attr, escape_html, icon_svg, PageLinksRenderer};
 use super::super::labels::{format_confidence, requirement_status_badge, resolution_status_word};
+
+/// Every titled link this page renders, in reading order: the breadcrumb and
+/// lineage, the resolving decisions, the refinements, the related
+/// requirements, and the source citations.
+fn page_links(page: &RequirementPage) -> Vec<&PageLink> {
+    let mut links: Vec<&PageLink> = page.lineage.iter().map(|entry| &entry.link).collect();
+    links.extend(page.decisions.iter().map(|decision| &decision.link));
+    links.extend(&page.children);
+    links.extend(&page.siblings);
+    links.extend(page.sources.iter().map(|citation| &citation.link));
+    links
+}
 
 /// Renders a requirement detail page.
 #[allow(clippy::too_many_lines)]
 pub fn render_requirement(scope: &str, page: &RequirementPage) -> String {
+    let links = PageLinksRenderer::new(page_links(page));
     let mut main = String::new();
     push_prose_section(
         &mut main,
@@ -35,7 +48,7 @@ pub fn render_requirement(scope: &str, page: &RequirementPage) -> String {
         push_prose_section(&mut main, "", None, "Fog", fog);
     }
     for decision in &page.decisions {
-        push_decision_sections(&mut main, decision);
+        push_decision_sections(&mut main, &links, decision);
     }
     if !page.produced_rules.is_empty() {
         push_section_open(&mut main, "sh-resolution", None, "Downstream Territory");
@@ -58,7 +71,7 @@ pub fn render_requirement(scope: &str, page: &RequirementPage) -> String {
             page.children.len()
         )
         .expect("writing to a String should not fail");
-        main.push_str(&link_list(&page.children));
+        main.push_str(&links.link_list(&page.children));
         main.push_str("</div>\n</div>\n</section>\n");
     }
     for decision in &page.decisions {
@@ -80,14 +93,14 @@ pub fn render_requirement(scope: &str, page: &RequirementPage) -> String {
             page.siblings.len()
         )
         .expect("writing to a String should not fail");
-        main.push_str(&link_list(&page.siblings));
+        main.push_str(&links.link_list(&page.siblings));
         main.push_str("</div>\n</div>\n</section>\n");
     }
 
     let mut margin = String::new();
     margin.push_str("<h3 class=\"margin-head\">Sources</h3>\n");
     push_gap_citations(&mut margin, &page.gaps);
-    push_source_citations(&mut margin, &page.sources);
+    push_source_citations(&mut margin, &links, &page.sources);
     let mut rows = String::new();
     if let Some(domain_id) = &page.domain_id {
         writeln!(
@@ -122,7 +135,7 @@ pub fn render_requirement(scope: &str, page: &RequirementPage) -> String {
         );
     }
     push_classification_block(&mut margin, &rows);
-    push_lineage(&mut margin, &page.lineage);
+    push_lineage(&mut margin, &links, &page.lineage);
 
     let back = page.back_link.as_ref().map_or_else(
         || {
@@ -158,7 +171,7 @@ pub fn render_requirement(scope: &str, page: &RequirementPage) -> String {
         scope,
         "requirement",
         &page.title,
-        &breadcrumb_from_lineage(&page.lineage),
+        &breadcrumb_from_lineage(&links, &page.lineage),
         &container,
         &field_notes(&page.threads, &page.id),
     )

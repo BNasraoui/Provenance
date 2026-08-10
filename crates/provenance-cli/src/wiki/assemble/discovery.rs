@@ -4,6 +4,7 @@ use crate::wiki::model::{
     SearchEntry, SearchIndexPage,
 };
 use provenance_core::{EdgeType, NodeType};
+use provenance_macros::rule;
 use std::collections::{BTreeMap, BTreeSet};
 
 struct RequirementRecord<'a> {
@@ -180,6 +181,16 @@ fn domain_index(
     }
 }
 
+/// Decides which domains a requirement belongs to on the wiki.
+///
+/// A requirement belongs to its own domain and to every domain of every
+/// requirement it refines from, walking the `refines_into` chain all the way
+/// up. A record whose chain names no domain gets an empty set here and is
+/// grouped as Unassigned by the caller; it is never dropped from the index.
+///
+/// The walk visits each requirement at most once, so a cycle in
+/// `refines_into` ends the walk instead of hanging.
+#[rule("rule_domain_attribution")]
 fn effective_requirement_domains(
     state: &ScopeExport,
     requirements: &[RequirementRecord<'_>],

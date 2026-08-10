@@ -1,10 +1,17 @@
 use assert_cmd::Command;
+use provenance_macros::verifies;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::process::Command as StdCommand;
 use std::time::{Duration, Instant};
 
+// The link decision is checked against generated sites in
+// src/docs/tests.rs. These cases pin it to the command a reader runs: the
+// links below are the ones a real docs tree is written with, and `docs
+// check` has to pass or fail on them through the whole load-and-resolve
+// path, not just in the decision function.
 #[test]
+#[verifies("rule_docs_links_resolve", examples)]
 fn docs_check_accepts_plain_markdown_tree_and_reports_inferred_pages() {
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path();
@@ -40,6 +47,7 @@ fn docs_check_accepts_plain_markdown_tree_and_reports_inferred_pages() {
 }
 
 #[test]
+#[verifies("rule_docs_links_resolve", examples)]
 fn docs_check_fails_on_broken_relative_markdown_links() {
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path();
@@ -60,7 +68,42 @@ fn docs_check_fails_on_broken_relative_markdown_links() {
         .stderr(predicates::str::contains("missing.md"));
 }
 
+// `docs check` and `docs serve` read a page with the same parser options,
+// so a footnote is a footnote to both. Read without footnotes, the block
+// below is a link definition and `[^1]` the link using it, and the command
+// would fail on a page the server renders with no link on it at all.
 #[test]
+#[verifies("rule_docs_links_resolve", examples)]
+fn docs_check_reads_footnotes_the_way_the_server_renders_them() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path();
+    std::fs::create_dir_all(repo.join("docs")).unwrap();
+    std::fs::write(
+        repo.join("docs/index.md"),
+        "# Agent Handbook\n\nThe handbook is versioned.[^1]\n\n[^1]: guide/missing.md\n",
+    )
+    .unwrap();
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "docs",
+            "check",
+            "--repo",
+            &repo.to_string_lossy(),
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains(r#""broken_links": []"#));
+}
+
+// A link out of docs/ and back into the repo root resolves only when the
+// site publishes README.md as a page, so this case checks the decision as
+// well as the homepage it infers.
+#[test]
+#[verifies("rule_docs_links_resolve", examples)]
 fn docs_check_uses_readme_as_homepage_when_docs_index_is_absent() {
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path();

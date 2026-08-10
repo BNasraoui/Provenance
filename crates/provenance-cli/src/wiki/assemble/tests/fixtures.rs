@@ -57,7 +57,6 @@ pub(super) fn resolution(id: &str, title: &str, inputs: Vec<ResolutionInput>) ->
         approved_at: Some(1_745_000_000),
         superseded_by: None,
         review_on: None,
-        review_triggers: serde_json::json!([]),
         origin_thread: None,
         origin_message: None,
     }
@@ -82,8 +81,6 @@ pub(super) fn rule(id: &str, rule_code: &str, name: Option<&str>) -> Rule {
         source_section: Some("59-69".to_string()),
         origin_thread: None,
         origin_message: None,
-        expression: serde_json::json!({}),
-        inputs: serde_json::json!([]),
     }
 }
 

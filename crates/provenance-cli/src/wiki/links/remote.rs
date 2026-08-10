@@ -102,6 +102,33 @@ pub fn detect_remote_url(repo: &Path) -> Option<String> {
 mod tests {
     use super::super::code_ref::parse_code_ref;
     use super::*;
+    use provenance_macros::verifies;
+
+    /// Derived from an exhaustive match so that adding a `GitHost` variant
+    /// fails compilation until the new host joins the chain, keeping the
+    /// proof below complete.
+    fn all_hosts() -> Vec<GitHost> {
+        let mut all = vec![GitHost::GitHub];
+        while let Some(next) = match all.last().unwrap() {
+            GitHost::GitHub => Some(GitHost::GitLab),
+            GitHost::GitLab => Some(GitHost::Bitbucket),
+            GitHost::Bitbucket => None,
+        } {
+            all.push(next);
+        }
+        all
+    }
+
+    /// The anchor each host's web UI understands, written out here rather
+    /// than derived, so the proof does not restate `line_anchor` by calling
+    /// it. Columns: no lines, a single line, a line range.
+    const ANCHOR_TABLE: [(GitHost, [&str; 3]); 3] = [
+        (GitHost::GitHub, ["", "#L153", "#L153-L156"]),
+        (GitHost::GitLab, ["", "#L153", "#L153-156"]),
+        (GitHost::Bitbucket, ["", "#lines-153", "#lines-153:156"]),
+    ];
+
+    const LINE_SHAPES: [&str; 3] = ["", ":153", ":153-156"];
 
     fn github_remote() -> GitRemote {
         GitRemote {
@@ -150,7 +177,45 @@ mod tests {
         assert_eq!(remote.repo, "repo");
     }
 
+    /// Every host x line-shape pair the address builder can be asked for:
+    /// 3 hosts on the allowlist, each with a range, a single line, and no
+    /// lines at all. The domain is finite, so this is a proof, not a sample.
     #[test]
+    #[verifies("rule_wiki_reference_links", exhaustion)]
+    fn blob_urls_anchor_every_host_and_line_shape() {
+        assert_eq!(
+            ANCHOR_TABLE.len(),
+            all_hosts().len(),
+            "the anchor table and the host list disagree on how many hosts there are"
+        );
+        for host in all_hosts() {
+            let (_, anchors) = ANCHOR_TABLE
+                .iter()
+                .find(|(row, _)| *row == host)
+                .unwrap_or_else(|| panic!("{host:?} has no row in the anchor table"));
+            let remote = GitRemote {
+                host,
+                owner: "exampleorg".to_string(),
+                repo: "ex-api".to_string(),
+            };
+            for (shape, expected) in LINE_SHAPES.iter().zip(anchors) {
+                let code_ref = parse_code_ref(&format!("src/UseCase.php{shape}"))
+                    .unwrap_or_else(|| panic!("`src/UseCase.php{shape}` is a code reference"));
+                let url = blob_url(&remote, "HEAD", &code_ref);
+                assert!(
+                    url.starts_with("https://") && url.contains("src/UseCase.php"),
+                    "{host:?} with `{shape}` built `{url}`, which is not an address for the file"
+                );
+                let anchor = url
+                    .split_once('#')
+                    .map_or_else(String::new, |(_, anchor)| format!("#{anchor}"));
+                assert_eq!(anchor, *expected, "{host:?} with `{shape}` built `{url}`");
+            }
+        }
+    }
+
+    #[test]
+    #[verifies("rule_wiki_reference_links", examples)]
     fn parse_git_remote_rejects_unknown_hosts_and_local_paths() {
         assert!(parse_git_remote("https://git.internal.example/owner/repo.git").is_none());
         assert!(parse_git_remote("/srv/git/repo.git").is_none());

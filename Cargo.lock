@@ -1388,6 +1388,7 @@ dependencies = [
  "jsonschema",
  "predicates",
  "provenance-core",
+ "provenance-macros",
  "provenance-scanner",
  "provenance-store",
  "pulldown-cmark",
@@ -1408,6 +1409,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "camino",
+ "provenance-macros",
  "serde",
  "serde_json",
  "sha2",
@@ -1415,11 +1417,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "provenance-macros"
+version = "0.1.0"
+
+[[package]]
 name = "provenance-scanner"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "camino",
+ "provenance-core",
+ "provenance-macros",
  "serde",
  "tempfile",
  "walkdir",
@@ -1433,6 +1441,7 @@ dependencies = [
  "camino",
  "fs2",
  "provenance-core",
+ "provenance-macros",
  "serde",
  "serde_ignored",
  "serde_json",

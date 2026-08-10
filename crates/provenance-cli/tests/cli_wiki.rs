@@ -364,8 +364,7 @@ fn seed_state(dir: &std::path::Path, repo: &str) {
     "position": "Keep as draft extraction",
     "rationale": "Needs human review",
     "status": "approved",
-    "review_on": null,
-    "review_triggers": []
+    "review_on": null
   }],
   "rules": [{
     "schema_version": 1,
@@ -379,9 +378,7 @@ fn seed_state(dir: &std::path::Path, repo: &str) {
     "rule_type": "business",
     "modality": "obligation",
     "source_document": "Example-API-main/src/example.php",
-    "source_section": "lines 1-3",
-    "expression": {},
-    "inputs": []
+    "source_section": "lines 1-3"
   }],
   "edges": [],
   "threads": [],

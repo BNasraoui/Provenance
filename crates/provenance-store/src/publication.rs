@@ -1,5 +1,6 @@
 use crate::layout::ProvenanceLayout;
 use camino::{Utf8Path, Utf8PathBuf};
+use provenance_macros::rule;
 use serde::{de::DeserializeOwned, Serialize};
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -55,17 +56,16 @@ pub fn with_repository_publication<R>(
 }
 
 fn prepare_publication_lock(layout: &ProvenanceLayout) -> anyhow::Result<()> {
-    let canonical_root = Utf8PathBuf::from_path_buf(std::fs::canonicalize(
+    let canonical_root = canonical_utf8(
         layout
             .provenance_dir()
             .parent()
             .unwrap_or_else(|| Utf8Path::new(".")),
-    )?)
-    .map_err(|path| anyhow::anyhow!("repository path is not UTF-8: {}", path.display()))?;
+        "repository path",
+    )?;
     let provenance = layout.provenance_dir();
     create_real_directory(&provenance)?;
-    let canonical_provenance = Utf8PathBuf::from_path_buf(std::fs::canonicalize(&provenance)?)
-        .map_err(|path| anyhow::anyhow!("provenance path is not UTF-8: {}", path.display()))?;
+    let canonical_provenance = canonical_utf8(&provenance, "provenance path")?;
     anyhow::ensure!(
         canonical_provenance == canonical_root.join(".provenance"),
         "repository provenance directory is outside the repository"
@@ -78,12 +78,23 @@ fn prepare_publication_lock(layout: &ProvenanceLayout) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Resolves `path`, keeping the failure message that names what the path was.
+fn canonical_utf8(path: &Utf8Path, description: &str) -> anyhow::Result<Utf8PathBuf> {
+    Utf8PathBuf::from_path_buf(std::fs::canonicalize(path)?)
+        .map_err(|path| anyhow::anyhow!("{description} is not UTF-8: {}", path.display()))
+}
+
+/// Makes sure `path` is a real directory, creating it if it is absent.
+///
+/// This is the ancestor half of `rule_recovery_stays_in_cache`: called in turn
+/// on `.provenance`, the cache and the lock directory, it settles that the
+/// cache itself is not reached through a symlink. Everything below the cache is
+/// settled by [`recovery_dir_inside_cache`]. That the two halves meet, so that
+/// a symlinked cache is refused before recovery reads a marker, is checked by
+/// `a_symlinked_cache_is_refused_before_recovery_runs`.
 fn create_real_directory(path: &Utf8Path) -> anyhow::Result<()> {
     match std::fs::symlink_metadata(path) {
-        Ok(metadata) => anyhow::ensure!(
-            metadata.file_type().is_dir() && !metadata.file_type().is_symlink(),
-            "publication lock path contains a symlink component: {path}"
-        ),
+        Ok(_) => {}
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             if let Err(error) = std::fs::create_dir(path) {
                 anyhow::ensure!(
@@ -182,58 +193,105 @@ pub fn recover_pending_publication(layout: &ProvenanceLayout) -> anyhow::Result<
     clear_publication_marker(layout)
 }
 
+const OUTSIDE_REPOSITORY_CACHE: &str =
+    "publication marker transaction is outside the repository cache";
+
+const TRANSACTION_NOT_A_DIRECTORY: &str = "publication marker transaction is not a directory";
+
+/// What recovery is about to do with the directory it is checking.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RecoveryUse {
+    /// Recovery will read, rename or delete the directory, so it has to be on
+    /// disk and land where the name says it does.
+    Touched,
+    /// The directory is already gone and recovery only clears the marker, so
+    /// nothing is left to resolve beyond the place it claimed to sit.
+    AlreadyGone,
+}
+
+/// Publication recovery may only touch a directory that really sits inside this
+/// repository's cache, reached without crossing a symlink.
+///
+/// Recovery renames and deletes whole trees named by
+/// `.provenance/cache/import-publication.json`, which is plain data: a stale,
+/// hand-edited or hostile marker must not be able to steer that deletion at the
+/// working tree or at anything outside the repository. So the directory has to
+/// resolve to a direct child of the directory it claims to live in, and the
+/// caller has to act on the resolved path this returns rather than the name it
+/// passed in.
+///
+/// Resolving the name and comparing it with where it is supposed to sit settles
+/// both halves of the decision at once: a `..` step lands somewhere other than
+/// the container, and so does a symlink. Applied twice (the transactions
+/// directory inside the cache, then the transaction inside that) this covers
+/// every component below the cache. That the cache itself is a real directory
+/// is settled earlier, by [`create_real_directory`].
+///
+/// A touched entry has to be a directory as well as contained, because a
+/// regular file under the name a marker gives resolves exactly where the name
+/// says and would then fail from inside `remove_dir_all`. Nothing is probed for
+/// [`RecoveryUse::AlreadyGone`], which has no entry left to be of any kind.
+#[rule("rule_recovery_stays_in_cache")]
+fn recovery_dir_inside_cache(
+    canonical_container: &Utf8Path,
+    candidate: &Utf8Path,
+    recovery_use: RecoveryUse,
+) -> anyhow::Result<Utf8PathBuf> {
+    let parent = candidate
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("publication marker transaction has no parent"))?;
+    let canonical_parent = std::fs::canonicalize(parent)?;
+    anyhow::ensure!(
+        canonical_parent == canonical_container.as_std_path(),
+        OUTSIDE_REPOSITORY_CACHE
+    );
+    let name = candidate
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!(OUTSIDE_REPOSITORY_CACHE))?;
+    let contained = canonical_container.join(name);
+    if recovery_use == RecoveryUse::Touched {
+        let resolved = canonical_utf8(candidate, "import transaction path")?;
+        anyhow::ensure!(resolved == contained, OUTSIDE_REPOSITORY_CACHE);
+        anyhow::ensure!(
+            std::fs::symlink_metadata(&resolved)?.is_dir(),
+            TRANSACTION_NOT_A_DIRECTORY
+        );
+    }
+    Ok(contained)
+}
+
 fn validated_transaction_dir(
     layout: &ProvenanceLayout,
     transaction_dir: &Utf8Path,
 ) -> anyhow::Result<Utf8PathBuf> {
     let canonical_transactions = canonical_transactions_dir(layout)?;
-    let canonical_transaction = Utf8PathBuf::from_path_buf(std::fs::canonicalize(transaction_dir)?)
-        .map_err(|path| {
-            anyhow::anyhow!("import transaction path is not UTF-8: {}", path.display())
-        })?;
-    let parent = transaction_dir
-        .parent()
-        .ok_or_else(|| anyhow::anyhow!("publication marker transaction has no parent"))?;
-    let canonical_parent = std::fs::canonicalize(parent)?;
-    anyhow::ensure!(
-        canonical_parent == canonical_transactions
-            && canonical_transaction.parent() == Some(canonical_transactions.as_path()),
-        "publication marker transaction is outside the repository cache"
-    );
-    Ok(canonical_transaction)
+    recovery_dir_inside_cache(
+        &canonical_transactions,
+        transaction_dir,
+        RecoveryUse::Touched,
+    )
 }
 
 fn validate_missing_transaction_dir(
     layout: &ProvenanceLayout,
     transaction_dir: &Utf8Path,
 ) -> anyhow::Result<()> {
-    let parent = transaction_dir
-        .parent()
-        .ok_or_else(|| anyhow::anyhow!("publication marker transaction has no parent"))?;
     let canonical_transactions = canonical_transactions_dir(layout)?;
-    let canonical_parent = std::fs::canonicalize(parent)?;
-    anyhow::ensure!(
-        canonical_parent == canonical_transactions,
-        "publication marker transaction is outside the repository cache"
-    );
-    Ok(())
+    recovery_dir_inside_cache(
+        &canonical_transactions,
+        transaction_dir,
+        RecoveryUse::AlreadyGone,
+    )
+    .map(|_| ())
 }
 
 fn canonical_transactions_dir(layout: &ProvenanceLayout) -> anyhow::Result<Utf8PathBuf> {
-    let canonical_cache = Utf8PathBuf::from_path_buf(std::fs::canonicalize(layout.cache_dir())?)
-        .map_err(|path| {
-            anyhow::anyhow!("repository cache path is not UTF-8: {}", path.display())
-        })?;
-    let canonical_transactions =
-        Utf8PathBuf::from_path_buf(std::fs::canonicalize(layout.import_transactions_dir())?)
-            .map_err(|path| {
-                anyhow::anyhow!("import transaction path is not UTF-8: {}", path.display())
-            })?;
-    anyhow::ensure!(
-        canonical_transactions == canonical_cache.join("import-transactions"),
-        "publication marker transaction is outside the repository cache"
-    );
-    Ok(canonical_transactions)
+    let canonical_cache = canonical_utf8(&layout.cache_dir(), "repository cache path")?;
+    recovery_dir_inside_cache(
+        &canonical_cache,
+        &layout.import_transactions_dir(),
+        RecoveryUse::Touched,
+    )
 }
 
 pub fn sync_directory(path: &Utf8Path) -> anyhow::Result<()> {
@@ -331,5 +389,7 @@ impl crate::state_store::StateStore {
     }
 }
 
+#[cfg(all(test, unix))]
+mod containment_tests;
 #[cfg(test)]
 mod tests;

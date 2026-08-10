@@ -79,7 +79,18 @@ fn index_reports_scope_gaps_and_orphans() {
             .map(|link| link.target.record_id.clone())
             .collect::<Vec<_>>()
     };
-    assert_eq!(orphan_ids(&corpus.index.orphans.rules), vec!["rule_orphan"]);
+    let orphan_rules: Vec<crate::wiki::model::PageLink> = corpus
+        .index
+        .orphans
+        .rules
+        .iter()
+        .map(|rule| rule.link.clone())
+        .collect();
+    assert_eq!(orphan_ids(&orphan_rules), vec!["rule_orphan"]);
+    assert_eq!(
+        corpus.index.orphans.rules[0].reason,
+        "no requirement or resolution produces this rule"
+    );
     assert_eq!(
         orphan_ids(&corpus.index.orphans.resolutions),
         vec!["res_orphan"]

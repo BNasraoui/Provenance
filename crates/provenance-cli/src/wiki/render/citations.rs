@@ -1,7 +1,7 @@
 use crate::wiki::model::{GapNotice, InputCitation, SourceCitation};
 use std::fmt::Write as _;
 
-use super::html::{escape_html, evidence_html, link_html};
+use super::html::{escape_html, evidence_html, PageLinksRenderer};
 use super::labels::{input_type_label, source_type_label};
 
 pub(in crate::wiki::render) fn push_gap_citations(html: &mut String, gaps: &[GapNotice]) {
@@ -17,6 +17,7 @@ pub(in crate::wiki::render) fn push_gap_citations(html: &mut String, gaps: &[Gap
 
 pub(in crate::wiki::render) fn push_source_citations(
     html: &mut String,
+    links: &PageLinksRenderer,
     sources: &[SourceCitation],
 ) {
     for (index, citation) in sources.iter().enumerate() {
@@ -32,7 +33,7 @@ pub(in crate::wiki::render) fn push_source_citations(
             .as_ref()
             .map(|clause| format!(" — {}", escape_html(clause)))
             .unwrap_or_default();
-        writeln!(html, "<p>{}{clause}</p>", link_html(&citation.link))
+        writeln!(html, "<p>{}{clause}</p>", links.link(&citation.link, None))
             .expect("writing to a String should not fail");
         if let Some(reference) = &citation.reference {
             writeln!(

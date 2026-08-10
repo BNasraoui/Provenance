@@ -1,3 +1,4 @@
+use crate::state_store::readers::ensure_supported_record_version;
 use camino::Utf8Path;
 use fs2::FileExt;
 use serde::{de::DeserializeOwned, Serialize};
@@ -61,14 +62,31 @@ where
     Ok(result)
 }
 
+/// The read a write is built on, guarded the same way an ordinary read is.
+///
+/// A mutation rewrites the whole shard, so every line it did not touch still
+/// has to survive a round trip through a struct. A line written in a layout
+/// this build does not know does not survive it: the fields the struct does
+/// not recognise are dropped on the way out, which turns an unrelated `create`
+/// into a silent edit of somebody else's record. So the version is read from
+/// the raw JSON and judged by
+/// [`ensure_supported_record_version`](crate::state_store::readers::ensure_supported_record_version),
+/// the same function the read choke point calls, before any record is built.
+///
+/// The check runs before the caller's mutation and before anything is written,
+/// so a refusal leaves the shard exactly as it was found.
 fn read_jsonl_unlocked<T: DeserializeOwned>(path: &Utf8Path) -> anyhow::Result<Vec<T>> {
     if !path.exists() {
         return Ok(Vec::new());
     }
-    std::fs::read_to_string(path)?
-        .lines()
-        .map(|line| Ok(serde_json::from_str(line)?))
-        .collect()
+    let contents = std::fs::read_to_string(path)?;
+    let mut records = Vec::new();
+    for (index, line) in contents.lines().enumerate() {
+        let value: serde_json::Value = serde_json::from_str(line)?;
+        ensure_supported_record_version(path, index + 1, &value)?;
+        records.push(serde_json::from_value(value)?);
+    }
+    Ok(records)
 }
 
 fn write_jsonl_atomic_unlocked<T: Serialize>(path: &Utf8Path, records: &[T]) -> anyhow::Result<()> {

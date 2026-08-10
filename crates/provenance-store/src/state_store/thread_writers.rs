@@ -29,14 +29,11 @@ impl StateStore {
                 provenance_core::threads::choose_canonical_active_thread(&matching)
             {
                 let canonical = canonical.clone();
-                for thread in threads.iter_mut() {
-                    if thread.parent == parent
-                        && thread.status == ThreadStatus::Active
-                        && thread.id != canonical.id
-                    {
-                        thread.status = ThreadStatus::Archived;
-                    }
-                }
+                provenance_core::threads::archive_non_canonical_siblings(
+                    threads,
+                    &parent,
+                    &canonical.id,
+                );
                 canonical
             } else {
                 let thread = Thread {

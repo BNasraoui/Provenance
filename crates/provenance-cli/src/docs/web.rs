@@ -1,4 +1,4 @@
-use super::{local_markdown_path, resolve_markdown_link, DocPage, DocsSite};
+use super::{local_markdown_path, resolve_markdown_link, DocPage, DocsSite, MARKDOWN_OPTIONS};
 use axum::{
     extract::State,
     http::{header, StatusCode, Uri},
@@ -6,7 +6,7 @@ use axum::{
     routing::get,
     Router,
 };
-use pulldown_cmark::{html, CowStr, Event, Options, Parser, Tag};
+use pulldown_cmark::{html, CowStr, Event, Parser, Tag};
 use std::{fmt::Write as _, sync::Arc};
 
 const DOCS_CSS: &str = r#"
@@ -241,11 +241,7 @@ impl DocsSite {
     }
 
     fn render_markdown(&self, page: &DocPage) -> String {
-        let options = Options::ENABLE_TABLES
-            | Options::ENABLE_STRIKETHROUGH
-            | Options::ENABLE_TASKLISTS
-            | Options::ENABLE_FOOTNOTES;
-        let events = Parser::new_ext(&page.markdown, options).map(|event| match event {
+        let events = Parser::new_ext(&page.markdown, MARKDOWN_OPTIONS).map(|event| match event {
             Event::Start(Tag::Link {
                 link_type,
                 dest_url,
@@ -269,6 +265,13 @@ impl DocsSite {
         rendered
     }
 
+    /// Turns a link that names a local document into the route the site
+    /// serves for it, keeping any fragment.
+    ///
+    /// Scope and resolution come from the same two functions the docs link
+    /// decision is built from (`rule_docs_links_resolve`), so the server
+    /// rewrites exactly the links `docs check` resolved and leaves the rest
+    /// - anchors, absolute paths, web addresses - as the author wrote them.
     fn rewrite_markdown_link(&self, page: &DocPage, destination: &str) -> Option<String> {
         let (_path_part, suffix) = local_markdown_path(destination)?;
         let target_path = resolve_markdown_link(page, destination)?;

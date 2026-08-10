@@ -1,12 +1,17 @@
+mod canonical;
+mod export;
 mod git;
 mod projection;
 
 use camino::Utf8Path;
+use provenance_core::SUPPORTED_SCHEMA_VERSION;
+use provenance_macros::rule;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
+pub use export::{graph_digest, ExactExport};
 pub use projection::GraphExport;
 
+use canonical::{canonical_bytes, digest, sha256};
 use git::{GitRepository, TreeSource};
 use projection::load_projection;
 
@@ -67,14 +72,6 @@ pub struct Verification {
     pub reference_id: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct ExactExport {
-    pub schema_version: u32,
-    pub operation: &'static str,
-    pub reference_id: String,
-    pub graph: GraphExport,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct GraphCounts {
     pub sources: usize,
@@ -104,12 +101,31 @@ impl GraphReference {
         Ok(reference)
     }
 
+    /// Decides what a well-formed graph reference looks like.
+    ///
+    /// A reference is a claim about someone else's repository that its holder
+    /// cannot check by reading it, so the shape of every field is fixed before
+    /// anything is resolved: schema version 1; a `grf1_` reference id and a
+    /// `git1_` repository id, each carrying exactly 64 lowercase hexadecimal
+    /// digits; the store path `.provenance/state` and no other; a scope id
+    /// `ScopeId` accepts; a full 40- or 64-character lowercase hexadecimal
+    /// commit id, never an abbreviation, so the reference names one commit
+    /// rather than a prefix that later grows ambiguous; a `sha256:` graph
+    /// digest of 64 lowercase hexadecimal digits; and, when a correlation is
+    /// present, both its system and its key filled in, since half a
+    /// correlation points nowhere.
+    ///
+    /// The same decision is replicated as JSON Schema in
+    /// `provenance-cli/src/handlers/schema/artifacts/graph_reference.rs`
+    /// (`reference_schema`), which is what a holder outside this codebase
+    /// validates against; the two must reach the same verdict on every value.
+    #[rule("rule_reference_wellformed")]
     fn validate(&self) -> Result<(), GraphReferenceError> {
-        if self.schema_version != 1 {
+        if self.schema_version != SUPPORTED_SCHEMA_VERSION.0 {
             return Err(GraphReferenceError::Incomplete {
                 detail: format!(
-                    "unsupported schema_version {}; expected 1",
-                    self.schema_version
+                    "unsupported schema_version {}; expected {}",
+                    self.schema_version, SUPPORTED_SCHEMA_VERSION.0
                 ),
             });
         }
@@ -173,7 +189,7 @@ impl GraphReferences {
         let reference_id =
             reference_identity(&repository_id, STORE_PATH, scope, &commit, &graph_digest);
         Ok(GraphReference {
-            schema_version: 1,
+            schema_version: SUPPORTED_SCHEMA_VERSION.0,
             reference_id,
             repository_id,
             store_path: STORE_PATH.to_string(),
@@ -190,7 +206,7 @@ impl GraphReferences {
     ) -> Result<GraphReferenceSummary, GraphReferenceError> {
         let graph = self.verify_and_load(reference)?;
         Ok(GraphReferenceSummary {
-            schema_version: 1,
+            schema_version: SUPPORTED_SCHEMA_VERSION.0,
             operation: "show",
             reference: reference.clone(),
             counts: GraphCounts::from(&graph),
@@ -200,21 +216,30 @@ impl GraphReferences {
     pub fn verify(&self, reference: &GraphReference) -> Result<Verification, GraphReferenceError> {
         self.verify_and_load(reference)?;
         Ok(Verification {
-            schema_version: 1,
+            schema_version: SUPPORTED_SCHEMA_VERSION.0,
             operation: "verify",
             valid: true,
             reference_id: reference.reference_id.clone(),
         })
     }
 
+    /// Hands the pinned graph out as a document that can be checked without
+    /// this repository.
+    ///
+    /// The digest travels with the graph rather than being left behind in the
+    /// reference: `verify_and_load` has just recomputed it over these bytes
+    /// and found it equal to the recorded one, so writing the recorded digest
+    /// into the document writes a digest the graph beside it hashes to. That
+    /// is what `ExactExport::from_json` checks again on the way in.
     pub fn exact_export(
         &self,
         reference: &GraphReference,
     ) -> Result<ExactExport, GraphReferenceError> {
         Ok(ExactExport {
-            schema_version: 1,
+            schema_version: SUPPORTED_SCHEMA_VERSION.0,
             operation: "exact-export",
             reference_id: reference.reference_id.clone(),
+            graph_digest: reference.graph_digest.clone(),
             graph: self.verify_and_load(reference)?,
         })
     }
@@ -233,6 +258,36 @@ impl GraphReferences {
         )
     }
 
+    /// Decides when a graph reference is honoured.
+    ///
+    /// A reference is a claim about a repository its holder does not control,
+    /// so none of it is taken on trust. Every read verb comes through here,
+    /// and the shape rule runs first, so a malformed reference is refused
+    /// before any Git work is done on its behalf. The pinned graph is then
+    /// handed back only when four things hold at once:
+    ///
+    /// 1. the commit the reference names still resolves in this repository and
+    ///    is that commit, not an annotated tag peeling to it;
+    /// 2. the repository identity taken from that commit, which is the hash of
+    ///    its root commits, matches the recorded one, because two repositories
+    ///    can hold the same store path and the same scope name;
+    /// 3. the graph materialized at that commit still hashes to the recorded
+    ///    digest, so the holder gets the bytes that were pinned or an error,
+    ///    never a graph that moved underneath the reference;
+    /// 4. the reference id is the hash of exactly those parts. An id lifted
+    ///    from another reference clears every check above it, because two
+    ///    commits over the same graph agree on everything except their ids,
+    ///    and quoting it names a graph nobody can produce.
+    ///
+    /// The checks run in that order and the first failure is returned, so a
+    /// reference with several fields edited is reported by the earliest one.
+    /// The order shapes the error, not the verdict: all four must pass.
+    ///
+    /// The rule is impure. It shells to Git and writes the pinned tree to a
+    /// temporary directory, so the answer depends on the repository it is
+    /// asked about and not on the reference alone. The same reference is
+    /// honoured in one clone and refused in another, which is the point.
+    #[rule("rule_reference_verified")]
     fn verify_and_load(
         &self,
         reference: &GraphReference,
@@ -262,52 +317,6 @@ impl GraphReferences {
             return mismatch("reference_id", &reference.reference_id, &identity);
         }
         Ok(graph)
-    }
-}
-
-impl ExactExport {
-    pub fn from_json(bytes: &[u8]) -> Result<Self, GraphReferenceError> {
-        #[derive(Deserialize)]
-        #[serde(deny_unknown_fields)]
-        struct Document {
-            schema_version: u32,
-            operation: String,
-            reference_id: String,
-            graph: GraphExport,
-        }
-
-        let mut unknown = None;
-        let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-        let document: Document = serde_ignored::deserialize(&mut deserializer, |path| {
-            if unknown.is_none() {
-                unknown = Some(path.to_string());
-            }
-        })
-        .map_err(incomplete)?;
-        if let Some(path) = unknown {
-            return Err(incomplete(format!("unknown field `{path}`")));
-        }
-        if document.schema_version != 1 || document.operation != "exact-export" {
-            return Err(GraphReferenceError::Incomplete {
-                detail: "exact export must use schema_version 1 and operation 'exact-export'"
-                    .into(),
-            });
-        }
-        validate_prefixed_hash("reference_id", &document.reference_id, "grf1_", 64)?;
-        if document.graph.schema_version != 1 {
-            return Err(GraphReferenceError::Incomplete {
-                detail: "graph schema_version must be 1".into(),
-            });
-        }
-        document.graph.validate_schema_versions()?;
-        document.graph.validate_no_collaboration_fields()?;
-        projection::validate_scope_ownership(&document.graph, &document.graph.scope.id)?;
-        Ok(Self {
-            schema_version: 1,
-            operation: "exact-export",
-            reference_id: document.reference_id,
-            graph: document.graph,
-        })
     }
 }
 
@@ -391,64 +400,6 @@ fn reference_identity(
         "graph-reference-v1\0{repository_id}\0{store_path}\0{scope}\0{commit}\0{graph_digest}"
     );
     format!("grf1_{}", sha256(framed.as_bytes()))
-}
-
-fn canonical_bytes<T: Serialize>(value: &T) -> Result<Vec<u8>, GraphReferenceError> {
-    let value = serde_json::to_value(value).map_err(incomplete)?;
-    let mut bytes = Vec::new();
-    write_canonical_json(&value, &mut bytes)?;
-    Ok(bytes)
-}
-
-fn write_canonical_json(
-    value: &serde_json::Value,
-    output: &mut Vec<u8>,
-) -> Result<(), GraphReferenceError> {
-    match value {
-        serde_json::Value::Object(map) => {
-            output.push(b'{');
-            let mut entries: Vec<_> = map.iter().collect();
-            entries.sort_by_key(|(key, _)| key.as_str());
-            for (index, (key, value)) in entries.into_iter().enumerate() {
-                if index > 0 {
-                    output.push(b',');
-                }
-                output.extend(serde_json::to_vec(key).map_err(incomplete)?);
-                output.push(b':');
-                write_canonical_json(value, output)?;
-            }
-            output.push(b'}');
-        }
-        serde_json::Value::Array(values) => {
-            output.push(b'[');
-            for (index, value) in values.iter().enumerate() {
-                if index > 0 {
-                    output.push(b',');
-                }
-                write_canonical_json(value, output)?;
-            }
-            output.push(b']');
-        }
-        _ => output.extend(serde_json::to_vec(value).map_err(incomplete)?),
-    }
-    Ok(())
-}
-
-fn digest(bytes: &[u8]) -> String {
-    format!("sha256:{}", sha256(bytes))
-}
-
-fn sha256(bytes: &[u8]) -> String {
-    use std::fmt::Write;
-
-    let digest = Sha256::digest(bytes);
-    digest.iter().fold(
-        String::with_capacity(digest.len() * 2),
-        |mut output, byte| {
-            write!(output, "{byte:02x}").expect("writing to a String cannot fail");
-            output
-        },
-    )
 }
 
 fn incomplete(error: impl std::fmt::Display) -> GraphReferenceError {

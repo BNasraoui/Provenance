@@ -1,4 +1,4 @@
-use crate::wiki::model::{PageKind, RulePage};
+use crate::wiki::model::{PageKind, PageLink, RulePage};
 use std::fmt::Write as _;
 
 use super::super::chrome::{container_html, index_breadcrumb, page_shell, title_row};
@@ -7,15 +7,25 @@ use super::super::field_notes::field_notes;
 use super::super::fragments::{
     push_classification_block, push_classification_row, push_prose_section, push_section_open,
 };
-use super::super::html::{evidence_html, link_list};
+use super::super::html::{evidence_html, PageLinksRenderer};
 use super::super::labels::{
     format_confidence, modality_word, rule_status_word, rule_type_word, sev_chip, severity_word,
     status_badge,
 };
 
+/// Every titled link this page renders: the records that produce the rule,
+/// the requirements upstream of those, and the sources behind them.
+fn page_links(page: &RulePage) -> Vec<&PageLink> {
+    let mut links: Vec<&PageLink> = page.produced_by.iter().collect();
+    links.extend(&page.requirements);
+    links.extend(&page.sources);
+    links
+}
+
 /// Renders a rule detail page.
 #[allow(clippy::too_many_lines)]
 pub fn render_rule(scope: &str, page: &RulePage) -> String {
+    let links = PageLinksRenderer::new(page_links(page));
     let mut main = String::new();
     push_prose_section(&mut main, "sh-rule", None, "Statement", &page.statement);
     if let Some(description) = &page.description {
@@ -32,7 +42,7 @@ pub fn render_rule(scope: &str, page: &RulePage) -> String {
     }
     if !page.produced_by.is_empty() {
         push_section_open(&mut main, "sh-resolution", Some("i-scale"), "Produced By");
-        main.push_str(&link_list(&page.produced_by));
+        main.push_str(&links.link_list(&page.produced_by));
         main.push_str("</section>\n");
     }
     if !page.requirements.is_empty() {
@@ -42,12 +52,12 @@ pub fn render_rule(scope: &str, page: &RulePage) -> String {
             Some("i-git-branch"),
             "Upstream Requirements",
         );
-        main.push_str(&link_list(&page.requirements));
+        main.push_str(&links.link_list(&page.requirements));
         main.push_str("</section>\n");
     }
     if !page.sources.is_empty() {
         push_section_open(&mut main, "sh-source", Some("i-book-open"), "Sources");
-        main.push_str(&link_list(&page.sources));
+        main.push_str(&links.link_list(&page.sources));
         main.push_str("</section>\n");
     }
 

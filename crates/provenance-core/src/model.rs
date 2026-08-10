@@ -21,13 +21,15 @@ pub use ideation::contributions::{
     UnsupportedRecommendation,
 };
 pub use ideation::dispositions::{
-    validate_disposition_intrinsic, CanonicalArtifact, DispositionActor, DispositionRecord,
-    ExternalActionCorrelation,
+    disposition_requires_prior_assertion, validate_disposition_intrinsic, CanonicalArtifact,
+    DispositionActor, DispositionRecord, ExternalActionCorrelation,
 };
+pub use ideation::legacy_audit::is_shipped_legacy_disposition_audit;
 pub use ideation::lifecycle::{
-    effective_proposal_state, validate_assertion_intrinsic, validate_ideation_aggregate,
+    effective_proposal_state, ensure_supported_schema_version, packet_qualifies_proposal,
+    validate_assertion_intrinsic, validate_disposition_admissible, validate_ideation_aggregate,
     validate_proposal_intrinsic, Assertion, AssertionId, AssertionRecord, IdeationAggregate,
-    LegacyProposalPolicy,
+    LegacyProposalPolicy, SUPPORTED_SCHEMA_VERSION,
 };
 pub use ideation::proposals::{Proposal, ProposalCard, ProposalTraceability};
 pub use ideation::synthesis::{
@@ -52,7 +54,7 @@ pub use shaping::{
 };
 pub use validation::{
     validate_commit_pin, validate_confidence_score, validate_optional_commit_pin,
-    validate_optional_confidence_score,
+    validate_optional_confidence_score, validate_resolution_input_content,
 };
 
 #[cfg(test)]

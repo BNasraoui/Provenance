@@ -1,8 +1,35 @@
+use super::model::node_type_word;
 use provenance_core::{
     Edge, EdgeType, NodeType, Question, Requirement, Resolution, Rule, ScopeId, Source, StableId,
     Thread, Topic,
 };
 use std::collections::BTreeSet;
+
+/// One of the two ends a fully traced rule is produced by.
+///
+/// The requirement it serves and the resolution that decided it: one alone
+/// is a half-written chain, so gap reporting and the health report both hold
+/// out for both.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuleProducer {
+    Requirement,
+    Resolution,
+}
+
+impl RuleProducer {
+    pub const ALL: [Self; 2] = [Self::Requirement, Self::Resolution];
+
+    pub const fn node_type(self) -> NodeType {
+        match self {
+            Self::Requirement => NodeType::Requirement,
+            Self::Resolution => NodeType::Resolution,
+        }
+    }
+
+    pub const fn word(self) -> &'static str {
+        node_type_word(self.node_type())
+    }
+}
 
 pub struct GapGraph<'a> {
     pub scope: &'a ScopeId,
@@ -16,7 +43,12 @@ pub struct GapGraph<'a> {
     pub threads: &'a [Thread],
 }
 
-pub(super) struct GraphQuery<'a, 'graph> {
+/// Read-only joins over a [`GapGraph`].
+///
+/// Gap policy is written against these helpers, and they are the single home
+/// for the traversals the wiki assembler needs too, so both readers answer
+/// "what resolves this?" and "what did this produce?" the same way.
+pub struct GraphQuery<'a, 'graph> {
     pub graph: &'a GapGraph<'graph>,
 }
 
@@ -87,7 +119,7 @@ impl<'a, 'graph> GraphQuery<'a, 'graph> {
         }
     }
 
-    pub fn resolving_resolutions(&self, requirement_id: &StableId) -> Vec<&Resolution> {
+    pub fn resolving_resolutions(&self, requirement_id: &StableId) -> Vec<&'graph Resolution> {
         self.graph
             .resolutions
             .iter()
@@ -115,7 +147,7 @@ impl<'a, 'graph> GraphQuery<'a, 'graph> {
         })
     }
 
-    pub fn produced_rules_for_requirement(&self, requirement_id: &StableId) -> Vec<&Rule> {
+    pub fn produced_rules_for_requirement(&self, requirement_id: &StableId) -> Vec<&'graph Rule> {
         let resolution_ids: BTreeSet<&str> = self
             .resolving_resolutions(requirement_id)
             .into_iter()
@@ -138,7 +170,7 @@ impl<'a, 'graph> GraphQuery<'a, 'graph> {
             .collect()
     }
 
-    pub fn produced_rules_for_resolution(&self, resolution_id: &StableId) -> Vec<&Rule> {
+    pub fn produced_rules_for_resolution(&self, resolution_id: &StableId) -> Vec<&'graph Rule> {
         self.graph
             .rules
             .iter()
@@ -154,24 +186,63 @@ impl<'a, 'graph> GraphQuery<'a, 'graph> {
             .collect()
     }
 
-    pub fn rule_has_existing_producer(&self, rule_id: &StableId) -> bool {
-        self.graph.requirements.iter().any(|requirement| {
-            self.edge_exists(
-                EdgeType::Produces,
-                NodeType::Requirement,
-                &requirement.id,
-                NodeType::Rule,
-                rule_id,
-            )
-        }) || self.graph.resolutions.iter().any(|resolution| {
-            self.edge_exists(
-                EdgeType::Produces,
-                NodeType::Resolution,
-                &resolution.id,
-                NodeType::Rule,
-                rule_id,
-            )
-        })
+    /// The requirements recorded as producing this rule. A `produces` edge
+    /// from a record that is not in the scope is a dangling reference, not a
+    /// producer, so the join runs from the records that exist.
+    pub fn producing_requirements(&self, rule_id: &StableId) -> Vec<&'graph Requirement> {
+        self.graph
+            .requirements
+            .iter()
+            .filter(|requirement| {
+                self.edge_exists(
+                    EdgeType::Produces,
+                    NodeType::Requirement,
+                    &requirement.id,
+                    NodeType::Rule,
+                    rule_id,
+                )
+            })
+            .collect()
+    }
+
+    /// The resolutions recorded as producing this rule, on the same terms as
+    /// [`Self::producing_requirements`].
+    pub fn producing_resolutions(&self, rule_id: &StableId) -> Vec<&'graph Resolution> {
+        self.graph
+            .resolutions
+            .iter()
+            .filter(|resolution| {
+                self.edge_exists(
+                    EdgeType::Produces,
+                    NodeType::Resolution,
+                    &resolution.id,
+                    NodeType::Rule,
+                    rule_id,
+                )
+            })
+            .collect()
+    }
+
+    /// Which producers this rule is missing, in [`RuleProducer::ALL`] order.
+    /// Empty means the rule is produced from both ends and so is fully
+    /// traced; anything else names what a reader has to add.
+    pub fn missing_rule_producers(&self, rule_id: &StableId) -> Vec<RuleProducer> {
+        RuleProducer::ALL
+            .into_iter()
+            .filter(|producer| match producer {
+                RuleProducer::Requirement => self.producing_requirements(rule_id).is_empty(),
+                RuleProducer::Resolution => self.producing_resolutions(rule_id).is_empty(),
+            })
+            .collect()
+    }
+
+    /// True when a source reaches this rule through a requirement that
+    /// produces it. A sourced requirement elsewhere in the scope says
+    /// nothing about this rule.
+    pub fn rule_trace_reaches_source(&self, rule_id: &StableId) -> bool {
+        self.producing_requirements(rule_id)
+            .into_iter()
+            .any(|requirement| self.requirement_has_valid_source(requirement))
     }
 
     pub fn requirement_has_valid_source(&self, requirement: &Requirement) -> bool {

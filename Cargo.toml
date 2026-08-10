@@ -2,6 +2,7 @@
 members = [
     "crates/provenance-cli",
     "crates/provenance-core",
+    "crates/provenance-macros",
     "crates/provenance-scanner",
     "crates/provenance-store",
 ]

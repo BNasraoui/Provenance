@@ -1,4 +1,5 @@
 mod discovery;
+mod domain_attribution;
 mod fixtures;
 mod index;
 mod load;

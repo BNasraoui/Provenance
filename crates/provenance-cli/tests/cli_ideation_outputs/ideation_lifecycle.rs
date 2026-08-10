@@ -40,9 +40,7 @@ fn dispositions_list_rejects_invalid_lifecycle_records() {
         ])
         .assert()
         .failure()
-        .stderr(predicates::str::contains(
-            "disposition proposal missing_proposal does not exist",
-        ));
+        .stderr(predicates::str::contains("proposal does not exist"));
 }
 
 #[test]

@@ -1,7 +1,9 @@
 use super::*;
+use provenance_macros::verifies;
 
 #[cfg(unix)]
 #[test]
+#[verifies("rule_publish_preflight", examples)]
 fn rejects_a_symlink_lock_without_following_it() {
     use std::os::unix::fs::symlink;
 
@@ -14,13 +16,20 @@ fn rejects_a_symlink_lock_without_following_it() {
 
     let error = publish(&empty_corpus(), PublicationOutput::custom(output.clone())).unwrap_err();
 
-    assert!(matches!(error, PublishError::UnsafeLockPath { .. }));
+    let message = error.to_string();
+    let PublishError::AmbiguousArtifacts { paths, unsafe_lock } = &error else {
+        panic!("publication refused a symlinked lock with {error}");
+    };
+    assert_eq!(paths.as_slice(), std::slice::from_ref(&lock));
+    assert_eq!(unsafe_lock.as_ref(), Some(&lock));
+    assert!(message.contains("is not a regular file"), "{message}");
     assert!(lock.symlink_metadata().unwrap().file_type().is_symlink());
     assert_eq!(std::fs::read_to_string(target).unwrap(), "keep me");
     assert!(!output.exists());
 }
 
 #[test]
+#[verifies("rule_publish_preflight", examples)]
 fn leaves_ambiguous_interruption_artifacts_untouched() {
     let temp = tempfile::tempdir().unwrap();
     let output = utf8(temp.path().join("wiki"));
@@ -33,7 +42,11 @@ fn leaves_ambiguous_interruption_artifacts_untouched() {
 
     let error = publish(&empty_corpus(), PublicationOutput::custom(output.clone())).unwrap_err();
 
-    assert!(matches!(error, PublishError::AmbiguousArtifacts { .. }));
+    let PublishError::AmbiguousArtifacts { paths, unsafe_lock } = &error else {
+        panic!("publication refused interruption artifacts with {error}");
+    };
+    assert_eq!(paths, &[stage.clone(), backup.clone()]);
+    assert_eq!(unsafe_lock, &None);
     assert_eq!(
         std::fs::read_to_string(stage.join("unknown")).unwrap(),
         "stage bytes"

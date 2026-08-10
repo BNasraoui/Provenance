@@ -93,10 +93,10 @@ async fn load_decision_records(
         loaded += 1;
     }
     for resolution in store.list_resolutions(scope)? {
-        sqlx::query("INSERT INTO resolutions (scope_id, id, title, position, rationale, status, review_on, review_triggers, context, enforcement, confidence, inputs, made_by, approved_by, approved_at, superseded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        sqlx::query("INSERT INTO resolutions (scope_id, id, title, position, rationale, status, review_on, context, enforcement, confidence, inputs, made_by, approved_by, approved_at, superseded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(resolution.scope_id.as_str()).bind(resolution.id.as_str()).bind(resolution.title)
             .bind(resolution.position).bind(resolution.rationale).bind(serde_name(&resolution.status)?)
-            .bind(resolution.review_on).bind(resolution.review_triggers.to_string())
+            .bind(resolution.review_on)
             .bind(resolution.context).bind(resolution.enforcement).bind(resolution.confidence)
             .bind(serde_json::to_string(&resolution.inputs)?).bind(resolution.made_by)
             .bind(resolution.approved_by).bind(resolution.approved_at)
@@ -105,10 +105,9 @@ async fn load_decision_records(
         loaded += 1;
     }
     for rule in store.list_rules(scope)? {
-        sqlx::query("INSERT INTO rules (scope_id, id, rule_code, statement, status, severity, expression, inputs) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        sqlx::query("INSERT INTO rules (scope_id, id, rule_code, statement, status, severity) VALUES (?, ?, ?, ?, ?, ?)")
             .bind(rule.scope_id.as_str()).bind(rule.id.as_str()).bind(rule.rule_code)
             .bind(rule.statement).bind(serde_name(&rule.status)?).bind(serde_name(&rule.severity)?)
-            .bind(rule.expression.to_string()).bind(rule.inputs.to_string())
             .execute(&mut **tx).await?;
         loaded += 1;
     }

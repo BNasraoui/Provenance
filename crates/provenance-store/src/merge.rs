@@ -1,10 +1,20 @@
+use provenance_macros::rule;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
+
+pub mod validation;
+
+pub use validation::{validate_merged_records, ShardFamily};
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MergeConflictKind {
+    /// Both sides added the same id with different content. There is no base
+    /// pre-image to compare against, so neither side can be called the mover.
+    AddAdd,
+    /// Both sides changed a record that existed in the base, differently.
     DivergentEdit,
+    /// One side deleted a record the other side changed.
     DeleteModify,
 }
 
@@ -12,6 +22,9 @@ pub enum MergeConflictKind {
 pub struct MergeConflict {
     pub kind: MergeConflictKind,
     pub record_id: String,
+    /// The base pre-image, so a reader can see what both sides moved away
+    /// from. `None` for an add/add clash, where the base held nothing.
+    pub base: Option<CanonicalRecord>,
     pub ours: Option<Value>,
     pub theirs: Option<Value>,
 }
@@ -46,6 +59,17 @@ impl<T> MergeOutcome<T> {
 
 pub type CanonicalRecord = Value;
 
+/// Merges three sides of one JSONL shard by record id.
+///
+/// This decides *which* record survives, not whether the survivor is a legal
+/// record: it merges untyped JSON and never inspects a field other than `id`.
+/// A merged set can therefore hold a record that no writer would have accepted,
+/// because each side's record was legal on its own branch and only the
+/// combination is not. The caller must put the merged records back through the
+/// write gate before they land: [`validate_merged_records`] re-checks them
+/// against the type the shard holds, and the merge fails rather than storing an
+/// invalid record.
+#[rule("rule_record_merge")]
 pub fn merge_records(
     base: &[CanonicalRecord],
     ours: &[CanonicalRecord],
@@ -68,21 +92,23 @@ pub fn merge_records(
             (None, Some(ours), Some(theirs)) if ours == theirs => merged.push(ours.clone()),
             (Some(_), None, None) => {}
             (Some(base), Some(ours), None) if ours == base => {}
-            (Some(_), Some(ours), None) => {
+            (Some(base), Some(ours), None) => {
                 merged.push(ours.clone());
                 conflicts.push(MergeConflict {
                     kind: MergeConflictKind::DeleteModify,
                     record_id: id,
+                    base: Some(base.clone()),
                     ours: Some(ours.clone()),
                     theirs: None,
                 });
             }
             (Some(base), None, Some(theirs)) if theirs == base => {}
-            (Some(_), None, Some(theirs)) => {
+            (Some(base), None, Some(theirs)) => {
                 merged.push(theirs.clone());
                 conflicts.push(MergeConflict {
                     kind: MergeConflictKind::DeleteModify,
                     record_id: id,
+                    base: Some(base.clone()),
                     ours: None,
                     theirs: Some(theirs.clone()),
                 });
@@ -90,11 +116,16 @@ pub fn merge_records(
             (Some(_), Some(ours), Some(theirs)) if ours == theirs => merged.push(ours.clone()),
             (Some(base), Some(ours), Some(theirs)) if ours == base => merged.push(theirs.clone()),
             (Some(base), Some(ours), Some(theirs)) if theirs == base => merged.push(ours.clone()),
-            (None | Some(_), Some(ours), Some(theirs)) => {
+            (base, Some(ours), Some(theirs)) => {
                 merged.push(ours.clone());
                 conflicts.push(MergeConflict {
-                    kind: MergeConflictKind::DivergentEdit,
+                    kind: if base.is_none() {
+                        MergeConflictKind::AddAdd
+                    } else {
+                        MergeConflictKind::DivergentEdit
+                    },
                     record_id: id,
+                    base: base.cloned(),
                     ours: Some(ours.clone()),
                     theirs: Some(theirs.clone()),
                 });
@@ -138,64 +169,4 @@ fn index_by_id(records: &[CanonicalRecord]) -> anyhow::Result<BTreeMap<String, C
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn record(id: &str, statement: &str) -> Value {
-        serde_json::json!({ "id": id, "statement": statement })
-    }
-
-    fn ids(records: &[Value]) -> Vec<&str> {
-        records
-            .iter()
-            .map(|record| record.get("id").unwrap().as_str().unwrap())
-            .collect()
-    }
-
-    #[test]
-    fn merge_keeps_one_sided_additions_and_sorts_by_stable_key() {
-        let merged = merge_records(&[], &[record("rule_b", "b")], &[record("rule_a", "a")])
-            .unwrap()
-            .unwrap_clean();
-
-        assert_eq!(ids(&merged), vec!["rule_a", "rule_b"]);
-    }
-
-    #[test]
-    fn merge_collapses_identical_edits() {
-        let base = [record("rule_a", "old")];
-        let ours = [record("rule_a", "new")];
-        let theirs = [record("rule_a", "new")];
-
-        let merged = merge_records(&base, &ours, &theirs).unwrap().unwrap_clean();
-
-        assert_eq!(merged, vec![record("rule_a", "new")]);
-    }
-
-    #[test]
-    fn merge_reports_divergent_edits() {
-        let base = [record("rule_a", "old")];
-        let ours = [record("rule_a", "ours")];
-        let theirs = [record("rule_a", "theirs")];
-
-        let conflicts = merge_records(&base, &ours, &theirs)
-            .unwrap()
-            .unwrap_conflicts();
-
-        assert_eq!(conflicts[0].kind, MergeConflictKind::DivergentEdit);
-        assert_eq!(conflicts[0].record_id, "rule_a");
-    }
-
-    #[test]
-    fn merge_reports_delete_modify_conflict() {
-        let base = [record("rule_a", "old")];
-        let theirs = [record("rule_a", "new")];
-
-        let conflicts = merge_records(&base, &[], &theirs)
-            .unwrap()
-            .unwrap_conflicts();
-
-        assert_eq!(conflicts[0].kind, MergeConflictKind::DeleteModify);
-        assert_eq!(conflicts[0].record_id, "rule_a");
-    }
-}
+mod tests;

@@ -8,10 +8,11 @@ impl PublicationLock {
         self,
         transaction: &TransactionDirectory,
     ) -> std::io::Result<()> {
-        transaction.rename(&transaction.lock_leaf, &transaction.lock_cleanup_leaf)?;
-        if transaction.child_identity(&transaction.lock_cleanup_leaf)? != self.identity {
+        transaction.rename(&transaction.leaves.lock, &transaction.leaves.lock_cleanup)?;
+        if transaction.child_identity(&transaction.leaves.lock_cleanup)? != self.identity {
             let mismatch = std::io::Error::other("publication lock path changed before cleanup");
-            return match transaction.rename(&transaction.lock_cleanup_leaf, &transaction.lock_leaf)
+            return match transaction
+                .rename(&transaction.leaves.lock_cleanup, &transaction.leaves.lock)
             {
                 Ok(()) => Err(mismatch),
                 Err(restore) => Err(std::io::Error::other(format!(
@@ -20,7 +21,7 @@ impl PublicationLock {
             };
         }
         drop(self);
-        transaction.remove_file(&transaction.lock_cleanup_leaf)
+        transaction.remove_file(&transaction.leaves.lock_cleanup)
     }
 }
 
@@ -30,10 +31,10 @@ impl TransactionDirectory {
         mut stage: File,
         expected: &StageIdentity,
     ) -> std::io::Result<()> {
-        self.rename(&self.stage_leaf, &self.stage_cleanup_leaf)?;
-        if self.child_identity(&self.stage_cleanup_leaf)? != expected.0 {
+        self.rename(&self.leaves.stage, &self.leaves.stage_cleanup)?;
+        if self.child_identity(&self.leaves.stage_cleanup)? != expected.0 {
             let mismatch = std::io::Error::other("staging directory path changed before cleanup");
-            return match self.rename(&self.stage_cleanup_leaf, &self.stage_leaf) {
+            return match self.rename(&self.leaves.stage_cleanup, &self.leaves.stage) {
                 Ok(()) => Err(mismatch),
                 Err(restore) => Err(std::io::Error::other(format!(
                     "{mismatch}; restoring the replacement staging directory also failed: {restore}"
@@ -42,9 +43,9 @@ impl TransactionDirectory {
         }
         stage.remove_dir_contents(Some(self.paths.stage_cleanup.as_std_path()))?;
         drop(stage);
-        match fs_at::OpenOptions::default().rmdir_at(&self.parent, &self.stage_cleanup_leaf) {
+        match fs_at::OpenOptions::default().rmdir_at(&self.parent, &self.leaves.stage_cleanup) {
             Ok(()) => Ok(()),
-            Err(cleanup) => match self.rename(&self.stage_cleanup_leaf, &self.stage_leaf) {
+            Err(cleanup) => match self.rename(&self.leaves.stage_cleanup, &self.leaves.stage) {
                 Ok(()) => Err(cleanup),
                 Err(restore) => Err(std::io::Error::other(format!(
                     "{cleanup}; restoring the staging directory after cleanup failed: {restore}"
@@ -135,14 +136,14 @@ pub(super) fn cleanup_backup(
     before_cleanup: &mut impl FnMut(&camino::Utf8Path) -> std::io::Result<()>,
 ) -> std::io::Result<()> {
     let backup_path = &transaction.paths.backup;
-    let mut backup = transaction.open_dir(&transaction.backup_leaf)?;
+    let mut backup = transaction.open_dir(&transaction.leaves.backup)?;
     let expected_identity = same_file::Handle::from_file(backup.try_clone()?)?;
     before_cleanup(backup_path)?;
-    if transaction.child_identity(&transaction.backup_leaf)? != expected_identity {
+    if transaction.child_identity(&transaction.leaves.backup)? != expected_identity {
         return Err(std::io::Error::other("backup path changed before cleanup"));
     }
 
     backup.remove_dir_contents(Some(backup_path.as_std_path()))?;
     drop(backup);
-    fs_at::OpenOptions::default().rmdir_at(&transaction.parent, &transaction.backup_leaf)
+    fs_at::OpenOptions::default().rmdir_at(&transaction.parent, &transaction.leaves.backup)
 }

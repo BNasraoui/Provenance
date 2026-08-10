@@ -1,5 +1,13 @@
 use super::*;
+use provenance_macros::verifies;
 
+/// A record at an unreadable version never reaches the projection.
+///
+/// The pinned graph keeps its own per-record version check for a graph that
+/// arrives as a document, but a record read off disk is refused earlier, by
+/// the store's read guard, which is why the message names the file and line
+/// rather than the family. Issuing a reference over such a record is what this
+/// pins: no reference is minted for a record this build cannot read.
 #[test]
 fn issue_rejects_unsupported_pinned_record_schema_versions() {
     let temp = committed_store();
@@ -41,8 +49,9 @@ fn issue_rejects_unsupported_pinned_record_schema_versions() {
         ])
         .assert()
         .failure()
+        .stderr(predicate::str::contains("sources/source.jsonl line 1"))
         .stderr(predicate::str::contains(
-            "source 'source_v2' has unsupported schema_version 2",
+            "record source_v2 has schema_version 2, but this build reads schema_version 1 only",
         ));
 }
 
@@ -94,6 +103,7 @@ fn issue_rejects_unknown_fields_in_pinned_graph_records() {
 }
 
 #[test]
+#[verifies("rule_pinned_scope_ownership", examples)]
 fn selected_scope_ignores_future_data_from_another_scope() {
     let temp = committed_store();
     let manifest_path = temp.path().join(".provenance/state/manifest.json");

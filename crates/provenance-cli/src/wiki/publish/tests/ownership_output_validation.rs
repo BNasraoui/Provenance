@@ -1,6 +1,8 @@
 use super::*;
+use provenance_macros::verifies;
 
 #[test]
+#[verifies("rule_wiki_output_ownership", examples)]
 fn publishes_a_complete_fresh_custom_output() {
     let temp = tempfile::tempdir().unwrap();
     let output = Utf8PathBuf::from_path_buf(temp.path().join("wiki")).unwrap();
@@ -17,6 +19,7 @@ fn publishes_a_complete_fresh_custom_output() {
 }
 
 #[test]
+#[verifies("rule_wiki_output_ownership", examples)]
 fn adopts_an_empty_custom_directory() {
     let temp = tempfile::tempdir().unwrap();
     let output = utf8(temp.path().join("wiki"));
@@ -29,6 +32,7 @@ fn adopts_an_empty_custom_directory() {
 }
 
 #[test]
+#[verifies("rule_wiki_output_ownership", examples)]
 fn refuses_a_nonempty_unrecognized_custom_directory_without_mutation() {
     let temp = tempfile::tempdir().unwrap();
     let output = utf8(temp.path().join("wiki"));
@@ -49,6 +53,7 @@ fn refuses_a_nonempty_unrecognized_custom_directory_without_mutation() {
 }
 
 #[test]
+#[verifies("rule_wiki_output_ownership", examples)]
 fn upgrades_a_recognized_custom_output() {
     let temp = tempfile::tempdir().unwrap();
     let output = utf8(temp.path().join("wiki"));
@@ -75,6 +80,7 @@ fn repeatedly_replaces_a_recognized_output_without_leaving_artifacts() {
 }
 
 #[test]
+#[verifies("rule_wiki_output_ownership", examples)]
 fn default_output_is_generator_owned_even_before_manifests() {
     let temp = tempfile::tempdir().unwrap();
     let output = utf8(temp.path().join("wiki"));
@@ -92,6 +98,7 @@ fn default_output_is_generator_owned_even_before_manifests() {
 }
 
 #[test]
+#[verifies("rule_wiki_output_ownership", examples)]
 fn rejects_an_unknown_manifest_version_without_mutation() {
     let temp = tempfile::tempdir().unwrap();
     let output = utf8(temp.path().join("wiki"));
@@ -116,6 +123,7 @@ fn rejects_an_unknown_manifest_version_without_mutation() {
 }
 
 #[test]
+#[verifies("rule_wiki_output_ownership", examples)]
 fn rejects_a_malformed_manifest_without_mutation() {
     let temp = tempfile::tempdir().unwrap();
     let output = utf8(temp.path().join("wiki"));
@@ -133,6 +141,7 @@ fn rejects_a_malformed_manifest_without_mutation() {
 }
 
 #[test]
+#[verifies("rule_wiki_output_ownership", examples)]
 fn rejects_an_oversized_manifest_without_mutation() {
     let temp = tempfile::tempdir().unwrap();
     let output = utf8(temp.path().join("wiki"));
@@ -154,6 +163,30 @@ fn rejects_an_oversized_manifest_without_mutation() {
 }
 
 #[test]
+#[verifies("rule_wiki_output_ownership", examples)]
+fn rejects_a_directory_standing_in_for_the_marker_without_mutation() {
+    let temp = tempfile::tempdir().unwrap();
+    let output = utf8(temp.path().join("wiki"));
+    std::fs::create_dir(&output).unwrap();
+    std::fs::create_dir(output.join(OWNERSHIP_MANIFEST)).unwrap();
+    std::fs::write(output.join("caller.txt"), "keep me").unwrap();
+
+    let error = publish(&empty_corpus(), PublicationOutput::custom(output.clone())).unwrap_err();
+
+    assert!(matches!(
+        error,
+        PublishError::InvalidManifest { detail, .. } if detail.contains("not a regular file")
+    ));
+    assert!(output.join(OWNERSHIP_MANIFEST).is_dir());
+    assert_eq!(
+        std::fs::read_to_string(output.join("caller.txt")).unwrap(),
+        "keep me"
+    );
+    assert_no_transaction_artifacts(&output);
+}
+
+#[test]
+#[verifies("rule_publish_preflight", examples)]
 fn rejects_a_non_directory_output_root_without_mutation() {
     let temp = tempfile::tempdir().unwrap();
     let output = utf8(temp.path().join("wiki"));
@@ -168,6 +201,7 @@ fn rejects_a_non_directory_output_root_without_mutation() {
 
 #[cfg(unix)]
 #[test]
+#[verifies("rule_publish_preflight", examples)]
 fn rejects_a_symlink_output_root_without_mutation() {
     use std::os::unix::fs::symlink;
 
@@ -191,6 +225,7 @@ fn rejects_a_symlink_output_root_without_mutation() {
 
 #[cfg(windows)]
 #[test]
+#[verifies("rule_publish_preflight", examples)]
 fn rejects_an_output_root_reparse_point_without_mutation() {
     use std::os::windows::fs::symlink_dir;
 
@@ -212,6 +247,7 @@ fn rejects_an_output_root_reparse_point_without_mutation() {
 }
 
 #[test]
+#[verifies("rule_wiki_output_ownership", examples)]
 fn does_not_infer_ownership_from_a_parseable_journal_or_nonce_names() {
     let temp = tempfile::tempdir().unwrap();
     let output = utf8(temp.path().join("wiki"));

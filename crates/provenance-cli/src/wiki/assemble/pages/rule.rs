@@ -1,12 +1,10 @@
 use crate::wiki::model::{PageId, PageLink, RecordKind, RulePage};
 use provenance_core::{EdgeType, NodeType, Requirement, Resolution, Rule};
-use std::collections::BTreeSet;
 
 use super::super::context::Assembler;
 use super::super::page_links::{requirement_link, resolution_link, rule_title, source_link};
 
 impl<'a> Assembler<'a> {
-    #[allow(clippy::too_many_lines)]
     pub(in crate::wiki::assemble) fn rule_page(&self, rule: &'a Rule) -> RulePage {
         let producing_resolutions: Vec<&Resolution> = self
             .state
@@ -42,29 +40,10 @@ impl<'a> Assembler<'a> {
             .map(resolution_link)
             .chain(producing_requirements.iter().copied().map(requirement_link))
             .collect();
-        let mut requirement_ids: BTreeSet<&str> = producing_requirements
-            .iter()
-            .map(|requirement| requirement.id.as_str())
-            .collect();
-        for resolution in &producing_resolutions {
-            for requirement in &self.state.requirements {
-                if self.edge_exists(
-                    EdgeType::Resolves,
-                    NodeType::Resolution,
-                    &resolution.id,
-                    NodeType::Requirement,
-                    &requirement.id,
-                ) {
-                    requirement_ids.insert(requirement.id.as_str());
-                }
-            }
-        }
-        let upstream_requirements: Vec<&Requirement> = self
-            .state
-            .requirements
-            .iter()
-            .filter(|requirement| requirement_ids.contains(requirement.id.as_str()))
-            .collect();
+        // Which requirements a rule answers to is decided once, by the
+        // forward traversal; this page reads that decision inverted rather
+        // than walking Produces and Resolves backwards itself.
+        let upstream_requirements: &[&Requirement] = self.requirements_behind_rule(&rule.id);
         let sources: Vec<PageLink> = self
             .state
             .sources
@@ -102,7 +81,8 @@ impl<'a> Assembler<'a> {
             evidence: self.rule_evidence(rule),
             produced_by,
             requirements: upstream_requirements
-                .into_iter()
+                .iter()
+                .copied()
                 .map(requirement_link)
                 .collect(),
             sources,

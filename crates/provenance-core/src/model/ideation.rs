@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 pub(super) mod contributions;
 pub(super) mod dispositions;
+pub(super) mod legacy_audit;
 pub(super) mod lifecycle;
 pub(super) mod proposals;
 pub(super) mod synthesis;

@@ -10,7 +10,7 @@ pub(in crate::handlers::schema) fn reference_schema() -> Value {
             "scope_id", "commit", "graph_digest"
         ],
         "properties": {
-            "schema_version": {"const": 1},
+            "schema_version": schema_version(),
             "reference_id": {"type": "string", "pattern": "^grf1_[0-9a-f]{64}$"},
             "repository_id": {"type": "string", "pattern": "^git1_[0-9a-f]{64}$"},
             "store_path": {"const": ".provenance/state"},
@@ -35,11 +35,12 @@ pub(in crate::handlers::schema) fn export_schema() -> Value {
         "title": "GraphReferenceExactExport",
         "type": "object",
         "additionalProperties": false,
-        "required": ["schema_version", "operation", "reference_id", "graph"],
+        "required": ["schema_version", "operation", "reference_id", "graph_digest", "graph"],
         "properties": {
-            "schema_version": {"const": 1},
+            "schema_version": schema_version(),
             "operation": {"const": "exact-export"},
             "reference_id": {"type": "string", "pattern": "^grf1_[0-9a-f]{64}$"},
+            "graph_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
             "graph": {
                 "type": "object",
                 "additionalProperties": false,
@@ -49,7 +50,7 @@ pub(in crate::handlers::schema) fn export_schema() -> Value {
                     "services", "service_bindings", "edges"
                 ],
                 "properties": {
-                    "schema_version": {"const": 1},
+                    "schema_version": schema_version(),
                     "scope": {"$ref": "#/$defs/scope"},
                     "sources": record_array("source"),
                     "domains": record_array("domain"),
@@ -69,6 +70,21 @@ pub(in crate::handlers::schema) fn export_schema() -> Value {
     })
 }
 
+/// The version every published record and envelope must carry.
+///
+/// `const` states the value and `type` states that it is an integer, because
+/// the runtime reads the field into a `u32`: a document writing `1.0` is
+/// refused there. JSON Schema drafts 6 and later compare numbers by value and
+/// count `1.0` as an integer, so a validator on those drafts still accepts it
+/// and the runtime is the stricter of the two; the divergence is pinned by
+/// `schema_version_float_is_where_the_replica_is_looser_than_the_runtime` in
+/// `crates/provenance-cli/tests/cli_graph_references/schema.rs`. The `type` is
+/// worth stating anyway: it says what the field is, and a stricter validator
+/// refuses `1.0` on it.
+fn schema_version() -> Value {
+    json!({"type": "integer", "const": 1})
+}
+
 fn record_array(name: &str) -> Value {
     json!({"type": "array", "items": {"$ref": format!("#/$defs/{name}")}})
 }
@@ -86,7 +102,7 @@ fn closed_record(required: &[&str], properties: Value) -> Value {
 #[allow(clippy::redundant_clone, clippy::too_many_lines)]
 fn export_definitions() -> Value {
     let id = json!({"type": "string", "pattern": "^[a-z0-9_-]+$"});
-    let version = json!({"const": 1});
+    let version = schema_version();
     let string = json!({"type": "string"});
     let confidence = json!({"type": "number", "minimum": 0, "maximum": 1});
     json!({
@@ -162,7 +178,7 @@ fn export_definitions() -> Value {
             })
         ),
         "resolution": closed_record(
-            &["schema_version", "scope_id", "id", "title", "position", "rationale", "status", "inputs", "review_on", "review_triggers"],
+            &["schema_version", "scope_id", "id", "title", "position", "rationale", "status", "inputs", "review_on"],
             json!({
                 "schema_version": version.clone(), "scope_id": id.clone(), "id": id.clone(),
                 "title": string.clone(), "position": string.clone(), "rationale": string.clone(),
@@ -170,12 +186,11 @@ fn export_definitions() -> Value {
                 "context": string.clone(), "enforcement": string.clone(), "confidence": confidence.clone(),
                 "inputs": {"type": "array", "items": {"$ref": "#/$defs/resolutionInput"}},
                 "made_by": string.clone(), "approved_by": string.clone(), "approved_at": {"type": "integer"},
-                "superseded_by": id.clone(), "review_on": {"type": ["string", "null"]},
-                "review_triggers": true
+                "superseded_by": id.clone(), "review_on": {"type": ["string", "null"]}
             })
         ),
         "rule": closed_record(
-            &["schema_version", "scope_id", "id", "rule_code", "statement", "status", "severity", "expression", "inputs"],
+            &["schema_version", "scope_id", "id", "rule_code", "statement", "status", "severity"],
             json!({
                 "schema_version": version.clone(), "scope_id": id.clone(), "id": id.clone(),
                 "rule_code": string.clone(), "name": string.clone(), "description": string.clone(),
@@ -184,8 +199,7 @@ fn export_definitions() -> Value {
                 "rule_type": {"enum": ["business", "functional", "technical"]},
                 "modality": {"enum": ["obligation", "prohibition", "necessity"]},
                 "confidence": confidence, "extraction_method": string.clone(),
-                "source_document": string.clone(), "source_section": string.clone(),
-                "expression": true, "inputs": true
+                "source_document": string.clone(), "source_section": string.clone()
             })
         ),
         "service": closed_record(&["schema_version", "scope_id", "id", "name", "status"], json!({
