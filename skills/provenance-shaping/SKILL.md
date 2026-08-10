@@ -276,8 +276,9 @@ is a requirement whose rule is unwritten. Say so and move on.
 
 2. **The binding, in the code.** `#[rule("<id>")]` sits on the one function that decides;
    exactly one function may carry an id. `#[verifies("<id>", <method>)]` sits on whatever
-   proves it — `exhaustion`, `property`, `examples`, `conformance`, or `construction`.
-   `construction` goes on the type whose construction is the proof, not on a test.
+   proves it — `exhaustion`, `property`, `examples`, `conformance`, `construction`, or
+   `proof`. `construction` goes on the type whose construction is the proof, not on a
+   test.
 
    ```rust
    #[rule("rule_<stable_slug>")]

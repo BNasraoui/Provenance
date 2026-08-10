@@ -10,7 +10,7 @@ A statement produced by a decision, carried in code by the function that decides
 
 ## Verification
 
-Evidence that a rule holds, carried by a `#[verifies("rule_id", method)]` marker on a test or a type. The method is one of `exhaustion`, `property`, `examples`, `conformance`, or `construction`. Exhaustion over a finite domain is proof, not a sample.
+Evidence that a rule holds, carried by a `#[verifies("rule_id", method)]` marker on a test or a type. The method is one of `exhaustion`, `property`, `examples`, `conformance`, `construction`, or `proof`. Exhaustion over a finite domain is proof, not a sample; `proof` names a machine-checked proof outside the test runner, bridged by the marked site.
 
 ## Enforcement
 

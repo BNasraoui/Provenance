@@ -74,6 +74,8 @@ description of it and not a claim to satisfy it. Exactly one function may carry 
 - `conformance` — a copy of the rule elsewhere checked against the rule function
 - `construction` — a type or constraint makes violation impossible; the attribute goes on
   the type, never on a test
+- `proof` — a machine-checked proof outside the test runner backs the rule; the marked
+  site is the bridge pinning the implementation to the proved model
 
 Both attributes come from `provenance-macros` (`use provenance_macros::rule;`,
 `use provenance_macros::verifies;`). They expand to nothing and cost one argument check at

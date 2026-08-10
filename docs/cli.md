@@ -20,8 +20,11 @@ Agent-facing commands support JSON output for deterministic parsing.
 A rule's record names it; the code that carries the rule names it back. In Rust that is
 `#[rule("rule_id")]` on the function that decides the thing the rule states, and
 `#[verifies("rule_id", method)]` on each test that verifies it. The methods are
-`exhaustion`, `property`, `examples`, `conformance`, and `construction`. A marked type
-uses `construction`, because building the value is the proof.
+`exhaustion`, `property`, `examples`, `conformance`, `construction`, and `proof`. A
+marked type uses `construction`, because building the value is the proof. A test whose
+expected values come from a machine-checked model (a Lean theorem, for example) uses
+`proof`: the proof checker runs in your CI, and the marked test is the bridge between
+the proved model and the implementation.
 
 ```sh
 provenance coverage scan --path . --scope default --validate-rules
