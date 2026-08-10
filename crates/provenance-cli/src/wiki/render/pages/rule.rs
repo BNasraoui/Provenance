@@ -1,4 +1,4 @@
-use crate::wiki::model::{CodeScan, PageKind, PageLink, RulePage};
+use crate::wiki::model::{CodeScan, GapKind, GapNotice, PageKind, PageLink, RulePage};
 use std::fmt::Write as _;
 
 use super::super::chrome::{container_html, index_breadcrumb, page_shell, title_row};
@@ -112,11 +112,7 @@ pub fn render_rule(scope: &str, page: &RulePage) -> String {
     if let Some(description) = &page.description {
         push_prose_section(&mut main, "sh-rule", None, "Description", description);
     }
-    if let Some(orphan) = page
-        .gaps
-        .iter()
-        .find(|gap| gap.kind == crate::wiki::model::GapKind::OrphanRule)
-    {
+    if let Some(orphan) = page.gaps.iter().find(|gap| gap.kind == GapKind::OrphanRule) {
         writeln!(
             main,
             "<p class=\"data-note\">{}</p>",
@@ -143,17 +139,14 @@ pub fn render_rule(scope: &str, page: &RulePage) -> String {
     }
 
     let mut margin = String::new();
-    if page
+    let margin_gaps: Vec<&GapNotice> = page
         .gaps
         .iter()
-        .any(|gap| gap.kind != crate::wiki::model::GapKind::OrphanRule)
-    {
+        .filter(|gap| gap.kind != GapKind::OrphanRule)
+        .collect();
+    if !margin_gaps.is_empty() {
         margin.push_str("<h3 class=\"margin-head\">Gaps</h3>\n");
-        for gap in page
-            .gaps
-            .iter()
-            .filter(|gap| gap.kind != crate::wiki::model::GapKind::OrphanRule)
-        {
+        for gap in margin_gaps {
             push_gap_citations(&mut margin, &links, std::slice::from_ref(gap));
         }
     }
