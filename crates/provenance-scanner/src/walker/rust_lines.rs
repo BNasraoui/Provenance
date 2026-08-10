@@ -6,8 +6,9 @@
 //! inside strings never bind.
 
 use super::Language;
+use crate::binding_lexer::rust_character_literal_end;
 use crate::parser::annotation_marker_positions;
-use crate::string_context::obvious_string_is_open;
+use crate::string_context::marker_is_inside_quoted_region;
 
 pub(super) fn rust_line_states(language: Language, lines: &[&str]) -> Vec<RustLexicalState> {
     let mut state = RustLexicalState::Code;
@@ -36,7 +37,8 @@ pub(super) fn rust_annotation_marker_position(
                 RustLexicalState::Quoted | RustLexicalState::Raw(_)
             ) && state == RustLexicalState::Code;
             !matches!(state, RustLexicalState::Quoted | RustLexicalState::Raw(_))
-                && (closed_multiline_string || !obvious_string_is_open(&line[..*position]))
+                && (closed_multiline_string
+                    || !marker_is_inside_quoted_region(line, *position, false))
         })
         .min()
 }
@@ -61,7 +63,7 @@ fn advance_rust_state(line: &str, state: &mut RustLexicalState) {
                     index += 2;
                 }
                 b'\'' => {
-                    index = character_literal_end(line, index + 1).unwrap_or(index) + 1;
+                    index = rust_character_literal_end(line, index + 1).unwrap_or(index) + 1;
                 }
                 b'"' => {
                     *state = RustLexicalState::Quoted;
@@ -120,21 +122,4 @@ fn advance_rust_state(line: &str, state: &mut RustLexicalState) {
             }
         }
     }
-}
-
-fn character_literal_end(line: &str, index: usize) -> Option<usize> {
-    let bytes = line.as_bytes();
-    let content_end = if bytes.get(index) == Some(&b'\\') {
-        match bytes.get(index + 1) {
-            Some(b'x') => index + 4,
-            Some(b'u') if bytes.get(index + 2) == Some(&b'{') => {
-                index + 3 + bytes[index + 3..].iter().position(|byte| *byte == b'}')? + 1
-            }
-            Some(_) => index + 2,
-            None => return None,
-        }
-    } else {
-        index + line.get(index..)?.chars().next()?.len_utf8()
-    };
-    (bytes.get(content_end) == Some(&b'\'')).then_some(content_end)
 }

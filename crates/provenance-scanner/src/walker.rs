@@ -2,8 +2,8 @@ use anyhow::Context;
 use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::binding_lexer::{block_comment_state, code_outside_multiline_string, MultilineStyle};
-use crate::parser::{annotation_marker_position, Verification};
-use crate::{parse_annotations, Annotation, ParseWarning};
+use crate::parser::{annotation_marker_position, parse_annotations_with_backticks, Verification};
+use crate::{Annotation, ParseWarning};
 
 use bindings::parse_binding_line;
 use rust_lines::{rust_annotation_marker_position, rust_line_states, RustLexicalState};
@@ -132,7 +132,8 @@ pub fn scan_file(file_path: &Utf8Path, language: Language, content: &str) -> Fil
         };
         let started_in_block_comment = in_block_comment;
         if language != Language::Python {
-            in_block_comment = block_comment_state(line, in_block_comment);
+            in_block_comment =
+                block_comment_state(line, in_block_comment, language == Language::Rust);
         }
         let binding = (language != Language::Rust || rust_states[idx] == RustLexicalState::Code)
             .then(|| parse_binding_line(language, line, started_in_block_comment))
@@ -160,7 +161,7 @@ pub fn scan_file(file_path: &Utf8Path, language: Language, content: &str) -> Fil
             continue;
         };
         let (comment, end_idx) = collect_annotation_comment(&lines, idx, marker_position);
-        let parsed = parse_annotations(&comment);
+        let parsed = parse_annotations_with_backticks(&comment, language == Language::Go);
         warnings.extend(parsed.warnings);
         let function_name = next_function_name(language, &lines[end_idx.saturating_add(1)..]);
         for annotation in parsed.annotations {
@@ -173,7 +174,11 @@ pub fn scan_file(file_path: &Utf8Path, language: Language, content: &str) -> Fil
         }
         if language != Language::Python {
             for consumed_line in lines.iter().take(end_idx + 1).skip(idx + 1) {
-                in_block_comment = block_comment_state(consumed_line, in_block_comment);
+                in_block_comment = block_comment_state(
+                    consumed_line,
+                    in_block_comment,
+                    language == Language::Rust,
+                );
             }
         }
         idx = end_idx + 1;
@@ -222,7 +227,7 @@ fn annotation_marker_start(
     }
     (!started_in_multiline_string
         && is_annotation_comment_line(language, line, started_in_block_comment))
-    .then(|| annotation_marker_position(line))
+    .then(|| annotation_marker_position(line, language == Language::Go))
     .flatten()
 }
 

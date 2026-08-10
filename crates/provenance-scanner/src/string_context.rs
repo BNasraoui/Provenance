@@ -1,36 +1,38 @@
-pub fn obvious_string_is_open(text: &str) -> bool {
+pub fn marker_is_inside_quoted_region(text: &str, marker: usize, track_backticks: bool) -> bool {
     let bytes = text.as_bytes();
-    let mut double_quote_open = false;
-    let mut backtick_open = false;
+    let mut quote = None;
     let mut index = 0;
-    while index < bytes.len() {
-        if !double_quote_open && !backtick_open && bytes[index] == b'\'' {
-            if let Some(end) = single_quote_end(bytes, index + 1) {
-                index = end + 1;
-                continue;
-            }
+    while index <= marker && index < bytes.len() {
+        if index == marker {
+            return quote.is_some();
         }
-        match bytes[index] {
-            b'\\' if !backtick_open => index = (index + 2).min(bytes.len()),
-            b'"' if !backtick_open => {
-                double_quote_open = !double_quote_open;
-                index += 1;
+        if let Some(active_quote) = quote {
+            match bytes[index] {
+                b'\\' if active_quote != b'`' => index = (index + 2).min(bytes.len()),
+                byte if byte == active_quote => {
+                    quote = None;
+                    index += 1;
+                }
+                _ => index += 1,
             }
-            b'`' if !double_quote_open => {
-                backtick_open = !backtick_open;
-                index += 1;
-            }
-            _ => index += 1,
+            continue;
         }
+        let candidate = bytes[index];
+        if (matches!(candidate, b'\'' | b'"') || (track_backticks && candidate == b'`'))
+            && quote_end(bytes, index + 1, candidate).is_some()
+        {
+            quote = Some(candidate);
+        }
+        index += 1;
     }
-    double_quote_open || backtick_open
+    false
 }
 
-fn single_quote_end(bytes: &[u8], mut index: usize) -> Option<usize> {
+fn quote_end(bytes: &[u8], mut index: usize, quote: u8) -> Option<usize> {
     while index < bytes.len() {
         match bytes[index] {
-            b'\\' => index += 2,
-            b'\'' => return Some(index),
+            b'\\' if quote != b'`' => index += 2,
+            byte if byte == quote => return Some(index),
             _ => index += 1,
         }
     }
