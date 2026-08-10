@@ -1,7 +1,7 @@
 use super::{CreateContributionInput, CreateSynthesisPacketInput, StateStore};
 use crate::shards;
 use provenance_core::{
-    validate_optional_confidence_score, Contribution, SchemaVersion, SynthesisPacket,
+    validate_optional_confidence_score, Contribution, SynthesisPacket, SUPPORTED_SCHEMA_VERSION,
 };
 
 impl StateStore {
@@ -47,7 +47,7 @@ impl StateStore {
             validate_optional_confidence_score(claim.confidence)?;
         }
         let contribution = Contribution {
-            schema_version: SchemaVersion(1),
+            schema_version: SUPPORTED_SCHEMA_VERSION,
             scope_id: scope_id.clone(),
             id,
             target,
@@ -160,7 +160,7 @@ impl StateStore {
             required_human_decisions,
         } = input;
         let synthesis_packet = SynthesisPacket {
-            schema_version: SchemaVersion(1),
+            schema_version: SUPPORTED_SCHEMA_VERSION,
             scope_id: scope_id.clone(),
             id,
             target,

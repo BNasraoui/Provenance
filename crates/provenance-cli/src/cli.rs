@@ -32,6 +32,7 @@ pub enum Command {
         #[arg(long, default_value = ".")]
         path_prefix: Utf8PathBuf,
         /// Repository-local actor ID allowed to attest proposal dispositions.
+        /// Repeat for multiple actors; if omitted, no actor may dispose.
         #[arg(long)]
         disposition_actor_id: Vec<String>,
     },

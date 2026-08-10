@@ -407,7 +407,10 @@ fn repository_actor_allowlist_rejects_unlisted_disposition_actor() {
         .unwrap_err()
         .to_string();
 
-    assert!(error.contains("repository allowlist"), "{error}");
+    assert!(
+        error.contains("no disposition actors configured"),
+        "{error}"
+    );
 }
 
 fn seed_blocked_evidence(store: &crate::state_store::StateStore, scope: &provenance_core::ScopeId) {

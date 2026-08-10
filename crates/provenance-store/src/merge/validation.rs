@@ -20,6 +20,7 @@ use provenance_core::{edge_validation::validate_edge_endpoint, Edge};
 use serde_json::Value;
 
 use super::CanonicalRecord;
+use crate::state_store::readers::ensure_supported_ideation_landing_versions;
 
 /// The record type a shard holds, read off the repository path of the file
 /// being merged.
@@ -32,7 +33,9 @@ use super::CanonicalRecord;
 pub enum ShardFamily {
     /// `.provenance/state/edges/*.jsonl`
     Edges,
-    /// Any other path, including the per-scope record families
+    /// `.provenance/state/scopes/<scope>/ideation/landings.jsonl`
+    IdeationLandings,
+    /// Any other path, including the ordinary per-scope record families
     /// (`requirements`, `rules`, `sources`, `resolutions`, and the rest) and
     /// files outside the state directory. Merged records pass unchecked.
     Unrecognized,
@@ -52,6 +55,19 @@ impl ShardFamily {
         let in_state = directory.parent().and_then(Utf8Path::file_name) == Some("state");
         if in_state && directory.file_name() == Some("edges") {
             Self::Edges
+        } else if path.file_name() == Some("landings.jsonl")
+            && directory.file_name() == Some("ideation")
+            && directory
+                .parent()
+                .and_then(Utf8Path::parent)
+                .is_some_and(|directory| directory.file_name() == Some("scopes"))
+            && directory
+                .parent()
+                .and_then(Utf8Path::parent)
+                .and_then(Utf8Path::parent)
+                .is_some_and(|directory| directory.file_name() == Some("state"))
+        {
+            Self::IdeationLandings
         } else {
             Self::Unrecognized
         }
@@ -75,6 +91,12 @@ pub fn validate_merged_records(
 ) -> anyhow::Result<()> {
     match ShardFamily::for_shard_path(shard_path) {
         ShardFamily::Edges => validate_merged_edges(records),
+        ShardFamily::IdeationLandings => {
+            for (index, record) in records.iter().enumerate() {
+                ensure_supported_ideation_landing_versions(shard_path, index + 1, record)?;
+            }
+            Ok(())
+        }
         ShardFamily::Unrecognized => Ok(()),
     }
 }
@@ -197,5 +219,20 @@ mod tests {
             report.contains("edge_truncated"),
             "error should name the offending record: {report}"
         );
+    }
+
+    #[test]
+    fn rejects_an_unsupported_record_nested_in_a_merged_landing() {
+        let shard = Utf8Path::new(".provenance/state/scopes/default/ideation/landings.jsonl");
+        let landing = serde_json::json!({
+            "contributions": [{"schema_version": 2, "id": "contribution_future"}]
+        });
+
+        let error = validate_merged_records(shard, &[landing])
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("record contribution_future"), "{error}");
+        assert!(error.contains("schema_version 2"), "{error}");
     }
 }
