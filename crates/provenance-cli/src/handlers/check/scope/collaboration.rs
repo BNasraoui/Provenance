@@ -2,6 +2,7 @@ use crate::handlers::check::index::CheckIndex;
 use crate::handlers::check::references::{check_scoped_reference, node_type_name};
 use provenance_core::{Message, ScopeId, Thread};
 use provenance_store::state_store::StateStore;
+use std::collections::BTreeSet;
 
 pub(super) struct Records {
     threads: Vec<Thread>,
@@ -18,6 +19,7 @@ impl Records {
 
     pub(super) fn validate_scope_ownership(
         &self,
+        manifest_scopes: &BTreeSet<String>,
         loaded_scope_id: &ScopeId,
         findings: &mut Vec<String>,
     ) {
@@ -35,7 +37,17 @@ impl Records {
             };
         }
 
-        check_records!(&self.threads, "thread");
+        for thread in &self.threads {
+            if manifest_scopes.contains(thread.scope_id.as_str()) {
+                super::check_scope_ownership(
+                    loaded_scope_id,
+                    &thread.scope_id,
+                    "thread",
+                    &thread.id,
+                    findings,
+                );
+            }
+        }
         check_records!(&self.messages, "message");
     }
 
@@ -51,19 +63,25 @@ impl Records {
     pub(super) fn validate(
         &self,
         index: &CheckIndex,
+        manifest_scopes: &BTreeSet<String>,
         scope_id: &ScopeId,
         dangling: &mut Vec<String>,
     ) {
         for thread in &self.threads {
-            check_scoped_reference(
-                index,
-                dangling,
-                scope_id,
-                &format!("thread {}", thread.id.as_str()),
-                "parent",
-                node_type_name(thread.parent.node_type),
-                &thread.parent.node_id,
-            );
+            let owner = format!("thread {}", thread.id.as_str());
+            if !manifest_scopes.contains(thread.scope_id.as_str()) {
+                dangling.push(format!(
+                    "{owner} is in unknown scope {}",
+                    thread.scope_id.as_str()
+                ));
+            }
+            if !index.has_global_node(thread.parent.node_type, &thread.parent.node_id) {
+                dangling.push(format!(
+                    "{owner} has dangling reference: parent {} {}",
+                    node_type_name(thread.parent.node_type),
+                    thread.parent.node_id.as_str()
+                ));
+            }
         }
         for message in &self.messages {
             check_scoped_reference(
