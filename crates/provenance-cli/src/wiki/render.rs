@@ -136,4 +136,13 @@ mod tests {
         page.verifications.clear();
         insta::assert_snapshot!(render_rule("default", &page));
     }
+
+    #[test]
+    fn snapshot_rule_page_without_a_code_scan() {
+        let mut page = rule_fixture();
+        page.code_scan = None;
+        page.rule_function = None;
+        page.verifications.clear();
+        insta::assert_snapshot!(render_rule("default", &page));
+    }
 }

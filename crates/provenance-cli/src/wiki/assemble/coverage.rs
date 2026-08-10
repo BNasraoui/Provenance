@@ -1,9 +1,17 @@
-use crate::wiki::model::{RuleFunction, VerificationSite};
+use crate::wiki::model::{CodeScan, RuleFunction, VerificationSite};
 use provenance_core::coverage::BindingResult;
 
 use super::context::Assembler;
 
 impl Assembler<'_> {
+    /// The scan this build read, so a page can say which code it looked at
+    /// and a page built without a scan can say that instead.
+    pub(super) fn code_scan(&self) -> Option<CodeScan> {
+        self.coverage.map(|report| CodeScan {
+            commit: report.commit.clone(),
+        })
+    }
+
     pub(super) fn rule_function(&self, rule_id: &str) -> Option<RuleFunction> {
         let binding = self
             .coverage?

@@ -57,6 +57,43 @@ fn coverage_bindings_become_commit_pinned_rule_function_and_verification_sites()
     assert_eq!(page.verifications.len(), 2);
     assert!(!page.verifications[0].outside_defining_module);
     assert!(page.verifications[1].outside_defining_module);
+    assert_eq!(
+        page.code_scan.as_ref().unwrap().commit.as_deref(),
+        Some("abc1234")
+    );
+}
+
+/// A build given no report must leave `code_scan` unset, so the page can say
+/// nothing was scanned instead of reporting an absent binding.
+#[test]
+fn a_corpus_built_without_a_report_records_no_code_scan() {
+    let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
+
+    let corpus = build_corpus_with_coverage(&fixture_state(), &resolver, None);
+    let page = rule_page(&corpus, "rule_001");
+
+    assert!(page.code_scan.is_none());
+    assert!(page.rule_function.is_none());
+    assert!(page.verifications.is_empty());
+}
+
+#[test]
+fn an_uncommitted_scan_is_recorded_without_a_commit() {
+    let report = CoverageReport::new(
+        None,
+        1,
+        Vec::new(),
+        vec![binding("src/rules.rs", 7, "decide_rule", None)],
+        Vec::new(),
+    );
+    let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
+
+    let corpus = build_corpus_with_coverage(&fixture_state(), &resolver, Some(&report));
+    let page = rule_page(&corpus, "rule_001");
+
+    let scan = page.code_scan.as_ref().unwrap();
+    assert!(scan.commit.is_none());
+    assert!(page.rule_function.is_some());
 }
 
 #[test]

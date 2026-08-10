@@ -1,4 +1,4 @@
-use crate::wiki::model::{PageKind, PageLink, RulePage};
+use crate::wiki::model::{CodeScan, PageKind, PageLink, RulePage};
 use std::fmt::Write as _;
 
 use super::super::chrome::{container_html, index_breadcrumb, page_shell, title_row};
@@ -19,6 +19,36 @@ fn page_links(page: &RulePage) -> Vec<&PageLink> {
     links
 }
 
+/// The binding sections have three states, and the page must not blur them.
+/// Without a scan it shows neither section and says so: "No function bound"
+/// on a page nobody scanned would read as a scan that found nothing.
+fn push_code_scan(main: &mut String, page: &RulePage) {
+    let Some(scan) = &page.code_scan else {
+        main.push_str(
+            "<section>\n<p class=\"scan-note\">No code scan was supplied to this build; \
+             bindings and verification are not shown.</p>\n</section>\n",
+        );
+        return;
+    };
+    push_rule_function(main, page);
+    push_verifications(main, page, scan);
+}
+
+/// Which code the sections above describe, so a reader can tell a scan of
+/// today's tree from one taken several commits ago.
+fn push_scan_note(main: &mut String, scan: &CodeScan) {
+    if let Some(commit) = &scan.commit {
+        writeln!(
+            main,
+            "<p class=\"scan-note\">Code scan at commit <code>{}</code></p>",
+            escape_html(commit.get(..7).unwrap_or(commit)),
+        )
+        .expect("writing to a String should not fail");
+    } else {
+        main.push_str("<p class=\"scan-note\">Code scan of an uncommitted working tree</p>\n");
+    }
+}
+
 fn push_rule_function(main: &mut String, page: &RulePage) {
     push_section_open(main, "sh-rule", None, "Rule Function");
     if let Some(binding) = &page.rule_function {
@@ -35,7 +65,7 @@ fn push_rule_function(main: &mut String, page: &RulePage) {
     main.push_str("</section>\n");
 }
 
-fn push_verifications(main: &mut String, page: &RulePage) {
+fn push_verifications(main: &mut String, page: &RulePage, scan: &CodeScan) {
     push_section_open(main, "sh-rule", Some("i-check-circle"), "Verification");
     if page.verifications.is_empty() {
         main.push_str("<p class=\"empty-state\">Not verified</p>\n");
@@ -58,6 +88,7 @@ fn push_verifications(main: &mut String, page: &RulePage) {
         }
         main.push_str("</ul>\n");
     }
+    push_scan_note(main, scan);
     main.push_str("</section>\n");
 }
 
@@ -70,8 +101,7 @@ pub fn render_rule(scope: &str, page: &RulePage) -> String {
     if let Some(description) = &page.description {
         push_prose_section(&mut main, "sh-rule", None, "Description", description);
     }
-    push_rule_function(&mut main, page);
-    push_verifications(&mut main, page);
+    push_code_scan(&mut main, page);
     if !page.produced_by.is_empty() {
         push_section_open(&mut main, "sh-resolution", Some("i-scale"), "Produced By");
         main.push_str(&links.link_list(&page.produced_by));

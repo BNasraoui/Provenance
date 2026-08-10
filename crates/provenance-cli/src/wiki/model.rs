@@ -292,6 +292,16 @@ pub struct RuleFunction {
     pub location: EvidenceRef,
 }
 
+/// The code scan the binding sections were read from. `None` on a page built
+/// without a scan report: such a page knows nothing about bindings and must
+/// not report an absent one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CodeScan {
+    /// The commit the scan ran against, or `None` for an uncommitted tree.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
+}
+
 /// A scanned site claiming how a rule is verified.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct VerificationSite {
@@ -311,6 +321,10 @@ pub struct RulePage {
     pub description: Option<String>,
     pub status: RuleStatus,
     pub severity: RuleSeverity,
+    /// The scan behind `rule_function` and `verifications`. `None` means no
+    /// scan was supplied, so neither field says anything about the code.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code_scan: Option<CodeScan>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rule_function: Option<RuleFunction>,
     pub verifications: Vec<VerificationSite>,

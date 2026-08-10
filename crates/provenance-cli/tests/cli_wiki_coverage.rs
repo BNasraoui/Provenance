@@ -76,9 +76,18 @@ fn wiki_build_uses_coverage_report_for_rule_functions_and_verifications() {
     assert!(!bound.contains("docs/obsolete.md"), "{bound}");
     assert!(!bound.contains(">Evidence</h2>"), "{bound}");
 
+    assert!(
+        bound.contains("Code scan at commit <code>abc1234</code>"),
+        "{bound}"
+    );
+
     let unbound = std::fs::read_to_string(out.join("rules/rule_unbound/index.html")).unwrap();
     assert!(unbound.contains("No function bound"), "{unbound}");
     assert!(unbound.contains("Not verified"), "{unbound}");
+    assert!(
+        unbound.contains("Code scan at commit <code>abc1234</code>"),
+        "{unbound}"
+    );
 }
 
 fn seed_rules(dir: &std::path::Path, repo: &std::path::Path) {
