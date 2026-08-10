@@ -196,19 +196,25 @@ fn requirement_and_index_pages_flag_requirements_without_domain_id_only() {
     assert!(missing_page
         .gaps
         .iter()
-        .any(|gap| gap.detail.contains("domain_id")));
+        .any(|gap| gap.kind == GapKind::MissingDomainId && gap.detail.contains("no domain")));
     assert!(!with_domain_page
         .gaps
         .iter()
-        .any(|gap| gap.detail.contains("domain_id")));
+        .any(|gap| gap.kind == GapKind::MissingDomainId));
     assert!(corpus.index.gaps.iter().any(|gap| {
-        gap.detail.contains("req_missing_domain") && gap.detail.contains("domain_id")
+        gap.kind == GapKind::MissingDomainId
+            && gap
+                .subject
+                .as_ref()
+                .is_some_and(|subject| subject.target.record_id == "req_missing_domain")
     }));
-    assert!(!corpus
-        .index
-        .gaps
-        .iter()
-        .any(|gap| { gap.detail.contains("req_with_domain") && gap.detail.contains("domain_id") }));
+    assert!(!corpus.index.gaps.iter().any(|gap| {
+        gap.kind == GapKind::MissingDomainId
+            && gap
+                .subject
+                .as_ref()
+                .is_some_and(|subject| subject.target.record_id == "req_with_domain")
+    }));
 }
 
 #[test]
@@ -226,7 +232,10 @@ fn requirement_page_flags_dangling_refs_and_frontier_gaps() {
         .iter()
         .find(|gap| gap.kind == GapKind::DanglingReference)
         .unwrap();
-    assert!(dangling.detail.contains("source_missing"));
+    assert_eq!(
+        dangling.detail,
+        "This requirement points to a source that is missing."
+    );
 }
 
 #[test]
@@ -262,19 +271,24 @@ fn requirement_and_index_pages_anchor_dangling_edges_in_both_directions() {
         .map(|gap| gap.detail.as_str())
         .collect();
     assert_eq!(dangling_details.len(), 2);
-    for missing_id in ["req_missing_from", "req_missing_to"] {
-        assert!(dangling_details.iter().any(|detail| {
-            detail.contains("req_surviving")
-                && detail.contains(missing_id)
-                && detail.contains("refines_into")
-        }));
-        assert!(corpus.index.gaps.iter().any(|gap| {
-            gap.kind == GapKind::DanglingReference
-                && gap.detail.contains("req_surviving")
-                && gap.detail.contains(missing_id)
-                && gap.detail.contains("refines_into")
-        }));
-    }
+    assert!(dangling_details
+        .iter()
+        .all(|detail| detail.contains("requirement that is missing")));
+    assert_eq!(
+        corpus
+            .index
+            .gaps
+            .iter()
+            .filter(|gap| {
+                gap.kind == GapKind::DanglingReference
+                    && gap
+                        .subject
+                        .as_ref()
+                        .is_some_and(|subject| subject.target.record_id == "req_surviving")
+            })
+            .count(),
+        2
+    );
 }
 
 #[test]
@@ -338,7 +352,15 @@ fn contradiction_gap_surfaces_on_both_requirement_pages_without_duplicate_fronti
         .filter(|gap| gap.kind == GapKind::UnresolvedContradictsPair)
         .collect();
     assert_eq!(left_contradictions.len(), 1);
-    assert!(left_contradictions[0].detail.contains("req_right"));
+    assert_eq!(
+        left_contradictions[0]
+            .related
+            .as_ref()
+            .unwrap()
+            .target
+            .record_id,
+        "req_right"
+    );
 
     let right_page = requirement_page(&corpus, "req_right");
     let right_contradictions: Vec<_> = right_page
@@ -347,9 +369,15 @@ fn contradiction_gap_surfaces_on_both_requirement_pages_without_duplicate_fronti
         .filter(|gap| gap.kind == GapKind::UnresolvedContradictsPair)
         .collect();
     assert_eq!(right_contradictions.len(), 1);
-    assert!(right_contradictions[0]
-        .detail
-        .contains("requirement req_right -> requirement req_left"));
+    assert_eq!(
+        right_contradictions[0]
+            .related
+            .as_ref()
+            .unwrap()
+            .target
+            .record_id,
+        "req_left"
+    );
 
     let pair_count = compute_state_gaps(&state)
         .iter()

@@ -187,7 +187,7 @@
        GRAMMAR — mirrors the Statesman Provenance resolution detail
        page: type accent bar, 1040px container, icon + display title,
        780px body + 220px scholarly margin, tinted territory cards,
-       full-width Field Notes band.
+       full-width Discussion band.
        ============================================================ */
 
     * { box-sizing: border-box; }
@@ -197,7 +197,7 @@
       background: var(--pv-canvas-bg);
       color: var(--pv-ink);
       font-family: var(--pv-font-body);
-      font-size: 14px;
+      font-size: 15px;
       line-height: 1.6;
     }
 
@@ -205,7 +205,7 @@
 
     code {
       font-family: var(--pv-font-mono);
-      font-size: 0.85em;
+      font-size: max(0.85em, 11px);
     }
 
     .icon { width: 1em; height: 1em; flex: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; fill: none; }
@@ -399,7 +399,7 @@
       display: flex;
       align-items: center;
       gap: 0.35rem;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.08em;
@@ -420,13 +420,13 @@
     }
     .rule-list li:first-child { border-top: 0; padding-top: 0; }
     .rule-list .rcode { font-family: var(--pv-font-mono); font-weight: 500; color: var(--pv-rule); white-space: nowrap; }
-    .rule-list .rname { font-weight: 600; }
+    .rule-list .rname { grid-column: 1 / 3; font-weight: 600; }
     .rule-list .rstatement { grid-column: 2 / 4; color: var(--pv-muted); line-height: 1.5; }
     .rule-list .rmeta { display: flex; gap: 0.35rem; align-items: baseline; white-space: nowrap; }
-    .rule-list .rref { grid-column: 2 / 4; font-family: var(--pv-font-mono); font-size: 10px; color: var(--pv-rule); opacity: 0.65; }
+    .rule-list .rref { grid-column: 2 / 4; font-family: var(--pv-font-mono); font-size: 11px; color: var(--pv-rule); opacity: 0.65; }
 
     .sev {
-      font-size: 9px;
+      font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.06em;
@@ -456,7 +456,7 @@
     /* ---- margin column: scholarly footnotes ---- */
 
     .margin-head {
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.08em;
@@ -466,10 +466,10 @@
 
     .citation { border-bottom: 1px solid var(--pv-card-border); padding-bottom: 0.75rem; margin-bottom: 0.75rem; }
     .citation .cite-head { display: flex; align-items: baseline; gap: 0.35rem; margin-bottom: 0.25rem; }
-    .citation .cite-num { font-size: 10px; font-weight: 700; color: var(--pv-resolution); opacity: 0.6; font-variant-numeric: tabular-nums; }
-    .citation .cite-type { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--pv-resolution); opacity: 0.7; }
+    .citation .cite-num { font-size: 11px; font-weight: 700; color: var(--pv-resolution); opacity: 0.6; font-variant-numeric: tabular-nums; }
+    .citation .cite-type { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--pv-resolution); opacity: 0.7; }
     .citation p { margin: 0; font-size: 12px; line-height: 1.55; }
-    .citation .cite-ref { font-family: var(--pv-font-mono); font-size: 10px; color: var(--pv-resolution); opacity: 0.5; margin-top: 0.25rem; word-break: break-all; }
+    .citation .cite-ref { font-family: var(--pv-font-mono); font-size: 11px; color: var(--pv-resolution); opacity: 0.5; margin-top: 0.25rem; word-break: break-all; }
 
     .citation.gap {
       border: 1px dashed color-mix(in srgb, var(--pv-status-discovery) 55%, transparent);
@@ -485,7 +485,7 @@
     .classification .icon { width: 12px; height: 12px; opacity: 0.4; }
     .classification .k { color: var(--pv-muted); }
     .classification .v { font-weight: 500; margin-left: auto; min-width: 0; text-align: right; overflow-wrap: anywhere; }
-    .classification .v.mono { font-family: var(--pv-font-mono); font-size: 10px; word-break: break-all; }
+    .classification .v.mono { font-family: var(--pv-font-mono); font-size: 11px; word-break: break-all; }
 
     .lineage { margin-top: 1.5rem; }
     .lineage ol { list-style: none; margin: 0; padding: 0; }
@@ -524,7 +524,7 @@
     .fn-head .icon { width: 16px; height: 16px; color: var(--pv-thread); opacity: 0.5; }
     .fn-head h2 { font-family: var(--pv-font-display); font-size: 14px; font-weight: 600; margin: 0; }
     .fn-head .count { font-size: 11px; color: var(--pv-muted); }
-    .fn-head .thread-id { font-family: var(--pv-font-mono); font-size: 10px; color: var(--pv-muted); opacity: 0.7; margin-left: auto; }
+    .fn-head .thread-id { font-family: var(--pv-font-mono); font-size: 11px; color: var(--pv-muted); opacity: 0.7; margin-left: auto; }
 
     .fn-list { max-width: 780px; }
 
@@ -537,7 +537,7 @@
       align-self: flex-start;
       margin-top: 0.15rem;
       padding: 0.15rem 0.4rem;
-      font-size: 9px;
+      font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.08em;
@@ -551,7 +551,7 @@
     .field-note .fn-body { flex: 1; min-width: 0; }
     .field-note .fn-meta { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.25rem; }
     .field-note .who { font-family: var(--pv-font-display); font-size: 11px; font-weight: 600; }
-    .field-note time { font-size: 10px; color: var(--pv-muted); }
+    .field-note time { font-size: 11px; color: var(--pv-muted); }
     .field-note .fn-content { margin: 0; white-space: pre-wrap; line-height: 1.55; font-size: 13px; }
     .field-note .fn-content .src { font-family: var(--pv-font-mono); font-size: 11px; color: var(--pv-thread); }
 
@@ -618,7 +618,7 @@
     .index-list li:first-child { border-top: 0; padding-top: 0; }
     .index-list .entry-title { color: var(--pv-requirement); font-family: var(--pv-font-display); font-weight: 600; text-decoration: none; }
     .index-list .entry-title:hover, .index-list .entry-title:focus-visible { text-decoration: underline; }
-    .index-list .entry-counts { font-family: var(--pv-font-mono); font-size: 10px; color: var(--pv-muted); margin-left: auto; white-space: nowrap; }
+    .index-list .entry-counts { font-family: var(--pv-font-mono); font-size: 11px; color: var(--pv-muted); margin-left: auto; white-space: nowrap; }
 
     .evidence-list { list-style: none; margin: 0; padding: 0; }
     .evidence-list li { font-family: var(--pv-font-mono); font-size: 12px; padding: 0.25rem 0; color: var(--pv-rule); }
@@ -629,8 +629,8 @@
     .verification-list { list-style: none; margin: 0; padding: 0; }
     .verification-list li { padding: 0.45rem 0; border-top: 1px solid color-mix(in srgb, var(--pv-card-border) 60%, transparent); font-family: var(--pv-font-mono); font-size: 12px; }
     .verification-list li:first-child { border-top: 0; padding-top: 0; }
-    .verification-method { display: inline-block; margin-right: 0.35rem; padding: 0.1rem 0.35rem; border-radius: 4px; background: var(--pv-rule-bg); color: var(--pv-rule); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
-    .site-note { margin-left: 0.35rem; color: var(--pv-muted); font-family: var(--pv-font-sans); font-size: 10px; }
+    .verification-method { display: inline-block; margin-right: 0.35rem; padding: 0.1rem 0.35rem; border-radius: 4px; background: var(--pv-rule-bg); color: var(--pv-rule); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+    .site-note { margin-left: 0.35rem; color: var(--pv-muted); font-family: var(--pv-font-body); font-size: 11px; }
     .site-note::before { content: "("; }
     .site-note::after { content: ")"; }
     .empty-state { margin: 0; color: var(--pv-muted); font-style: italic; }
@@ -662,7 +662,7 @@
     .domain-group h2 { font-family: var(--pv-font-display); font-size: 18px; margin: 0; }
     .domain-group .domain-id { display: block; color: var(--pv-muted); margin: 0.15rem 0 0.65rem; overflow-wrap: anywhere; }
     .domain-records { margin-top: 0.9rem; }
-    .domain-records h3 { margin: 0 0 0.35rem; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+    .domain-records h3 { margin: 0 0 0.35rem; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
     .domain-records.requirement { --pv-link-color: var(--pv-requirement); }
     .domain-records.rule { --pv-link-color: var(--pv-rule); }
     .data-note, .empty-note { color: var(--pv-muted); font-size: 12px; }

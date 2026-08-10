@@ -42,7 +42,7 @@ fn wiki_build_writes_static_pages_and_stylesheet() {
     assert!(out.join(".provenance-wiki-output.json").is_file());
 
     let domains = std::fs::read_to_string(out.join("domains/index.html")).unwrap();
-    assert!(domains.contains("Unassigned"), "{domains}");
+    assert!(domains.contains("All requirements"), "{domains}");
     assert!(
         domains.contains("href=\"/requirements/req_sah/\""),
         "{domains}"
@@ -309,7 +309,7 @@ fn wiki_serve_serves_pages_stylesheet_and_not_found() {
     );
 
     assert!(domains.contains("200 OK"), "{domains}");
-    assert!(domains.contains("Unassigned"), "{domains}");
+    assert!(domains.contains("All requirements"), "{domains}");
     assert!(search.contains("200 OK"), "{search}");
     assert!(search.contains("id=\"wiki-search\""), "{search}");
     assert!(findings.contains("200 OK"), "{findings}");

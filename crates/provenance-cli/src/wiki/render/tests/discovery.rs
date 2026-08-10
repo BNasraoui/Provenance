@@ -14,6 +14,18 @@ fn domain_index_renders_defined_missing_and_unassigned_sections() {
     );
     assert!(html.contains("href=\"/rules/rule_sah_inv_016/\""), "{html}");
     assert!(html.contains("Domain record missing"), "{html}");
+    assert!(html.contains("1 group"), "{html}");
+}
+
+#[test]
+fn domain_index_uses_singular_group_grammar() {
+    let mut page = domain_index_fixture();
+    page.groups.truncate(1);
+
+    let html = render_domains("default", &page);
+
+    assert!(html.contains("1 group."), "{html}");
+    assert!(!html.contains("1 groups"), "{html}");
 }
 
 #[test]
@@ -36,6 +48,10 @@ fn search_renders_safe_readable_dom_entries_and_shipped_script() {
     assert!(!html.contains("search-index.json"), "{html}");
     assert!(!html.contains("fetch("), "{html}");
     assert!(!html.contains("data-search-entry hidden"), "{html}");
+    assert!(
+        html.contains("placeholder=\"e.g. Invoice &amp; participant\""),
+        "{html}"
+    );
 }
 
 #[test]

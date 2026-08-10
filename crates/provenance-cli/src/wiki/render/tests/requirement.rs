@@ -15,8 +15,33 @@ fn requirement_page_carries_the_mockup_structure() {
     assert!(html.contains("Statement"));
     assert!(html.contains("Resolving Decision"));
     assert!(html.contains("blockquote class=\"position\""));
-    assert!(html.contains("Downstream Territory"));
-    assert!(html.contains("Field Notes"));
+    assert!(html.contains("Produced rules"));
+    assert!(html.contains("Discussion"));
+    assert!(!html.contains("Downstream Territory"));
+    assert!(!html.contains("Field Notes"));
+    assert!(html.contains(
+        "<a href=\"/rules/rule_sah_inv_016/\">Suppress line emission for fully zero claim items</a>"
+    ));
+    assert!(!html.contains(">rule_sah_inv_016</a>"));
+}
+
+#[test]
+fn produced_rule_titles_are_disambiguated_across_the_whole_page() {
+    let mut page = requirement_fixture();
+    let mut other = page.produced_rules[0].clone();
+    other.link.target.record_id = "rule_sah_inv_017".to_string();
+    page.produced_rules.push(other);
+
+    let html = render_requirement("default", &page);
+
+    assert!(
+        html.contains("<span class=\"id-chip\">…_inv_016</span>"),
+        "{html}"
+    );
+    assert!(
+        html.contains("<span class=\"id-chip\">…_inv_017</span>"),
+        "{html}"
+    );
 }
 
 #[test]
@@ -234,9 +259,23 @@ fn field_notes_who_shows_a_readable_role_not_the_raw_message_id() {
 fn gaps_render_as_dashed_citations_and_are_never_suppressed() {
     let html = render_requirement("default", &gappy_requirement_fixture());
     assert_eq!(html.matches("citation gap").count(), 3);
-    assert!(html.contains("source ref points at source_missing"));
-    assert!(html.contains("no source refs recorded on this requirement"));
-    assert!(html.contains("resolved with no resolving decision"));
+    assert!(html.contains("This requirement points to a source that is missing."));
+    assert!(html.contains("This requirement has no source references."));
+    assert!(html.contains("This requirement is marked resolved but has no resolving decision."));
+}
+
+#[test]
+fn requirement_margin_puts_plain_gaps_after_source_citations() {
+    let mut page = requirement_fixture();
+    page.gaps = gappy_requirement_fixture().gaps;
+
+    let html = render_requirement("default", &page);
+    let source = html.find("SCHADS Award mapping").unwrap();
+    let gaps = html.find(">Gaps</h3>").unwrap();
+    let first_gap = html.find("citation gap").unwrap();
+
+    assert!(source < gaps && gaps < first_gap, "{html}");
+    assert!(!html.contains('`'), "{html}");
 }
 
 #[test]

@@ -88,14 +88,20 @@ fn search_index(
         },
     ];
     let coverage = coverage_sentence(&collections);
-    let entries = collections
+    let entries: Vec<SearchEntry> = collections
         .into_iter()
         .flat_map(|collection| collection.entries)
         .collect();
+    let example = entries
+        .iter()
+        .map(|entry| entry.link.title.trim())
+        .find(|title| !title.is_empty())
+        .map(str::to_string);
     SearchIndexPage {
         scope: scope.to_string(),
         title: "Search requirements and rules".to_string(),
         coverage,
+        example,
         entries,
     }
 }
@@ -129,6 +135,7 @@ fn domain_index(
     requirements: &[RequirementRecord<'_>],
     rules: &[RuleRecord<'_>],
 ) -> DomainIndexPage {
+    let authored_group_count = state.domains.len();
     let mut groups = Vec::new();
     let mut positions = BTreeMap::new();
     for domain in &state.domains {
@@ -225,8 +232,31 @@ fn domain_index(
     DomainIndexPage {
         scope: state.scope.clone(),
         title: "Requirements and rules by domain".to_string(),
+        authored_group_count,
         groups,
+        all_requirements: flat_requirement_entries(requirements),
+        all_rules: flat_rule_entries(rules),
     }
+}
+
+fn flat_requirement_entries(requirements: &[RequirementRecord<'_>]) -> Vec<SearchEntry> {
+    requirements
+        .iter()
+        .map(|requirement| SearchEntry {
+            link: requirement.link.clone(),
+            statement: requirement.statement.to_string(),
+        })
+        .collect()
+}
+
+fn flat_rule_entries(rules: &[RuleRecord<'_>]) -> Vec<SearchEntry> {
+    rules
+        .iter()
+        .map(|rule| SearchEntry {
+            link: rule.link.clone(),
+            statement: rule.statement.to_string(),
+        })
+        .collect()
 }
 
 /// Decides which domains a requirement belongs to on the wiki.

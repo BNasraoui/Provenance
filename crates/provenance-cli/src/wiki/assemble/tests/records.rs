@@ -50,9 +50,73 @@ fn rule_page_traces_back_to_requirements_and_sources() {
 fn rule_page_flags_orphan_rules_and_titles_a_nameless_rule_by_its_id() {
     let corpus = fixture_corpus();
     let page = rule_page(&corpus, "rule_orphan");
-    assert_eq!(page.title, "rule_orphan");
+    assert_eq!(page.title, "Rule orphan");
     assert_eq!(gap_kinds(&page.gaps), vec![GapKind::OrphanRule]);
     assert!(page.produced_by.is_empty());
+}
+
+#[test]
+fn requirement_titles_stop_at_the_first_clause_while_the_statement_stays_complete() {
+    let mut state = empty_state();
+    let statement = "Claims shall be grouped by participant before invoicing; later exports may preserve the original ordering for audit readers";
+    state.requirements = vec![requirement(
+        "req_long_title",
+        statement,
+        provenance_core::RequirementStatus::Active,
+        vec![],
+    )];
+
+    let corpus = super::super::build_corpus(&state, &crate::wiki::links::LinkResolver::new(None));
+    let page = &corpus.requirements[0];
+
+    assert_eq!(
+        page.title,
+        "Claims shall be grouped by participant before invoicing"
+    );
+    assert_eq!(page.statement, statement);
+    assert!(page.title.chars().count() <= 70);
+}
+
+#[test]
+fn requirement_titles_handle_dotted_words_and_truncate_at_a_word_boundary() {
+    let mut state = empty_state();
+    state.requirements = vec![
+        requirement(
+            "req_dotnet",
+            ".NET 8.0 services shall preserve participant identifiers across every invoice export",
+            provenance_core::RequirementStatus::Active,
+            vec![],
+        ),
+        requirement(
+            "req_long_words",
+            "Participant invoice exports shall preserve all original settlement references while remaining readable to audit reviewers",
+            provenance_core::RequirementStatus::Active,
+            vec![],
+        ),
+    ];
+
+    let corpus = super::super::build_corpus(&state, &crate::wiki::links::LinkResolver::new(None));
+
+    assert!(corpus.requirements[0]
+        .title
+        .starts_with(".NET 8.0 services"));
+    assert!(corpus.requirements[1].title.ends_with('…'));
+    assert!(corpus.requirements[1].title.chars().count() <= 70);
+    assert!(!corpus.requirements[1].title.ends_with(" …"));
+
+    let mut unbroken_state = empty_state();
+    unbroken_state.requirements = vec![requirement(
+        "req_unbroken",
+        &"a".repeat(100),
+        provenance_core::RequirementStatus::Active,
+        vec![],
+    )];
+    let unbroken = super::super::build_corpus(
+        &unbroken_state,
+        &crate::wiki::links::LinkResolver::new(None),
+    );
+    assert!(unbroken.requirements[0].title.chars().count() <= 70);
+    assert!(unbroken.requirements[0].title.ends_with('…'));
 }
 
 #[test]

@@ -2,7 +2,7 @@ use crate::wiki::model::{PageKind, PageLink, SourcePage};
 use std::fmt::Write as _;
 
 use super::super::chrome::{container_html, index_breadcrumb, page_shell, title_row};
-use super::super::citations::push_gap_citations;
+use super::super::citations::{gap_links, push_gap_citations};
 use super::super::field_notes::field_notes;
 use super::super::fragments::{
     push_classification_block, push_classification_link_row, push_classification_row,
@@ -16,6 +16,7 @@ use super::super::labels::{format_date_ms, source_type_label, status_badge};
 fn page_links(page: &SourcePage) -> Vec<&PageLink> {
     let mut links: Vec<&PageLink> = page.referenced_requirements.iter().collect();
     links.extend(page.superseded_by.iter());
+    links.extend(gap_links(&page.gaps));
     links
 }
 
@@ -38,7 +39,7 @@ pub fn render_source(scope: &str, page: &SourcePage) -> String {
     let mut margin = String::new();
     if !page.gaps.is_empty() {
         margin.push_str("<h3 class=\"margin-head\">Gaps</h3>\n");
-        push_gap_citations(&mut margin, &page.gaps);
+        push_gap_citations(&mut margin, &links, &page.gaps);
     }
     let mut rows = String::new();
     push_classification_row(

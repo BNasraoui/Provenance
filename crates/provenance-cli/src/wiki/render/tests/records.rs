@@ -1,4 +1,4 @@
-use crate::wiki::model::PageKind;
+use crate::wiki::model::{GapKind, GapNotice, PageKind};
 
 use super::super::{
     render_not_found, render_requirement, render_resolution, render_rule, render_source,
@@ -21,6 +21,20 @@ fn resolution_page_renders_inputs_as_citations_and_attribution() {
     assert!(html.contains(
         "<a href=\"/requirements/req_saveinvoice_split/\">SaveInvoice shall split each claim item into portions</a>"
     ));
+}
+
+#[test]
+fn attribution_normalizes_machine_shaped_actor_names() {
+    let mut page = resolution_fixture();
+    page.made_by = Some("ben_nasraoui".to_string());
+    page.approved_by = Some("release-reviewer".to_string());
+
+    let html = render_resolution("default", &page);
+
+    assert!(html.contains("Ben Nasraoui"), "{html}");
+    assert!(html.contains("Release Reviewer"), "{html}");
+    assert!(!html.contains("ben_nasraoui"), "{html}");
+    assert!(!html.contains("release-reviewer"), "{html}");
 }
 
 #[test]
@@ -92,9 +106,51 @@ fn rule_page_disambiguates_mixed_kind_producers_with_the_same_id() {
     ];
 
     let html = render_rule("default", &page);
-    assert!(html.contains("Produced By"));
+    assert!(html.contains(">Provenance</h2>"));
+    assert!(!html.contains("Produced By"));
+    assert!(!html.contains("Upstream Requirements"));
     assert!(html.contains("<span class=\"id-chip\">Resolution · shared_id</span>"));
     assert!(html.contains("<span class=\"id-chip\">Requirement · shared_id</span>"));
+}
+
+#[test]
+fn rule_page_merges_and_deduplicates_producers_and_upstream_requirements() {
+    let mut page = rule_fixture();
+    page.produced_by.push(page.requirements[0].clone());
+
+    let html = render_rule("default", &page);
+
+    assert_eq!(html.matches(">Provenance</h2>").count(), 1, "{html}");
+    assert_eq!(
+        html.matches("href=\"/requirements/req_saveinvoice_split/\"")
+            .count(),
+        1,
+        "{html}"
+    );
+}
+
+#[test]
+fn rule_pages_use_shields_and_explain_orphaned_provenance_without_raw_ids() {
+    let mut page = rule_fixture();
+    page.id.record_id = "rule_orphan".to_string();
+    page.produced_by.clear();
+    page.requirements.clear();
+    page.gaps = vec![GapNotice {
+        kind: GapKind::OrphanRule,
+        subject: None,
+        related: None,
+        detail: "No requirement or decision is recorded as producing this rule.".to_string(),
+    }];
+    let html = render_rule("default", &page);
+
+    assert!(html.contains("href=\"#i-shield\""), "{html}");
+    assert!(
+        html.contains("No requirement or decision is recorded as producing this rule."),
+        "{html}"
+    );
+    let gap_start = html.find("citation gap").unwrap();
+    let gap_end = html[gap_start..].find("</div>").unwrap() + gap_start;
+    assert!(!html[gap_start..gap_end].contains("rule_orphan"), "{html}");
 }
 
 #[test]

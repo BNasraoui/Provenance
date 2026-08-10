@@ -60,7 +60,7 @@ expression: "render_index(\"default\", &index_fixture())"
 <p>Find the project records you need without browsing every area.</p>
 <form class="search-box" role="search" action="/search/" method="get">
 <label for="homepage-search">Search by title or text</label>
-<div><input id="homepage-search" name="q" type="search" autocomplete="off" placeholder="e.g. invoice participant"><button type="submit">Search</button></div>
+<div><input id="homepage-search" name="q" type="search" autocomplete="off" placeholder="e.g. Invoice &amp; participant"><button type="submit">Search</button></div>
 </form><p class="search-summary">Search covers requirements and rules.</p></section>
 <section data-homepage-domains><h2>Browse by area</h2>
 <article class="domain-group" data-homepage-domain-row><h3><a href="/domains/#domain-domain_default">Invoicing</a></h3>

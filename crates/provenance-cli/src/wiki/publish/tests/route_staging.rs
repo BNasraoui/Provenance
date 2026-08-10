@@ -30,6 +30,7 @@ fn staging_failure_preserves_the_previous_complete_output() {
         description: None,
         fog: None,
         domain_id: None,
+        domain_has_anchor: false,
         back_link: None,
         lineage: Vec::new(),
         decisions: Vec::new(),

@@ -28,6 +28,7 @@ fn empty_corpus() -> WikiCorpus {
             gaps: Vec::new(),
             orphans: OrphanReport::default(),
             search_coverage: "Search covers requirements and rules.".to_string(),
+            search_example: None,
             domains: Vec::new(),
             authored_domain_count: 0,
             finding_count: 0,
@@ -35,12 +36,16 @@ fn empty_corpus() -> WikiCorpus {
         domains: DomainIndexPage {
             scope: "default".to_string(),
             title: "Requirements and rules by domain".to_string(),
+            authored_group_count: 0,
             groups: Vec::new(),
+            all_requirements: Vec::new(),
+            all_rules: Vec::new(),
         },
         search: SearchIndexPage {
             scope: "default".to_string(),
             title: "Search requirements and rules".to_string(),
             coverage: "Search covers requirements and rules.".to_string(),
+            example: None,
             entries: Vec::new(),
         },
         findings: FindingsPage {

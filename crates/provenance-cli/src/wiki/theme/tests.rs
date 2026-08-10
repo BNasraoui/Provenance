@@ -229,6 +229,26 @@ fn css_styles_domain_navigation_and_search_responsively() {
 }
 
 #[test]
+fn css_uses_readable_base_type_with_an_eleven_pixel_floor() {
+    assert!(css_rule("body").contains("font-size: 15px;"));
+    for declaration in WIKI_CSS.split("font-size:").skip(1) {
+        let value = declaration.split(';').next().unwrap_or_default();
+        for token in
+            value.split(|character: char| !(character.is_ascii_digit() || character == '.'))
+        {
+            if token.is_empty() || !value.contains(&format!("{token}px")) {
+                continue;
+            }
+            let pixels: f64 = token.parse().expect("pixel font sizes should be numeric");
+            assert!(
+                pixels >= 11.0,
+                "font-size {value:?} falls below the 11px floor"
+            );
+        }
+    }
+}
+
+#[test]
 fn icon_defs_cover_the_symbols_the_renderer_uses() {
     for symbol in [
         "i-git-branch",

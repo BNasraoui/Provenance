@@ -25,7 +25,7 @@ pub(in crate::wiki::render) fn field_notes(threads: &[EvidenceThread], page_id: 
         };
         write!(
             html,
-            "<div class=\"fn-head\">\n{}<h2>Field Notes</h2>\n<span class=\"count\">{} · {}</span>\n<span class=\"thread-id\">{}{borrowed}</span>\n</div>\n",
+            "<div class=\"fn-head\">\n{}<h2>Discussion</h2>\n<span class=\"count\">{} · {}</span>\n<span class=\"thread-id\">{}{borrowed}</span>\n</div>\n",
             icon_svg("i-message-square"),
             counted(thread.messages.len(), "message", "messages"),
             thread_status_word(&thread.status),

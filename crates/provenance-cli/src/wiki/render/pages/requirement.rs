@@ -2,7 +2,7 @@ use crate::wiki::model::{PageKind, PageLink, RequirementPage};
 use std::fmt::Write as _;
 
 use super::super::chrome::{breadcrumb_from_lineage, container_html, page_shell, title_row};
-use super::super::citations::{push_gap_citations, push_source_citations};
+use super::super::citations::{gap_links, push_gap_citations, push_source_citations};
 use super::super::field_notes::field_notes;
 use super::super::fragments::{
     push_attribution, push_classification_block, push_classification_row, push_decision_sections,
@@ -19,7 +19,9 @@ fn page_links(page: &RequirementPage) -> Vec<&PageLink> {
     links.extend(page.decisions.iter().map(|decision| &decision.link));
     links.extend(&page.children);
     links.extend(&page.siblings);
+    links.extend(page.produced_rules.iter().map(|rule| &rule.link));
     links.extend(page.sources.iter().map(|citation| &citation.link));
+    links.extend(gap_links(&page.gaps));
     links
 }
 
@@ -51,9 +53,9 @@ pub fn render_requirement(scope: &str, page: &RequirementPage) -> String {
         push_decision_sections(&mut main, &links, decision);
     }
     if !page.produced_rules.is_empty() {
-        push_section_open(&mut main, "sh-resolution", None, "Downstream Territory");
+        push_section_open(&mut main, "sh-rule", Some("i-shield"), "Produced rules");
         main.push_str("<div class=\"territory\">\n");
-        push_rule_territory_card(&mut main, &page.produced_rules);
+        push_rule_territory_card(&mut main, &links, &page.produced_rules);
         main.push_str("</div>\n</section>\n");
     }
     if !page.children.is_empty() {
@@ -98,20 +100,29 @@ pub fn render_requirement(scope: &str, page: &RequirementPage) -> String {
     }
 
     let mut margin = String::new();
-    margin.push_str("<h3 class=\"margin-head\">Sources</h3>\n");
-    push_gap_citations(&mut margin, &page.gaps);
-    push_source_citations(&mut margin, &links, &page.sources);
+    if !page.sources.is_empty() {
+        margin.push_str("<h3 class=\"margin-head\">Sources</h3>\n");
+        push_source_citations(&mut margin, &links, &page.sources);
+    }
+    if !page.gaps.is_empty() {
+        margin.push_str("<h3 class=\"margin-head\">Gaps</h3>\n");
+        push_gap_citations(&mut margin, &links, &page.gaps);
+    }
     let mut rows = String::new();
     if let Some(domain_id) = &page.domain_id {
-        writeln!(
-            rows,
-            "<div class=\"row\">{}<span class=\"k\">Domain</span>\
-             <a class=\"v mono\" href=\"{}\">{}</a></div>",
-            icon_svg("i-git-branch"),
-            escape_attr(&crate::wiki::routes::domain_fragment(domain_id)),
-            escape_html(domain_id),
-        )
-        .expect("writing to a String should not fail");
+        if page.domain_has_anchor {
+            writeln!(
+                rows,
+                "<div class=\"row\">{}<span class=\"k\">Domain</span>\
+                 <a class=\"v mono\" href=\"{}\">{}</a></div>",
+                icon_svg("i-git-branch"),
+                escape_attr(&crate::wiki::routes::domain_fragment(domain_id)),
+                escape_html(domain_id),
+            )
+            .expect("writing to a String should not fail");
+        } else {
+            push_classification_row(&mut rows, "i-git-branch", "Domain", domain_id, true);
+        }
     }
     for decision in &page.decisions {
         if let Some(enforcement) = &decision.enforcement {

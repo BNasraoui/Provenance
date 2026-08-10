@@ -1,9 +1,10 @@
-use crate::wiki::model::{DomainIndexPage, DomainState, PageKind, PageLink};
+use crate::wiki::model::{DomainIndexPage, DomainState, PageKind, PageLink, SearchEntry};
 use crate::wiki::routes::{domain_anchor, WikiRoute, UNASSIGNED_DOMAIN_ANCHOR};
 use std::fmt::Write as _;
 
 use super::super::chrome::{container_html, index_breadcrumb, page_shell, title_row};
-use super::super::html::{escape_attr, escape_html, PageLinksRenderer};
+use super::super::html::{escape_attr, escape_html, icon_svg, PageLinksRenderer};
+use super::super::labels::counted;
 
 /// Every titled link this page renders: the requirements and rules of every
 /// domain group, gathered so one group's title collides visibly with another's.
@@ -13,18 +14,26 @@ fn page_links(page: &DomainIndexPage) -> Vec<&PageLink> {
         links.extend(&group.requirements);
         links.extend(&group.rules);
     }
+    links.extend(page.all_requirements.iter().map(|entry| &entry.link));
+    links.extend(page.all_rules.iter().map(|entry| &entry.link));
     links
 }
 
 pub fn render_domains(scope: &str, page: &DomainIndexPage) -> String {
     let links = PageLinksRenderer::new(page_links(page));
     let mut main = String::new();
-    if page.groups.is_empty() {
-        main.push_str(
-            "<p class=\"empty-note\">No domains, requirements, or rules are recorded in this scope.</p>\n",
+    if page.authored_group_count == 0 {
+        main.push_str("<p class=\"empty-note\">No domains have been authored in this scope. All requirements and rules are listed below.</p>\n");
+        push_all_records(
+            &mut main,
+            &links,
+            "All requirements",
+            &page.all_requirements,
+            false,
         );
+        push_all_records(&mut main, &links, "All rules", &page.all_rules, true);
     }
-    for group in &page.groups {
+    for group in page.groups.iter().filter(|_| page.authored_group_count > 0) {
         let (anchor, name, domain_id, description, gap) = match &group.state {
             DomainState::Defined {
                 id,
@@ -93,10 +102,7 @@ pub fn render_domains(scope: &str, page: &DomainIndexPage) -> String {
         }
         main.push_str("</section>\n");
     }
-    let margin = format!(
-        "<h3 class=\"margin-head\">Domains</h3><p class=\"prose\">{} groups. Rules inherit every Domain represented by their upstream requirements.</p>",
-        page.groups.len()
-    );
+    let margin = domain_margin(page);
     let container = container_html(
         Some((
             PageKind::ScopeIndex,
@@ -114,6 +120,46 @@ pub fn render_domains(scope: &str, page: &DomainIndexPage) -> String {
         &container,
         "",
     )
+}
+
+fn domain_margin(page: &DomainIndexPage) -> String {
+    format!(
+        "<h3 class=\"margin-head\">Domains</h3><p class=\"prose\">{}. Rules inherit every Domain represented by their upstream requirements.</p>",
+        counted(page.authored_group_count, "group", "groups")
+    )
+}
+
+fn push_all_records(
+    html: &mut String,
+    links: &PageLinksRenderer,
+    heading: &str,
+    entries: &[SearchEntry],
+    rules: bool,
+) {
+    writeln!(html, "<section><h2>{}</h2>", escape_html(heading))
+        .expect("writing to a String should not fail");
+    if entries.is_empty() {
+        let noun = if rules { "rules" } else { "requirements" };
+        writeln!(html, "<p class=\"empty-note\">No {noun} are recorded.</p>")
+            .expect("writing to a String should not fail");
+    } else {
+        html.push_str("<ol class=\"search-results\">\n");
+        for entry in entries {
+            html.push_str("<li>\n");
+            if rules {
+                html.push_str(&icon_svg("i-shield"));
+            }
+            writeln!(
+                html,
+                "{}<p>{}</p></li>",
+                links.link(&entry.link, None),
+                escape_html(&entry.statement)
+            )
+            .expect("writing to a String should not fail");
+        }
+        html.push_str("</ol>\n");
+    }
+    html.push_str("</section>\n");
 }
 
 fn push_group(

@@ -141,6 +141,7 @@ pub(super) fn requirement_fixture() -> RequirementPage {
         description: None,
         fog: None,
         domain_id: Some("dom_invoicing".to_string()),
+        domain_has_anchor: true,
         back_link: Some(link(
             PageKind::Requirement,
             "req_sah",
@@ -192,6 +193,7 @@ pub(super) fn gappy_requirement_fixture() -> RequirementPage {
         description: None,
         fog: Some("Which award clauses apply is still unclear.".to_string()),
         domain_id: None,
+        domain_has_anchor: false,
         back_link: None,
         lineage: vec![LineageEntry {
             link: link(
@@ -209,15 +211,22 @@ pub(super) fn gappy_requirement_fixture() -> RequirementPage {
         gaps: vec![
             GapNotice {
                 kind: GapKind::DanglingReference,
-                detail: "source ref points at source_missing, which does not exist".to_string(),
+                subject: None,
+                related: None,
+                detail: "This requirement points to a source that is missing.".to_string(),
             },
             GapNotice {
                 kind: GapKind::MissingSourceRefs,
-                detail: "no source refs recorded on this requirement".to_string(),
+                subject: None,
+                related: None,
+                detail: "This requirement has no source references.".to_string(),
             },
             GapNotice {
                 kind: GapKind::NoResolvingDecision,
-                detail: "resolved with no resolving decision".to_string(),
+                subject: None,
+                related: None,
+                detail: "This requirement is marked resolved but has no resolving decision."
+                    .to_string(),
             },
         ],
         threads: vec![],
@@ -340,7 +349,9 @@ pub(super) fn index_fixture() -> ScopeIndexPage {
         }],
         gaps: vec![GapNotice {
             kind: GapKind::UnreferencedSource,
-            detail: "source_unused is referenced by nothing".to_string(),
+            subject: None,
+            related: None,
+            detail: "A source is not referenced by a requirement.".to_string(),
         }],
         orphans: OrphanReport {
             rules: vec![OrphanRule {
@@ -351,6 +362,7 @@ pub(super) fn index_fixture() -> ScopeIndexPage {
             sources: vec![link(PageKind::Source, "source_unused", "Unused API spec")],
         },
         search_coverage: "Search covers requirements and rules.".to_string(),
+        search_example: Some("Invoice & participant".to_string()),
         domains: vec![HomepageDomain {
             id: "domain_default".to_string(),
             name: "Invoicing".to_string(),
@@ -381,6 +393,7 @@ pub(super) fn domain_index_fixture() -> DomainIndexPage {
     DomainIndexPage {
         scope: "default".to_string(),
         title: "Requirements and rules by domain".to_string(),
+        authored_group_count: 1,
         groups: vec![
             DomainGroup {
                 state: DomainState::Defined {
@@ -412,6 +425,18 @@ pub(super) fn domain_index_fixture() -> DomainIndexPage {
                 rules: vec![],
             },
         ],
+        all_requirements: vec![SearchEntry {
+            link: link(
+                PageKind::Requirement,
+                "req_saveinvoice_split",
+                "Invoice & participant",
+            ),
+            statement: "Invoice & participant statement".to_string(),
+        }],
+        all_rules: vec![SearchEntry {
+            link: link(PageKind::Rule, "rule_sah_inv_016", "Suppress line emission"),
+            statement: "No invoice lines shall be emitted for zero claims".to_string(),
+        }],
     }
 }
 
@@ -420,6 +445,7 @@ pub(super) fn search_fixture() -> SearchIndexPage {
         scope: "default".to_string(),
         title: "Search requirements and rules".to_string(),
         coverage: "Search covers requirements and rules.".to_string(),
+        example: Some("Invoice & participant".to_string()),
         entries: vec![SearchEntry {
             link: link(
                 PageKind::Requirement,
@@ -438,19 +464,28 @@ pub(super) fn findings_fixture() -> FindingsPage {
         findings: vec![
             GapNotice {
                 kind: GapKind::UnreferencedSource,
-                detail: "source_unused is referenced by nothing".to_string(),
+                subject: None,
+                related: None,
+                detail: "A source is not referenced by a requirement.".to_string(),
             },
             GapNotice {
                 kind: GapKind::DanglingReference,
-                detail: "source ref points at source_missing, which does not exist".to_string(),
+                subject: None,
+                related: None,
+                detail: "A requirement points to a source that is missing.".to_string(),
             },
             GapNotice {
                 kind: GapKind::MissingSourceRefs,
-                detail: "no source refs recorded on this requirement".to_string(),
+                subject: None,
+                related: None,
+                detail: "A requirement has no source references.".to_string(),
             },
             GapNotice {
                 kind: GapKind::NoResolvingDecision,
-                detail: "resolved with no resolving decision".to_string(),
+                subject: None,
+                related: None,
+                detail: "A requirement is marked resolved but has no resolving decision."
+                    .to_string(),
             },
         ],
     }

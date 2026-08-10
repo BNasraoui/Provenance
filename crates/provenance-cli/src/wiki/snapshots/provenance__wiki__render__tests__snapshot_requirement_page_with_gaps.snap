@@ -71,18 +71,18 @@ expression: "render_requirement(\"default\", &gappy_requirement_fixture())"
 </section>
 </div>
 <aside class="body-margin">
-<h3 class="margin-head">Sources</h3>
+<h3 class="margin-head">Gaps</h3>
 <div class="citation gap">
 <div class="cite-head"><span class="cite-type" style="color:inherit">Gap</span></div>
-<p>source ref points at source_missing, which does not exist</p>
+<p>This requirement points to a source that is missing.</p>
 </div>
 <div class="citation gap">
 <div class="cite-head"><span class="cite-type" style="color:inherit">Gap</span></div>
-<p>no source refs recorded on this requirement</p>
+<p>This requirement has no source references.</p>
 </div>
 <div class="citation gap">
 <div class="cite-head"><span class="cite-type" style="color:inherit">Gap</span></div>
-<p>resolved with no resolving decision</p>
+<p>This requirement is marked resolved but has no resolving decision.</p>
 </div>
 <div class="lineage">
 <h3 class="margin-head">Lineage</h3>

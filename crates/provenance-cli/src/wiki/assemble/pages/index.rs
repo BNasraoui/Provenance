@@ -5,7 +5,9 @@ use crate::wiki::model::{
 use provenance_core::{EdgeType, NodeType};
 
 use super::super::context::Assembler;
-use super::super::page_links::{requirement_link, resolution_link, rule_link, source_link};
+use super::super::page_links::{
+    display_identifier, reader_title, requirement_link, resolution_link, rule_link, source_link,
+};
 use provenance_store::cache::GapKind;
 
 impl Assembler<'_> {
@@ -103,7 +105,10 @@ impl Assembler<'_> {
             .collect();
         ScopeIndexPage {
             scope: self.state.scope.clone(),
-            title: format!("{} documentation", self.state.scope),
+            title: reader_title(&format!(
+                "{} documentation",
+                display_identifier(&self.state.scope)
+            )),
             counts: CorpusCounts {
                 sources: self.state.sources.len(),
                 requirements: self.state.requirements.len(),
@@ -114,6 +119,7 @@ impl Assembler<'_> {
             gaps: self.index_gaps(),
             orphans,
             search_coverage: search.coverage.clone(),
+            search_example: search.example.clone(),
             domains,
             authored_domain_count,
             finding_count,

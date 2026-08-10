@@ -60,7 +60,11 @@ fn traceability_summary_html(finding_count: usize) -> String {
 #[rule("rule_wiki_homepage_traceability_summary")]
 fn homepage_content_html(page: &ScopeIndexPage) -> String {
     let mut main = String::new();
-    push_search(&mut main, &page.search_coverage);
+    push_search(
+        &mut main,
+        &page.search_coverage,
+        page.search_example.as_deref(),
+    );
     push_domains(&mut main, page);
     main.push_str(&traceability_summary_html(page.finding_count));
     main
@@ -120,17 +124,20 @@ pub fn render_index(scope: &str, page: &ScopeIndexPage) -> String {
     html
 }
 
-fn push_search(html: &mut String, coverage: &str) {
+fn push_search(html: &mut String, coverage: &str, example: Option<&str>) {
+    let placeholder = example.map_or_else(String::new, |example| {
+        format!(" placeholder=\"e.g. {}\"", escape_attr(example))
+    });
     write!(
         html,
         "<section class=\"homepage-search\"><h2>Search the documentation</h2>\n\
          <p>Find the project records you need without browsing every area.</p>\n\
          <form class=\"search-box\" role=\"search\" action=\"{}\" method=\"get\">\n\
          <label for=\"homepage-search\">Search by title or text</label>\n\
-         <div><input id=\"homepage-search\" name=\"q\" type=\"search\" autocomplete=\"off\" \
-         placeholder=\"e.g. invoice participant\"><button type=\"submit\">Search</button></div>\n\
+         <div><input id=\"homepage-search\" name=\"q\" type=\"search\" autocomplete=\"off\"{}><button type=\"submit\">Search</button></div>\n\
          </form><p class=\"search-summary\">{}</p></section>\n",
         WikiRoute::Search.path(),
+        placeholder,
         escape_html(coverage),
     )
     .expect("writing to a String should not fail");
