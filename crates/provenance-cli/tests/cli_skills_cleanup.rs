@@ -91,7 +91,11 @@ fn cleanup_removes_only_skill_file_and_keeps_user_files() {
 fn rerun_reports_legacy_cleanup_as_an_update() {
     let dir = tempfile::tempdir().unwrap();
     install_local(dir.path()).success();
-    let legacy = legacy_dir(dir.path(), ".agents/skills", "shaping");
+    // The report's paths come from the child's physical working directory;
+    // canonicalize so the expectation matches on macOS, where the temp area
+    // sits behind the /var -> /private/var symlink.
+    let physical = dir.path().canonicalize().unwrap();
+    let legacy = legacy_dir(&physical, ".agents/skills", "shaping");
     write_managed_skill(&legacy, "---\nname: old\n---\n", "payload\n");
 
     let output = install_local(dir.path())

@@ -15,6 +15,17 @@ The pre-commit hook runs formatting, Clippy, and compile checks. Fix any
 reported failure before committing. When a hook must be bypassed intentionally,
 use Git's standard `git commit --no-verify` option.
 
+## Code standards
+
+**No Rust file in this repo may exceed 500 lines.** Unreadable code is not accepted.
+
+- New files must be designed under the limit from the start; split by responsibility, not by line count.
+- Never push an existing file over the limit. If your change would, extract a module first.
+- When you touch a file already over the limit, leave it smaller than you found it where practical.
+- Tests count too: split large test files by the behavior they pin.
+
+Before designing or restructuring modules, use the `codebase-design` and `domain-modeling` skills (`.claude/skills/`).
+
 ## Quick Reference
 
 ```bash

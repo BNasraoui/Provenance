@@ -20,6 +20,30 @@ fn publishes_a_complete_fresh_custom_output() {
     assert_no_transaction_artifacts(&output);
 }
 
+/// An OS-provided symlink above the output (macOS's `/var -> /private/var`,
+/// or here `link -> real`) is not the output root and must not block
+/// publication; only the descent below the resolved parent stays no-follow.
+#[test]
+#[cfg(unix)]
+#[verifies("rule_wiki_output_ownership", examples)]
+fn publishes_through_a_symlinked_ancestor_of_the_output() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::create_dir(temp.path().join("real")).unwrap();
+    std::os::unix::fs::symlink(temp.path().join("real"), temp.path().join("link")).unwrap();
+    let output = utf8(temp.path().join("link").join("sub").join("wiki"));
+
+    publish(&empty_corpus(), PublicationOutput::custom(output.clone())).unwrap();
+
+    assert!(output.join("index.html").is_file());
+    assert!(temp
+        .path()
+        .join("real")
+        .join("sub")
+        .join("wiki")
+        .join("index.html")
+        .is_file());
+}
+
 #[test]
 #[verifies("rule_wiki_output_ownership", examples)]
 fn adopts_an_empty_custom_directory() {

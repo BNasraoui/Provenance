@@ -11,3 +11,10 @@ node_modules/
 
 # Dolt database files (added by bd init)
 .dolt/
+
+# Riptide artifacts (cloud-synced)
+.humanlayer/tasks/
+
+# Local Claude Code state (skills are tracked)
+.claude/worktrees/
+.claude/settings.local.json

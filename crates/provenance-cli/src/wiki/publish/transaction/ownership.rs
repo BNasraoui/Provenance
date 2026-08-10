@@ -246,11 +246,41 @@ pub(super) fn output_identity(output: &Utf8Path) -> Result<OutputState, PublishE
     Ok(OutputState::Existing(OutputIdentity(identity)))
 }
 
+/// Resolve OS-level symlinks in the existing part of the parent path once,
+/// before the no-follow descent. On macOS the default temp area lives under
+/// `/var -> /private/var`, so refusing symlinked ancestors outright would
+/// reject every standard temp path. After this resolution the descent still
+/// refuses to follow symlinks, so a swap mid-walk fails closed.
+fn resolve_existing_parent_prefix(parent: &Path) -> std::io::Result<PathBuf> {
+    let mut existing = parent;
+    let mut created_below = Vec::new();
+    while !existing.try_exists()? {
+        match (existing.file_name(), existing.parent()) {
+            (Some(leaf), Some(next)) => {
+                created_below.push(leaf.to_os_string());
+                existing = next;
+            }
+            _ => break,
+        }
+    }
+    let mut resolved = if existing.as_os_str().is_empty() {
+        std::fs::canonicalize(".")?
+    } else {
+        std::fs::canonicalize(existing)?
+    };
+    for leaf in created_below.iter().rev() {
+        resolved.push(leaf);
+    }
+    Ok(resolved)
+}
+
 pub(super) fn open_or_create_parent(
     parent: &Utf8Path,
     output: &Utf8Path,
 ) -> Result<File, PublishError> {
-    let mut components = parent.as_std_path().components().peekable();
+    let parent_resolved = resolve_existing_parent_prefix(parent.as_std_path())
+        .map_err(|error| PublishError::io("resolve output parent", parent, error))?;
+    let mut components = parent_resolved.components().peekable();
     let mut current_path = PathBuf::new();
     let mut current = match components.peek().copied() {
         Some(Component::Prefix(prefix)) => {
