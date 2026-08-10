@@ -291,7 +291,8 @@ fn binding_item_name(
 }
 
 fn assignment_name(line: &str) -> Option<String> {
-    let before_equals = line.split_once('=')?.0.trim_end();
+    let assigned = line.split_once('=')?.0.trim_end();
+    let before_equals = assigned.trim_end_matches(':').trim_end();
     if let Some(name) = ["const ", "let ", "var "]
         .iter()
         .find_map(|marker| token_after(before_equals, marker))

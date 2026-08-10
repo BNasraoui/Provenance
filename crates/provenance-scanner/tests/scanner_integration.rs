@@ -401,3 +401,60 @@ fn multiline_delimiters_in_comments_do_not_hide_later_bindings() {
         assert_eq!(scan.bindings[0].rule_id, "rule_native");
     }
 }
+
+#[test]
+fn rust_string_ending_in_r_does_not_open_a_phantom_raw_string() {
+    let scan = scan_file(
+        Utf8Path::new("threads.rs"),
+        Language::Rust,
+        "fn check() { assert_eq!(actor, \"reviewer\"); }\n\n#[verifies(\"rule_thread_siblings_archived\", examples)]\nfn posting_reuses_thread() {}\n",
+    );
+
+    assert_eq!(scan.bindings.len(), 1);
+    assert_eq!(scan.bindings[0].rule_id, "rule_thread_siblings_archived");
+}
+
+#[test]
+fn rust_rule_id_ending_in_r_still_binds() {
+    let scan = scan_file(
+        Utf8Path::new("rules.rs"),
+        Language::Rust,
+        "#[rule(\"rule_after\")]\nfn decide() {}\n",
+    );
+
+    assert_eq!(scan.bindings.len(), 1);
+    assert_eq!(scan.bindings[0].rule_id, "rule_after");
+}
+
+#[test]
+fn rust_annotation_after_string_ending_in_r_still_scans() {
+    let scan = scan_file(
+        Utf8Path::new("payroll.rs"),
+        Language::Rust,
+        "fn setup() { let name = \"walker\"; }\n// @provenance rule: rule_real\nfn decide() {}\n",
+    );
+
+    assert_eq!(scan.annotations.len(), 1);
+}
+
+#[test]
+fn go_short_variable_declaration_names_the_binding() {
+    let scan = scan_file(
+        Utf8Path::new("rules.go"),
+        Language::Go,
+        "paysOvertime := rule(\"rule_overtime\", func(h int) bool { return h > 38 })\n",
+    );
+
+    assert_eq!(scan.bindings[0].item_name.as_deref(), Some("paysOvertime"));
+}
+
+#[test]
+fn template_literal_after_inline_block_comment_hides_its_contents() {
+    let scan = scan_file(
+        Utf8Path::new("rules.js"),
+        Language::JavaScript,
+        "/* note */ const s = `start\nconst fake = rule(\"rule_not_bound\", fn);\n`;\n",
+    );
+
+    assert!(scan.bindings.is_empty());
+}

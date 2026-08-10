@@ -65,16 +65,53 @@ pub fn code_outside_multiline_string<'a>(
 }
 
 fn unclosed_rust_raw_delimiter(line: &str) -> Option<(String, usize)> {
-    line.match_indices('r').find_map(|(start, _)| {
-        if line[..start].contains("//") || line[..start].contains("/*") {
+    let bytes = line.as_bytes();
+    let mut idx = 0;
+    while idx < bytes.len() {
+        if bytes[idx..].starts_with(b"//") {
             return None;
         }
-        let after_r = &line[start + 1..];
-        let hashes = after_r.bytes().take_while(|byte| *byte == b'#').count();
-        let contents = after_r[hashes..].strip_prefix('"')?;
-        let closing = format!("\"{}", "#".repeat(hashes));
-        (!contents.contains(&closing)).then_some((closing, start))
-    })
+        if bytes[idx..].starts_with(b"/*") {
+            idx = idx + 2 + line[idx + 2..].find("*/")? + 2;
+            continue;
+        }
+        if bytes[idx] == b'"' {
+            idx = closing_plain_quote(bytes, idx + 1)? + 1;
+            continue;
+        }
+        if bytes[idx] == b'r' && at_identifier_start(bytes, idx) {
+            let after_r = &line[idx + 1..];
+            let hashes = after_r.bytes().take_while(|byte| *byte == b'#').count();
+            if after_r[hashes..].starts_with('"') {
+                let closing = format!("\"{}", "#".repeat(hashes));
+                match after_r[hashes + 1..].find(&closing) {
+                    Some(end) => idx += 1 + hashes + 1 + end + closing.len(),
+                    None => return Some((closing, idx)),
+                }
+                continue;
+            }
+        }
+        idx += 1;
+    }
+    None
+}
+
+/// The byte at `idx` starts an identifier: a raw-string `r` inside a word
+/// (as in `"reviewer"`) is string content, not a raw-string opener.
+fn at_identifier_start(bytes: &[u8], idx: usize) -> bool {
+    !idx.checked_sub(1)
+        .is_some_and(|previous| bytes[previous].is_ascii_alphanumeric() || bytes[previous] == b'_')
+}
+
+fn closing_plain_quote(bytes: &[u8], mut idx: usize) -> Option<usize> {
+    while idx < bytes.len() {
+        match bytes[idx] {
+            b'\\' => idx += 2,
+            b'"' => return Some(idx),
+            _ => idx += 1,
+        }
+    }
+    None
 }
 
 fn unpaired_delimiter_start(
@@ -100,8 +137,15 @@ fn unpaired_delimiter_start(
             idx += 1;
             continue;
         }
-        if bytes[idx..].starts_with(b"//") || bytes[idx..].starts_with(b"/*") {
+        if bytes[idx..].starts_with(b"//") {
             break;
+        }
+        if bytes[idx..].starts_with(b"/*") {
+            let Some(end) = line[idx + 2..].find("*/") else {
+                break;
+            };
+            idx = idx + 2 + end + 2;
+            continue;
         }
         if hash_starts_comment && bytes[idx] == b'#' {
             break;
