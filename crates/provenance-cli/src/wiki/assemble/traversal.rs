@@ -28,15 +28,6 @@ impl<'a> Assembler<'a> {
             .find_map(|id| self.find_requirement(id))
     }
 
-    pub(super) fn has_parent_edge(&self, requirement_id: &StableId) -> bool {
-        self.edges().any(|edge| {
-            edge.edge_type == EdgeType::RefinesInto
-                && edge.from_type == NodeType::Requirement
-                && edge.to_type == NodeType::Requirement
-                && edge.to_id == *requirement_id
-        })
-    }
-
     pub(super) fn resolving_resolutions(&self, requirement_id: &StableId) -> Vec<&'a Resolution> {
         self.query.resolving_resolutions(requirement_id)
     }
