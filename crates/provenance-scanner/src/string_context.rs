@@ -2,11 +2,14 @@
 /// open at the marker: the region must close somewhere after the marker, so
 /// a lone unmatched quote earlier in a comment line never hides a directive.
 ///
-/// Single quotes never open a hiding region. A pair that closes before the
-/// marker is skipped as a char-literal-like span (quotes inside it stay
-/// inert); an apostrophe whose mate sits past the marker is prose, as in
-/// contractions straddling the directive.
-pub fn marker_is_inside_quoted_region(text: &str, marker: usize, track_backticks: bool) -> bool {
+/// Double quotes and backticks both open hiding regions in every language: a
+/// paired span quoting a directive is quotation, not declaration, whether it
+/// is a Go raw string or a doc-comment code span. Single quotes never open a
+/// hiding region. A pair that closes before the marker is skipped as a
+/// char-literal-like span (quotes inside it stay inert); an apostrophe whose
+/// mate sits past the marker is prose, as in contractions straddling the
+/// directive.
+pub fn marker_is_inside_quoted_region(text: &str, marker: usize) -> bool {
     let bytes = text.as_bytes();
     let mut quote = None;
     let mut index = 0;
@@ -36,7 +39,7 @@ pub fn marker_is_inside_quoted_region(text: &str, marker: usize, track_backticks
             }
             continue;
         }
-        if (candidate == b'"' || (track_backticks && candidate == b'`'))
+        if (candidate == b'"' || candidate == b'`')
             && quote_end(bytes, index + 1, candidate).is_some()
         {
             quote = Some(candidate);

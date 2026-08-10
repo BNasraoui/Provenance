@@ -37,8 +37,7 @@ pub(super) fn rust_annotation_marker_position(
                 RustLexicalState::Quoted | RustLexicalState::Raw(_)
             ) && state == RustLexicalState::Code;
             !matches!(state, RustLexicalState::Quoted | RustLexicalState::Raw(_))
-                && (closed_multiline_string
-                    || !marker_is_inside_quoted_region(line, *position, false))
+                && (closed_multiline_string || !marker_is_inside_quoted_region(line, *position))
         })
         .min()
 }

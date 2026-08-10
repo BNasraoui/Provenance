@@ -144,13 +144,6 @@ impl MarkerLog {
 }
 
 pub fn parse_annotations(comment_text: &str) -> ParseResult {
-    parse_annotations_with_backticks(comment_text, false)
-}
-
-pub(crate) fn parse_annotations_with_backticks(
-    comment_text: &str,
-    track_backticks: bool,
-) -> ParseResult {
     let mut warnings = Vec::new();
     let mut annotations: Vec<Annotation> = Vec::new();
     let mut shared = Annotation::default();
@@ -159,8 +152,7 @@ pub(crate) fn parse_annotations_with_backticks(
     for (line_idx, raw_line) in comment_text.lines().enumerate() {
         let line = line_idx + 1;
         let stripped = strip_comment_prefix(raw_line);
-        let Some((marker, after_marker)) = split_annotation_marker(stripped, track_backticks)
-        else {
+        let Some((marker, after_marker)) = split_annotation_marker(stripped) else {
             continue;
         };
         warnings.extend(markers.record(marker, line));
@@ -303,8 +295,8 @@ fn parse_confidence(value: &str) -> Result<f64, ConfidenceRejection> {
     }
 }
 
-pub(crate) fn annotation_marker_position(line: &str, track_backticks: bool) -> Option<usize> {
-    annotation_marker(line, track_backticks).map(|(_, position)| position)
+pub(crate) fn annotation_marker_position(line: &str) -> Option<usize> {
+    annotation_marker(line).map(|(_, position)| position)
 }
 
 pub(crate) fn annotation_marker_positions(line: &str) -> impl Iterator<Item = usize> + '_ {
@@ -313,19 +305,17 @@ pub(crate) fn annotation_marker_positions(line: &str) -> impl Iterator<Item = us
         .flat_map(|marker| line.match_indices(marker).map(|(position, _)| position))
 }
 
-fn split_annotation_marker(line: &str, track_backticks: bool) -> Option<(&'static str, &str)> {
-    let (marker, position) = annotation_marker(line, track_backticks)?;
+fn split_annotation_marker(line: &str) -> Option<(&'static str, &str)> {
+    let (marker, position) = annotation_marker(line)?;
     Some((marker, line[position + marker.len()..].trim()))
 }
 
-fn annotation_marker(line: &str, track_backticks: bool) -> Option<(&'static str, usize)> {
+fn annotation_marker(line: &str) -> Option<(&'static str, usize)> {
     ANNOTATION_MARKERS
         .iter()
         .flat_map(|marker| {
             line.match_indices(marker)
-                .filter(|(position, _)| {
-                    !marker_is_inside_quoted_region(line, *position, track_backticks)
-                })
+                .filter(|(position, _)| !marker_is_inside_quoted_region(line, *position))
                 .map(|(position, _)| (*marker, position))
         })
         .min_by_key(|(_, position)| *position)

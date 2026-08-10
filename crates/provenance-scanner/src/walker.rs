@@ -2,7 +2,7 @@ use anyhow::Context;
 use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::binding_lexer::{block_comment_state, code_outside_multiline_string, MultilineStyle};
-use crate::parser::{annotation_marker_position, parse_annotations_with_backticks, Verification};
+use crate::parser::{annotation_marker_position, parse_annotations, Verification};
 use crate::{Annotation, ParseWarning};
 
 use bindings::parse_binding_line;
@@ -161,7 +161,7 @@ pub fn scan_file(file_path: &Utf8Path, language: Language, content: &str) -> Fil
             continue;
         };
         let (comment, end_idx) = collect_annotation_comment(&lines, idx, marker_position);
-        let parsed = parse_annotations_with_backticks(&comment, language == Language::Go);
+        let parsed = parse_annotations(&comment);
         warnings.extend(parsed.warnings);
         let function_name = next_function_name(language, &lines[end_idx.saturating_add(1)..]);
         for annotation in parsed.annotations {
@@ -227,7 +227,7 @@ fn annotation_marker_start(
     }
     (!started_in_multiline_string
         && is_annotation_comment_line(language, line, started_in_block_comment))
-    .then(|| annotation_marker_position(line, language == Language::Go))
+    .then(|| annotation_marker_position(line))
     .flatten()
 }
 

@@ -39,6 +39,18 @@ fn rust_doc_marker_after_lone_backtick_still_scans() {
 }
 
 #[test]
+fn rust_doc_marker_inside_a_paired_code_span_stays_hidden() {
+    // A doc-comment code span quoting a directive is quotation, not
+    // declaration: `@provenance rule: quoted_only` must not bind.
+    let source =
+        "/// Write `@provenance rule: quoted_only` on the deciding line\nfn real_rule() {}";
+    let scan = scan_file(Utf8Path::new("fixture.rs"), Language::Rust, source);
+
+    assert!(scan.annotations.is_empty());
+    assert!(scan.warnings.is_empty());
+}
+
+#[test]
 fn rust_doc_contractions_straddling_marker_still_scan() {
     // The apostrophes in "don't" and "it's" straddle the marker; they are
     // prose, not a quote region. The rule value runs to the end of the line.
