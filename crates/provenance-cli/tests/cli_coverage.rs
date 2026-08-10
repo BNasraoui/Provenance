@@ -157,7 +157,7 @@ fn coverage_markdown_marks_verification_sites_outside_the_defining_module() {
     assert!(
         markdown.contains("verified by examples at `")
             && markdown.contains(
-                "billing.rs`:1 (bills_overtime_at_the_right_rate) (outside defining module)"
+                "billing.rs`:1 (bills_overtime_at_the_right_rate) (new) (outside defining module)"
             ),
         "billing site not marked as outside the defining module:\n{markdown}"
     );

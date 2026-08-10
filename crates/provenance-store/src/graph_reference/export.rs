@@ -6,8 +6,10 @@
 
 use super::{
     canonical::{canonical_bytes, digest},
-    incomplete, mismatch, projection, validate_prefixed_hash, GraphExport, GraphReferenceError,
+    ensure_graph_schema_version, incomplete, mismatch, projection, validate_prefixed_hash,
+    GraphExport, GraphReferenceError,
 };
+use provenance_core::{SchemaVersion, SUPPORTED_SCHEMA_VERSION};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -88,19 +90,15 @@ impl ExactExport {
         if let Some(path) = unknown {
             return Err(incomplete(format!("unknown field `{path}`")));
         }
-        if document.schema_version != 1 || document.operation != "exact-export" {
+        ensure_graph_schema_version("exact export", SchemaVersion(document.schema_version))?;
+        if document.operation != "exact-export" {
             return Err(GraphReferenceError::Incomplete {
-                detail: "exact export must use schema_version 1 and operation 'exact-export'"
-                    .into(),
+                detail: "exact export operation must be 'exact-export'".into(),
             });
         }
         validate_prefixed_hash("reference_id", &document.reference_id, "grf1_", 64)?;
         validate_prefixed_hash("graph_digest", &document.graph_digest, "sha256:", 64)?;
-        if document.graph.schema_version != 1 {
-            return Err(GraphReferenceError::Incomplete {
-                detail: "graph schema_version must be 1".into(),
-            });
-        }
+        ensure_graph_schema_version("graph", SchemaVersion(document.graph.schema_version))?;
         document.graph.validate_schema_versions()?;
         document.graph.validate_no_collaboration_fields()?;
         projection::validate_scope_ownership(&document.graph, &document.graph.scope.id)?;
@@ -109,7 +107,7 @@ impl ExactExport {
             return mismatch("graph_digest", &document.graph_digest, &graph_digest);
         }
         Ok(Self {
-            schema_version: 1,
+            schema_version: SUPPORTED_SCHEMA_VERSION.0,
             operation: "exact-export",
             reference_id: document.reference_id,
             graph_digest,

@@ -4,7 +4,7 @@ use super::{
 use crate::shards;
 use provenance_core::{
     edge_validation::validate_edge_endpoint, validate_optional_commit_pin, Edge, EdgeType,
-    NodeType, Requirement, SchemaVersion, ScopeId, Source, SourceReference, StableId,
+    NodeType, Requirement, ScopeId, Source, SourceReference, StableId, SUPPORTED_SCHEMA_VERSION,
 };
 
 impl StateStore {
@@ -27,7 +27,7 @@ impl StateStore {
         let path = shards::sources_path(&self.layout, &scope_id);
         self.mutate_jsonl_records(&path, |records: &mut Vec<Source>| {
             let source = Source {
-                schema_version: SchemaVersion(1),
+                schema_version: SUPPORTED_SCHEMA_VERSION,
                 scope_id: scope_id.clone(),
                 id,
                 name,
@@ -77,7 +77,7 @@ impl StateStore {
         let path = shards::requirements_path(&self.layout, &scope_id);
         self.mutate_jsonl_records(&path, |records: &mut Vec<Requirement>| {
             let requirement = Requirement {
-                schema_version: SchemaVersion(1),
+                schema_version: SUPPORTED_SCHEMA_VERSION,
                 scope_id: scope_id.clone(),
                 id,
                 statement,
@@ -170,7 +170,7 @@ impl StateStore {
             Ok(())
         })?;
         let edge = Edge {
-            schema_version: SchemaVersion(1),
+            schema_version: SUPPORTED_SCHEMA_VERSION,
             scope_id,
             id: Edge::stable_id(
                 EdgeType::References,
@@ -258,7 +258,7 @@ impl StateStore {
     ) -> anyhow::Result<Edge> {
         validate_edge_endpoint(edge_type, from_type, to_type)?;
         let edge = Edge {
-            schema_version: SchemaVersion(1),
+            schema_version: SUPPORTED_SCHEMA_VERSION,
             scope_id,
             id: Edge::stable_id(edge_type, from_type, &from_id, to_type, &to_id)?,
             edge_type,

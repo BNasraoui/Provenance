@@ -20,6 +20,14 @@ The live path: the running code that rejects a violation. Verification is eviden
 
 An active rule with no verification marker anywhere in the scanned tree. It is absence, not a stored field: `provenance coverage scan --path . --validate-rules` derives it at scan time and reports it, and no shard records it.
 
+## Evidence site
+
+A source line carrying a rule binding, verification binding, or provenance annotation. Its file path and line number remain its human-readable coordinate.
+
+## Evidence anchor
+
+The enclosing symbol and content identity recorded alongside an Evidence site's coordinate. A later scan resolves the anchor before deciding whether the site is Unchanged, New, Moved, or Gone; these states are derived report findings, not canonical graph state.
+
 ## Topic
 
 A persisted, claimable shaping work area attached to a requirement. A Topic is not a reader taxonomy classification.

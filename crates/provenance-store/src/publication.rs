@@ -1,5 +1,7 @@
 use crate::layout::ProvenanceLayout;
+use anyhow::Context;
 use camino::{Utf8Path, Utf8PathBuf};
+use provenance_core::{ensure_supported_schema_version, SchemaVersion, SUPPORTED_SCHEMA_VERSION};
 use provenance_macros::rule;
 use serde::{de::DeserializeOwned, Serialize};
 use std::cell::RefCell;
@@ -141,7 +143,7 @@ pub fn write_publication_marker(
 ) -> anyhow::Result<()> {
     let transaction_dir = validated_transaction_dir(layout, transaction_dir)?;
     let marker = PublicationMarker {
-        schema_version: 1,
+        schema_version: SUPPORTED_SCHEMA_VERSION.0,
         transaction_dir,
         phase,
     };
@@ -169,10 +171,13 @@ pub fn recover_pending_publication(layout: &ProvenanceLayout) -> anyhow::Result<
         return Ok(());
     }
     let marker: PublicationMarker = serde_json::from_str(&std::fs::read_to_string(&marker_path)?)?;
-    anyhow::ensure!(
-        marker.schema_version == 1,
-        "unsupported publication marker version"
-    );
+    ensure_supported_schema_version("publication marker", SchemaVersion(marker.schema_version))
+        .with_context(|| {
+            format!(
+                "{marker_path}: publication marker has unsupported schema_version {}; expected {}",
+                marker.schema_version, SUPPORTED_SCHEMA_VERSION.0
+            )
+        })?;
     if matches!(marker.phase, PublicationPhase::Published) && !marker.transaction_dir.exists() {
         validate_missing_transaction_dir(layout, &marker.transaction_dir)?;
         return clear_publication_marker(layout);
@@ -263,15 +268,36 @@ fn ensure_written_path_has_no_symlinks(
     candidate: &Utf8Path,
     recovery_use: RecoveryUse,
 ) -> anyhow::Result<()> {
+    // A marker may name the container through OS symlinks above it (macOS's
+    // /var -> /private/var), where the candidate matches neither the written
+    // nor the canonical container spelling. The ancestor that canonicalizes
+    // to the container is that same protected directory under another
+    // spelling; components below it are still judged as written.
     let (written_container, relative) = candidate
         .strip_prefix(written_container)
         .map(|relative| (written_container, relative))
-        .or_else(|_| {
+        .ok()
+        .or_else(|| {
             candidate
                 .strip_prefix(canonical_container)
                 .map(|relative| (canonical_container, relative))
+                .ok()
         })
-        .map_err(|_| anyhow::anyhow!(OUTSIDE_REPOSITORY_CACHE))?;
+        .or_else(|| {
+            candidate
+                .ancestors()
+                .find(|ancestor| {
+                    std::fs::canonicalize(ancestor)
+                        .is_ok_and(|resolved| resolved == canonical_container.as_std_path())
+                })
+                .and_then(|ancestor| {
+                    candidate
+                        .strip_prefix(ancestor)
+                        .map(|relative| (ancestor, relative))
+                        .ok()
+                })
+        })
+        .ok_or_else(|| anyhow::anyhow!(OUTSIDE_REPOSITORY_CACHE))?;
     let mut written = written_container.to_path_buf();
     let component_count = relative.components().count();
     for (index, component) in relative.components().enumerate() {

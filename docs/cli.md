@@ -29,6 +29,8 @@ the proved model and the implementation.
 ```sh
 provenance coverage scan --path . --scope default --validate-rules
 provenance coverage scan --path . --scope default --validate-rules --strict --format json
+provenance coverage scan --path . --format json --output coverage.json
+provenance coverage scan --path . --baseline coverage.json --validate-rules --format json
 ```
 
 Without `--validate-rules` the scan only reports what it found in the tree. With it, the
@@ -39,6 +41,25 @@ time and never stored, so no shard can disagree with the code.
 `--strict` exits non-zero when the report holds any warning; the report still prints
 first. That is the dial each repository sets for itself: strict in CI once a repository
 wants every active rule verified, plain while it is still filling them in.
+
+Each annotation and binding in a scan report keeps `file_path` and `line` and adds a
+durable `anchor`: the enclosing symbol plus a SHA-256 hash of the cited line's trimmed
+text. Pass an earlier JSON scan with `--baseline` to resolve those anchors. An
+`unchanged` site is pinned to a baseline site, a `moved` site reports its new `line`
+and `original_line`, and a `gone` site retains its last coordinate. A `new` site has
+no baseline site sharing its anchor; without `--baseline` the scan has nothing to
+compare against, so every site is `new`. With `--validate-rules`, gone anchors
+produce warnings; moved anchors do not become false absence warnings.
+
+Anchors relocate across files. A site missing from its own file is matched by rule,
+symbol, and line hash against baseline-unaccounted sites anywhere in the scan before
+anything is declared missing: a single match is `moved`, reporting `original_file_path`
+alongside `original_line`; no match is `gone`. Several matches make the scan warn,
+naming every candidate, rather than pick one. When identical sites share one anchor,
+each is pinned to a baseline line where it can be, and a lost instance is reported
+gone; when the survivors cannot be told apart, they stay at their current coordinates
+as unchanged and the scan warns that the group lost instances. Identical sites
+shuffled within one file with none lost stay silent.
 
 The scanner is line-oriented. Its native binding patterns and current limits are:
 

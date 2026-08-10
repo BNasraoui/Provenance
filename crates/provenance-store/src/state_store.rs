@@ -33,8 +33,8 @@ use provenance_core::{
     SchemaVersion, Scope, ScopeId, Source, SynthesisPacket, Thread, Topic,
 };
 use readers::{
-    deserialize_closed, read_edge_shards, read_jsonl, read_jsonl_closed, read_legacy_dispositions,
-    read_message_shards,
+    deserialize_closed, read_edge_shards, read_ideation_landings, read_jsonl, read_jsonl_closed,
+    read_legacy_dispositions, read_message_shards,
 };
 use serde::{Deserialize, Serialize};
 

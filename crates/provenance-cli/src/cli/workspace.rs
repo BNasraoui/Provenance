@@ -83,6 +83,10 @@ pub enum CoverageCommand {
         path: Utf8PathBuf,
         #[arg(long, default_value = "default")]
         scope: String,
+        /// JSON report from an earlier scan whose evidence anchors should be
+        /// resolved against this scan.
+        #[arg(long)]
+        baseline: Option<Utf8PathBuf>,
         #[arg(long)]
         validate_rules: bool,
         /// Exit non-zero when the report contains any warnings. The report is

@@ -205,6 +205,41 @@ fn only_the_add_add_case_reports_the_new_kind() {
     );
 }
 
+#[test]
+fn jsonl_merge_input_rejects_an_unsupported_record_version_before_loading() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = camino::Utf8PathBuf::from_path_buf(directory.path().join("rule.jsonl")).unwrap();
+    std::fs::write(&path, "{\"schema_version\":2,\"id\":\"rule_future\"}\n").unwrap();
+
+    let error = read_jsonl_records(&path).unwrap_err().to_string();
+
+    assert!(error.contains("rule.jsonl line 1"), "{error}");
+    assert!(error.contains("record rule_future"), "{error}");
+    assert!(error.contains("has schema_version 2"), "{error}");
+}
+
+#[test]
+fn jsonl_merge_input_rejects_an_unsupported_nested_landing_record() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = camino::Utf8PathBuf::from_path_buf(
+        directory
+            .path()
+            .join(".provenance/state/scopes/default/ideation/landings.jsonl"),
+    )
+    .unwrap();
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(
+        &path,
+        "{\"contributions\":[{\"schema_version\":2,\"id\":\"contribution_future\"}]}\n",
+    )
+    .unwrap();
+
+    let error = read_jsonl_records(&path).unwrap_err().to_string();
+
+    assert!(error.contains("record contribution_future"), "{error}");
+    assert!(error.contains("schema_version 2"), "{error}");
+}
+
 /// Deterministic generator; the property test needs varied inputs, not
 /// random ones, and the crate takes no test-only dependencies.
 struct Generator(u64);
