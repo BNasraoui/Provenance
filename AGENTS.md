@@ -49,6 +49,16 @@ cp -rf source dest          # NOT: cp -r source dest
 - `apt-get` - use `-y` flag
 - `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
 
+## Rule Doc Headers
+
+The doc comment above a `#[rule("...")]` item is one short paragraph saying what
+the rule decides, followed only by constraints the code cannot show for itself.
+Amendment history, proof inventories, and cross-references belong in the rule's
+graph record, not in the source header. `crates/provenance-cli/tests/cli_structure.rs`
+enforces this mechanically: it caps how many `///` lines may sit above a
+`#[rule]` attribute and fails on record-keeping phrases such as `Amended 20` and
+`tracked in beads`.
+
 <!-- BEGIN BEADS INTEGRATION -->
 ## Issue Tracking with bd (beads)
 
