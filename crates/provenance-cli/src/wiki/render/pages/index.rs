@@ -52,7 +52,7 @@ fn traceability_summary_html(unfinished_count: usize) -> String {
     )
 }
 
-/// Renders homepage content with one exact findings link and no individual finding cards.
+/// Renders homepage content with one exact unfinished-items link and no individual gap cards.
 #[rule("rule_wiki_homepage_traceability_summary")]
 fn homepage_content_html(page: &ScopeIndexPage) -> String {
     let mut main = String::new();
