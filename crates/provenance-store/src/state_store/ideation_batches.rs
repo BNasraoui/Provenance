@@ -1,4 +1,6 @@
-use super::{read_jsonl, read_legacy_dispositions, IdeationLandingBatch, StateStore};
+use super::{
+    read_ideation_landings, read_jsonl, read_legacy_dispositions, IdeationLandingBatch, StateStore,
+};
 use crate::shards;
 use provenance_core::{
     AssertionRecord, Contribution, DispositionRecord, IdeationAggregate, ProposalCard, ScopeId,
@@ -22,7 +24,7 @@ impl StateStore {
         &self,
         scope: &ScopeId,
     ) -> anyhow::Result<Vec<IdeationLandingBatch>> {
-        read_jsonl(&shards::ideation_landings_path(&self.layout, scope))
+        read_ideation_landings(&shards::ideation_landings_path(&self.layout, scope))
     }
 
     pub fn land_ideation_batch(

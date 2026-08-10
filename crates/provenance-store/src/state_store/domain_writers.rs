@@ -1,6 +1,6 @@
 use super::{CreateDomainInput, StateStore};
 use crate::shards;
-use provenance_core::{Domain, SchemaVersion};
+use provenance_core::{Domain, SUPPORTED_SCHEMA_VERSION};
 
 impl StateStore {
     pub fn create_domain(&self, input: CreateDomainInput) -> anyhow::Result<Domain> {
@@ -14,7 +14,7 @@ impl StateStore {
         let path = shards::domains_path(&self.layout, &scope_id);
         self.mutate_jsonl_records(&path, |records: &mut Vec<Domain>| {
             let domain = Domain {
-                schema_version: SchemaVersion(1),
+                schema_version: SUPPORTED_SCHEMA_VERSION,
                 scope_id: scope_id.clone(),
                 id,
                 name,

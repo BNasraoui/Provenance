@@ -15,6 +15,15 @@ enum Fields {
     Closed,
 }
 
+const NO_NESTED_RECORDS: &[&str] = &[];
+const IDEATION_LANDING_RECORD_FIELDS: &[&str] = &[
+    "contributions",
+    "synthesis_packets",
+    "proposals",
+    "assertions",
+    "dispositions",
+];
+
 /// The one place a stored line becomes a record.
 ///
 /// Every reader in this module lands here: [`read_records`] carries the open
@@ -33,8 +42,10 @@ fn record_from_line<T: DeserializeOwned>(
     line: &str,
     value: serde_json::Value,
     fields: Fields,
+    nested_record_fields: &[&str],
 ) -> anyhow::Result<T> {
     ensure_supported_record_version(path, line_number, &value)?;
+    ensure_supported_nested_record_versions(path, line_number, &value, nested_record_fields)?;
     match fields {
         Fields::Open => Ok(serde_json::from_value(value)?),
         // The closed reader needs the untouched line: `serde_ignored` reports
@@ -65,30 +76,22 @@ fn record_from_line<T: DeserializeOwned>(
 /// `crate::jsonl`. A write against a shard holding an unsupported row fails
 /// before the mutation runs, and the shard is left byte for byte as it was.
 ///
-/// A line with no `schema_version` at all makes no claim about its layout;
+/// A record object with no `schema_version` makes no claim about its layout;
 /// there is nothing to compare, and its own deserializer says whether the
-/// field was required. The version is read from the raw JSON rather than from
-/// a struct because the struct is what we refuse to build until the version is
-/// known.
+/// field was required. The ideation landing reader applies the same check to
+/// the versioned records inside its unversioned batch envelope. The version is
+/// read from the raw JSON rather than from a struct because the struct is what
+/// we refuse to build until the version is known.
 #[rule("rule_reads_supported_version_only")]
 pub fn ensure_supported_record_version(
     path: &Utf8Path,
     line_number: usize,
     value: &serde_json::Value,
 ) -> anyhow::Result<()> {
-    let Some(version) = value
-        .get("schema_version")
-        .and_then(serde_json::Value::as_u64)
-    else {
+    let Some((id, version)) = first_unsupported_record(value) else {
         return Ok(());
     };
-    if version == u64::from(SUPPORTED_SCHEMA_VERSION.0) {
-        return Ok(());
-    }
-    let record = value
-        .get("id")
-        .and_then(serde_json::Value::as_str)
-        .map_or_else(|| "record".to_string(), |id| format!("record {id}"));
+    let record = id.map_or_else(|| "record".to_string(), |id| format!("record {id}"));
     anyhow::bail!(
         "{path} line {line_number}: {record} has schema_version {version}, \
          but this build reads schema_version {} only",
@@ -96,10 +99,66 @@ pub fn ensure_supported_record_version(
     )
 }
 
+fn first_unsupported_record(value: &serde_json::Value) -> Option<(Option<&str>, u64)> {
+    let record = value.as_object()?;
+    unsupported_object_version(record)
+}
+
+fn ensure_supported_nested_record_versions(
+    path: &Utf8Path,
+    line_number: usize,
+    value: &serde_json::Value,
+    fields: &[&str],
+) -> anyhow::Result<()> {
+    let unsupported = fields
+        .iter()
+        .filter_map(|field| value.get(*field).and_then(serde_json::Value::as_array))
+        .flatten()
+        .filter_map(serde_json::Value::as_object)
+        .find_map(unsupported_object_version);
+    let Some((id, version)) = unsupported else {
+        return Ok(());
+    };
+    let record = id.map_or_else(|| "record".to_string(), |id| format!("record {id}"));
+    anyhow::bail!(
+        "{path} line {line_number}: {record} has schema_version {version}, \
+         but this build reads schema_version {} only",
+        SUPPORTED_SCHEMA_VERSION.0
+    )
+}
+
+pub fn ensure_supported_ideation_landing_versions(
+    path: &Utf8Path,
+    line_number: usize,
+    value: &serde_json::Value,
+) -> anyhow::Result<()> {
+    ensure_supported_nested_record_versions(
+        path,
+        line_number,
+        value,
+        IDEATION_LANDING_RECORD_FIELDS,
+    )
+}
+
+fn unsupported_object_version(
+    record: &serde_json::Map<String, serde_json::Value>,
+) -> Option<(Option<&str>, u64)> {
+    let version = record
+        .get("schema_version")
+        .and_then(serde_json::Value::as_u64)?;
+    (version != u64::from(SUPPORTED_SCHEMA_VERSION.0)).then(|| {
+        (
+            record.get("id").and_then(serde_json::Value::as_str),
+            version,
+        )
+    })
+}
+
 fn read_records<T: DeserializeOwned>(
     path: &Utf8Path,
     fields: Fields,
     prepare: fn(&mut serde_json::Value),
+    nested_record_fields: &[&str],
 ) -> anyhow::Result<Vec<T>> {
     if !path.exists() {
         return Ok(Vec::new());
@@ -109,7 +168,14 @@ fn read_records<T: DeserializeOwned>(
     for (index, line) in contents.lines().enumerate() {
         let mut value: serde_json::Value = serde_json::from_str(line)?;
         prepare(&mut value);
-        records.push(record_from_line(path, index + 1, line, value, fields)?);
+        records.push(record_from_line(
+            path,
+            index + 1,
+            line,
+            value,
+            fields,
+            nested_record_fields,
+        )?);
     }
     Ok(records)
 }
@@ -121,7 +187,20 @@ pub(super) fn read_jsonl<T: DeserializeOwned>(path: &Utf8Path) -> anyhow::Result
 }
 
 fn read_jsonl_unlocked<T: DeserializeOwned>(path: &Utf8Path) -> anyhow::Result<Vec<T>> {
-    read_records(path, Fields::Open, leave_as_written)
+    read_records(path, Fields::Open, leave_as_written, NO_NESTED_RECORDS)
+}
+
+pub(super) fn read_ideation_landings<T: DeserializeOwned>(
+    path: &Utf8Path,
+) -> anyhow::Result<Vec<T>> {
+    crate::publication::with_state_path_access(path, || {
+        read_records(
+            path,
+            Fields::Open,
+            leave_as_written,
+            IDEATION_LANDING_RECORD_FIELDS,
+        )
+    })
 }
 
 pub(super) fn read_legacy_dispositions(path: &Utf8Path) -> anyhow::Result<Vec<DispositionRecord>> {
@@ -129,7 +208,12 @@ pub(super) fn read_legacy_dispositions(path: &Utf8Path) -> anyhow::Result<Vec<Di
 }
 
 fn read_legacy_dispositions_unlocked(path: &Utf8Path) -> anyhow::Result<Vec<DispositionRecord>> {
-    read_records(path, Fields::Open, normalize_disposition_aliases)
+    read_records(
+        path,
+        Fields::Open,
+        normalize_disposition_aliases,
+        NO_NESTED_RECORDS,
+    )
 }
 
 fn normalize_disposition_aliases(value: &mut serde_json::Value) {
@@ -169,7 +253,7 @@ pub(super) fn read_jsonl_closed<T: DeserializeOwned>(path: &Utf8Path) -> anyhow:
 }
 
 fn read_jsonl_closed_unlocked<T: DeserializeOwned>(path: &Utf8Path) -> anyhow::Result<Vec<T>> {
-    read_records(path, Fields::Closed, leave_as_written)
+    read_records(path, Fields::Closed, leave_as_written, NO_NESTED_RECORDS)
 }
 
 pub(super) fn deserialize_closed<T: DeserializeOwned>(input: &str) -> anyhow::Result<T> {
@@ -204,8 +288,15 @@ fn read_jsonl_shards<T: DeserializeOwned>(
             };
             let value: serde_json::Value = serde_json::from_str(line).with_context(context)?;
             records.push(
-                record_from_line(&path, index + 1, line, value, Fields::Open)
-                    .with_context(context)?,
+                record_from_line(
+                    &path,
+                    index + 1,
+                    line,
+                    value,
+                    Fields::Open,
+                    NO_NESTED_RECORDS,
+                )
+                .with_context(context)?,
             );
         }
     }
@@ -302,8 +393,15 @@ fn read_closed_edges(paths: Vec<Utf8PathBuf>, scope: &ScopeId) -> anyhow::Result
             // nothing else, whatever version the neighbours were written in.
             if value.get("scope_id").and_then(serde_json::Value::as_str) == Some(scope.as_str()) {
                 records.push(
-                    record_from_line(&path, index + 1, line, value, Fields::Closed)
-                        .with_context(context)?,
+                    record_from_line(
+                        &path,
+                        index + 1,
+                        line,
+                        value,
+                        Fields::Closed,
+                        NO_NESTED_RECORDS,
+                    )
+                    .with_context(context)?,
                 );
             }
         }
@@ -312,123 +410,4 @@ fn read_closed_edges(paths: Vec<Utf8PathBuf>, scope: &ScopeId) -> anyhow::Result
 }
 
 #[cfg(test)]
-mod read_guard_tests {
-    use super::{record_from_line, Fields};
-    use camino::Utf8Path;
-    use provenance_macros::verifies;
-    use serde_json::{json, Value};
-
-    // The version range the exhaustion below runs. The guard is an equality
-    // test on the version and nothing else: it is monotone in nothing, so no
-    // interpolation between tried values is being claimed, and every version
-    // that is not 1 takes the same branch. These four are the value below the
-    // accepted one, the accepted one, the value above, and the top of the u32
-    // domain, which is the whole of the behaviour there is to see.
-    const VERSION_RANGE: [u32; 4] = [0, 1, 2, u32::MAX];
-
-    // Independent restatement of the decision, listed rather than compared so
-    // the oracle does not repeat the guard's shape: these are the record
-    // layouts this build knows how to read. Must not be implemented by
-    // calling the guard.
-    const READABLE_LAYOUT_VERSIONS: [u32; 1] = [1];
-
-    // One way of turning a stored line into a record, named for the assertion.
-    type Loader = fn(&str) -> anyhow::Result<()>;
-
-    // Every way a stored line can become a record: the read choke point's two
-    // field policies, and the read a write is built on, which loads the shard
-    // and then writes all of it back. None of them may load a version another
-    // one refuses - least of all the write, which would rewrite the row it
-    // misread.
-    const LOADERS: [(&str, Loader); 3] = [
-        ("an open read", load_open),
-        ("a closed read", load_closed),
-        ("the read inside a write", load_through_a_write),
-    ];
-
-    fn layout_is_readable_by_oracle(version: u32) -> bool {
-        READABLE_LAYOUT_VERSIONS.contains(&version)
-    }
-
-    fn path() -> &'static Utf8Path {
-        Utf8Path::new(".provenance/state/scopes/default/requirements/req.jsonl")
-    }
-
-    fn load(line: &str, fields: Fields) -> anyhow::Result<Value> {
-        let value = serde_json::from_str(line)?;
-        record_from_line(path(), 7, line, value, fields)
-    }
-
-    fn load_open(line: &str) -> anyhow::Result<()> {
-        load(line, Fields::Open).map(drop)
-    }
-
-    fn load_closed(line: &str) -> anyhow::Result<()> {
-        load(line, Fields::Closed).map(drop)
-    }
-
-    // The mutation empties the shard, so the loader fails loudly if the write
-    // path ever stops guarding: the record reaches the caller, the file is
-    // rewritten without it, and the call returns the success the assertion
-    // below refuses at every version but 1.
-    fn load_through_a_write(line: &str) -> anyhow::Result<()> {
-        let dir = tempfile::tempdir()?;
-        let shard = camino::Utf8PathBuf::from_path_buf(dir.path().join("req.jsonl"))
-            .expect("temporary directory path must be UTF-8");
-        std::fs::write(&shard, format!("{line}\n"))?;
-        crate::jsonl::mutate_jsonl_locked(
-            &shard,
-            &shard.with_extension("lock"),
-            |records: &mut Vec<Value>| {
-                records.clear();
-                Ok(())
-            },
-        )
-    }
-
-    #[test]
-    #[verifies("rule_reads_supported_version_only", exhaustion)]
-    fn only_the_supported_version_loads() {
-        for (loader_name, load_line) in LOADERS {
-            for version in VERSION_RANGE {
-                let line = json!({"schema_version": version, "id": "req_a"}).to_string();
-                assert_eq!(
-                    load_line(&line).is_ok(),
-                    layout_is_readable_by_oracle(version),
-                    "the guard and the decision disagree on {loader_name} at version {version}"
-                );
-            }
-        }
-    }
-
-    #[test]
-    #[verifies("rule_reads_supported_version_only", examples)]
-    fn refusal_names_the_file_the_record_and_both_versions() {
-        let line = json!({"schema_version": 2, "id": "req_overtime"}).to_string();
-        let message = load(&line, Fields::Open).unwrap_err().to_string();
-
-        assert_eq!(
-            message,
-            "\
-.provenance/state/scopes/default/requirements/req.jsonl line 7: \
-record req_overtime has schema_version 2, but this build reads schema_version 1 only"
-        );
-    }
-
-    #[test]
-    #[verifies("rule_reads_supported_version_only", examples)]
-    fn refusal_says_so_even_when_the_line_carries_no_id() {
-        let line = json!({"schema_version": 2}).to_string();
-        let message = load(&line, Fields::Open).unwrap_err().to_string();
-
-        assert!(message.contains("record has schema_version 2"), "{message}");
-    }
-
-    #[test]
-    #[verifies("rule_reads_supported_version_only", examples)]
-    fn a_line_claiming_no_version_is_left_to_its_own_deserializer() {
-        let line = json!({"id": "req_a"}).to_string();
-
-        assert!(load(&line, Fields::Open).is_ok());
-    }
-}
+mod read_guard_tests;

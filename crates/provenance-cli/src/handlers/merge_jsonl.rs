@@ -1,7 +1,7 @@
 use crate::output;
 use camino::{Utf8Path, Utf8PathBuf};
 use provenance_store::merge::{
-    merge_records, read_jsonl_records, validate_merged_records, MergeOutcome,
+    merge_records, read_jsonl_records_for_shard, validate_merged_records, MergeOutcome,
 };
 
 /// Merges one JSONL shard and, when asked, writes the result.
@@ -22,16 +22,25 @@ pub(super) fn handle(
     shard_path: Option<&Utf8Path>,
     format: crate::output::OutputFormat,
 ) -> anyhow::Result<()> {
-    let outcome = merge_records(
-        &read_jsonl_records(base)?,
-        &read_jsonl_records(ours)?,
-        &read_jsonl_records(theirs)?,
+    let target_path = shard_path.or(output_path.as_deref());
+    let base_records = target_path.map_or_else(
+        || provenance_store::merge::read_jsonl_records(base),
+        |target| read_jsonl_records_for_shard(base, target),
     )?;
+    let our_records = target_path.map_or_else(
+        || provenance_store::merge::read_jsonl_records(ours),
+        |target| read_jsonl_records_for_shard(ours, target),
+    )?;
+    let their_records = target_path.map_or_else(
+        || provenance_store::merge::read_jsonl_records(theirs),
+        |target| read_jsonl_records_for_shard(theirs, target),
+    )?;
+    let outcome = merge_records(&base_records, &our_records, &their_records)?;
     let records = match &outcome {
         MergeOutcome::Clean { records } => records,
         MergeOutcome::Conflicted { partial, .. } => partial,
     };
-    if let Some(shard_path) = shard_path.or(output_path.as_deref()) {
+    if let Some(shard_path) = target_path {
         validate_merged_records(shard_path, records)?;
     }
     if let Some(output_path) = output_path {
