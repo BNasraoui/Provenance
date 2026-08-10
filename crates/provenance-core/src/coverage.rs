@@ -1,4 +1,33 @@
 use camino::Utf8PathBuf;
+use sha2::{Digest, Sha256};
+
+/// Durable identity for one source line, independent of its line number.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub struct EvidenceAnchor {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub symbol: Option<String>,
+    pub content_hash: String,
+}
+
+impl EvidenceAnchor {
+    pub fn new(symbol: Option<String>, line: &str) -> Self {
+        let digest = Sha256::digest(line.trim().as_bytes());
+        Self {
+            symbol,
+            content_hash: format!("sha256:{digest:x}"),
+        }
+    }
+}
+
+/// What a later scan learned when resolving a durable evidence anchor.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AnchorState {
+    #[default]
+    Unchanged,
+    Moved,
+    Gone,
+}
 
 /// Something the scan wants to say about a rule.
 ///
@@ -23,6 +52,12 @@ pub struct AnnotationResult {
     pub function_name: Option<String>,
     pub coverage: String,
     pub confidence: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<EvidenceAnchor>,
+    #[serde(default)]
+    pub anchor_state: AnchorState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub original_line: Option<usize>,
 }
 
 /// A `#[rule]` or `#[verifies]` attribute site. `verification` is `None` for
@@ -35,6 +70,12 @@ pub struct BindingResult {
     pub line: usize,
     pub item_name: Option<String>,
     pub verification: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<EvidenceAnchor>,
+    #[serde(default)]
+    pub anchor_state: AnchorState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub original_line: Option<usize>,
 }
 
 /// One source file read by the scan. Keeping its content in the report lets
@@ -107,6 +148,9 @@ mod tests {
                 function_name: Some("pays_overtime".into()),
                 coverage: "full".into(),
                 confidence: 1.0,
+                anchor: None,
+                anchor_state: AnchorState::Unchanged,
+                original_line: None,
             }],
             Vec::new(),
             Vec::new(),

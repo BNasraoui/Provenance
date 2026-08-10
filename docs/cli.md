@@ -29,6 +29,8 @@ the proved model and the implementation.
 ```sh
 provenance coverage scan --path . --scope default --validate-rules
 provenance coverage scan --path . --scope default --validate-rules --strict --format json
+provenance coverage scan --path . --format json --output coverage.json
+provenance coverage scan --path . --baseline coverage.json --validate-rules --format json
 ```
 
 Without `--validate-rules` the scan only reports what it found in the tree. With it, the
@@ -39,6 +41,14 @@ time and never stored, so no shard can disagree with the code.
 `--strict` exits non-zero when the report holds any warning; the report still prints
 first. That is the dial each repository sets for itself: strict in CI once a repository
 wants every active rule verified, plain while it is still filling them in.
+
+Each annotation and binding in a scan report keeps `file_path` and `line` and adds a
+durable `anchor`: the enclosing symbol plus a SHA-256 hash of the cited line's trimmed
+text. Pass an earlier JSON scan with `--baseline` to resolve those anchors. An
+`unchanged` site remains at its old line, a `moved` site reports its new `line` and
+`original_line`, and a `gone` site retains its last coordinate. With
+`--validate-rules`, gone anchors produce warnings; moved anchors do not become false
+absence warnings.
 
 The scanner is line-oriented. Its native binding patterns and current limits are:
 

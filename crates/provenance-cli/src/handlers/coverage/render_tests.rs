@@ -6,7 +6,7 @@ use super::{render_coverage, OUTSIDE_DEFINING_MODULE};
 use crate::output::OutputFormat;
 use camino::Utf8PathBuf;
 use provenance_core::coverage::{
-    BindingResult, CoverageReport, CoverageScan, ScannedFile, ValidationWarning,
+    AnchorState, BindingResult, CoverageReport, CoverageScan, ScannedFile, ValidationWarning,
 };
 
 fn binding(rule_id: &str, file_path: &str, verification: Option<&str>) -> BindingResult {
@@ -16,6 +16,9 @@ fn binding(rule_id: &str, file_path: &str, verification: Option<&str>) -> Bindin
         line: 12,
         item_name: None,
         verification: verification.map(ToOwned::to_owned),
+        anchor: None,
+        anchor_state: AnchorState::Unchanged,
+        original_line: None,
     }
 }
 
@@ -38,6 +41,22 @@ fn json_output_keeps_scanned_source_content() {
 
     assert!(json.contains("scanned_files"));
     assert!(json.contains("fn rule() {}"));
+}
+
+#[test]
+fn markdown_reports_moved_and_gone_anchor_states() {
+    let mut moved = binding("rule_moved", "src/rules.rs", None);
+    moved.line = 18;
+    moved.anchor_state = AnchorState::Moved;
+    moved.original_line = Some(7);
+    let mut gone = binding("rule_gone", "src/rules.rs", Some("examples"));
+    gone.anchor_state = AnchorState::Gone;
+    let report = report(vec![moved, gone], Vec::new());
+
+    let markdown = render_coverage(OutputFormat::Markdown, &report).unwrap();
+
+    assert!(markdown.contains("at `src/rules.rs`:18 (moved from line 7)"));
+    assert!(markdown.contains("at `src/rules.rs`:12 (gone)"));
 }
 
 #[test]

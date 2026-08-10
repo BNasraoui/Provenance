@@ -1,23 +1,36 @@
 use crate::cli::workspace::CoverageCommand;
 use crate::output::{self, OutputFormat};
+use anyhow::Context;
 use camino::Utf8PathBuf;
 use provenance_core::ScopeId;
 use provenance_store::{layout::ProvenanceLayout, state_store::StateStore};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
+mod anchors;
+
 pub(super) fn coverage_scan(
-    repo: Utf8PathBuf,
+    repo: &camino::Utf8Path,
     path: &Utf8PathBuf,
     scope: String,
     validate_rules: bool,
+) -> anyhow::Result<provenance_core::coverage::CoverageScan> {
+    coverage_scan_against(repo, path, scope, validate_rules, None)
+}
+
+fn coverage_scan_against(
+    repo: &camino::Utf8Path,
+    path: &Utf8PathBuf,
+    scope: String,
+    validate_rules: bool,
+    baseline: Option<&camino::Utf8Path>,
 ) -> anyhow::Result<provenance_core::coverage::CoverageScan> {
     let scanned = provenance_scanner::scan_path_with_content(path)?;
     let scans = scanned
         .iter()
         .map(|file| file.scan.clone())
         .collect::<Vec<_>>();
-    let commit = scan_commit(&repo, &scans);
+    let commit = scan_commit(repo, &scans);
     let rules = if validate_rules {
         StateStore::new(ProvenanceLayout::new(repo)).list_rules(&ScopeId::new(scope)?)?
     } else {
@@ -63,6 +76,9 @@ pub(super) fn coverage_scan(
             function_name: location.function_name.clone(),
             coverage: location.annotation.coverage.to_string(),
             confidence: location.annotation.confidence,
+            anchor: Some(location.anchor.clone()),
+            anchor_state: provenance_core::coverage::AnchorState::Unchanged,
+            original_line: None,
         })
         .collect::<Vec<_>>();
     let bindings = scans
@@ -74,6 +90,9 @@ pub(super) fn coverage_scan(
             line: binding.line,
             item_name: binding.item_name.clone(),
             verification: binding.verification.map(|method| method.to_string()),
+            anchor: Some(binding.anchor.clone()),
+            anchor_state: provenance_core::coverage::AnchorState::Unchanged,
+            original_line: None,
         })
         .collect::<Vec<_>>();
     let scanned_files = scanned
@@ -83,7 +102,7 @@ pub(super) fn coverage_scan(
             content: file.content.clone(),
         })
         .collect();
-    Ok(provenance_core::coverage::CoverageScan {
+    let mut report = provenance_core::coverage::CoverageScan {
         report: provenance_core::coverage::CoverageReport::new(
             commit,
             scans.len(),
@@ -92,7 +111,15 @@ pub(super) fn coverage_scan(
             warnings,
         ),
         scanned_files,
-    })
+    };
+    if let Some(baseline) = baseline {
+        let bytes = std::fs::read(baseline)
+            .with_context(|| format!("read coverage baseline {baseline}"))?;
+        let baseline = serde_json::from_slice(&bytes)
+            .with_context(|| format!("parse coverage baseline {baseline}"))?;
+        anchors::reconcile(&mut report, &baseline, repo, path, validate_rules);
+    }
+    Ok(report)
 }
 
 /// What the parser complained about while reading the files: the legacy
@@ -222,7 +249,10 @@ fn defining_modules(
     report
         .bindings
         .iter()
-        .filter(|binding| binding.verification.is_none())
+        .filter(|binding| {
+            binding.verification.is_none()
+                && binding.anchor_state != provenance_core::coverage::AnchorState::Gone
+        })
         .map(|binding| (binding.rule_id.as_str(), binding.file_path.as_path()))
         .collect()
 }
@@ -255,6 +285,20 @@ fn warning_subject(rule_id: &str) -> String {
     }
 }
 
+fn anchor_state(
+    state: provenance_core::coverage::AnchorState,
+    original_line: Option<usize>,
+) -> String {
+    match (state, original_line) {
+        (provenance_core::coverage::AnchorState::Moved, Some(line)) => {
+            format!(" (moved from line {line})")
+        }
+        (provenance_core::coverage::AnchorState::Moved, None) => " (moved)".to_string(),
+        (provenance_core::coverage::AnchorState::Gone, _) => " (gone)".to_string(),
+        (provenance_core::coverage::AnchorState::Unchanged, _) => String::new(),
+    }
+}
+
 pub(super) fn render_coverage(
     format: OutputFormat,
     report: &provenance_core::coverage::CoverageScan,
@@ -267,8 +311,12 @@ pub(super) fn render_coverage(
         for annotation in &report.annotations {
             writeln!(
                 out,
-                "- `{}` in `{}`:{} ({})",
-                annotation.rule_id, annotation.file_path, annotation.line, annotation.coverage
+                "- `{}` in `{}`:{} ({}){}",
+                annotation.rule_id,
+                annotation.file_path,
+                annotation.line,
+                annotation.coverage,
+                anchor_state(annotation.anchor_state, annotation.original_line)
             )?;
         }
         let defining_modules = defining_modules(report);
@@ -279,7 +327,7 @@ pub(super) fn render_coverage(
             );
             writeln!(
                 out,
-                "- `{}` {} at `{}`:{}{}{}",
+                "- `{}` {} at `{}`:{}{}{}{}",
                 binding.rule_id,
                 relation,
                 binding.file_path,
@@ -289,6 +337,7 @@ pub(super) fn render_coverage(
                     .as_deref()
                     .map(|name| format!(" ({name})"))
                     .unwrap_or_default(),
+                anchor_state(binding.anchor_state, binding.original_line),
                 if is_outside_defining_module(binding, &defining_modules) {
                     OUTSIDE_DEFINING_MODULE
                 } else {
@@ -319,12 +368,17 @@ pub(super) fn handle(command: CoverageCommand) -> anyhow::Result<()> {
             repo,
             path,
             scope,
+            baseline,
             validate_rules,
             strict,
             format,
             output,
         } => {
-            let report = coverage_scan(repo, &path, scope, validate_rules)?;
+            let report = if let Some(baseline) = baseline.as_deref() {
+                coverage_scan_against(&repo, &path, scope, validate_rules, Some(baseline))?
+            } else {
+                coverage_scan(&repo, &path, scope, validate_rules)?
+            };
             if let Some(output_path) = output {
                 let rendered = render_coverage(format, &report)?;
                 std::fs::write(output_path, rendered)?;
