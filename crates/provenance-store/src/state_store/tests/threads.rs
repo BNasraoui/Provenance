@@ -351,6 +351,35 @@ fn posting_twice_to_a_record_reuses_its_one_active_thread() {
     );
 }
 
+#[test]
+fn posting_after_terminal_history_mints_then_reuses_a_distinct_thread_id() {
+    for status in [ThreadStatus::Resolved, ThreadStatus::Archived] {
+        let (_dir, store, scope) = initialized_store();
+        let target = parent(0);
+        let terminal = thread(
+            &scope,
+            "thread_requirement_req_alpha",
+            &target,
+            status.clone(),
+            1,
+        );
+        seed_threads(&store, &scope, std::slice::from_ref(&terminal));
+
+        let first = post(&store, &scope, &target);
+        let second = post(&store, &scope, &target);
+        let after = store.list_threads(&scope).unwrap();
+
+        assert_ne!(first.id, terminal.id);
+        assert_eq!(second.id, first.id);
+        assert_eq!(after.len(), 2);
+        assert_eq!(find(&after, &terminal.id).status, status);
+        assert_eq!(
+            active_ids(&after, &target),
+            vec![first.id.as_str().to_string()]
+        );
+    }
+}
+
 fn thread(
     scope: &ScopeId,
     id: &str,

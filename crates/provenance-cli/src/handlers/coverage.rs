@@ -80,9 +80,9 @@ pub(super) fn coverage_scan(
     ))
 }
 
-/// What the parser complained about while reading the files: a legacy
-/// `@statesman` marker, a directive with no `key: value`, a confidence outside
-/// the range, an unknown field.
+/// What the parser complained about while reading the files: the legacy
+/// Statesman marker, a directive with no `key: value`, a confidence
+/// outside the range, an unknown field.
 ///
 /// These name a file and a line but no rule. A malformed directive may never
 /// get as far as saying which rule it meant, and inventing one would send a

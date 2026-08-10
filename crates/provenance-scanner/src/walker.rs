@@ -5,7 +5,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 
 use std::str::FromStr;
 
-use crate::parser::{contains_annotation_marker, Verification};
+use crate::parser::{annotation_marker_position, annotation_marker_positions, Verification};
+use crate::string_context::obvious_string_is_open;
 use crate::{parse_annotations, Annotation, ParseWarning};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -89,10 +90,11 @@ pub fn scan_file(file_path: &Utf8Path, language: Language, content: &str) -> Fil
     let mut bindings = Vec::new();
     let mut warnings = Vec::new();
     let lines = content.lines().collect::<Vec<_>>();
+    let rust_states = rust_line_states(language, &lines);
     let mut idx = 0;
     while idx < lines.len() {
         let line = lines[idx];
-        if language == Language::Rust {
+        if language == Language::Rust && rust_states[idx] == RustLexicalState::Code {
             if let Some((rule_id, verification)) = parse_attribute_line(line) {
                 bindings.push(AttributeBinding {
                     file_path: file_path.to_path_buf(),
@@ -105,11 +107,16 @@ pub fn scan_file(file_path: &Utf8Path, language: Language, content: &str) -> Fil
                 continue;
             }
         }
-        if !contains_annotation_marker(line) {
+        let marker_position = if language == Language::Rust {
+            rust_annotation_marker_position(line, rust_states[idx])
+        } else {
+            annotation_marker_position(line)
+        };
+        let Some(marker_position) = marker_position else {
             idx += 1;
             continue;
-        }
-        let (comment, end_idx) = collect_annotation_comment(&lines, idx);
+        };
+        let (comment, end_idx) = collect_annotation_comment(&lines, idx, marker_position);
         let parsed = parse_annotations(&comment);
         warnings.extend(parsed.warnings);
         let function_name = next_function_name(language, &lines[end_idx.saturating_add(1)..]);
@@ -130,6 +137,133 @@ pub fn scan_file(file_path: &Utf8Path, language: Language, content: &str) -> Fil
         bindings,
         warnings,
     }
+}
+
+fn rust_line_states(language: Language, lines: &[&str]) -> Vec<RustLexicalState> {
+    let mut state = RustLexicalState::Code;
+    lines
+        .iter()
+        .map(|line| {
+            let line_state = state;
+            if language == Language::Rust {
+                advance_rust_state(line, &mut state);
+            }
+            line_state
+        })
+        .collect()
+}
+
+fn rust_annotation_marker_position(line: &str, initial_state: RustLexicalState) -> Option<usize> {
+    annotation_marker_positions(line)
+        .filter(|position| {
+            let mut state = initial_state;
+            advance_rust_state(&line[..*position], &mut state);
+            let closed_multiline_string = matches!(
+                initial_state,
+                RustLexicalState::Quoted | RustLexicalState::Raw(_)
+            ) && state == RustLexicalState::Code;
+            !matches!(state, RustLexicalState::Quoted | RustLexicalState::Raw(_))
+                && (closed_multiline_string || !obvious_string_is_open(&line[..*position]))
+        })
+        .min()
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RustLexicalState {
+    Code,
+    Quoted,
+    Raw(usize),
+    BlockComment(usize),
+}
+
+fn advance_rust_state(line: &str, state: &mut RustLexicalState) {
+    let bytes = line.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        match *state {
+            RustLexicalState::Code => match bytes[index] {
+                b'/' if bytes.get(index + 1) == Some(&b'/') => break,
+                b'/' if bytes.get(index + 1) == Some(&b'*') => {
+                    *state = RustLexicalState::BlockComment(1);
+                    index += 2;
+                }
+                b'\'' => {
+                    index = character_literal_end(line, index + 1).unwrap_or(index) + 1;
+                }
+                b'"' => {
+                    *state = RustLexicalState::Quoted;
+                    index += 1;
+                }
+                b'r' => {
+                    let hashes = bytes[index + 1..]
+                        .iter()
+                        .take_while(|byte| **byte == b'#')
+                        .count();
+                    if bytes.get(index + hashes + 1) == Some(&b'"') {
+                        *state = RustLexicalState::Raw(hashes);
+                        index += hashes + 2;
+                    } else {
+                        index += 1;
+                    }
+                }
+                _ => index += 1,
+            },
+            RustLexicalState::Quoted => match bytes[index] {
+                b'\\' => index = (index + 2).min(bytes.len()),
+                b'"' => {
+                    *state = RustLexicalState::Code;
+                    index += 1;
+                }
+                _ => index += 1,
+            },
+            RustLexicalState::Raw(hashes) => {
+                let closes = bytes[index] == b'"'
+                    && bytes[index + 1..]
+                        .iter()
+                        .take(hashes)
+                        .all(|byte| *byte == b'#')
+                    && bytes.len().saturating_sub(index + 1) >= hashes;
+                if closes {
+                    *state = RustLexicalState::Code;
+                    index += hashes + 1;
+                } else {
+                    index += 1;
+                }
+            }
+            RustLexicalState::BlockComment(depth) => {
+                if bytes[index..].starts_with(b"/*") {
+                    *state = RustLexicalState::BlockComment(depth + 1);
+                    index += 2;
+                } else if bytes[index..].starts_with(b"*/") {
+                    *state = if depth == 1 {
+                        RustLexicalState::Code
+                    } else {
+                        RustLexicalState::BlockComment(depth - 1)
+                    };
+                    index += 2;
+                } else {
+                    index += 1;
+                }
+            }
+        }
+    }
+}
+
+fn character_literal_end(line: &str, index: usize) -> Option<usize> {
+    let bytes = line.as_bytes();
+    let content_end = if bytes.get(index) == Some(&b'\\') {
+        match bytes.get(index + 1) {
+            Some(b'x') => index + 4,
+            Some(b'u') if bytes.get(index + 2) == Some(&b'{') => {
+                index + 3 + bytes[index + 3..].iter().position(|byte| *byte == b'}')? + 1
+            }
+            Some(_) => index + 2,
+            None => return None,
+        }
+    } else {
+        index + line.get(index..)?.chars().next()?.len_utf8()
+    };
+    (bytes.get(content_end) == Some(&b'\'')).then_some(content_end)
 }
 
 /// Recognizes single-line `#[rule("id")]` and `#[verifies("id", method)]`
@@ -175,12 +309,21 @@ fn type_name(line: &str) -> Option<String> {
         .and_then(|marker| token_after(line, marker))
 }
 
-fn collect_annotation_comment(lines: &[&str], start: usize) -> (String, usize) {
+fn collect_annotation_comment(
+    lines: &[&str],
+    start: usize,
+    marker_position: usize,
+) -> (String, usize) {
     let mut end = start;
     while end + 1 < lines.len() && is_comment_continuation(lines[end + 1]) {
         end += 1;
     }
-    (lines[start..=end].join("\n"), end)
+    let mut comment = lines[start][marker_position..].to_string();
+    for continuation in lines.iter().take(end + 1).skip(start + 1) {
+        comment.push('\n');
+        comment.push_str(continuation);
+    }
+    (comment, end)
 }
 
 fn is_comment_continuation(line: &str) -> bool {

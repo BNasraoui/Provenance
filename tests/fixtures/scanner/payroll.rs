@@ -1,2 +1,1 @@
-// @provenance rule: UNKNOWN-RULE
-fn pays_overtime() {}
+const ANNOTATED_SOURCE: &str = "// @provenance rule: UNKNOWN-RULE\nfn pays_overtime() {}";
