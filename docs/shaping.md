@@ -278,9 +278,12 @@ How hard that lands is a per-repo dial. Plain, the scan reports and succeeds. Wi
 verified before merge gets that from CI, while a repo still filling in its rules gets
 the same report with no gate.
 
-Code outside Rust keeps the older channel: `@provenance` comments naming a rule above
-the function. Comments drift from the code they sit above, which is the whole reason for
-the attribute, so they are the legacy tier. They scan alongside attributes.
+Other supported languages use inert identity helpers in their native idiom: decorators
+in Python and callable wrappers in JavaScript, TypeScript, Go, and Java. The scanner's
+binding-grade coverage differs by language; [`cli.md`](cli.md#rule-coverage) gives the
+exact matrix. `@provenance` comments remain the universal floor. Comments can drift from
+the function they sit above, so they are the weaker tier and scan alongside native
+bindings.
 
 Rules follow decisions, not code shape. A rule exists because a human decided something,
 and the marked function is where that decision runs. Do not mint one rule per function,

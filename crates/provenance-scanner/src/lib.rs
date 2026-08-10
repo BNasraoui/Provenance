@@ -1,3 +1,5 @@
+mod binding_lexer;
+
 pub mod parser;
 mod string_context;
 pub mod validate;
