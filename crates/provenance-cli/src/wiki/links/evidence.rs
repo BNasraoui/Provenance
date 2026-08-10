@@ -122,6 +122,13 @@ impl LinkResolver {
     /// the reader a 404, so everything else stays plain text: text the reader
     /// can search for beats a link that lies.
     ///
+    /// A file path is also checked against the tree it cites: the scanned
+    /// file list when the scan covers the requested commit, otherwise
+    /// `git ls-tree` at the pinned commit (`HEAD` when unpinned). A path the
+    /// tree does not contain stays plain text with a short note saying why.
+    /// `file://` URLs never link at all — a reader's browser cannot reach
+    /// them — so they carry the same kind of note instead.
+    ///
     /// "Reads as a file path" is decided in one place, `parse_code_ref`: a
     /// directory separator, or a bare name carrying a line group. A bare
     /// dotted token with neither (`e.g.`, `Fig.`, `v1.2`, and equally
