@@ -77,8 +77,9 @@ fn coverage_scan_against(
             coverage: location.annotation.coverage.to_string(),
             confidence: location.annotation.confidence,
             anchor: Some(location.anchor.clone()),
-            anchor_state: provenance_core::coverage::AnchorState::Unchanged,
+            anchor_state: provenance_core::coverage::AnchorState::New,
             original_line: None,
+            original_file_path: None,
         })
         .collect::<Vec<_>>();
     let bindings = scans
@@ -91,8 +92,9 @@ fn coverage_scan_against(
             item_name: binding.item_name.clone(),
             verification: binding.verification.map(|method| method.to_string()),
             anchor: Some(binding.anchor.clone()),
-            anchor_state: provenance_core::coverage::AnchorState::Unchanged,
+            anchor_state: provenance_core::coverage::AnchorState::New,
             original_line: None,
+            original_file_path: None,
         })
         .collect::<Vec<_>>();
     let scanned_files = scanned
@@ -288,13 +290,17 @@ fn warning_subject(rule_id: &str) -> String {
 fn anchor_state(
     state: provenance_core::coverage::AnchorState,
     original_line: Option<usize>,
+    original_file_path: Option<&camino::Utf8Path>,
 ) -> String {
     match (state, original_line) {
-        (provenance_core::coverage::AnchorState::Moved, Some(line)) => {
-            format!(" (moved from line {line})")
-        }
+        (provenance_core::coverage::AnchorState::Moved, Some(line)) => original_file_path
+            .map_or_else(
+                || format!(" (moved from line {line})"),
+                |file| format!(" (moved from {file}:{line})"),
+            ),
         (provenance_core::coverage::AnchorState::Moved, None) => " (moved)".to_string(),
         (provenance_core::coverage::AnchorState::Gone, _) => " (gone)".to_string(),
+        (provenance_core::coverage::AnchorState::New, _) => " (new)".to_string(),
         (provenance_core::coverage::AnchorState::Unchanged, _) => String::new(),
     }
 }
@@ -316,7 +322,11 @@ pub(super) fn render_coverage(
                 annotation.file_path,
                 annotation.line,
                 annotation.coverage,
-                anchor_state(annotation.anchor_state, annotation.original_line)
+                anchor_state(
+                    annotation.anchor_state,
+                    annotation.original_line,
+                    annotation.original_file_path.as_deref()
+                )
             )?;
         }
         let defining_modules = defining_modules(report);
@@ -337,7 +347,11 @@ pub(super) fn render_coverage(
                     .as_deref()
                     .map(|name| format!(" ({name})"))
                     .unwrap_or_default(),
-                anchor_state(binding.anchor_state, binding.original_line),
+                anchor_state(
+                    binding.anchor_state,
+                    binding.original_line,
+                    binding.original_file_path.as_deref()
+                ),
                 if is_outside_defining_module(binding, &defining_modules) {
                     OUTSIDE_DEFINING_MODULE
                 } else {

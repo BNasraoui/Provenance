@@ -19,6 +19,7 @@ fn binding(rule_id: &str, file_path: &str, verification: Option<&str>) -> Bindin
         anchor: None,
         anchor_state: AnchorState::Unchanged,
         original_line: None,
+        original_file_path: None,
     }
 }
 
@@ -57,6 +58,31 @@ fn markdown_reports_moved_and_gone_anchor_states() {
 
     assert!(markdown.contains("at `src/rules.rs`:18 (moved from line 7)"));
     assert!(markdown.contains("at `src/rules.rs`:12 (gone)"));
+}
+
+#[test]
+fn markdown_reports_cross_file_moves_with_their_old_file() {
+    let mut moved = binding("rule_moved", "src/relocated.rs", None);
+    moved.line = 3;
+    moved.anchor_state = AnchorState::Moved;
+    moved.original_line = Some(7);
+    moved.original_file_path = Some(Utf8PathBuf::from("src/rules.rs"));
+    let report = report(vec![moved], Vec::new());
+
+    let markdown = render_coverage(OutputFormat::Markdown, &report).unwrap();
+
+    assert!(markdown.contains("at `src/relocated.rs`:3 (moved from src/rules.rs:7)"));
+}
+
+#[test]
+fn markdown_reports_first_seen_sites_as_new() {
+    let mut new = binding("rule_new", "src/rules.rs", Some("examples"));
+    new.anchor_state = AnchorState::New;
+    let report = report(vec![new], Vec::new());
+
+    let markdown = render_coverage(OutputFormat::Markdown, &report).unwrap();
+
+    assert!(markdown.contains("at `src/rules.rs`:12 (new)"));
 }
 
 #[test]

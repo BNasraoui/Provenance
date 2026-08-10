@@ -20,11 +20,18 @@ impl EvidenceAnchor {
 }
 
 /// What a later scan learned when resolving a durable evidence anchor.
+///
+/// `New` is what a scan says when it has nothing to compare against: no
+/// baseline site shares this site's anchor. Every site in a scan run without
+/// `--baseline` is `New`, because such a scan knows nothing about history.
+/// `Unchanged` is reserved for a site pinned to a baseline site, so it never
+/// claims more than the scan checked.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AnchorState {
     #[default]
     Unchanged,
+    New,
     Moved,
     Gone,
 }
@@ -58,6 +65,8 @@ pub struct AnnotationResult {
     pub anchor_state: AnchorState,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub original_line: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub original_file_path: Option<Utf8PathBuf>,
 }
 
 /// A `#[rule]` or `#[verifies]` attribute site. `verification` is `None` for
@@ -76,6 +85,8 @@ pub struct BindingResult {
     pub anchor_state: AnchorState,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub original_line: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub original_file_path: Option<Utf8PathBuf>,
 }
 
 /// One source file read by the scan. Keeping its content in the report lets
@@ -151,6 +162,7 @@ mod tests {
                 anchor: None,
                 anchor_state: AnchorState::Unchanged,
                 original_line: None,
+                original_file_path: None,
             }],
             Vec::new(),
             Vec::new(),

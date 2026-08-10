@@ -26,7 +26,7 @@ A source line carrying a rule binding, verification binding, or provenance annot
 
 ## Evidence anchor
 
-The enclosing symbol and content identity recorded alongside an Evidence site's coordinate. A later scan resolves the anchor before deciding whether the site is Unchanged, Moved, or Gone; these states are derived report findings, not canonical graph state.
+The enclosing symbol and content identity recorded alongside an Evidence site's coordinate. A later scan resolves the anchor before deciding whether the site is Unchanged, New, Moved, or Gone; these states are derived report findings, not canonical graph state.
 
 ## Topic
 

@@ -22,6 +22,7 @@ fn binding(
         anchor: None,
         anchor_state: AnchorState::Unchanged,
         original_line: None,
+        original_file_path: None,
     }
 }
 

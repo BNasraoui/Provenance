@@ -45,17 +45,21 @@ wants every active rule verified, plain while it is still filling them in.
 Each annotation and binding in a scan report keeps `file_path` and `line` and adds a
 durable `anchor`: the enclosing symbol plus a SHA-256 hash of the cited line's trimmed
 text. Pass an earlier JSON scan with `--baseline` to resolve those anchors. An
-`unchanged` site remains at its old line, a `moved` site reports its new `line` and
-`original_line`, and a `gone` site retains its last coordinate. With
-`--validate-rules`, gone anchors produce warnings; moved anchors do not become false
-absence warnings.
+`unchanged` site is pinned to a baseline site, a `moved` site reports its new `line`
+and `original_line`, and a `gone` site retains its last coordinate. A `new` site has
+no baseline site sharing its anchor; without `--baseline` the scan has nothing to
+compare against, so every site is `new`. With `--validate-rules`, gone anchors
+produce warnings; moved anchors do not become false absence warnings.
 
-Anchors relocate only within a file. A site moved to a different file is reported
-gone at its old coordinate, and the new file carries it as a fresh unchanged site.
-When several sites share a file, rule, symbol, and line text, the scan refuses to
-guess between them: any that cannot be pinned to a baseline line are reported at
-their current coordinates as unchanged, and losing one of them raises no gone
-warning.
+Anchors relocate across files. A site missing from its own file is matched by rule,
+symbol, and line hash against baseline-unaccounted sites anywhere in the scan before
+anything is declared missing: a single match is `moved`, reporting `original_file_path`
+alongside `original_line`; no match is `gone`. Several matches make the scan warn,
+naming every candidate, rather than pick one. When identical sites share one anchor,
+each is pinned to a baseline line where it can be, and a lost instance is reported
+gone; when the survivors cannot be told apart, they stay at their current coordinates
+as unchanged and the scan warns that the group lost instances. Identical sites
+shuffled within one file with none lost stay silent.
 
 The scanner is line-oriented. Its native binding patterns and current limits are:
 
