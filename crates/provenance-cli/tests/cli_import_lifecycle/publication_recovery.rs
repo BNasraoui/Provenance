@@ -1,5 +1,30 @@
 use super::support::{init_repo, provenance};
 
+/// The macOS temp area sits behind `/var -> /private/var`, so a marker holds
+/// an absolute path whose spelling matches neither the relative written
+/// container nor the canonical one. An OS symlink above the repository must
+/// not make a legitimate marker read as outside the cache; this reproduces
+/// that shape on any Unix with an aliasing symlink above the repo.
+#[test]
+#[cfg(unix)]
+fn relative_access_recovers_a_marker_written_through_a_path_alias() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir(dir.path().join("real")).unwrap();
+    std::os::unix::fs::symlink(dir.path().join("real"), dir.path().join("alias")).unwrap();
+    let repo = dir.path().join("alias").join("repo");
+    init_repo(&repo, None);
+    let transaction = repo.join(".provenance/cache/import-transactions/completed");
+    std::fs::create_dir_all(transaction.parent().unwrap()).unwrap();
+    write_publication_marker(&repo, &transaction, "published");
+
+    check_repo_relative(&repo);
+
+    assert!(repo.join(".provenance/state/manifest.json").is_file());
+    assert!(!repo
+        .join(".provenance/cache/import-publication.json")
+        .exists());
+}
+
 #[test]
 fn relative_repository_access_restores_backup_after_interrupted_publication() {
     let dir = tempfile::tempdir().unwrap();
