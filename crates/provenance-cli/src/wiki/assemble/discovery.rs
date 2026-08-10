@@ -1,7 +1,7 @@
 use crate::handlers::ScopeExport;
 use crate::wiki::model::{
-    DomainGroup, DomainIndexPage, DomainState, PageId, PageLink, RecordKind, RequirementPage,
-    RulePage, SearchEntry, SearchIndexPage,
+    DecisionIndexPage, DomainGroup, DomainIndexPage, DomainState, PageId, PageLink, RecordKind,
+    RequirementPage, ResolutionPage, RulePage, SearchEntry, SearchIndexPage, SourcePage,
 };
 use provenance_core::{EdgeType, NodeType};
 use provenance_macros::rule;
@@ -28,8 +28,10 @@ struct SearchCollection {
 pub(super) fn build_discovery_pages(
     state: &ScopeExport,
     requirements: &[RequirementPage],
+    resolutions: &[ResolutionPage],
     rules: &[RulePage],
-) -> (DomainIndexPage, SearchIndexPage) {
+    sources: &[SourcePage],
+) -> (DomainIndexPage, SearchIndexPage, DecisionIndexPage) {
     let requirements = requirements
         .iter()
         .map(|page| RequirementRecord {
@@ -52,9 +54,42 @@ pub(super) fn build_discovery_pages(
         })
         .collect::<Vec<_>>();
 
+    let decision_entries = resolutions
+        .iter()
+        .map(|page| SearchEntry {
+            link: page_link(&page.id, &page.title),
+            statement: page.position.clone(),
+        })
+        .collect::<Vec<_>>();
+    let source_entries = sources
+        .iter()
+        .map(|page| SearchEntry {
+            link: page_link(&page.id, &page.title),
+            statement: page
+                .reference
+                .as_ref()
+                .map(|reference| reference.label.clone())
+                .or_else(|| page.url.clone())
+                .unwrap_or_default(),
+        })
+        .collect::<Vec<_>>();
+
+    let search = search_index(
+        &state.scope,
+        &requirements,
+        &decision_entries,
+        &rules,
+        &source_entries,
+    );
+    let decisions = DecisionIndexPage {
+        scope: state.scope.clone(),
+        title: "Decisions".to_string(),
+        entries: decision_entries,
+    };
     (
         domain_index(state, &requirements, &rules),
-        search_index(&state.scope, &requirements, &rules),
+        search,
+        decisions,
     )
 }
 
@@ -63,7 +98,9 @@ pub(super) fn build_discovery_pages(
 fn search_index(
     scope: &str,
     requirements: &[RequirementRecord<'_>],
+    decisions: &[SearchEntry],
     rules: &[RuleRecord<'_>],
+    sources: &[SearchEntry],
 ) -> SearchIndexPage {
     let collections = vec![
         SearchCollection {
@@ -77,6 +114,10 @@ fn search_index(
                 .collect(),
         },
         SearchCollection {
+            kind: RecordKind::Resolution,
+            entries: decisions.to_vec(),
+        },
+        SearchCollection {
             kind: RecordKind::Rule,
             entries: rules
                 .iter()
@@ -85,6 +126,10 @@ fn search_index(
                     statement: rule.statement.to_string(),
                 })
                 .collect(),
+        },
+        SearchCollection {
+            kind: RecordKind::Source,
+            entries: sources.to_vec(),
         },
     ];
     let coverage = coverage_sentence(&collections);
@@ -99,7 +144,7 @@ fn search_index(
         .map(str::to_string);
     SearchIndexPage {
         scope: scope.to_string(),
-        title: "Search requirements and rules".to_string(),
+        title: "Search project records".to_string(),
         coverage,
         example,
         entries,

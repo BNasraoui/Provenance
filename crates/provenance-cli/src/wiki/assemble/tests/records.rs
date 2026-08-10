@@ -47,10 +47,10 @@ fn rule_page_traces_back_to_requirements_and_sources() {
 }
 
 #[test]
-fn rule_page_flags_orphan_rules_and_titles_a_nameless_rule_by_its_id() {
+fn rule_page_flags_orphan_rules_and_titles_a_nameless_rule_by_its_statement() {
     let corpus = fixture_corpus();
     let page = rule_page(&corpus, "rule_orphan");
-    assert_eq!(page.title, "Rule orphan");
+    assert_eq!(page.title, "Claim items shall be grouped by participant");
     assert_eq!(gap_kinds(&page.gaps), vec![GapKind::OrphanRule]);
     assert!(page.produced_by.is_empty());
 }

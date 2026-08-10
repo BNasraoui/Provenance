@@ -1,4 +1,4 @@
-use crate::wiki::links::{EvidenceRef, InlineRef};
+use crate::wiki::links::{EvidenceRef, EvidenceSnippet, InlineRef};
 use crate::wiki::model::{PageId, PageLink};
 use provenance_macros::rule;
 use std::collections::HashMap;
@@ -136,7 +136,7 @@ fn shortest_distinct_suffix<'a>(target: &'a PageId, colliding_targets: &[PageId]
 }
 
 pub(in crate::wiki::render) fn evidence_html(evidence: &EvidenceRef) -> String {
-    evidence.href.as_ref().map_or_else(
+    let reference = evidence.href.as_ref().map_or_else(
         || escape_html(&evidence.label),
         |href| {
             format!(
@@ -145,6 +145,18 @@ pub(in crate::wiki::render) fn evidence_html(evidence: &EvidenceRef) -> String {
                 escape_html(&evidence.label)
             )
         },
+    );
+    evidence.snippet.as_ref().map_or_else(
+        || reference.clone(),
+        |snippet| format!("{reference}{}", snippet_html(snippet)),
+    )
+}
+
+pub(in crate::wiki::render) fn snippet_html(snippet: &EvidenceSnippet) -> String {
+    let content = escape_html(&snippet.content).replace('\n', "<br>");
+    format!(
+        "<span class=\"local-snippet\"><br><span class=\"snippet-label\">Local snippet · {}</span><br><code>{content}</code></span>",
+        escape_html(&snippet.label),
     )
 }
 
@@ -162,13 +174,17 @@ pub(in crate::wiki::render) fn linkify_body(body: &str, refs: &[InlineRef]) -> S
             continue;
         }
         html.push_str(&escape_html(&body[cursor..inline.start]));
-        write!(
-            html,
-            "<a class=\"src\" href=\"{}\">{}</a>",
-            escape_attr(&inline.href),
-            escape_html(&inline.label)
-        )
-        .expect("writing to a String should not fail");
+        if let Some(href) = &inline.href {
+            write!(
+                html,
+                "<a class=\"src\" href=\"{}\">{}</a>",
+                escape_attr(href),
+                escape_html(&inline.label)
+            )
+            .expect("writing to a String should not fail");
+        } else {
+            html.push_str(&escape_html(&inline.label));
+        }
         cursor = inline.end;
     }
     html.push_str(&escape_html(&body[cursor..]));

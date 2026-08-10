@@ -39,20 +39,16 @@ pub fn homepage_plain_language_is_valid(html: &str) -> bool {
         && !lower.contains(">atlas<")
         && lower.contains("documentation")
         && lower.contains("project records")
-        && lower.contains("missing evidence")
+        && lower.contains("unfinished")
 }
 
-fn traceability_summary_html(finding_count: usize) -> String {
+fn traceability_summary_html(unfinished_count: usize) -> String {
     format!(
-        "<section data-homepage-traceability><h2>Missing evidence</h2>\n\
-         <p>See the complete list of places where project records need stronger support.</p>\n\
+        "<section data-homepage-traceability><h2>Unfinished</h2>\n\
+         <p>See all gaps, orphans, and open questions in one place.</p>\n\
          <a class=\"traceability-link\" href=\"{}\">Review {}</a></section>\n",
-        WikiRoute::Findings.path(),
-        counted(
-            finding_count,
-            "missing evidence finding",
-            "missing evidence findings"
-        ),
+        WikiRoute::Unfinished.path(),
+        counted(unfinished_count, "unfinished item", "unfinished items"),
     )
 }
 
@@ -66,7 +62,7 @@ fn homepage_content_html(page: &ScopeIndexPage) -> String {
         page.search_example.as_deref(),
     );
     push_domains(&mut main, page);
-    main.push_str(&traceability_summary_html(page.finding_count));
+    main.push_str(&traceability_summary_html(page.unfinished_count));
     main
 }
 

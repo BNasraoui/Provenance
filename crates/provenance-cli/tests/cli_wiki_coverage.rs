@@ -16,6 +16,13 @@ fn wiki_build_uses_coverage_report_for_rule_functions_and_verifications() {
   "total_annotations": 0,
   "warnings": [],
   "annotations": [],
+  "scanned_files": [{
+    "file_path": "src/rules.rs",
+    "content": "line one\nline two\nline three\nline four\nline five\nline six\nfn decide_bound_rule() {}\n"
+  }, {
+    "file_path": "tests/rules.rs",
+    "content": "test line one\ntest line two\n"
+  }],
   "bindings": [{
     "rule_id": "rule_bound",
     "file_path": "src/rules.rs",
@@ -68,6 +75,9 @@ fn wiki_build_uses_coverage_report_for_rule_functions_and_verifications() {
     assert!(bound.contains("examples"), "{bound}");
     assert!(bound.contains("bound_rule_examples"), "{bound}");
     assert!(bound.contains("tests/rules.rs:12"), "{bound}");
+    assert!(bound.contains("Local snippet"), "{bound}");
+    assert!(bound.contains("fn decide_bound_rule() {}"), "{bound}");
+    assert!(!bound.contains("/blob/HEAD/"), "{bound}");
     assert_eq!(
         bound.matches("outside defining module").count(),
         1,

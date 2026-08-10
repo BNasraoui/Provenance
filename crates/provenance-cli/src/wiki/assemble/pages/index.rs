@@ -1,6 +1,6 @@
 use crate::wiki::model::{
-    CorpusCounts, DomainIndexPage, DomainState, HomepageDomain, IndexEntry, OrphanReport,
-    OrphanRule, ScopeIndexPage, SearchIndexPage, HOMEPAGE_DOMAIN_ROW_CAP,
+    CorpusCounts, DomainIndexPage, DomainState, HomepageDomain, IndexEntry, OrphanRecord,
+    OrphanReport, ScopeIndexPage, SearchIndexPage, HOMEPAGE_DOMAIN_ROW_CAP,
 };
 use provenance_core::{EdgeType, NodeType};
 
@@ -16,7 +16,7 @@ impl Assembler<'_> {
         &self,
         domains: &DomainIndexPage,
         search: &SearchIndexPage,
-        finding_count: usize,
+        unfinished_count: usize,
     ) -> ScopeIndexPage {
         let roots: Vec<IndexEntry> = self
             .state
@@ -48,7 +48,7 @@ impl Assembler<'_> {
                         .rules
                         .iter()
                         .find(|rule| rule.id.as_str() == gap.node_id)
-                        .map(|rule| OrphanRule {
+                        .map(|rule| OrphanRecord {
                             link: rule_link(rule),
                             reason: gap.reason.clone(),
                         })
@@ -63,8 +63,11 @@ impl Assembler<'_> {
                         .resolutions
                         .iter()
                         .find(|resolution| resolution.id.as_str() == gap.node_id)
+                        .map(|resolution| OrphanRecord {
+                            link: resolution_link(resolution),
+                            reason: gap.reason.clone(),
+                        })
                 })
-                .map(resolution_link)
                 .collect(),
             sources: self
                 .gaps
@@ -75,8 +78,11 @@ impl Assembler<'_> {
                         .sources
                         .iter()
                         .find(|source| source.id.as_str() == gap.node_id)
+                        .map(|source| OrphanRecord {
+                            link: source_link(source),
+                            reason: gap.reason.clone(),
+                        })
                 })
-                .map(source_link)
                 .collect(),
         };
         let authored_domain_count = domains
@@ -122,7 +128,7 @@ impl Assembler<'_> {
             search_example: search.example.clone(),
             domains,
             authored_domain_count,
-            finding_count,
+            unfinished_count,
         }
     }
 }

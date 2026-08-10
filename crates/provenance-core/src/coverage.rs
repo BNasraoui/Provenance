@@ -37,6 +37,14 @@ pub struct BindingResult {
     pub verification: Option<String>,
 }
 
+/// One source file read by the scan. Keeping its content in the report lets
+/// offline consumers show the evidence without relying on a code host.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub struct ScannedFile {
+    pub file_path: Utf8PathBuf,
+    pub content: String,
+}
+
 #[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct CoverageReport {
     pub commit: Option<String>,
@@ -45,6 +53,23 @@ pub struct CoverageReport {
     pub warnings: Vec<ValidationWarning>,
     pub annotations: Vec<AnnotationResult>,
     pub bindings: Vec<BindingResult>,
+}
+
+/// A report plus the exact source text read by this scan.
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct CoverageScan {
+    #[serde(flatten)]
+    pub report: CoverageReport,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scanned_files: Vec<ScannedFile>,
+}
+
+impl std::ops::Deref for CoverageScan {
+    type Target = CoverageReport;
+
+    fn deref(&self) -> &Self::Target {
+        &self.report
+    }
 }
 
 impl CoverageReport {

@@ -1,22 +1,103 @@
-use crate::wiki::model::{FindingsPage, GapNotice, PageLink};
+use crate::wiki::model::{
+    GapNotice, OpenQuestionNotice, OrphanRecord, OrphanReport, PageLink, UnfinishedPage,
+};
 use provenance_core::{NodeType, StableId};
 use provenance_store::cache::{GapItem, GapKind};
 
 use super::context::Assembler;
 use super::page_links::{requirement_link, resolution_link, rule_link, source_link};
-
 const SUBJECT_TOKEN: &str = concat!("{", "subject", "}");
 const RELATED_TOKEN: &str = concat!("{", "related", "}");
 
 impl Assembler<'_> {
-    pub(super) fn findings_page(&self) -> FindingsPage {
-        FindingsPage {
+    pub(super) fn unfinished_page(&self) -> UnfinishedPage {
+        let gaps = self
+            .gaps
+            .iter()
+            .filter(|gap| {
+                !matches!(
+                    gap.kind,
+                    GapKind::OrphanRule
+                        | GapKind::OrphanResolution
+                        | GapKind::UnreferencedSource
+                        | GapKind::OpenQuestion
+                )
+            })
+            .map(|gap| self.gap_notice(gap, None))
+            .collect();
+        let open_questions = self
+            .gaps
+            .iter()
+            .filter(|gap| gap.kind == GapKind::OpenQuestion)
+            .filter_map(|gap| {
+                self.state
+                    .questions
+                    .iter()
+                    .find(|question| question.id.as_str() == gap.node_id)
+            })
+            .map(|question| OpenQuestionNotice {
+                question: question.question.clone(),
+                status: question.status,
+                requirement: self
+                    .find_requirement(&question.requirement_id)
+                    .map(requirement_link),
+            })
+            .collect();
+        UnfinishedPage {
             scope: self.state.scope.clone(),
-            title: "Missing evidence".to_string(),
-            findings: self
+            title: "Unfinished".to_string(),
+            gaps,
+            orphans: self.orphan_report(),
+            open_questions,
+        }
+    }
+
+    fn orphan_report(&self) -> OrphanReport {
+        OrphanReport {
+            rules: self
                 .gaps
                 .iter()
-                .map(|gap| self.gap_notice(gap, None))
+                .filter(|gap| gap.kind == GapKind::OrphanRule)
+                .filter_map(|gap| {
+                    self.state
+                        .rules
+                        .iter()
+                        .find(|rule| rule.id.as_str() == gap.node_id)
+                        .map(|rule| OrphanRecord {
+                            link: rule_link(rule),
+                            reason: gap.reason.clone(),
+                        })
+                })
+                .collect(),
+            resolutions: self
+                .gaps
+                .iter()
+                .filter(|gap| gap.kind == GapKind::OrphanResolution)
+                .filter_map(|gap| {
+                    self.state
+                        .resolutions
+                        .iter()
+                        .find(|resolution| resolution.id.as_str() == gap.node_id)
+                        .map(|resolution| OrphanRecord {
+                            link: resolution_link(resolution),
+                            reason: gap.reason.clone(),
+                        })
+                })
+                .collect(),
+            sources: self
+                .gaps
+                .iter()
+                .filter(|gap| gap.kind == GapKind::UnreferencedSource)
+                .filter_map(|gap| {
+                    self.state
+                        .sources
+                        .iter()
+                        .find(|source| source.id.as_str() == gap.node_id)
+                        .map(|source| OrphanRecord {
+                            link: source_link(source),
+                            reason: gap.reason.clone(),
+                        })
+                })
                 .collect(),
         }
     }

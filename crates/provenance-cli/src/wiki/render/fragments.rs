@@ -86,6 +86,12 @@ pub(in crate::wiki::render) fn push_rule_territory_card(
             links.link(&rule.link, None)
         )
         .expect("writing to a String should not fail");
+        writeln!(
+            html,
+            "<span class=\"rcode\"><span class=\"id-chip\">{}</span></span>",
+            escape_html(&rule.link.target.record_id)
+        )
+        .expect("writing to a String should not fail");
         html.push_str("<span class=\"rmeta\">");
         html.push_str(&sev_chip(
             severity_word(&rule.severity),

@@ -52,7 +52,7 @@ fn requirement_page_assembles_lineage_decision_rules_and_sources() {
 }
 
 #[test]
-fn requirement_page_borrows_decision_threads_and_annotates_bodies() {
+fn requirement_page_borrows_decision_threads_without_unscanned_links() {
     let corpus = fixture_corpus();
     let page = requirement_page(&corpus, "req_child");
     let thread_ids: Vec<&str> = page
@@ -63,9 +63,7 @@ fn requirement_page_borrows_decision_threads_and_annotates_bodies() {
     assert_eq!(thread_ids, vec!["thr_req_child", "thr_res_split"]);
     assert_eq!(page.threads[1].parent_type, NodeType::Resolution);
     let note = &page.threads[1].messages[0];
-    assert_eq!(note.refs.len(), 2);
-    assert_eq!(note.refs[0].label, "src/UseCase.php:153-156");
-    assert_eq!(note.refs[1].label, "testCreateGapInvoiceOnly");
+    assert!(note.refs.is_empty());
 }
 
 #[test]

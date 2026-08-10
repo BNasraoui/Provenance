@@ -199,7 +199,7 @@ fn requirement_page_attributes_borrowed_threads_to_their_parent() {
     assert!(html.contains("thr_resolution_res_split_0"));
     assert!(html.contains("on resolution res_split"));
     assert!(html.contains("1 message · active"));
-    assert!(html.contains(">Agent</span>"));
+    assert!(html.contains(">Assistant</span>"));
 }
 
 #[test]
@@ -252,7 +252,30 @@ fn field_notes_who_shows_a_readable_role_not_the_raw_message_id() {
         !html.contains("msg_000001"),
         "the internal message id should never be shown as if it were an author name"
     );
-    assert!(html.contains("<span class=\"who\">Agent</span>"));
+    assert!(html.contains("<span class=\"who\">Assistant</span>"));
+}
+
+#[test]
+fn field_notes_use_recorded_roles_without_guessing_actor_type() {
+    let mut page = requirement_fixture();
+    page.threads[0].messages[0].role = provenance_core::MessageRole::User;
+
+    let html = render_requirement("default", &page);
+
+    assert!(html.contains("<span class=\"who\">User</span>"));
+    assert!(html.contains(">User</span>"));
+    assert!(!html.contains(">Human</span>"));
+}
+
+#[test]
+fn produced_rule_cards_show_display_names_and_confine_ids_to_chips() {
+    let html = render_requirement("default", &requirement_fixture());
+
+    assert!(html.contains(
+        "<a href=\"/rules/rule_sah_inv_016/\">Suppress line emission for fully zero claim items</a>"
+    ));
+    assert!(html.contains("<span class=\"id-chip\">rule_sah_inv_016</span>"));
+    assert!(!html.contains(">rule_sah_inv_016</a>"));
 }
 
 #[test]

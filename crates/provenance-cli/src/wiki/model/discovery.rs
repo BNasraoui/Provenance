@@ -1,4 +1,5 @@
-use super::PageLink;
+use super::{GapNotice, OrphanReport, PageLink};
+use provenance_core::QuestionStatus;
 use serde::Serialize;
 
 pub const HOMEPAGE_DOMAIN_ROW_CAP: usize = 20;
@@ -18,6 +19,42 @@ pub struct SearchIndexPage {
     pub coverage: String,
     pub example: Option<String>,
     pub entries: Vec<SearchEntry>,
+}
+
+/// Every recorded decision, listed by title with its position.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DecisionIndexPage {
+    pub scope: String,
+    pub title: String,
+    pub entries: Vec<SearchEntry>,
+}
+
+/// One unresolved question with the requirement that owns it when present.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct OpenQuestionNotice {
+    pub question: String,
+    pub status: QuestionStatus,
+    pub requirement: Option<PageLink>,
+}
+
+/// The scope's gaps, disconnected records, and unanswered questions.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct UnfinishedPage {
+    pub scope: String,
+    pub title: String,
+    pub gaps: Vec<GapNotice>,
+    pub orphans: OrphanReport,
+    pub open_questions: Vec<OpenQuestionNotice>,
+}
+
+impl UnfinishedPage {
+    pub const fn item_count(&self) -> usize {
+        self.gaps.len()
+            + self.orphans.rules.len()
+            + self.orphans.resolutions.len()
+            + self.orphans.sources.len()
+            + self.open_questions.len()
+    }
 }
 
 /// The metadata available for one reader-facing Domain group.

@@ -37,7 +37,7 @@ fn homepage_uses_plain_reader_language() {
     assert!(homepage_plain_language_is_valid(&html));
     assert!(!html.to_ascii_lowercase().contains("corpus"));
     assert!(!html.contains(">Atlas<"));
-    for everyday_label in ["documentation", "project records", "missing evidence"] {
+    for everyday_label in ["documentation", "project records", "unfinished"] {
         assert!(html.contains(everyday_label), "missing {everyday_label:?}");
     }
     assert!(html.contains("Browse 1 area"));
@@ -49,36 +49,36 @@ fn homepage_uses_plain_reader_language() {
 fn homepage_states_the_search_index_coverage() {
     let html = homepage_html();
 
-    assert!(html.contains("Search covers requirements and rules."));
+    assert!(html.contains("Search covers requirements, decisions, rules, and sources."));
 }
 
 #[test]
 #[verifies("rule_wiki_homepage_traceability_summary", examples)]
-fn homepage_links_one_exact_finding_count_without_gap_cards() {
+fn homepage_links_one_exact_unfinished_count_without_gap_cards() {
     let html = homepage_html();
 
-    assert_eq!(html.matches("href=\"/findings/\"").count(), 1);
-    assert_eq!(html.matches("4 missing evidence findings").count(), 1);
+    assert_eq!(html.matches("href=\"/unfinished/\"").count(), 1);
+    assert_eq!(html.matches("4 unfinished items").count(), 1);
     assert!(!html.contains("citation gap"));
 }
 
 #[test]
-fn findings_route_renders_every_finding_summarized_by_the_homepage() {
+fn unfinished_route_renders_every_kind_summarized_by_the_homepage() {
     let pages = render_corpus(&corpus_fixture());
-    let findings = pages
+    let unfinished = pages
         .iter()
-        .find(|page| page.route == "/findings/")
-        .expect("the complete findings route must be rendered");
+        .find(|page| page.route == "/unfinished/")
+        .expect("the complete Unfinished route must be rendered");
 
     for detail in [
-        "A source is not referenced by a requirement.",
+        "Unused API spec",
         "A requirement points to a source that is missing.",
         "A requirement has no source references.",
         "A requirement is marked resolved but has no resolving decision.",
     ] {
-        assert!(findings.html.contains(detail), "missing {detail:?}");
+        assert!(unfinished.html.contains(detail), "missing {detail:?}");
     }
-    assert_eq!(findings.html.matches("citation gap").count(), 4);
+    assert_eq!(unfinished.html.matches("citation gap").count(), 3);
 }
 
 #[test]

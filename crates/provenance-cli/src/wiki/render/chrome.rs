@@ -84,9 +84,10 @@ fn page_shell_with_script(
         html,
         "<nav class=\"global-nav\" aria-label=\"Wiki\">\
          <a href=\"{}\">Home</a><a href=\"{}\">Domains</a>\
-         <a href=\"{}\">Search</a></nav>",
+         <a href=\"{}\">Decisions</a><a href=\"{}\">Search</a></nav>",
         WikiRoute::Index.path(),
         WikiRoute::Domains.path(),
+        WikiRoute::Decisions.path(),
         WikiRoute::Search.path(),
     )
     .expect("writing to a String should not fail");

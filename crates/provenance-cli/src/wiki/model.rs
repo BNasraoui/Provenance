@@ -15,8 +15,8 @@ use serde::Serialize;
 
 mod discovery;
 pub use discovery::{
-    DomainGroup, DomainIndexPage, DomainState, HomepageDomain, SearchEntry, SearchIndexPage,
-    HOMEPAGE_DOMAIN_ROW_CAP,
+    DecisionIndexPage, DomainGroup, DomainIndexPage, DomainState, HomepageDomain,
+    OpenQuestionNotice, SearchEntry, SearchIndexPage, UnfinishedPage, HOMEPAGE_DOMAIN_ROW_CAP,
 };
 
 /// A rendered page kind, including singleton discovery pages.
@@ -26,7 +26,8 @@ pub enum PageKind {
     ScopeIndex,
     DomainIndex,
     SearchIndex,
-    Findings,
+    DecisionIndex,
+    Unfinished,
     Requirement,
     Resolution,
     Rule,
@@ -97,7 +98,7 @@ pub struct GapNotice {
 /// A rule whose trace back to a requirement and a resolution is incomplete,
 /// carrying the gap's own words for which end is missing.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct OrphanRule {
+pub struct OrphanRecord {
     pub link: PageLink,
     pub reason: String,
 }
@@ -105,9 +106,9 @@ pub struct OrphanRule {
 /// Records that exist but are attached to nothing, listed on the index.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct OrphanReport {
-    pub rules: Vec<OrphanRule>,
-    pub resolutions: Vec<PageLink>,
-    pub sources: Vec<PageLink>,
+    pub rules: Vec<OrphanRecord>,
+    pub resolutions: Vec<OrphanRecord>,
+    pub sources: Vec<OrphanRecord>,
 }
 
 #[cfg(test)]
@@ -151,15 +152,7 @@ pub struct ScopeIndexPage {
     pub search_example: Option<String>,
     pub domains: Vec<HomepageDomain>,
     pub authored_domain_count: usize,
-    pub finding_count: usize,
-}
-
-/// Every traceability finding for one scope, without homepage truncation.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct FindingsPage {
-    pub scope: String,
-    pub title: String,
-    pub findings: Vec<GapNotice>,
+    pub unfinished_count: usize,
 }
 
 /// One step in a requirement's parent chain, root first; the final entry is
@@ -218,8 +211,6 @@ pub struct DecisionSection {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RuleCard {
     pub link: PageLink,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
     pub statement: String,
     pub status: RuleStatus,
     pub severity: RuleSeverity,
@@ -391,7 +382,8 @@ pub struct WikiCorpus {
     pub index: ScopeIndexPage,
     pub domains: DomainIndexPage,
     pub search: SearchIndexPage,
-    pub findings: FindingsPage,
+    pub decisions: DecisionIndexPage,
+    pub unfinished: UnfinishedPage,
     pub requirements: Vec<RequirementPage>,
     pub resolutions: Vec<ResolutionPage>,
     pub rules: Vec<RulePage>,
@@ -408,9 +400,10 @@ mod tests {
             PageKind::ScopeIndex,
             PageKind::DomainIndex,
             PageKind::SearchIndex,
-            PageKind::Findings,
+            PageKind::DecisionIndex,
+            PageKind::Unfinished,
         ];
-        assert_eq!(singletons.len(), 4);
+        assert_eq!(singletons.len(), 5);
     }
 
     #[test]

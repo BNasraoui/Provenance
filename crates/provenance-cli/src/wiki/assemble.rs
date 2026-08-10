@@ -20,7 +20,7 @@ use crate::wiki::model::WikiCorpus;
 use anyhow::Context as _;
 use camino::{Utf8Path, Utf8PathBuf};
 use context::Assembler;
-use provenance_core::coverage::CoverageReport;
+use provenance_core::coverage::CoverageScan;
 use provenance_store::cache::{compute_gaps, GapGraph, GraphQuery};
 
 /// Loads the scope's state from disk and assembles the wiki corpus, using
@@ -52,8 +52,9 @@ pub fn build_corpus(state: &ScopeExport, resolver: &LinkResolver) -> WikiCorpus 
 fn build_corpus_with_coverage(
     state: &ScopeExport,
     resolver: &LinkResolver,
-    coverage: Option<&CoverageReport>,
+    coverage: Option<&CoverageScan>,
 ) -> WikiCorpus {
+    let resolver = coverage.map_or_else(|| resolver.clone(), |scan| resolver.with_coverage(scan));
     let scope_id = provenance_core::ScopeId::new(&state.scope).expect("export scope is valid");
     let graph = GapGraph {
         scope: &scope_id,
@@ -69,8 +70,8 @@ fn build_corpus_with_coverage(
     let gaps = compute_gaps(&graph);
     let assembler = Assembler {
         state,
-        resolver,
-        coverage,
+        resolver: &resolver,
+        coverage: coverage.map(|scan| &scan.report),
         gaps: &gaps,
         query: GraphQuery::new(&graph),
         rule_requirements: std::cell::OnceCell::new(),
@@ -95,15 +96,17 @@ fn build_corpus_with_coverage(
         .iter()
         .map(|source| assembler.source_page(source))
         .collect::<Vec<_>>();
-    let (domains, search) = discovery::build_discovery_pages(state, &requirements, &rules);
-    let findings = assembler.findings_page();
-    let index = assembler.index_page(&domains, &search, findings.findings.len());
+    let (domains, search, decisions) =
+        discovery::build_discovery_pages(state, &requirements, &resolutions, &rules, &sources);
+    let unfinished = assembler.unfinished_page();
+    let index = assembler.index_page(&domains, &search, unfinished.item_count());
     WikiCorpus {
         scope: state.scope.clone(),
         index,
         domains,
         search,
-        findings,
+        decisions,
+        unfinished,
         requirements,
         resolutions,
         rules,
@@ -111,17 +114,20 @@ fn build_corpus_with_coverage(
     }
 }
 
-fn load_coverage_report(path: &Utf8Path, repo: &Utf8Path) -> anyhow::Result<CoverageReport> {
+fn load_coverage_report(path: &Utf8Path, repo: &Utf8Path) -> anyhow::Result<CoverageScan> {
     let contents = std::fs::read_to_string(path)
         .with_context(|| format!("failed to read coverage report {path}"))?;
-    let mut report: CoverageReport = serde_json::from_str(&contents)
+    let mut report: CoverageScan = serde_json::from_str(&contents)
         .with_context(|| format!("failed to parse coverage report {path}"))?;
     let canonical_repo = std::fs::canonicalize(repo)
         .ok()
         .and_then(|path| Utf8PathBuf::from_path_buf(path).ok());
-    for binding in &mut report.bindings {
+    for binding in &mut report.report.bindings {
         binding.file_path =
             repository_relative_path(&binding.file_path, repo, canonical_repo.as_deref());
+    }
+    for file in &mut report.scanned_files {
+        file.file_path = repository_relative_path(&file.file_path, repo, canonical_repo.as_deref());
     }
     Ok(report)
 }

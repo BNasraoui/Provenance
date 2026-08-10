@@ -87,10 +87,10 @@ fn parse_line_ranges(part: &str) -> Option<Vec<LineRange>> {
                 .map_or((group, None), |(start, end)| {
                     (start.trim(), Some(end.trim()))
                 });
-            Some(LineRange::new(
-                start.parse().ok()?,
-                end.map(str::parse).transpose().ok()?,
-            ))
+            let start = start.parse().ok()?;
+            let end = end.map(str::parse).transpose().ok()?;
+            end.is_none_or(|end| end >= start)
+                .then(|| LineRange::new(start, end))
         })
         .collect()
 }
@@ -117,6 +117,11 @@ mod tests {
     fn parse_code_ref_reads_a_line_range() {
         let code_ref = parse_code_ref("UseCase.php:153-156").unwrap();
         assert_eq!(code_ref.lines, vec![LineRange::new(153, Some(156))]);
+    }
+
+    #[test]
+    fn parse_code_ref_rejects_a_descending_line_range() {
+        assert!(parse_code_ref("UseCase.php:20-10").is_none());
     }
 
     #[test]

@@ -25,11 +25,29 @@ pub(super) fn rule_link(rule: &Rule) -> PageLink {
 pub(super) fn rule_title(rule: &Rule) -> String {
     rule.name
         .as_deref()
-        .filter(|name| !name.trim().is_empty())
-        .map_or_else(
-            || display_identifier(rule.id.as_str()),
-            |name| name.trim().to_string(),
-        )
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_string)
+        .or_else(|| first_statement_clause(&rule.statement))
+        .unwrap_or_else(|| desnaked_id(rule.id.as_str()))
+}
+
+fn first_statement_clause(statement: &str) -> Option<String> {
+    statement
+        .split([';', '.', '\n'])
+        .map(str::trim)
+        .find(|clause| !clause.is_empty())
+        .map(str::to_string)
+}
+
+fn desnaked_id(id: &str) -> String {
+    let words = id.replace(['_', '-'], " ");
+    let words = words.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut chars = words.chars();
+    chars.next().map_or_else(
+        || words.clone(),
+        |first| first.to_uppercase().collect::<String>() + chars.as_str(),
+    )
 }
 
 pub(super) fn source_link(source: &Source) -> PageLink {

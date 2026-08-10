@@ -14,7 +14,7 @@ pub fn render_search(scope: &str, page: &SearchIndexPage) -> String {
     write!(
         main,
         "<form class=\"search-box\" action=\"{}\" method=\"get\">\n\
-         <label for=\"wiki-search\">Search requirement and rule text</label>\n\
+         <label for=\"wiki-search\">Search project record titles and text</label>\n\
          <div><input id=\"wiki-search\" name=\"q\" type=\"search\" autocomplete=\"off\"{}><button type=\"submit\">Search</button></div>\n\
          </form>\n",
         WikiRoute::Search.path(),
@@ -26,9 +26,7 @@ pub fn render_search(scope: &str, page: &SearchIndexPage) -> String {
          <noscript><p class=\"data-note\">Search filtering requires the vendored JavaScript; the complete index remains readable below.</p></noscript>\n",
     );
     if page.entries.is_empty() {
-        main.push_str(
-            "<p class=\"empty-note\">No requirements or rules are available to search.</p>\n",
-        );
+        main.push_str("<p class=\"empty-note\">No project records are available to search.</p>\n");
     }
     main.push_str("<ol id=\"search-results\" class=\"search-results\">\n");
     let links = PageLinksRenderer::new(page.entries.iter().map(|entry| &entry.link));

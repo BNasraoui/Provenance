@@ -89,3 +89,19 @@ test("hydrated DOM fixture ranks titles first with stable ties and preserves q",
   assert.deepEqual(visible.map((item) => item.dataset.id), ["title-first", "title-tie", "statement"]);
   assert.equal(new URL(dom.window.location.href).searchParams.get("q"), "INVOICE participant");
 });
+
+test("a decision is found by its title or position", () => {
+  const entries = `
+    <li data-search-entry data-id="decision" data-search-title="Choose invoice grouping" data-search-statement="Adopt one invoice per participant">decision</li>
+    <li data-search-entry data-id="rule" data-search-title="Group invoice lines" data-search-statement="Keep claim portions together">rule</li>`;
+  const { dom, errors } = run(fixture(entries));
+  const input = dom.window.document.querySelector("#wiki-search");
+
+  for (const query of ["Choose invoice", "one invoice per participant"]) {
+    input.value = query;
+    input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    assert.equal(dom.window.document.querySelector('[data-id="decision"]').hidden, false);
+    assert.equal(dom.window.document.querySelector('[data-id="rule"]').hidden, true);
+  }
+  assert.deepEqual(errors, []);
+});

@@ -9,5 +9,5 @@ mod code_ref;
 mod evidence;
 mod remote;
 
-pub use evidence::{EvidenceRef, InlineRef, LinkResolver};
+pub use evidence::{EvidenceRef, EvidenceSnippet, InlineRef, LinkResolver};
 pub use remote::detect_remote_url;

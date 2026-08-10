@@ -2,6 +2,7 @@ use super::super::build_corpus;
 use super::fixtures::*;
 use crate::wiki::links::LinkResolver;
 use crate::wiki::model::{CorpusCounts, GapKind};
+use crate::wiki::render::render_corpus;
 use provenance_core::{NodeType, QuestionStatus, RequirementStatus, TopicStatus};
 
 #[test]
@@ -66,20 +67,13 @@ fn index_reports_scope_gaps_and_orphans() {
         .gaps
         .iter()
         .any(|gap| gap.detail.contains("source that is missing")));
-    let orphan_ids = |links: &[crate::wiki::model::PageLink]| {
-        links
+    let orphan_ids = |records: &[crate::wiki::model::OrphanRecord]| {
+        records
             .iter()
-            .map(|link| link.target.record_id.clone())
+            .map(|record| record.link.target.record_id.clone())
             .collect::<Vec<_>>()
     };
-    let orphan_rules: Vec<crate::wiki::model::PageLink> = corpus
-        .index
-        .orphans
-        .rules
-        .iter()
-        .map(|rule| rule.link.clone())
-        .collect();
-    assert_eq!(orphan_ids(&orphan_rules), vec!["rule_orphan"]);
+    assert_eq!(orphan_ids(&corpus.index.orphans.rules), vec!["rule_orphan"]);
     assert_eq!(
         corpus.index.orphans.rules[0].reason,
         "no requirement or resolution produces this rule"
@@ -160,41 +154,56 @@ fn index_reports_a_gap_for_a_thread_whose_parent_record_is_gone() {
 }
 
 #[test]
-fn findings_page_preserves_every_computed_gap_exactly_once() {
+fn unfinished_count_preserves_every_computed_gap_exactly_once() {
     let state = fixture_state();
     let expected = compute_state_gaps(&state)
         .into_iter()
         .map(|gap| gap.kind)
         .collect::<Vec<_>>();
     let corpus = build_corpus(&state, &LinkResolver::new(None));
-    let actual = corpus
-        .findings
-        .findings
-        .iter()
-        .map(|gap| gap.kind)
-        .collect::<Vec<_>>();
-
-    assert_eq!(actual, expected);
-    assert_eq!(corpus.index.finding_count, actual.len());
+    assert_eq!(corpus.unfinished.item_count(), expected.len());
+    assert_eq!(corpus.index.unfinished_count, expected.len());
 }
 
 #[test]
-fn findings_use_plain_sentences_and_link_existing_record_titles() {
-    let corpus = fixture_corpus();
-    let html = crate::wiki::render::render_findings("default", &corpus.findings);
+fn unfinished_page_renders_gaps_orphans_and_open_questions() {
+    let mut state = fixture_state();
+    state.topics = vec![topic("topic_open", "req_stuck", TopicStatus::Open)];
+    state.questions = vec![question(
+        "question_open",
+        "topic_open",
+        "req_stuck",
+        QuestionStatus::Open,
+    )];
+    let corpus = build_corpus(&state, &LinkResolver::new(None));
 
-    assert!(
-        html.contains(
-            "<a href=\"/requirements/req_root/\">Platform shall manage invoicing</a> has no source references."
-        ),
-        "{html}"
+    let unfinished = render_corpus(&corpus)
+        .into_iter()
+        .find(|page| page.route == "/unfinished/")
+        .expect("Unfinished must be the one aggregate page");
+
+    for heading in ["Gaps", "Orphans", "Open questions"] {
+        assert!(
+            unfinished.html.contains(heading),
+            "missing heading {heading}"
+        );
+    }
+    assert!(unfinished.html.contains("citation gap"));
+    assert!(unfinished
+        .html
+        .contains("Claim items shall be grouped by participant"));
+    assert!(unfinished.html.contains("Detached decision"));
+    assert!(unfinished.html.contains("Unused API spec"));
+    assert!(unfinished.html.contains("What remains unresolved?"));
+    assert_eq!(
+        corpus.unfinished.orphans.resolutions[0].reason,
+        "resolution does not resolve any requirement"
     );
-    assert!(
-        html.contains(
-            "<a href=\"/rules/rule_orphan/\">Rule orphan</a> has no producing requirement or decision."
-        ),
-        "{html}"
+    assert_eq!(
+        corpus.unfinished.orphans.sources[0].reason,
+        "no requirement references this source"
     );
-    assert!(!html.contains('`'), "{html}");
-    assert!(!html.contains("requirement req_root:"), "{html}");
+    assert!(!render_corpus(&corpus)
+        .iter()
+        .any(|page| page.route == "/findings/"));
 }

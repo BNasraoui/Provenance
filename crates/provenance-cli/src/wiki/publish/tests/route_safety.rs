@@ -260,6 +260,8 @@ fn accepts_every_route_the_wiki_mints_for_a_page() {
         WikiRoute::Index.path(),
         WikiRoute::Domains.path(),
         WikiRoute::Search.path(),
+        WikiRoute::Decisions.path(),
+        WikiRoute::Unfinished.path(),
         WikiRoute::Record(&PageId::new(RecordKind::Rule, "rule_one")).path(),
         WikiRoute::Record(&PageId::new(RecordKind::Source, "src_one")).path(),
     ] {
