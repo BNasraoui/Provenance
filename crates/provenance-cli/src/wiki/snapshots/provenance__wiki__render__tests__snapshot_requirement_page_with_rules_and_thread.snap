@@ -150,8 +150,11 @@ expression: "render_requirement(\"default\", &requirement_fixture())"
 <span class="role-badge"><svg class="icon"><use href="#i-bot"/></svg>Assistant</span>
 <div class="fn-body">
 <div class="fn-meta"><span class="who">Assistant</span><time datetime="2024-05-04">4 May 2024</time></div>
-<p class="fn-content">Per-portion guard at <a class="src" href="https://github.com/exampleorg/ex-api/blob/9f2c1ab4e5f6/src/UseCase.php#L211-L233">src/UseCase.php:211-233</a>.
+<p class="fn-takeaway">Per-portion guard at src/UseCase.php:211-233.</p>
+<div class="fn-content">
+<p>Per-portion guard at <a class="src" href="https://github.com/exampleorg/ex-api/blob/9f2c1ab4e5f6/src/UseCase.php#L211-L233">src/UseCase.php:211-233</a>.
 Confirmed by <a class="src" href="https://github.com/exampleorg/ex-api/blob/9f2c1ab4e5f6/src/UseCase.php">testCreateGapInvoiceOnly</a>.</p>
+</div>
 <span class="local-snippet"><br><span class="snippet-label">Local snippet · src/UseCase.php:211-222 (requested 211-233)</span><br><code>source line 211<br>source line 212<br>source line 213<br>source line 214<br>source line 215<br>source line 216<br>source line 217<br>source line 218<br>source line 219<br>source line 220<br>source line 221<br>source line 222<br>…</code></span></div>
 </div>
 </div>

@@ -268,6 +268,95 @@ fn field_notes_use_recorded_roles_without_guessing_actor_type() {
 }
 
 #[test]
+fn discussion_notes_render_numbered_findings_as_a_real_list() {
+    let mut page = requirement_fixture();
+    page.threads[0].messages[0].body = "Investigation complete.\n\nFindings:\n1. First finding\n2) Second finding\n\nConclusion: Keep exact words."
+        .to_string();
+    page.threads[0].messages[0].refs.clear();
+
+    let html = render_requirement("default", &page);
+
+    assert!(html.contains("<ol class=\"fn-list-block\">"), "{html}");
+    assert!(html.contains("<li>First finding</li>"), "{html}");
+    assert!(html.contains("<li>Second finding</li>"), "{html}");
+    assert!(html.contains("<p class=\"fn-takeaway\">Investigation complete.</p>"));
+}
+
+#[test]
+fn discussion_notes_render_fenced_and_bare_json_as_code() {
+    let mut page = requirement_fixture();
+    page.threads[0].messages[0].body =
+        "Payloads:\n\n```json\n{\"fenced\": true}\n```\n\n{\"bare\": [1, 2]}".to_string();
+    page.threads[0].messages[0].refs.clear();
+
+    let html = render_requirement("default", &page);
+
+    assert!(html.contains(
+        "<pre class=\"fn-code\"><code class=\"language-json\">{\"fenced\": true}</code></pre>"
+    ));
+    assert!(html.contains("<pre class=\"fn-code\"><code>{\"bare\": [1, 2]}</code></pre>"));
+}
+
+#[test]
+fn discussion_takeaway_uses_an_explicit_final_conclusion_when_no_lead_is_derivable() {
+    let mut page = requirement_fixture();
+    page.threads[0].messages[0].body =
+        "Findings:\n1. One observed fact\n2. Another observed fact\n\nConclusion: Preserve this line exactly."
+            .to_string();
+    page.threads[0].messages[0].refs.clear();
+
+    let html = render_requirement("default", &page);
+
+    assert!(html.contains("<p class=\"fn-takeaway\">Conclusion: Preserve this line exactly.</p>"));
+}
+
+#[test]
+fn discussion_takeaway_uses_a_standalone_leading_line_without_inventing_punctuation() {
+    let mut page = requirement_fixture();
+    page.threads[0].messages[0].body =
+        "Research complete: Exact title\n\nEvidence follows without a conclusion".to_string();
+    page.threads[0].messages[0].refs.clear();
+
+    let html = render_requirement("default", &page);
+
+    assert!(html.contains("<p class=\"fn-takeaway\">Research complete: Exact title</p>"));
+    assert!(!html.contains("Research complete: Exact title.</p>"));
+}
+
+#[test]
+fn discussion_note_omits_takeaway_when_none_is_derivable() {
+    let mut page = requirement_fixture();
+    page.threads[0].messages[0].body =
+        "Findings:\n1. One observed fact\n2. Another observed fact".to_string();
+    page.threads[0].messages[0].refs.clear();
+
+    let html = render_requirement("default", &page);
+
+    assert!(!html.contains("class=\"fn-takeaway\""), "{html}");
+}
+
+#[test]
+fn long_discussion_notes_collapse_behind_their_derived_first_line() {
+    let mut page = requirement_fixture();
+    page.threads[0].messages[0].body = format!(
+        "Opening conclusion.\n\n{}",
+        "Supporting detail remains verbatim. ".repeat(20)
+    );
+    page.threads[0].messages[0].refs.clear();
+
+    let html = render_requirement("default", &page);
+
+    assert!(
+        html.contains("<details class=\"fn-collapsible\">"),
+        "{html}"
+    );
+    assert!(html.contains(
+        "<summary><span class=\"fn-takeaway\">Opening conclusion.</span><span class=\"fn-expand\">Expand note</span></summary>"
+    ));
+    assert!(html.contains("Supporting detail remains verbatim."));
+}
+
+#[test]
 fn produced_rule_cards_show_display_names_and_confine_ids_to_chips() {
     let html = render_requirement("default", &requirement_fixture());
 
