@@ -82,6 +82,30 @@ fn findings_route_renders_every_finding_summarized_by_the_homepage() {
 }
 
 #[test]
+fn homepage_with_no_authored_domains_shows_the_empty_note_without_a_browse_link() {
+    let mut corpus = corpus_fixture();
+    corpus.index.domains = Vec::new();
+    corpus.index.authored_domain_count = 0;
+
+    let html = render_corpus(&corpus)
+        .into_iter()
+        .find(|page| page.route == "/")
+        .unwrap()
+        .html;
+
+    assert!(html.contains("No project areas have been described yet."));
+    assert!(!html.contains("data-homepage-domain-row"));
+    assert!(!html.contains("browse-all"));
+    assert!(!html.contains("Browse all areas"));
+    for viewport in RATIFIED_VIEWPORTS {
+        assert!(
+            homepage_entry_order_is_valid(&html, viewport.0, viewport.1),
+            "homepage order failed at {viewport:?}"
+        );
+    }
+}
+
+#[test]
 fn homepage_caps_authored_domain_rows() {
     let mut corpus = corpus_fixture();
     corpus.domains.groups = (0..25)

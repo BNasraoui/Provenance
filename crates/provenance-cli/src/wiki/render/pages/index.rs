@@ -161,16 +161,22 @@ fn push_domains(html: &mut String, page: &ScopeIndexPage) {
         )
         .expect("writing to a String should not fail");
     }
+    // With no authored areas the browse link would promise content the
+    // domains page does not hold, so the empty note stands alone.
     let browse_label = match page.authored_domain_count {
-        0 => "Browse all areas".to_string(),
-        1 => "Browse 1 area".to_string(),
-        count => format!("Browse all {count} areas"),
+        0 => None,
+        1 => Some("Browse 1 area".to_string()),
+        count => Some(format!("Browse all {count} areas")),
     };
-    writeln!(
-        html,
-        "<a class=\"browse-all\" href=\"{}\">{}</a></section>",
-        WikiRoute::Domains.path(),
-        escape_html(&browse_label),
-    )
-    .expect("writing to a String should not fail");
+    if let Some(browse_label) = browse_label {
+        writeln!(
+            html,
+            "<a class=\"browse-all\" href=\"{}\">{}</a></section>",
+            WikiRoute::Domains.path(),
+            escape_html(&browse_label),
+        )
+        .expect("writing to a String should not fail");
+    } else {
+        html.push_str("</section>\n");
+    }
 }
