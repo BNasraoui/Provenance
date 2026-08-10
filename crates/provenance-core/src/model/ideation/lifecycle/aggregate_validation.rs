@@ -148,7 +148,7 @@ fn validate_disposition_intrinsics(dispositions: &[DispositionRecord]) -> anyhow
 /// effective pre-disposition state is live (`proposed` or `asserted`); a legacy
 /// terminal row is frozen by its shipped fingerprint and carries its own audit.
 ///
-/// The allowlist is manifest state, written at `provenance repo init` and read
+/// The allowlist is manifest state, written at `provenance init` and read
 /// on every write path that validates the aggregate. An empty list therefore
 /// blocks every disposition, which is the safe default for a repository that
 /// has not yet said who decides.
@@ -375,12 +375,14 @@ mod schema_version_tests {
 
 #[cfg(test)]
 mod disposition_actor_trigger_tests {
+    use provenance_macros::verifies;
     use serde_json::json;
 
     use super::validate_actor_allowlist;
     use crate::model::{AssertionRecord, PromotionState, ProposalCard};
 
     #[test]
+    #[verifies("rule_disposition_actor_allowlist", examples)]
     fn trigger_uses_the_proposals_derived_effective_state() {
         let mut proposal: ProposalCard = serde_json::from_value(json!({
             "schema_version": 1, "scope_id": "default", "id": "proposal_a",
