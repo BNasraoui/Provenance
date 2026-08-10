@@ -39,6 +39,26 @@ fn rust_doc_marker_after_lone_backtick_still_scans() {
 }
 
 #[test]
+fn rust_doc_contractions_straddling_marker_still_scan() {
+    // The apostrophes in "don't" and "it's" straddle the marker; they are
+    // prose, not a quote region. The rule value runs to the end of the line.
+    let source = "/// don't hide @provenance rule: real_rule, it's fine\nfn real_rule() {}";
+    let scan = scan_file(Utf8Path::new("fixture.rs"), Language::Rust, source);
+
+    assert_eq!(scan.annotations.len(), 1);
+    assert!(scan.annotations[0].annotation.rule.starts_with("real_rule"));
+}
+
+#[test]
+fn marker_after_a_backslash_inside_paired_quotes_stays_hidden() {
+    let source = "// \"a \\@provenance rule: string_only\"\nfn real_rule() {}";
+    let scan = scan_file(Utf8Path::new("fixture.rs"), Language::Rust, source);
+
+    assert!(scan.annotations.is_empty());
+    assert!(scan.warnings.is_empty());
+}
+
+#[test]
 fn go_comment_marker_inside_backticks_stays_hidden() {
     let source = "// Example: `@provenance rule: quoted_only`\nfunc realRule() {}";
     let scan = scan_file(Utf8Path::new("fixture.go"), Language::Go, source);
