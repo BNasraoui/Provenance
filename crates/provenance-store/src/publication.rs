@@ -268,15 +268,36 @@ fn ensure_written_path_has_no_symlinks(
     candidate: &Utf8Path,
     recovery_use: RecoveryUse,
 ) -> anyhow::Result<()> {
+    // A marker may name the container through OS symlinks above it (macOS's
+    // /var -> /private/var), where the candidate matches neither the written
+    // nor the canonical container spelling. The ancestor that canonicalizes
+    // to the container is that same protected directory under another
+    // spelling; components below it are still judged as written.
     let (written_container, relative) = candidate
         .strip_prefix(written_container)
         .map(|relative| (written_container, relative))
-        .or_else(|_| {
+        .ok()
+        .or_else(|| {
             candidate
                 .strip_prefix(canonical_container)
                 .map(|relative| (canonical_container, relative))
+                .ok()
         })
-        .map_err(|_| anyhow::anyhow!(OUTSIDE_REPOSITORY_CACHE))?;
+        .or_else(|| {
+            candidate
+                .ancestors()
+                .find(|ancestor| {
+                    std::fs::canonicalize(ancestor)
+                        .is_ok_and(|resolved| resolved == canonical_container.as_std_path())
+                })
+                .and_then(|ancestor| {
+                    candidate
+                        .strip_prefix(ancestor)
+                        .map(|relative| (ancestor, relative))
+                        .ok()
+                })
+        })
+        .ok_or_else(|| anyhow::anyhow!(OUTSIDE_REPOSITORY_CACHE))?;
     let mut written = written_container.to_path_buf();
     let component_count = relative.components().count();
     for (index, component) in relative.components().enumerate() {
