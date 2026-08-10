@@ -198,6 +198,9 @@ const OUTSIDE_REPOSITORY_CACHE: &str =
 
 const TRANSACTION_NOT_A_DIRECTORY: &str = "publication marker transaction is not a directory";
 
+const TRANSACTION_HAS_SYMLINK: &str =
+    "publication marker transaction path contains a symlink component";
+
 /// What recovery is about to do with the directory it is checking.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RecoveryUse {
@@ -209,34 +212,28 @@ enum RecoveryUse {
     AlreadyGone,
 }
 
-/// Publication recovery may only touch a directory that really sits inside this
-/// repository's cache, reached without crossing a symlink.
+/// Publication recovery may only touch a directory named as a direct child
+/// inside this repository's cache, and callers must operate on the returned
+/// contained path, never the written one.
 ///
-/// Recovery renames and deletes whole trees named by
-/// `.provenance/cache/import-publication.json`, which is plain data: a stale,
-/// hand-edited or hostile marker must not be able to steer that deletion at the
-/// working tree or at anything outside the repository. So the directory has to
-/// resolve to a direct child of the directory it claims to live in, and the
-/// caller has to act on the resolved path this returns rather than the name it
-/// passed in.
-///
-/// Resolving the name and comparing it with where it is supposed to sit settles
-/// both halves of the decision at once: a `..` step lands somewhere other than
-/// the container, and so does a symlink. Applied twice (the transactions
-/// directory inside the cache, then the transaction inside that) this covers
-/// every component below the cache. That the cache itself is a real directory
-/// is settled earlier, by [`create_real_directory`].
-///
-/// A touched entry has to be a directory as well as contained, because a
-/// regular file under the name a marker gives resolves exactly where the name
-/// says and would then fail from inside `remove_dir_all`. Nothing is probed for
-/// [`RecoveryUse::AlreadyGone`], which has no entry left to be of any kind.
+/// The path is judged as written: no relative component may be a symlink,
+/// even when its target remains inside the cache. The cache root must
+/// already be a real directory, established by [`create_real_directory`].
+/// An [`RecoveryUse::AlreadyGone`] leaf may be absent, but a symlink
+/// lingering at the leaf is still refused.
 #[rule("rule_recovery_stays_in_cache")]
 fn recovery_dir_inside_cache(
     canonical_container: &Utf8Path,
+    written_container: &Utf8Path,
     candidate: &Utf8Path,
     recovery_use: RecoveryUse,
 ) -> anyhow::Result<Utf8PathBuf> {
+    ensure_written_path_has_no_symlinks(
+        canonical_container,
+        written_container,
+        candidate,
+        recovery_use,
+    )?;
     let parent = candidate
         .parent()
         .ok_or_else(|| anyhow::anyhow!("publication marker transaction has no parent"))?;
@@ -260,6 +257,41 @@ fn recovery_dir_inside_cache(
     Ok(contained)
 }
 
+fn ensure_written_path_has_no_symlinks(
+    canonical_container: &Utf8Path,
+    written_container: &Utf8Path,
+    candidate: &Utf8Path,
+    recovery_use: RecoveryUse,
+) -> anyhow::Result<()> {
+    let (written_container, relative) = candidate
+        .strip_prefix(written_container)
+        .map(|relative| (written_container, relative))
+        .or_else(|_| {
+            candidate
+                .strip_prefix(canonical_container)
+                .map(|relative| (canonical_container, relative))
+        })
+        .map_err(|_| anyhow::anyhow!(OUTSIDE_REPOSITORY_CACHE))?;
+    let mut written = written_container.to_path_buf();
+    let component_count = relative.components().count();
+    for (index, component) in relative.components().enumerate() {
+        written.push(component.as_str());
+        if recovery_use == RecoveryUse::AlreadyGone && index + 1 == component_count {
+            match std::fs::symlink_metadata(&written) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error.into()),
+                Ok(metadata) => {
+                    anyhow::ensure!(!metadata.file_type().is_symlink(), TRANSACTION_HAS_SYMLINK);
+                    continue;
+                }
+            }
+        }
+        let metadata = std::fs::symlink_metadata(&written)?;
+        anyhow::ensure!(!metadata.file_type().is_symlink(), TRANSACTION_HAS_SYMLINK);
+    }
+    Ok(())
+}
+
 fn validated_transaction_dir(
     layout: &ProvenanceLayout,
     transaction_dir: &Utf8Path,
@@ -267,6 +299,7 @@ fn validated_transaction_dir(
     let canonical_transactions = canonical_transactions_dir(layout)?;
     recovery_dir_inside_cache(
         &canonical_transactions,
+        &layout.import_transactions_dir(),
         transaction_dir,
         RecoveryUse::Touched,
     )
@@ -279,6 +312,7 @@ fn validate_missing_transaction_dir(
     let canonical_transactions = canonical_transactions_dir(layout)?;
     recovery_dir_inside_cache(
         &canonical_transactions,
+        &layout.import_transactions_dir(),
         transaction_dir,
         RecoveryUse::AlreadyGone,
     )
@@ -289,6 +323,7 @@ fn canonical_transactions_dir(layout: &ProvenanceLayout) -> anyhow::Result<Utf8P
     let canonical_cache = canonical_utf8(&layout.cache_dir(), "repository cache path")?;
     recovery_dir_inside_cache(
         &canonical_cache,
+        &layout.cache_dir(),
         &layout.import_transactions_dir(),
         RecoveryUse::Touched,
     )
