@@ -43,6 +43,9 @@ pub enum WikiCommand {
         repo: Utf8PathBuf,
         #[arg(long, default_value = "default")]
         scope: String,
+        /// JSON report written by `coverage scan --format json --output`.
+        #[arg(long)]
+        coverage: Option<Utf8PathBuf>,
         #[arg(long, default_value = "127.0.0.1")]
         host: String,
         #[arg(long, default_value_t = 5175)]

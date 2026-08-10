@@ -80,7 +80,7 @@ impl LinkResolver {
         }
     }
 
-    /// Resolves a reference at the default `HEAD` revision.
+    /// Resolves a reference without promising a mutable revision.
     pub fn resolve(&self, reference: &str) -> EvidenceRef {
         self.resolve_at(reference, None)
     }
@@ -90,10 +90,10 @@ impl LinkResolver {
     /// A recorded reference is shown as a clickable link only when the link
     /// would actually work: either the reference is already a web address,
     /// which is used as it stands, or it reads as a file path that a known
-    /// code host can turn into a real blob URL. With no known remote, a
-    /// relative path would resolve against the wiki page's own route and give
-    /// the reader a 404, so everything else stays plain text: text the reader
-    /// can search for beats a link that lies.
+    /// code host can turn into a real blob URL at a known immutable revision.
+    /// With no known remote or commit, a path would either resolve against the
+    /// wiki page's route or require a mutable `HEAD` link, so it stays plain
+    /// text: text the reader can search for beats a link that lies.
     ///
     /// "Reads as a file path" is decided in one place, `parse_code_ref`: a
     /// directory separator, or a bare name carrying a line group. A bare
@@ -221,18 +221,44 @@ impl LinkResolver {
         refs
     }
 
-    /// Builds a blob URL for `code_ref` on the known remote. Returns `None`
-    /// without a remote: a path like `src/UseCase.php` is relative to the
-    /// repo root, not to the wiki page it would be rendered on, so it would
-    /// always 404 as an `<a href>` inside the generated site.
+    /// Builds a commit-pinned blob URL for `code_ref` on the known remote.
+    /// Returns `None` without both a remote and an immutable revision.
     fn href_for(&self, code_ref: &CodeRef, commit: Option<&str>) -> Option<String> {
+        if self.scanned_file_excludes_location(code_ref, commit) {
+            return None;
+        }
         let reference = commit
             .map(str::to_string)
             .or_else(|| self.scan.as_ref().and_then(|scan| scan.commit.clone()))
-            .or_else(|| self.scan.is_none().then(|| "HEAD".to_string()))?;
+            .filter(|reference| !reference.eq_ignore_ascii_case("HEAD"))?;
         self.remote
             .as_ref()
             .map(|remote| blob_url(remote, &reference, code_ref))
+    }
+
+    fn scanned_file_excludes_location(&self, code_ref: &CodeRef, commit: Option<&str>) -> bool {
+        if code_ref.lines.is_empty() {
+            return false;
+        }
+        let Some(scan) = self.scan.as_ref() else {
+            return false;
+        };
+        if commit.is_some_and(|commit| {
+            !scan
+                .commit
+                .as_deref()
+                .is_some_and(|scan_commit| commit_matches(scan_commit, commit))
+        }) {
+            return false;
+        }
+        let Some(content) = scan.files.get(normalized_path(&code_ref.path)) else {
+            return false;
+        };
+        let line_count = content.lines().count();
+        code_ref
+            .lines
+            .iter()
+            .any(|range| range.start == 0 || range.end.unwrap_or(range.start) as usize > line_count)
     }
 
     fn scan_contains(&self, path: &str) -> bool {
