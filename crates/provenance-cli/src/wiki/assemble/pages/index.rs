@@ -1,4 +1,7 @@
-use crate::wiki::model::{CorpusCounts, IndexEntry, OrphanReport, OrphanRule, ScopeIndexPage};
+use crate::wiki::model::{
+    CorpusCounts, DomainIndexPage, DomainState, HomepageDomain, IndexEntry, OrphanReport,
+    OrphanRule, ScopeIndexPage, SearchIndexPage, HOMEPAGE_DOMAIN_ROW_CAP,
+};
 use provenance_core::{EdgeType, NodeType};
 
 use super::super::context::Assembler;
@@ -7,7 +10,12 @@ use provenance_store::cache::GapKind;
 
 impl Assembler<'_> {
     #[allow(clippy::too_many_lines)]
-    pub(in crate::wiki::assemble) fn index_page(&self) -> ScopeIndexPage {
+    pub(in crate::wiki::assemble) fn index_page(
+        &self,
+        domains: &DomainIndexPage,
+        search: &SearchIndexPage,
+        finding_count: usize,
+    ) -> ScopeIndexPage {
         let roots: Vec<IndexEntry> = self
             .state
             .requirements
@@ -69,9 +77,33 @@ impl Assembler<'_> {
                 .map(source_link)
                 .collect(),
         };
+        let authored_domain_count = domains
+            .groups
+            .iter()
+            .filter(|group| matches!(group.state, DomainState::Defined { .. }))
+            .count();
+        let domains = domains
+            .groups
+            .iter()
+            .filter_map(|group| match &group.state {
+                DomainState::Defined {
+                    id,
+                    name,
+                    description,
+                } => Some(HomepageDomain {
+                    id: id.clone(),
+                    name: name.clone(),
+                    description: description.clone(),
+                    requirements: group.requirements.len(),
+                    rules: group.rules.len(),
+                }),
+                DomainState::Missing { .. } | DomainState::Unassigned => None,
+            })
+            .take(HOMEPAGE_DOMAIN_ROW_CAP)
+            .collect();
         ScopeIndexPage {
             scope: self.state.scope.clone(),
-            title: self.state.scope.clone(),
+            title: format!("{} documentation", self.state.scope),
             counts: CorpusCounts {
                 sources: self.state.sources.len(),
                 requirements: self.state.requirements.len(),
@@ -81,6 +113,10 @@ impl Assembler<'_> {
             roots,
             gaps: self.index_gaps(),
             orphans,
+            search_coverage: search.coverage.clone(),
+            domains,
+            authored_domain_count,
+            finding_count,
         }
     }
 }

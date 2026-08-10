@@ -1,6 +1,8 @@
 use super::PageLink;
 use serde::Serialize;
 
+pub const HOMEPAGE_DOMAIN_ROW_CAP: usize = 20;
+
 /// One requirement or rule in the offline full-text index.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SearchEntry {
@@ -13,6 +15,7 @@ pub struct SearchEntry {
 pub struct SearchIndexPage {
     pub scope: String,
     pub title: String,
+    pub coverage: String,
     pub entries: Vec<SearchEntry>,
 }
 
@@ -44,4 +47,14 @@ pub struct DomainIndexPage {
     pub scope: String,
     pub title: String,
     pub groups: Vec<DomainGroup>,
+}
+
+/// One authored domain summarized on the bounded homepage browse list.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HomepageDomain {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub requirements: usize,
+    pub rules: usize,
 }

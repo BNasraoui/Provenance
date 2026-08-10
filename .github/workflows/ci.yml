@@ -47,9 +47,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       # Report-only for now: the report is printed but the step never fails.
-      # Add --strict once the four wiki homepage rules are verified or
-      # demoted (rule_wiki_homepage_entry_order, rule_wiki_homepage_plain_language,
-      # rule_wiki_homepage_search_coverage, rule_wiki_homepage_traceability_summary).
+      # The four wiki homepage rules are bound and verified. --strict still
+      # cannot be added because the scan flags ~66 directive-shaped fixture
+      # strings inside coverage and scanner tests (unknown rule ids, legacy
+      # @statesman markers). Add --strict once those fixtures are excluded
+      # from the scan or rewritten so the parser skips them.
       - run: cargo run -p provenance-cli -- coverage scan --repo . --path crates --scope default --validate-rules
 
   wiki-dom:

@@ -14,7 +14,10 @@ pub use provenance_store::cache::GapKind;
 use serde::Serialize;
 
 mod discovery;
-pub use discovery::{DomainGroup, DomainIndexPage, DomainState, SearchEntry, SearchIndexPage};
+pub use discovery::{
+    DomainGroup, DomainIndexPage, DomainState, HomepageDomain, SearchEntry, SearchIndexPage,
+    HOMEPAGE_DOMAIN_ROW_CAP,
+};
 
 /// A rendered page kind, including singleton discovery pages.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -23,6 +26,7 @@ pub enum PageKind {
     ScopeIndex,
     DomainIndex,
     SearchIndex,
+    Findings,
     Requirement,
     Resolution,
     Rule,
@@ -102,6 +106,7 @@ pub struct OrphanReport {
     pub sources: Vec<PageLink>,
 }
 
+#[cfg(test)]
 impl OrphanReport {
     pub const fn is_empty(&self) -> bool {
         self.rules.is_empty() && self.resolutions.is_empty() && self.sources.is_empty()
@@ -138,6 +143,18 @@ pub struct ScopeIndexPage {
     pub roots: Vec<IndexEntry>,
     pub gaps: Vec<GapNotice>,
     pub orphans: OrphanReport,
+    pub search_coverage: String,
+    pub domains: Vec<HomepageDomain>,
+    pub authored_domain_count: usize,
+    pub finding_count: usize,
+}
+
+/// Every traceability finding for one scope, without homepage truncation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FindingsPage {
+    pub scope: String,
+    pub title: String,
+    pub findings: Vec<GapNotice>,
 }
 
 /// One step in a requirement's parent chain, root first; the final entry is
@@ -368,6 +385,7 @@ pub struct WikiCorpus {
     pub index: ScopeIndexPage,
     pub domains: DomainIndexPage,
     pub search: SearchIndexPage,
+    pub findings: FindingsPage,
     pub requirements: Vec<RequirementPage>,
     pub resolutions: Vec<ResolutionPage>,
     pub rules: Vec<RulePage>,
@@ -384,8 +402,9 @@ mod tests {
             PageKind::ScopeIndex,
             PageKind::DomainIndex,
             PageKind::SearchIndex,
+            PageKind::Findings,
         ];
-        assert_eq!(singletons.len(), 3);
+        assert_eq!(singletons.len(), 4);
     }
 
     #[test]

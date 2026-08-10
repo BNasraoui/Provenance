@@ -7,7 +7,7 @@ expression: "render_index(\"default\", &index_fixture())"
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Provenance atlas — default - Provenance Wiki</title>
+<title>default documentation - Provenance Wiki</title>
 <link rel="stylesheet" href="/assets/provenance-wiki.css">
 </head>
 <body>
@@ -31,7 +31,7 @@ expression: "render_index(\"default\", &index_fixture())"
 <div class="chrome-inner">
 <span class="wordmark">Provenance<span class="scope">default</span></span>
 <nav aria-label="Breadcrumb"></nav>
-<nav class="global-nav" aria-label="Wiki"><a href="/">Atlas</a><a href="/domains/">Domains</a><a href="/search/">Search</a></nav>
+<nav class="global-nav" aria-label="Wiki"><a href="/">Home</a><a href="/domains/">Domains</a><a href="/search/">Search</a></nav>
 <label class="theme-select">Theme
 <select id="theme-select">
 <option value="statesman" selected>Statesman</option>
@@ -48,7 +48,7 @@ expression: "render_index(\"default\", &index_fixture())"
 <div class="title-row">
 <svg class="icon scope-index" aria-hidden="true"><use href="#i-book-open"/></svg>
 <div>
-<h1>Provenance atlas — default</h1>
+<h1>default documentation</h1>
 <div class="badge-row">
 <span class="id-chip">default</span>
 </div>
@@ -56,41 +56,28 @@ expression: "render_index(\"default\", &index_fixture())"
 </div>
 <div class="body-grid">
 <div class="body-main">
-<section>
-<h2 class="section-head sh-requirement"><svg class="icon"><use href="#i-git-branch"/></svg>Root Requirements</h2>
-<ul class="index-list">
-<li>
-<a class="entry-title" href="/requirements/req_platform/">ExampleOrg platform</a>
-<span class="status-badge active"><svg class="icon"><use href="#i-check-circle"/></svg>Active</span><span class="entry-counts">2 refinements · 1 decision · 1 rule</span>
-</li>
-</ul>
-</section>
-<section>
-<h2 class="section-head">Orphaned Records</h2>
-<div class="orphan-card">
-<h3>Rules missing a producer</h3>
-<ul class="link-list">
-<li><a href="/rules/rule_orphan/">ORPH-001</a> <span class="why">no resolution produces this rule</span></li>
-</ul>
-<h3>Sources nothing references</h3>
-<ul class="link-list">
-<li><a href="/sources/source_unused/">Unused API spec</a></li>
-</ul>
-</div>
-</section>
+<section class="homepage-search"><h2>Search the documentation</h2>
+<p>Find the project records you need without browsing every area.</p>
+<form class="search-box" role="search" action="/search/" method="get">
+<label for="homepage-search">Search by title or text</label>
+<div><input id="homepage-search" name="q" type="search" autocomplete="off" placeholder="e.g. invoice participant"><button type="submit">Search</button></div>
+</form><p class="search-summary">Search covers requirements and rules.</p></section>
+<section data-homepage-domains><h2>Browse by area</h2>
+<article class="domain-group" data-homepage-domain-row><h3><a href="/domains/#domain-domain_default">Invoicing</a></h3>
+<p class="prose">Invoice behavior</p>
+<p class="entry-counts">1 requirement · 1 rule</p></article>
+<a class="browse-all" href="/domains/">Browse 1 area</a></section>
+<section data-homepage-traceability><h2>Missing evidence</h2>
+<p>See the complete list of places where project records need stronger support.</p>
+<a class="traceability-link" href="/findings/">Review 4 missing evidence findings</a></section>
 </div>
 <aside class="body-margin">
-<h3 class="margin-head">Gaps</h3>
-<div class="citation gap">
-<div class="cite-head"><span class="cite-type" style="color:inherit">Gap</span></div>
-<p>source_unused is referenced by nothing</p>
-</div>
-<div class="classification">
-<h3 class="margin-head">Records</h3>
-<div class="row"><svg class="icon"><use href="#i-book-open"/></svg><span class="k">Sources</span><span class="v">2</span></div>
+<div class="classification" data-record-counts>
+<h3 class="margin-head">Project records</h3>
 <div class="row"><svg class="icon"><use href="#i-git-branch"/></svg><span class="k">Requirements</span><span class="v">3</span></div>
-<div class="row"><svg class="icon"><use href="#i-scale"/></svg><span class="k">Resolutions</span><span class="v">1</span></div>
+<div class="row"><svg class="icon"><use href="#i-scale"/></svg><span class="k">Decisions</span><span class="v">1</span></div>
 <div class="row"><svg class="icon"><use href="#i-shield"/></svg><span class="k">Rules</span><span class="v">1</span></div>
+<div class="row"><svg class="icon"><use href="#i-book-open"/></svg><span class="k">Sources</span><span class="v">2</span></div>
 </div>
 </aside>
 </div>

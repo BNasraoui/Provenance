@@ -1,14 +1,10 @@
-use crate::wiki::model::{CorpusCounts, OrphanReport, PageKind, ScopeIndexPage};
-use provenance_core::RequirementStatus;
-use provenance_macros::verifies;
+use crate::wiki::model::PageKind;
 
 use super::super::{
-    render_index, render_not_found, render_requirement, render_resolution, render_rule,
-    render_source,
+    render_not_found, render_requirement, render_resolution, render_rule, render_source,
 };
 use super::fixtures::{
-    colliding_requirement_links, gappy_requirement_fixture, index_fixture, resolution_fixture,
-    rule_fixture, source_fixture, unique_requirement_links,
+    gappy_requirement_fixture, resolution_fixture, rule_fixture, source_fixture,
 };
 
 #[test]
@@ -111,116 +107,6 @@ fn source_page_shows_the_commit_pin_and_referenced_requirements() {
     assert!(html.contains(
         "<a href=\"/requirements/req_saveinvoice_split/\">SaveInvoice shall split each claim item into portions</a>"
     ));
-}
-
-#[test]
-fn index_page_lists_roots_counts_orphans_and_gaps() {
-    let html = render_index("default", &index_fixture());
-    assert!(html.contains("Provenance atlas — default"));
-    assert!(html.contains("<a class=\"entry-title\" href=\"/requirements/req_platform/\">"));
-    assert!(html.contains("2 refinements · 1 decision · 1 rule"));
-    assert!(html.contains("Orphaned Records"));
-    assert!(html.contains("Rules missing a producer"));
-    assert!(html.contains(
-        "<a href=\"/rules/rule_orphan/\">ORPH-001</a> <span class=\"why\">no resolution produces this rule</span>"
-    ));
-    assert!(html.contains("<a href=\"/sources/source_unused/\">Unused API spec</a>"));
-    assert!(html.contains("citation gap"));
-    assert!(html.contains("source_unused is referenced by nothing"));
-}
-
-#[test]
-fn index_page_disambiguates_roots_with_identical_titles() {
-    let mut page = index_fixture();
-    let links = colliding_requirement_links();
-    page.roots = links
-        .into_iter()
-        .map(|link| crate::wiki::model::IndexEntry {
-            link,
-            status: RequirementStatus::Active,
-            children: 0,
-            resolutions: 0,
-            rules: 0,
-        })
-        .collect();
-
-    let html = render_index("default", &page);
-    assert!(html.contains("<span class=\"id-chip\">…hall_pro</span>"));
-    assert!(html.contains("<span class=\"id-chip\">…ll_pro_2</span>"));
-}
-
-/// The root list and the orphan panel are separate lists on one page.
-#[test]
-#[verifies("rule_ambiguous_links_disambiguated", examples)]
-fn index_page_disambiguates_a_root_and_an_orphan_sharing_a_title() {
-    let mut page = index_fixture();
-    "ExampleOrg platform".clone_into(&mut page.orphans.rules[0].link.title);
-
-    let html = render_index("default", &page);
-    assert!(html.contains(
-        "<a class=\"entry-title\" href=\"/requirements/req_platform/\">ExampleOrg platform <span class=\"id-chip\">…platform</span></a>"
-    ));
-    assert!(html.contains(
-        "<a href=\"/rules/rule_orphan/\">ExampleOrg platform <span class=\"id-chip\">…e_orphan</span></a>"
-    ));
-}
-
-#[test]
-fn index_page_keeps_unique_root_links_unchanged() {
-    let mut page = index_fixture();
-    page.roots = unique_requirement_links()
-        .into_iter()
-        .map(|link| crate::wiki::model::IndexEntry {
-            link,
-            status: RequirementStatus::Active,
-            children: 0,
-            resolutions: 0,
-            rules: 0,
-        })
-        .collect();
-
-    let html = render_index("default", &page);
-    assert!(html.contains(
-        "<a class=\"entry-title\" href=\"/requirements/req_budget_split/\">Budget portions shall reconcile</a>\n"
-    ));
-    assert!(html.contains(
-        "<a class=\"entry-title\" href=\"/requirements/req_zero_suppression/\">Zero claim items shall be suppressed</a>\n"
-    ));
-    assert!(!html.contains("…"));
-}
-
-#[test]
-fn index_page_on_a_truly_empty_scope_shows_the_honest_empty_state() {
-    let page = ScopeIndexPage {
-        scope: "default".to_string(),
-        title: "Provenance atlas — default".to_string(),
-        counts: CorpusCounts::default(),
-        roots: vec![],
-        gaps: vec![],
-        orphans: OrphanReport {
-            rules: vec![],
-            resolutions: vec![],
-            sources: vec![],
-        },
-    };
-    let html = render_index("default", &page);
-    assert!(html.contains("No requirements recorded in this scope."));
-    assert!(!html.contains("Orphaned Records"));
-    assert!(!html.contains("class=\"margin-head\">Gaps"));
-    assert!(!html.contains("citation gap"));
-}
-
-#[test]
-#[verifies("rule_requirement_badge", examples)]
-fn index_marks_resolved_requirements_without_decisions_or_rules_unbacked() {
-    let mut page = index_fixture();
-    page.roots[0].status = RequirementStatus::Resolved;
-    page.roots[0].resolutions = 0;
-    page.roots[0].rules = 0;
-
-    let html = render_index("default", &page);
-    assert!(html.contains("status-badge resolved-unbacked"));
-    assert!(html.contains("Resolved (no decisions or rules)"));
 }
 
 #[test]

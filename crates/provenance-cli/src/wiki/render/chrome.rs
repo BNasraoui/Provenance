@@ -83,7 +83,7 @@ fn page_shell_with_script(
     writeln!(
         html,
         "<nav class=\"global-nav\" aria-label=\"Wiki\">\
-         <a href=\"{}\">Atlas</a><a href=\"{}\">Domains</a>\
+         <a href=\"{}\">Home</a><a href=\"{}\">Domains</a>\
          <a href=\"{}\">Search</a></nav>",
         WikiRoute::Index.path(),
         WikiRoute::Domains.path(),

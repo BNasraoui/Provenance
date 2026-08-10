@@ -61,6 +61,7 @@ pub(in crate::wiki::render) const fn kind_class(kind: PageKind) -> &'static str 
         PageKind::ScopeIndex => "scope-index",
         PageKind::DomainIndex => "domain-index",
         PageKind::SearchIndex => "search-index",
+        PageKind::Findings => "findings",
         PageKind::Requirement => "requirement",
         PageKind::Resolution => "resolution",
         PageKind::Rule => "rule",
@@ -73,6 +74,7 @@ pub(in crate::wiki::render) const fn kind_label(kind: PageKind) -> &'static str 
         PageKind::ScopeIndex => "Scope",
         PageKind::DomainIndex => "Domains",
         PageKind::SearchIndex => "Search",
+        PageKind::Findings => "Missing evidence",
         PageKind::Requirement => "Requirement",
         PageKind::Resolution => "Resolution",
         PageKind::Rule => "Rule",
@@ -83,7 +85,7 @@ pub(in crate::wiki::render) const fn kind_label(kind: PageKind) -> &'static str 
 pub(in crate::wiki::render) const fn kind_icon(kind: PageKind) -> &'static str {
     match kind {
         PageKind::ScopeIndex | PageKind::Rule | PageKind::Source => "i-book-open",
-        PageKind::SearchIndex => "i-search",
+        PageKind::SearchIndex | PageKind::Findings => "i-search",
         PageKind::DomainIndex | PageKind::Requirement => "i-git-branch",
         PageKind::Resolution => "i-scale",
     }

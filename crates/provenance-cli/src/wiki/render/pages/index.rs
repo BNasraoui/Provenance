@@ -1,96 +1,80 @@
-use crate::wiki::model::{PageKind, PageLink, ScopeIndexPage};
+use crate::wiki::model::{PageKind, ScopeIndexPage, HOMEPAGE_DOMAIN_ROW_CAP};
+use crate::wiki::routes::{domain_fragment, WikiRoute};
+use provenance_macros::rule;
 use std::fmt::Write as _;
 
 use super::super::chrome::{container_html, page_shell, title_row};
-use super::super::citations::push_gap_citations;
-use super::super::fragments::{
-    push_classification_row, push_orphan_group, push_orphan_rules, push_section_open,
-};
-use super::super::html::PageLinksRenderer;
-use super::super::labels::{counted, requirement_status_badge};
+use super::super::fragments::push_classification_row;
+use super::super::html::{escape_attr, escape_html};
+use super::super::labels::counted;
 
-/// Every titled link this page renders: the root requirements and the three
-/// orphan groups, so a root and an orphan sharing a title are told apart.
-fn page_links(page: &ScopeIndexPage) -> Vec<&PageLink> {
-    let mut links: Vec<&PageLink> = page.roots.iter().map(|entry| &entry.link).collect();
-    links.extend(page.orphans.rules.iter().map(|rule| &rule.link));
-    links.extend(&page.orphans.resolutions);
-    links.extend(&page.orphans.sources);
-    links
+const RATIFIED_VIEWPORTS: [(u16, u16); 2] = [(1440, 900), (390, 844)];
+
+/// Decides whether homepage HTML keeps the ratified entry order at a ratified viewport.
+#[rule("rule_wiki_homepage_entry_order")]
+pub fn homepage_entry_order_is_valid(html: &str, width: u16, height: u16) -> bool {
+    if !RATIFIED_VIEWPORTS.contains(&(width, height)) {
+        return false;
+    }
+    let Some(search) = html.find("role=\"search\"") else {
+        return false;
+    };
+    let Some(domains) = html.find("data-homepage-domains") else {
+        return false;
+    };
+    let Some(traceability) = html.find("data-homepage-traceability") else {
+        return false;
+    };
+    search < domains
+        && domains < traceability
+        && html
+            .match_indices("data-homepage-domain-row")
+            .all(|(position, _)| domains < position && position < traceability)
 }
 
-/// Renders the scope index page.
-pub fn render_index(scope: &str, page: &ScopeIndexPage) -> String {
-    let links = PageLinksRenderer::new(page_links(page));
+/// Checks rendered homepage HTML for the ratified everyday reader labels.
+pub fn homepage_plain_language_is_valid(html: &str) -> bool {
+    let lower = html.to_ascii_lowercase();
+    !lower.contains("corpus")
+        && !lower.contains(">atlas<")
+        && lower.contains("documentation")
+        && lower.contains("project records")
+        && lower.contains("missing evidence")
+}
+
+fn traceability_summary_html(finding_count: usize) -> String {
+    format!(
+        "<section data-homepage-traceability><h2>Missing evidence</h2>\n\
+         <p>See the complete list of places where project records need stronger support.</p>\n\
+         <a class=\"traceability-link\" href=\"{}\">Review {}</a></section>\n",
+        WikiRoute::Findings.path(),
+        counted(
+            finding_count,
+            "missing evidence finding",
+            "missing evidence findings"
+        ),
+    )
+}
+
+/// Renders homepage content with one exact findings link and no individual finding cards.
+#[rule("rule_wiki_homepage_traceability_summary")]
+fn homepage_content_html(page: &ScopeIndexPage) -> String {
     let mut main = String::new();
-    push_section_open(
-        &mut main,
-        "sh-requirement",
-        Some("i-git-branch"),
-        "Root Requirements",
-    );
-    if page.roots.is_empty() {
-        main.push_str("<p class=\"prose\">No requirements recorded in this scope.</p>\n");
-    } else {
-        main.push_str("<ul class=\"index-list\">\n");
-        for entry in &page.roots {
-            main.push_str("<li>\n");
-            writeln!(main, "{}", links.link(&entry.link, Some("entry-title")))
-                .expect("writing to a String should not fail");
-            main.push_str(&requirement_status_badge(
-                &entry.status,
-                entry.resolutions,
-                entry.rules,
-            ));
-            writeln!(
-                main,
-                "<span class=\"entry-counts\">{} · {} · {}</span>",
-                counted(entry.children, "refinement", "refinements"),
-                counted(entry.resolutions, "decision", "decisions"),
-                counted(entry.rules, "rule", "rules"),
-            )
-            .expect("writing to a String should not fail");
-            main.push_str("</li>\n");
-        }
-        main.push_str("</ul>\n");
-    }
-    main.push_str("</section>\n");
-    if !page.orphans.is_empty() {
-        push_section_open(&mut main, "", None, "Orphaned Records");
-        main.push_str("<div class=\"orphan-card\">\n");
-        push_orphan_rules(
-            &mut main,
-            &links,
-            "Rules missing a producer",
-            &page.orphans.rules,
-        );
-        push_orphan_group(
-            &mut main,
-            &links,
-            "Resolutions resolving nothing",
-            &page.orphans.resolutions,
-        );
-        push_orphan_group(
-            &mut main,
-            &links,
-            "Sources nothing references",
-            &page.orphans.sources,
-        );
-        main.push_str("</div>\n</section>\n");
-    }
+    push_search(&mut main, &page.search_coverage);
+    push_domains(&mut main, page);
+    main.push_str(&traceability_summary_html(page.finding_count));
+    main
+}
+
+/// Renders the search-first scope homepage using everyday reader language.
+#[rule("rule_wiki_homepage_plain_language")]
+pub fn render_index(scope: &str, page: &ScopeIndexPage) -> String {
+    let main = homepage_content_html(page);
 
     let mut margin = String::new();
-    if !page.gaps.is_empty() {
-        margin.push_str("<h3 class=\"margin-head\">Gaps</h3>\n");
-        push_gap_citations(&mut margin, &page.gaps);
-    }
-    margin.push_str("<div class=\"classification\">\n<h3 class=\"margin-head\">Records</h3>\n");
-    push_classification_row(
-        &mut margin,
-        "i-book-open",
-        "Sources",
-        &page.counts.sources.to_string(),
-        false,
+    margin.push_str(
+        "<div class=\"classification\" data-record-counts>\n\
+         <h3 class=\"margin-head\">Project records</h3>\n",
     );
     push_classification_row(
         &mut margin,
@@ -102,7 +86,7 @@ pub fn render_index(scope: &str, page: &ScopeIndexPage) -> String {
     push_classification_row(
         &mut margin,
         "i-scale",
-        "Resolutions",
+        "Decisions",
         &page.counts.resolutions.to_string(),
         false,
     );
@@ -113,6 +97,13 @@ pub fn render_index(scope: &str, page: &ScopeIndexPage) -> String {
         &page.counts.rules.to_string(),
         false,
     );
+    push_classification_row(
+        &mut margin,
+        "i-book-open",
+        "Sources",
+        &page.counts.sources.to_string(),
+        false,
+    );
     margin.push_str("</div>\n");
 
     let container = container_html(
@@ -121,5 +112,71 @@ pub fn render_index(scope: &str, page: &ScopeIndexPage) -> String {
         &main,
         &margin,
     );
-    page_shell(scope, "scope-index", &page.title, "", &container, "")
+    let html = page_shell(scope, "scope-index", &page.title, "", &container, "");
+    debug_assert!(homepage_plain_language_is_valid(&html));
+    debug_assert!(RATIFIED_VIEWPORTS
+        .iter()
+        .all(|&(width, height)| homepage_entry_order_is_valid(&html, width, height)));
+    html
+}
+
+fn push_search(html: &mut String, coverage: &str) {
+    write!(
+        html,
+        "<section class=\"homepage-search\"><h2>Search the documentation</h2>\n\
+         <p>Find the project records you need without browsing every area.</p>\n\
+         <form class=\"search-box\" role=\"search\" action=\"{}\" method=\"get\">\n\
+         <label for=\"homepage-search\">Search by title or text</label>\n\
+         <div><input id=\"homepage-search\" name=\"q\" type=\"search\" autocomplete=\"off\" \
+         placeholder=\"e.g. invoice participant\"><button type=\"submit\">Search</button></div>\n\
+         </form><p class=\"search-summary\">{}</p></section>\n",
+        WikiRoute::Search.path(),
+        escape_html(coverage),
+    )
+    .expect("writing to a String should not fail");
+}
+
+fn push_domains(html: &mut String, page: &ScopeIndexPage) {
+    html.push_str("<section data-homepage-domains><h2>Browse by area</h2>\n");
+    if page.domains.is_empty() {
+        html.push_str("<p class=\"empty-note\">No project areas have been described yet.</p>\n");
+    }
+    for domain in page.domains.iter().take(HOMEPAGE_DOMAIN_ROW_CAP) {
+        writeln!(
+            html,
+            "<article class=\"domain-group\" data-homepage-domain-row><h3><a href=\"{}\">{}</a></h3>",
+            escape_attr(&domain_fragment(&domain.id)),
+            escape_html(&domain.name),
+        )
+        .expect("writing to a String should not fail");
+        if let Some(description) = &domain.description {
+            writeln!(html, "<p class=\"prose\">{}</p>", escape_html(description))
+                .expect("writing to a String should not fail");
+        }
+        writeln!(
+            html,
+            "<p class=\"entry-counts\">{} · {}</p></article>",
+            counted(domain.requirements, "requirement", "requirements"),
+            counted(domain.rules, "rule", "rules"),
+        )
+        .expect("writing to a String should not fail");
+    }
+    // With no authored areas the browse link would promise content the
+    // domains page does not hold, so the empty note stands alone.
+    let browse_label = match page.authored_domain_count {
+        0 => None,
+        1 => Some("Browse 1 area".to_string()),
+        count => Some(format!("Browse all {count} areas")),
+    };
+    if let Some(browse_label) = browse_label {
+        writeln!(
+            html,
+            "<a class=\"browse-all\" href=\"{}\">{}</a></section>",
+            WikiRoute::Domains.path(),
+            escape_html(&browse_label),
+        )
+        .expect("writing to a String should not fail");
+    } else {
+        html.push_str("</section>\n");
+    }
 }
