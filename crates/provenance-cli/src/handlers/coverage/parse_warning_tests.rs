@@ -1,7 +1,7 @@
 //! What the parser noticed while reading the source reaches the report.
 //!
 //! The scan collected these all along and then dropped them, so a repository
-//! still on the old `@statesman` marker was never told to move off it.
+//! still on the legacy Statesman marker was never told to move off it.
 
 use super::coverage_scan;
 use camino::Utf8PathBuf;

@@ -12,6 +12,7 @@ pub(super) fn coverage_scan(
     scope: String,
     validate_rules: bool,
 ) -> anyhow::Result<provenance_core::coverage::CoverageReport> {
+    let commit = current_git_commit(&repo).ok();
     let scans = provenance_scanner::scan_path(path)?;
     let rules = if validate_rules {
         StateStore::new(ProvenanceLayout::new(repo)).list_rules(&ScopeId::new(scope)?)?
@@ -72,7 +73,7 @@ pub(super) fn coverage_scan(
         })
         .collect::<Vec<_>>();
     Ok(provenance_core::coverage::CoverageReport::new(
-        current_git_commit().ok(),
+        commit,
         scans.len(),
         annotations,
         bindings,
@@ -80,9 +81,9 @@ pub(super) fn coverage_scan(
     ))
 }
 
-/// What the parser complained about while reading the files: a legacy
-/// `@statesman` marker, a directive with no `key: value`, a confidence outside
-/// the range, an unknown field.
+/// What the parser complained about while reading the files: the legacy
+/// Statesman marker, a directive with no `key: value`, a confidence
+/// outside the range, an unknown field.
 ///
 /// These name a file and a line but no rule. A malformed directive may never
 /// get as far as saying which rule it meant, and inventing one would send a
@@ -150,9 +151,10 @@ fn unverified_rule_warnings(
         .collect()
 }
 
-pub(super) fn current_git_commit() -> anyhow::Result<String> {
+pub(super) fn current_git_commit(repo: &camino::Utf8Path) -> anyhow::Result<String> {
     let output = std::process::Command::new("git")
         .args(["rev-parse", "--short", "HEAD"])
+        .current_dir(repo)
         .output()?;
     anyhow::ensure!(output.status.success(), "git rev-parse failed");
     Ok(String::from_utf8(output.stdout)?.trim().to_string())
@@ -295,6 +297,9 @@ pub(super) fn handle(command: CoverageCommand) -> anyhow::Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod git_tests;
 
 #[cfg(test)]
 mod parse_warning_tests;

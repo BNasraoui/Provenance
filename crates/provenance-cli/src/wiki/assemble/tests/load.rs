@@ -26,7 +26,7 @@ fn load_corpus_reads_state_from_disk() {
     )
     .unwrap();
 
-    let corpus = load_corpus(repo, "default".to_string()).unwrap();
+    let corpus = load_corpus(repo, "default".to_string(), None).unwrap();
     assert_eq!(corpus.scope, "default");
     assert_eq!(corpus.requirements.len(), 1);
     assert_eq!(corpus.index.roots.len(), 1);

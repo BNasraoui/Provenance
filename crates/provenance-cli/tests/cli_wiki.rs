@@ -73,7 +73,12 @@ fn wiki_build_writes_static_pages_and_stylesheet() {
     );
 
     let rule = std::fs::read_to_string(out.join("rules/rule_sah_001/index.html")).unwrap();
-    assert!(rule.contains("Example-API-main/src/example.php"), "{rule}");
+    assert!(
+        rule.contains("No code scan was supplied to this build"),
+        "{rule}"
+    );
+    assert!(!rule.contains("No function bound"), "{rule}");
+    assert!(!rule.contains("Not verified"), "{rule}");
 
     let gapped = std::fs::read_to_string(out.join("requirements/req_gap/index.html")).unwrap();
     assert!(gapped.contains("citation gap"), "{gapped}");
@@ -431,24 +436,9 @@ fn create_edge(
 ) {
     Command::cargo_bin("provenance")
         .unwrap()
-        .args([
-            "edges",
-            "create",
-            "--repo",
-            repo,
-            "--scope",
-            "default",
-            "--type",
-            edge_type,
-            "--from-type",
-            from_type,
-            "--from-id",
-            from_id,
-            "--to-type",
-            to_type,
-            "--to-id",
-            to_id,
-        ])
+        .args(["edges", "create", "--repo", repo, "--scope", "default"])
+        .args(["--type", edge_type, "--from-type", from_type])
+        .args(["--from-id", from_id, "--to-type", to_type, "--to-id", to_id])
         .assert()
         .success();
 }

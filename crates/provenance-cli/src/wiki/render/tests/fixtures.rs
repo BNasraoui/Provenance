@@ -1,10 +1,10 @@
-use crate::wiki::links::{EvidenceRef, LinkResolver};
+use crate::wiki::links::LinkResolver;
 use crate::wiki::model::{
-    CorpusCounts, DecisionSection, DomainGroup, DomainIndexPage, DomainState, EvidenceThread,
-    FieldNote, FindingsPage, GapKind, GapNotice, HomepageDomain, IndexEntry, InputCitation,
-    LineageEntry, OrphanReport, OrphanRule, PageId, PageKind, PageLink, RecordKind,
-    RequirementPage, ResolutionPage, RuleCard, RulePage, ScopeIndexPage, SearchEntry,
-    SearchIndexPage, SourceCitation, SourcePage, WikiCorpus,
+    CodeScan, CorpusCounts, DecisionSection, DomainGroup, DomainIndexPage, DomainState,
+    EvidenceThread, FieldNote, FindingsPage, GapKind, GapNotice, HomepageDomain, IndexEntry,
+    InputCitation, LineageEntry, OrphanReport, OrphanRule, PageId, PageKind, PageLink, RecordKind,
+    RequirementPage, ResolutionPage, RuleCard, RuleFunction, RulePage, ScopeIndexPage, SearchEntry,
+    SearchIndexPage, SourceCitation, SourcePage, VerificationSite, WikiCorpus,
 };
 use provenance_core::{
     MessageRole, NodeType, RequirementStatus, ResolutionInputType, ResolutionStatus, RuleSeverity,
@@ -12,6 +12,9 @@ use provenance_core::{
 };
 
 pub(super) const REMOTE: &str = "git@github.com:exampleorg/ex-api.git";
+/// The commit the fixture's scan ran against; its binding links are pinned
+/// to it, as a real scan's would be.
+pub(super) const SCAN_COMMIT: &str = "9f2c1ab4e5f6";
 
 pub(super) fn link(kind: PageKind, id: &str, title: &str) -> PageLink {
     let kind = match kind {
@@ -263,15 +266,19 @@ pub(super) fn rule_fixture() -> RulePage {
         description: None,
         status: RuleStatus::Active,
         severity: RuleSeverity::High,
-        source_document: Some("src/UseCase.php".to_string()),
-        source_section: Some("153-156".to_string()),
-        evidence: vec![
-            resolver.resolve("src/UseCase.php:153-156"),
-            EvidenceRef {
-                label: "SCHADS Award clause 10.3".to_string(),
-                href: None,
-            },
-        ],
+        code_scan: Some(CodeScan {
+            commit: Some(SCAN_COMMIT.to_string()),
+        }),
+        rule_function: Some(RuleFunction {
+            symbol: Some("suppress_zero_claim_items".to_string()),
+            location: resolver.resolve_at("src/UseCase.php:153", Some(SCAN_COMMIT)),
+        }),
+        verifications: vec![VerificationSite {
+            method: "examples".to_string(),
+            symbol: Some("zero_claim_items_emit_no_lines".to_string()),
+            location: resolver.resolve_at("tests/UseCaseTest.php:84", Some(SCAN_COMMIT)),
+            outside_defining_module: true,
+        }],
         produced_by: vec![link(
             PageKind::Resolution,
             "res_split",

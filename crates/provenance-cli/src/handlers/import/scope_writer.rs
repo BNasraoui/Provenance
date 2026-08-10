@@ -1,6 +1,6 @@
 use super::ScopeExport;
 use camino::Utf8PathBuf;
-use provenance_core::{Edge, ScopeId};
+use provenance_core::{Edge, ScopeId, Thread, ThreadStatus};
 use provenance_store::layout::ProvenanceLayout;
 
 pub(super) fn write_scope(
@@ -8,6 +8,7 @@ pub(super) fn write_scope(
     scope_id: &ScopeId,
     exported: &ScopeExport,
 ) -> anyhow::Result<()> {
+    validate_threads(&exported.threads)?;
     provenance_store::jsonl::write_jsonl_atomic(
         &provenance_store::shards::sources_path(layout, scope_id),
         &exported.sources,
@@ -69,6 +70,33 @@ pub(super) fn write_scope(
         &provenance_store::shards::dispositions_path(layout, scope_id),
         &exported.dispositions,
     )?;
+    Ok(())
+}
+
+fn validate_threads(threads: &[Thread]) -> anyhow::Result<()> {
+    for (index, thread) in threads.iter().enumerate() {
+        if threads[..index]
+            .iter()
+            .any(|earlier| earlier.id == thread.id)
+        {
+            anyhow::bail!("duplicate thread id {}", thread.id.as_str());
+        }
+        if thread.status != ThreadStatus::Active {
+            continue;
+        }
+        if let Some(earlier) = threads[..index].iter().find(|earlier| {
+            earlier.status == ThreadStatus::Active && earlier.parent == thread.parent
+        }) {
+            let node_type = serde_json::to_string(&thread.parent.node_type)?;
+            anyhow::bail!(
+                "multiple active threads for {} {}: {} and {}",
+                node_type.trim_matches('"'),
+                thread.parent.node_id.as_str(),
+                earlier.id.as_str(),
+                thread.id.as_str()
+            );
+        }
+    }
     Ok(())
 }
 

@@ -71,9 +71,9 @@ impl<'a> Assembler<'a> {
             description: rule.description.clone(),
             status: rule.status.clone(),
             severity: rule.severity.clone(),
-            source_document: rule.source_document.clone(),
-            source_section: rule.source_section.clone(),
-            evidence: self.rule_evidence(rule),
+            code_scan: self.code_scan(),
+            rule_function: self.rule_function(rule.id.as_str()),
+            verifications: self.verification_sites(rule.id.as_str()),
             produced_by,
             requirements: upstream_requirements
                 .iter()

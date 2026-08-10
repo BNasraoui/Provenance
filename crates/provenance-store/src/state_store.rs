@@ -28,9 +28,9 @@ pub use proposal_surfaces::{ProposalDemand, ProposalSurfaceReason, SurfacedPropo
 use crate::{layout::ProvenanceLayout, shards};
 use ideation_batches::overlay_records;
 use provenance_core::{
-    AssertionRecord, Boundary, Contribution, DispositionRecord, Domain, Edge, Manifest, Message,
-    ProposalCard, Question, Requirement, Resolution, Rule, SchemaVersion, Scope, ScopeId, Source,
-    SynthesisPacket, Thread, Topic,
+    ensure_supported_schema_version, AssertionRecord, Boundary, Contribution, DispositionRecord,
+    Domain, Edge, Manifest, Message, ProposalCard, Question, Requirement, Resolution, Rule,
+    SchemaVersion, Scope, ScopeId, Source, SynthesisPacket, Thread, Topic,
 };
 use readers::{
     deserialize_closed, read_edge_shards, read_jsonl, read_jsonl_closed, read_legacy_dispositions,
@@ -78,9 +78,10 @@ impl StateStore {
     }
     pub fn manifest(&self) -> anyhow::Result<Manifest> {
         self.with_repository_publication(|| {
-            Ok(serde_json::from_str(&std::fs::read_to_string(
-                self.layout.manifest_path(),
-            )?)?)
+            let manifest: Manifest =
+                serde_json::from_str(&std::fs::read_to_string(self.layout.manifest_path())?)?;
+            ensure_supported_schema_version("manifest", manifest.schema_version)?;
+            Ok(manifest)
         })
     }
 

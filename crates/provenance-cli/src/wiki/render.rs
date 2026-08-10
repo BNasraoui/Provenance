@@ -112,9 +112,9 @@ mod tests {
     #[path = "requirement.rs"]
     mod requirement;
 
-    use fixtures::{gappy_requirement_fixture, index_fixture, requirement_fixture};
+    use fixtures::{gappy_requirement_fixture, index_fixture, requirement_fixture, rule_fixture};
 
-    use super::{render_index, render_requirement};
+    use super::{render_index, render_requirement, render_rule};
 
     #[test]
     fn snapshot_requirement_page_with_rules_and_thread() {
@@ -129,5 +129,27 @@ mod tests {
     #[test]
     fn snapshot_scope_index_page() {
         insta::assert_snapshot!(render_index("default", &index_fixture()));
+    }
+
+    #[test]
+    fn snapshot_rule_page_with_function_and_verifications() {
+        insta::assert_snapshot!(render_rule("default", &rule_fixture()));
+    }
+
+    #[test]
+    fn snapshot_rule_page_without_scanned_binding() {
+        let mut page = rule_fixture();
+        page.rule_function = None;
+        page.verifications.clear();
+        insta::assert_snapshot!(render_rule("default", &page));
+    }
+
+    #[test]
+    fn snapshot_rule_page_without_a_code_scan() {
+        let mut page = rule_fixture();
+        page.code_scan = None;
+        page.rule_function = None;
+        page.verifications.clear();
+        insta::assert_snapshot!(render_rule("default", &page));
     }
 }

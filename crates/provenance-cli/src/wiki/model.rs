@@ -302,6 +302,32 @@ pub struct ResolutionPage {
     pub threads: Vec<EvidenceThread>,
 }
 
+/// The scanned item carrying a rule's decision.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RuleFunction {
+    pub symbol: Option<String>,
+    pub location: EvidenceRef,
+}
+
+/// The code scan the binding sections were read from. `None` on a page built
+/// without a scan report: such a page knows nothing about bindings and must
+/// not report an absent one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CodeScan {
+    /// The commit the scan ran against, or `None` for an uncommitted tree.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
+}
+
+/// A scanned site claiming how a rule is verified.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct VerificationSite {
+    pub method: String,
+    pub symbol: Option<String>,
+    pub location: EvidenceRef,
+    pub outside_defining_module: bool,
+}
+
 /// A rule detail page with its backward traceability chain.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RulePage {
@@ -312,11 +338,13 @@ pub struct RulePage {
     pub description: Option<String>,
     pub status: RuleStatus,
     pub severity: RuleSeverity,
+    /// The scan behind `rule_function` and `verifications`. `None` means no
+    /// scan was supplied, so neither field says anything about the code.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub source_document: Option<String>,
+    pub code_scan: Option<CodeScan>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub source_section: Option<String>,
-    pub evidence: Vec<EvidenceRef>,
+    pub rule_function: Option<RuleFunction>,
+    pub verifications: Vec<VerificationSite>,
     /// Resolutions or requirements with a `produces` edge into this rule.
     pub produced_by: Vec<PageLink>,
     /// Upstream requirements reached through the producing records.

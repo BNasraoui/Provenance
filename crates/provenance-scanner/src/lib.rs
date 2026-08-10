@@ -1,4 +1,5 @@
 pub mod parser;
+mod string_context;
 pub mod validate;
 pub mod walker;
 
