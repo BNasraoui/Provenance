@@ -3,10 +3,10 @@
 //! `provenance-macros` validates `#[verifies]` method words against its
 //! `VERIFICATION_METHODS` list at compile time; the scanner parses the same
 //! words into `Verification` long after, from repositories the macro never
-//! saw. The two live in different crates with no shared dependency to carry
-//! the list, so this reads the macro's source and checks every word it
-//! accepts round-trips through the scanner, and that neither side knows a
-//! word the other refuses.
+//! saw. A proc-macro crate exports only macros, so no dependency can carry
+//! the list between them; this reads the macro's source instead and checks
+//! every word it accepts round-trips through the scanner, and that neither
+//! side knows a word the other refuses.
 
 use std::str::FromStr;
 
