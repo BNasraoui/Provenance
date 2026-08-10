@@ -45,6 +45,19 @@ fn homepage_uses_plain_reader_language() {
 }
 
 #[test]
+fn homepage_plain_language_check_allows_an_atlas_scope_name() {
+    let corpus = corpus_fixture();
+
+    let html = super::super::render_index("Atlas", &corpus.index);
+
+    assert!(
+        html.contains("<span class=\"scope\">Atlas</span>"),
+        "{html}"
+    );
+    assert!(homepage_plain_language_is_valid(&html));
+}
+
+#[test]
 #[verifies("rule_wiki_homepage_search_coverage", examples)]
 fn homepage_states_the_search_index_coverage() {
     let html = homepage_html();
