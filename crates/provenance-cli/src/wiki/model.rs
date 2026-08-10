@@ -285,6 +285,22 @@ pub struct ResolutionPage {
     pub threads: Vec<EvidenceThread>,
 }
 
+/// The scanned item carrying a rule's decision.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RuleFunction {
+    pub symbol: Option<String>,
+    pub location: EvidenceRef,
+}
+
+/// A scanned site claiming how a rule is verified.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct VerificationSite {
+    pub method: String,
+    pub symbol: Option<String>,
+    pub location: EvidenceRef,
+    pub outside_defining_module: bool,
+}
+
 /// A rule detail page with its backward traceability chain.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RulePage {
@@ -296,10 +312,8 @@ pub struct RulePage {
     pub status: RuleStatus,
     pub severity: RuleSeverity,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub source_document: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub source_section: Option<String>,
-    pub evidence: Vec<EvidenceRef>,
+    pub rule_function: Option<RuleFunction>,
+    pub verifications: Vec<VerificationSite>,
     /// Resolutions or requirements with a `produces` edge into this rule.
     pub produced_by: Vec<PageLink>,
     /// Upstream requirements reached through the producing records.

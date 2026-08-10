@@ -1,5 +1,6 @@
 use crate::handlers::ScopeExport;
 use crate::wiki::links::LinkResolver;
+use provenance_core::coverage::CoverageReport;
 use provenance_core::{Edge, EdgeType, NodeType, Requirement, Source, StableId};
 use provenance_store::cache::{GapItem, GraphQuery};
 use std::cell::OnceCell;
@@ -8,6 +9,7 @@ use std::collections::BTreeMap;
 pub(super) struct Assembler<'a> {
     pub(super) state: &'a ScopeExport,
     pub(super) resolver: &'a LinkResolver,
+    pub(super) coverage: Option<&'a CoverageReport>,
     pub(super) gaps: &'a [GapItem],
     /// The same traversals gap policy runs on. The wiki reads decisions and
     /// produced rules through this rather than re-deriving them, so a page

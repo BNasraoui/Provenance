@@ -28,15 +28,17 @@ fn resolution_page_renders_inputs_as_citations_and_attribution() {
 }
 
 #[test]
-fn rule_page_links_evidence_but_leaves_prose_references_as_text() {
+fn rule_page_links_the_function_and_lists_verification_sites() {
     let html = render_rule("default", &rule_fixture());
     assert!(html.contains("class=\"accent-bar rule\""));
     assert!(html.contains("Suppress line emission for fully zero claim items"));
-    assert!(
-        html.contains("https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php#L153-L156")
-    );
-    assert!(html.contains("SCHADS Award clause 10.3"));
-    assert!(!html.contains("<a>SCHADS Award clause 10.3</a>"));
+    assert!(html.contains("https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php#L153"));
+    assert!(html.contains("Rule Function"));
+    assert!(html.contains("suppress_zero_claim_items"));
+    assert!(html.contains("Verification"));
+    assert!(html.contains("zero_claim_items_emit_no_lines"));
+    assert!(html.contains("outside defining module"));
+    assert!(!html.contains(">Evidence</h2>"));
     assert!(!html.contains("href=\"\""));
     assert!(html.contains("sev high"));
 }

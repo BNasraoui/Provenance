@@ -623,6 +623,18 @@
     .evidence-list { list-style: none; margin: 0; padding: 0; }
     .evidence-list li { font-family: var(--pv-font-mono); font-size: 12px; padding: 0.25rem 0; color: var(--pv-rule); }
 
+    .code-site { margin: 0; font-family: var(--pv-font-mono); font-size: 12px; color: var(--pv-rule); }
+    .code-site code, .verification-list code { font-weight: 600; }
+    .site-separator { color: var(--pv-muted); }
+    .verification-list { list-style: none; margin: 0; padding: 0; }
+    .verification-list li { padding: 0.45rem 0; border-top: 1px solid color-mix(in srgb, var(--pv-card-border) 60%, transparent); font-family: var(--pv-font-mono); font-size: 12px; }
+    .verification-list li:first-child { border-top: 0; padding-top: 0; }
+    .verification-method { display: inline-block; margin-right: 0.35rem; padding: 0.1rem 0.35rem; border-radius: 4px; background: var(--pv-rule-bg); color: var(--pv-rule); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+    .site-note { margin-left: 0.35rem; color: var(--pv-muted); font-family: var(--pv-font-sans); font-size: 10px; }
+    .site-note::before { content: "("; }
+    .site-note::after { content: ")"; }
+    .empty-state { margin: 0; color: var(--pv-muted); font-style: italic; }
+
     .orphan-card {
       --pv-link-color: color-mix(in srgb, var(--pv-status-discovery) 85%, var(--pv-ink));
       border: 1px dashed color-mix(in srgb, var(--pv-status-discovery) 55%, transparent);

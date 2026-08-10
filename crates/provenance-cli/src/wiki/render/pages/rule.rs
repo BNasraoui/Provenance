@@ -7,7 +7,7 @@ use super::super::field_notes::field_notes;
 use super::super::fragments::{
     push_classification_block, push_classification_row, push_prose_section, push_section_open,
 };
-use super::super::html::{evidence_html, PageLinksRenderer};
+use super::super::html::{escape_html, evidence_html, PageLinksRenderer};
 use super::super::labels::{rule_status_word, sev_chip, severity_word, status_badge};
 
 /// Every titled link this page renders: the records that produce the rule,
@@ -19,6 +19,48 @@ fn page_links(page: &RulePage) -> Vec<&PageLink> {
     links
 }
 
+fn push_rule_function(main: &mut String, page: &RulePage) {
+    push_section_open(main, "sh-rule", None, "Rule Function");
+    if let Some(binding) = &page.rule_function {
+        writeln!(
+            main,
+            "<p class=\"code-site\"><code>{}</code><span class=\"site-separator\"> — </span>{}</p>",
+            escape_html(binding.symbol.as_deref().unwrap_or("Unknown symbol")),
+            evidence_html(&binding.location),
+        )
+        .expect("writing to a String should not fail");
+    } else {
+        main.push_str("<p class=\"empty-state\">No function bound</p>\n");
+    }
+    main.push_str("</section>\n");
+}
+
+fn push_verifications(main: &mut String, page: &RulePage) {
+    push_section_open(main, "sh-rule", Some("i-check-circle"), "Verification");
+    if page.verifications.is_empty() {
+        main.push_str("<p class=\"empty-state\">Not verified</p>\n");
+    } else {
+        main.push_str("<ul class=\"verification-list\">\n");
+        for site in &page.verifications {
+            let outside = if site.outside_defining_module {
+                " <span class=\"site-note\">outside defining module</span>"
+            } else {
+                ""
+            };
+            writeln!(
+                main,
+                "<li><span class=\"verification-method\">{}</span> <code>{}</code><span class=\"site-separator\"> — </span>{}{outside}</li>",
+                escape_html(&site.method),
+                escape_html(site.symbol.as_deref().unwrap_or("Unknown symbol")),
+                evidence_html(&site.location),
+            )
+            .expect("writing to a String should not fail");
+        }
+        main.push_str("</ul>\n");
+    }
+    main.push_str("</section>\n");
+}
+
 /// Renders a rule detail page.
 #[allow(clippy::too_many_lines)]
 pub fn render_rule(scope: &str, page: &RulePage) -> String {
@@ -28,15 +70,8 @@ pub fn render_rule(scope: &str, page: &RulePage) -> String {
     if let Some(description) = &page.description {
         push_prose_section(&mut main, "sh-rule", None, "Description", description);
     }
-    if !page.evidence.is_empty() {
-        push_section_open(&mut main, "sh-rule", Some("i-book-open"), "Evidence");
-        main.push_str("<ul class=\"evidence-list\">\n");
-        for evidence in &page.evidence {
-            writeln!(main, "<li>{}</li>", evidence_html(evidence))
-                .expect("writing to a String should not fail");
-        }
-        main.push_str("</ul>\n</section>\n");
-    }
+    push_rule_function(&mut main, page);
+    push_verifications(&mut main, page);
     if !page.produced_by.is_empty() {
         push_section_open(&mut main, "sh-resolution", Some("i-scale"), "Produced By");
         main.push_str(&links.link_list(&page.produced_by));
@@ -71,12 +106,6 @@ pub fn render_rule(scope: &str, page: &RulePage) -> String {
         severity_word(&page.severity),
         false,
     );
-    if let Some(source_document) = &page.source_document {
-        push_classification_row(&mut rows, "i-book-open", "Document", source_document, true);
-    }
-    if let Some(source_section) = &page.source_section {
-        push_classification_row(&mut rows, "i-book-open", "Section", source_section, true);
-    }
     push_classification_block(&mut margin, &rows);
 
     let chips = vec![sev_chip(

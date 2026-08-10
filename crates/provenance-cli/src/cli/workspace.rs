@@ -32,6 +32,9 @@ pub enum WikiCommand {
         /// (`.gitignore` is left untouched in that case).
         #[arg(long)]
         out: Option<Utf8PathBuf>,
+        /// JSON report written by `coverage scan --format json --output`.
+        #[arg(long)]
+        coverage: Option<Utf8PathBuf>,
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },

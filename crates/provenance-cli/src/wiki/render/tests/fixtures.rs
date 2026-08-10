@@ -1,9 +1,10 @@
-use crate::wiki::links::{EvidenceRef, LinkResolver};
+use crate::wiki::links::LinkResolver;
 use crate::wiki::model::{
     CorpusCounts, DecisionSection, DomainGroup, DomainIndexPage, DomainState, EvidenceThread,
     FieldNote, GapKind, GapNotice, IndexEntry, InputCitation, LineageEntry, OrphanReport,
     OrphanRule, PageId, PageKind, PageLink, RecordKind, RequirementPage, ResolutionPage, RuleCard,
-    RulePage, ScopeIndexPage, SearchEntry, SearchIndexPage, SourceCitation, SourcePage, WikiCorpus,
+    RuleFunction, RulePage, ScopeIndexPage, SearchEntry, SearchIndexPage, SourceCitation,
+    SourcePage, VerificationSite, WikiCorpus,
 };
 use provenance_core::{
     MessageRole, NodeType, RequirementStatus, ResolutionInputType, ResolutionStatus, RuleSeverity,
@@ -259,15 +260,16 @@ pub(super) fn rule_fixture() -> RulePage {
         description: None,
         status: RuleStatus::Active,
         severity: RuleSeverity::High,
-        source_document: Some("src/UseCase.php".to_string()),
-        source_section: Some("153-156".to_string()),
-        evidence: vec![
-            resolver.resolve("src/UseCase.php:153-156"),
-            EvidenceRef {
-                label: "SCHADS Award clause 10.3".to_string(),
-                href: None,
-            },
-        ],
+        rule_function: Some(RuleFunction {
+            symbol: Some("suppress_zero_claim_items".to_string()),
+            location: resolver.resolve("src/UseCase.php:153"),
+        }),
+        verifications: vec![VerificationSite {
+            method: "examples".to_string(),
+            symbol: Some("zero_claim_items_emit_no_lines".to_string()),
+            location: resolver.resolve("tests/UseCaseTest.php:84"),
+            outside_defining_module: true,
+        }],
         produced_by: vec![link(
             PageKind::Resolution,
             "res_split",
