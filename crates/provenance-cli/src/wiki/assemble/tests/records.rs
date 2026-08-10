@@ -10,7 +10,7 @@ fn resolution_page_links_requirements_rules_and_spawned_work() {
     assert_eq!(page.spawned.len(), 1);
     assert_eq!(page.spawned[0].target.record_id, "req_stuck");
     assert_eq!(page.produced_rules.len(), 1);
-    assert_eq!(page.produced_rules[0].rule_code, "SAH-INV-001");
+    assert_eq!(page.produced_rules[0].link.target.record_id, "rule_001");
     assert!(page.gaps.is_empty());
     assert_eq!(page.threads.len(), 1);
     assert_eq!(page.threads[0].thread_id, "thr_res_split");
@@ -50,10 +50,10 @@ fn rule_page_traces_back_to_requirements_and_sources() {
 }
 
 #[test]
-fn rule_page_flags_orphan_rules_and_falls_back_to_the_rule_code() {
+fn rule_page_flags_orphan_rules_and_titles_a_nameless_rule_by_its_id() {
     let corpus = fixture_corpus();
     let page = rule_page(&corpus, "rule_orphan");
-    assert_eq!(page.title, "SAH-INV-999");
+    assert_eq!(page.title, "rule_orphan");
     assert_eq!(gap_kinds(&page.gaps), vec![GapKind::OrphanRule]);
     assert!(page.produced_by.is_empty());
 }

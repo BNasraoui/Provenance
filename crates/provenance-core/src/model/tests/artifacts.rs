@@ -103,16 +103,11 @@ fn enriched_resolution_and_rule_records_roundtrip_without_schema_bump() {
         "schema_version": 1,
         "scope_id": "default",
         "id": "rule_sah_001",
-        "rule_code": "SAH-001",
         "name": "SAH rule",
         "description": "Rule description",
         "statement": "Draft rule shall stay draft",
         "status": "draft",
         "severity": "high",
-        "rule_type": "business",
-        "modality": "obligation",
-        "confidence": 0.98,
-        "extraction_method": "manual",
         "source_document": "Example-API-main/src/example.php",
         "source_section": "lines 1-3",
         "originThread": "thread_req_origin",
@@ -139,7 +134,6 @@ fn enriched_resolution_and_rule_records_roundtrip_without_schema_bump() {
     assert_eq!(resolution["origin_message"], "msg_000001");
     assert_eq!(rule["schema_version"], 1);
     assert_eq!(rule["status"], "draft");
-    assert_eq!(rule["rule_type"], "business");
     assert_eq!(rule["source_document"], "Example-API-main/src/example.php");
     assert_eq!(rule["origin_thread"], "thread_req_origin");
     assert_eq!(rule["origin_message"], "msg_000001");
@@ -184,11 +178,13 @@ fn requirement_fog_roundtrips_as_unstructured_text() {
 }
 
 /// Rule `expression`/`inputs` and resolution `review_triggers` were Statesman
-/// leftovers, never written with content and never read. They are gone. An
-/// export taken before the deletion still carries them, and reading one drops
-/// them rather than failing: the keys held nothing, so nothing is lost, and a
-/// hard failure would strand old exports for no gain. The keys do not come
-/// back out the other side.
+/// leftovers, never written with content and never read. Rule `rule_code`,
+/// `rule_type`, `modality`, `confidence` and `extraction_method` went the same
+/// way: a second name for a rule nothing looked up, and four classifications
+/// nothing branched on. They are gone. An export taken before the deletion
+/// still carries them, and reading one drops them rather than failing: a hard
+/// failure would strand old exports for no gain. The keys do not come back out
+/// the other side.
 #[test]
 fn pre_deletion_exports_carrying_the_removed_keys_read_and_drop_them() {
     let resolution = serde_json::json!({
@@ -212,7 +208,11 @@ fn pre_deletion_exports_carrying_the_removed_keys_read_and_drop_them() {
         "status": "active",
         "severity": "high",
         "expression": {},
-        "inputs": []
+        "inputs": [],
+        "rule_type": "business",
+        "modality": "obligation",
+        "confidence": 0.98,
+        "extraction_method": "manual"
     });
 
     let resolution: Resolution = serde_json::from_value(resolution).unwrap();
@@ -224,8 +224,13 @@ fn pre_deletion_exports_carrying_the_removed_keys_read_and_drop_them() {
     assert!(resolution.get("review_triggers").is_none());
     assert!(rule.get("expression").is_none());
     assert!(rule.get("inputs").is_none());
+    assert!(rule.get("rule_code").is_none());
+    assert!(rule.get("rule_type").is_none());
+    assert!(rule.get("modality").is_none());
+    assert!(rule.get("confidence").is_none());
+    assert!(rule.get("extraction_method").is_none());
     assert_eq!(resolution["status"], "approved");
-    assert_eq!(rule["rule_code"], "LEGACY-001");
+    assert_eq!(rule["statement"], "Legacy rule stays legible");
 }
 
 /// A resolution carrying a blank input is refused whole, on the way in. The

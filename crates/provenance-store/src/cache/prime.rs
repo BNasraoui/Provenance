@@ -75,7 +75,7 @@ pub fn render_prime_markdown(view: &PrimeContextView) -> String {
         view.scope_id
     );
     for rule in &view.rules {
-        let _ = writeln!(out, "- {} ({})", rule.id.as_str(), rule.rule_code);
+        let _ = writeln!(out, "- {}", rule.id.as_str());
     }
     out.push_str("\n## Gaps\n");
     if view.gaps.is_empty() {

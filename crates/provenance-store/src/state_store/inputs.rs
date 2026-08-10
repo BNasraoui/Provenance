@@ -4,9 +4,8 @@ use provenance_core::{
     IdeationEvidenceReference, IdeationTarget, MaterialClaim, MessageRole, MinorityObjection,
     NodeType, PromotionState, ProposalTraceability, ProposalType, QuestionStatus,
     RequiredHumanDecision, RequirementStatus, ResolutionInput, ResolutionMethod, ResolutionStatus,
-    RuleModality, RuleSeverity, RuleStatus, RuleType, ScopeId, ServiceBindingType,
-    ServiceEnvironment, ServiceStatus, ServiceTier, SourceReference, SourceType, StableId,
-    SuggestedArtifact, SuggestedArtifactChange, ThreadParent, TopicStatus, UncertaintyRating,
+    RuleSeverity, RuleStatus, ScopeId, SourceReference, SourceType, StableId, SuggestedArtifact,
+    SuggestedArtifactChange, ThreadParent, TopicStatus, UncertaintyRating,
     UnsupportedRecommendation, UnsupportedSpeculation,
 };
 
@@ -121,7 +120,6 @@ pub struct CreateResolutionInput {
 pub struct CreateRuleInput {
     pub scope_id: ScopeId,
     pub id: StableId,
-    pub rule_code: String,
     pub name: Option<String>,
     pub description: Option<String>,
     pub requirement_id: Option<StableId>,
@@ -129,34 +127,10 @@ pub struct CreateRuleInput {
     pub statement: String,
     pub status: RuleStatus,
     pub severity: RuleSeverity,
-    pub rule_type: Option<RuleType>,
-    pub modality: Option<RuleModality>,
-    pub confidence: Option<f64>,
-    pub extraction_method: Option<String>,
     pub source_document: Option<String>,
     pub source_section: Option<String>,
     pub origin_thread: Option<StableId>,
     pub origin_message: Option<StableId>,
-}
-
-pub struct CreateServiceInput {
-    pub scope_id: ScopeId,
-    pub id: StableId,
-    pub name: String,
-    pub description: Option<String>,
-    pub owner: Option<String>,
-    pub repository: Option<String>,
-    pub environment: Option<ServiceEnvironment>,
-    pub tier: Option<ServiceTier>,
-    pub external_id: Option<String>,
-    pub status: ServiceStatus,
-}
-
-pub struct CreateServiceBindingInput {
-    pub scope_id: ScopeId,
-    pub rule_id: StableId,
-    pub service_id: StableId,
-    pub binding_type: ServiceBindingType,
 }
 
 pub struct PostMessageInput {

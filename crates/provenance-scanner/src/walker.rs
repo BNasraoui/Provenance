@@ -312,5 +312,7 @@ mod tests {
 
         assert_eq!(scan.annotations.len(), 1);
         assert_eq!(scan.annotations[0].line, 1);
+        assert_eq!(scan.warnings.len(), 1);
+        assert!(scan.warnings[0].message.contains("legacy marker"));
     }
 }

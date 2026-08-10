@@ -1,7 +1,6 @@
 use provenance_core::{
     EdgeType, NodeType, QuestionStatus, RepoPathPrefix, RequirementStatus, ResolutionMethod,
-    ResolutionStatus, RuleSeverity, RuleStatus, SchemaVersion, ServiceBindingType, ServiceStatus,
-    SourceType, StableId, TopicStatus,
+    ResolutionStatus, RuleSeverity, RuleStatus, SchemaVersion, SourceType, StableId, TopicStatus,
 };
 use provenance_macros::verifies;
 
@@ -22,8 +21,6 @@ enum RecordFamily {
     Question,
     Resolution,
     Rule,
-    Service,
-    ServiceBinding,
     Edge,
 }
 
@@ -40,9 +37,7 @@ fn all_families() -> Vec<RecordFamily> {
         RecordFamily::Topic => Some(RecordFamily::Question),
         RecordFamily::Question => Some(RecordFamily::Resolution),
         RecordFamily::Resolution => Some(RecordFamily::Rule),
-        RecordFamily::Rule => Some(RecordFamily::Service),
-        RecordFamily::Service => Some(RecordFamily::ServiceBinding),
-        RecordFamily::ServiceBinding => Some(RecordFamily::Edge),
+        RecordFamily::Rule => Some(RecordFamily::Edge),
         RecordFamily::Edge => None,
     } {
         all.push(next);
@@ -60,8 +55,6 @@ const fn record_id(family: RecordFamily) -> &'static str {
         RecordFamily::Question => "question_pinned",
         RecordFamily::Resolution => "res_pinned",
         RecordFamily::Rule => "rule_pinned",
-        RecordFamily::Service => "service_pinned",
-        RecordFamily::ServiceBinding => "service_binding_pinned",
         RecordFamily::Edge => "edge_pinned",
     }
 }
@@ -186,47 +179,15 @@ fn rule_record(scope: &ScopeId) -> Rule {
         schema_version: SchemaVersion(1),
         scope_id: scope.clone(),
         id: stable_id(RecordFamily::Rule),
-        rule_code: "PINNED-1".into(),
         name: None,
         description: None,
         statement: "Pinned rule".into(),
         status: RuleStatus::Active,
         severity: RuleSeverity::Medium,
-        rule_type: None,
-        modality: None,
-        confidence: None,
-        extraction_method: None,
         source_document: None,
         source_section: None,
         origin_thread: None,
         origin_message: None,
-    }
-}
-
-fn service_record(scope: &ScopeId) -> Service {
-    Service {
-        schema_version: SchemaVersion(1),
-        scope_id: scope.clone(),
-        id: stable_id(RecordFamily::Service),
-        name: "Pinned service".into(),
-        description: None,
-        owner: None,
-        repository: None,
-        environment: None,
-        tier: None,
-        external_id: None,
-        status: ServiceStatus::Active,
-    }
-}
-
-fn service_binding_record(scope: &ScopeId) -> ServiceBinding {
-    ServiceBinding {
-        schema_version: SchemaVersion(1),
-        scope_id: scope.clone(),
-        id: stable_id(RecordFamily::ServiceBinding),
-        rule_id: stable_id(RecordFamily::Rule),
-        service_id: stable_id(RecordFamily::Service),
-        binding_type: ServiceBindingType::Enforces,
     }
 }
 
@@ -286,14 +247,6 @@ fn graph_in_scope(scope: &ScopeId, populated: &[RecordFamily]) -> GraphExport {
             .then(|| rule_record(scope))
             .into_iter()
             .collect(),
-        services: holds(RecordFamily::Service)
-            .then(|| service_record(scope))
-            .into_iter()
-            .collect(),
-        service_bindings: holds(RecordFamily::ServiceBinding)
-            .then(|| service_binding_record(scope))
-            .into_iter()
-            .collect(),
         edges: holds(RecordFamily::Edge)
             .then(|| edge_record(scope))
             .into_iter()
@@ -345,16 +298,6 @@ fn move_family_to_scope(graph: &mut GraphExport, family: RecordFamily, scope: &S
                 record.scope_id = scope.clone();
             }
         }
-        RecordFamily::Service => {
-            for record in &mut graph.services {
-                record.scope_id = scope.clone();
-            }
-        }
-        RecordFamily::ServiceBinding => {
-            for record in &mut graph.service_bindings {
-                record.scope_id = scope.clone();
-            }
-        }
         RecordFamily::Edge => {
             for record in &mut graph.edges {
                 record.scope_id = scope.clone();
@@ -381,8 +324,6 @@ fn family_count_of(graph: &GraphExport) -> usize {
         questions,
         resolutions,
         rules,
-        services,
-        service_bindings,
         edges,
     } = graph;
     let counts = [
@@ -394,8 +335,6 @@ fn family_count_of(graph: &GraphExport) -> usize {
         questions.len(),
         resolutions.len(),
         rules.len(),
-        services.len(),
-        service_bindings.len(),
         edges.len(),
     ];
     assert!(

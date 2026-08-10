@@ -9,6 +9,14 @@ status: complete
 
 # Handoff: rules-as-code prototype session
 
+> **Superseded. Kept as a record of the session, not as guidance.** What shipped is not
+> the design below. A rule is a function, or a type whose construction is the proof,
+> bound by `#[rule("rule_id")]`; tests verify it with `#[verifies("rule_id", method)]`
+> naming one of `exhaustion`, `property`, `examples`, `conformance`, or `construction`.
+> There is no binding ladder, no `#[enforces]` attribute, and no rule code: ids only.
+> Read `README.md`, `docs/shaping.md`, and `docs/cli.md` for the current model. The body
+> is unchanged below.
+
 This session continued `docs/research/2026-08-09-rules-as-code-fiat-handoff.md` and
 **substantially revised its central decision**. Read that doc for background, then this
 doc as the correction. Where they disagree, this doc wins.

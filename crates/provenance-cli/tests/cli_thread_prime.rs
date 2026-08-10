@@ -45,8 +45,6 @@ fn cli_thread_prime_posts_message_and_renders_context() {
             "default",
             "--id",
             "rule_schads_pay_001",
-            "--rule-code",
-            "SCHADS-PAY-001",
             "--requirement-id",
             "req_schads_overtime",
             "--statement",

@@ -8,10 +8,7 @@ use super::super::fragments::{
     push_classification_block, push_classification_row, push_prose_section, push_section_open,
 };
 use super::super::html::{evidence_html, PageLinksRenderer};
-use super::super::labels::{
-    format_confidence, modality_word, rule_status_word, rule_type_word, sev_chip, severity_word,
-    status_badge,
-};
+use super::super::labels::{rule_status_word, sev_chip, severity_word, status_badge};
 
 /// Every titled link this page renders: the records that produce the rule,
 /// the requirements upstream of those, and the sources behind them.
@@ -74,42 +71,6 @@ pub fn render_rule(scope: &str, page: &RulePage) -> String {
         severity_word(&page.severity),
         false,
     );
-    if let Some(modality) = &page.modality {
-        push_classification_row(
-            &mut rows,
-            "i-shield",
-            "Modality",
-            modality_word(modality),
-            false,
-        );
-    }
-    if let Some(rule_type) = &page.rule_type {
-        push_classification_row(
-            &mut rows,
-            "i-book-open",
-            "Type",
-            rule_type_word(rule_type),
-            false,
-        );
-    }
-    if let Some(confidence) = page.confidence {
-        push_classification_row(
-            &mut rows,
-            "i-gauge",
-            "Confidence",
-            &format_confidence(confidence),
-            false,
-        );
-    }
-    if let Some(extraction_method) = &page.extraction_method {
-        push_classification_row(
-            &mut rows,
-            "i-search",
-            "Extraction",
-            extraction_method,
-            false,
-        );
-    }
     if let Some(source_document) = &page.source_document {
         push_classification_row(&mut rows, "i-book-open", "Document", source_document, true);
     }
@@ -118,13 +79,10 @@ pub fn render_rule(scope: &str, page: &RulePage) -> String {
     }
     push_classification_block(&mut margin, &rows);
 
-    let severity_chip = sev_chip(severity_word(&page.severity), severity_word(&page.severity));
-    let modality_chip = page
-        .modality
-        .as_ref()
-        .map(|modality| sev_chip("modality", modality_word(modality)));
-    let mut chips = vec![severity_chip];
-    chips.extend(modality_chip);
+    let chips = vec![sev_chip(
+        severity_word(&page.severity),
+        severity_word(&page.severity),
+    )];
     let container = container_html(
         Some((
             PageKind::Rule,
@@ -135,7 +93,7 @@ pub fn render_rule(scope: &str, page: &RulePage) -> String {
         )),
         &title_row(
             PageKind::Rule,
-            &format!("{} — {}", page.rule_code, page.title),
+            &page.title,
             Some(&status_badge(rule_status_word(&page.status))),
             &chips,
             &page.id.record_id,

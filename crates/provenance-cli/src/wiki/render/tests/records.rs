@@ -31,7 +31,7 @@ fn resolution_page_renders_inputs_as_citations_and_attribution() {
 fn rule_page_links_evidence_but_leaves_prose_references_as_text() {
     let html = render_rule("default", &rule_fixture());
     assert!(html.contains("class=\"accent-bar rule\""));
-    assert!(html.contains("SAH-INV-016"));
+    assert!(html.contains("Suppress line emission for fully zero claim items"));
     assert!(
         html.contains("https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php#L153-L156")
     );
@@ -39,7 +39,6 @@ fn rule_page_links_evidence_but_leaves_prose_references_as_text() {
     assert!(!html.contains("<a>SCHADS Award clause 10.3</a>"));
     assert!(!html.contains("href=\"\""));
     assert!(html.contains("sev high"));
-    assert!(html.contains("prohibition"));
 }
 
 #[test]

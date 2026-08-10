@@ -4,6 +4,10 @@ pub(crate) const PRIMARY_ANNOTATION_MARKER: &str = "@provenance";
 const LEGACY_ANNOTATION_MARKER: &str = "@statesman";
 const ANNOTATION_MARKERS: [&str; 2] = [PRIMARY_ANNOTATION_MARKER, LEGACY_ANNOTATION_MARKER];
 
+/// Said once per comment block, at the first legacy marker: repeating it on
+/// every line of a ten-line block would bury the annotations it sits beside.
+const LEGACY_MARKER_WARNING: &str = "@statesman is the legacy marker; use @provenance";
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CoverageLevel {
@@ -112,11 +116,36 @@ pub struct ParseResult {
     pub warnings: Vec<ParseWarning>,
 }
 
+/// Which markers a comment block used.
+#[derive(Default)]
+struct MarkerLog {
+    first: Option<&'static str>,
+    warned_legacy: bool,
+}
+
+impl MarkerLog {
+    /// Records a marker and hands back the deprecation warning owed for it.
+    ///
+    /// Only the first legacy marker in a block earns one. The block still
+    /// parses either way; the warning is the only thing deprecation costs.
+    fn record(&mut self, marker: &'static str, line: usize) -> Option<ParseWarning> {
+        self.first.get_or_insert(marker);
+        if marker != LEGACY_ANNOTATION_MARKER || self.warned_legacy {
+            return None;
+        }
+        self.warned_legacy = true;
+        Some(ParseWarning {
+            line,
+            message: LEGACY_MARKER_WARNING.to_string(),
+        })
+    }
+}
+
 pub fn parse_annotations(comment_text: &str) -> ParseResult {
     let mut warnings = Vec::new();
     let mut annotations: Vec<Annotation> = Vec::new();
     let mut shared = Annotation::default();
-    let mut saw_directive_marker = None;
+    let mut markers = MarkerLog::default();
 
     for (line_idx, raw_line) in comment_text.lines().enumerate() {
         let line = line_idx + 1;
@@ -124,7 +153,7 @@ pub fn parse_annotations(comment_text: &str) -> ParseResult {
         let Some((marker, after_marker)) = split_annotation_marker(stripped) else {
             continue;
         };
-        saw_directive_marker.get_or_insert(marker);
+        warnings.extend(markers.record(marker, line));
         let Some((key, value)) = after_marker.split_once(':') else {
             warnings.push(ParseWarning {
                 line,
@@ -204,7 +233,7 @@ pub fn parse_annotations(comment_text: &str) -> ParseResult {
         }
     }
 
-    if let Some(marker) = saw_directive_marker.filter(|_| annotations.is_empty()) {
+    if let Some(marker) = markers.first.filter(|_| annotations.is_empty()) {
         warnings.push(ParseWarning {
             line: 0,
             message: format!("found {marker} directives but no rule annotations"),
@@ -326,6 +355,59 @@ mod tests {
 
         assert_eq!(parsed.annotations.len(), 1);
         assert_eq!(parsed.annotations[0].rule, "SCHADS-PAY-001");
+    }
+
+    /// The legacy marker still parses; it just says so on the way through.
+    #[test]
+    fn statesman_marker_warns_but_keeps_the_annotation() {
+        let parsed = parse_annotations("@statesman rule: SCHADS-PAY-001");
+
+        assert_eq!(parsed.annotations.len(), 1);
+        assert_eq!(
+            parsed.warnings,
+            vec![ParseWarning {
+                line: 1,
+                message: "@statesman is the legacy marker; use @provenance".to_string(),
+            }]
+        );
+    }
+
+    #[test]
+    fn statesman_marker_warns_once_per_comment_block() {
+        let parsed = parse_annotations(
+            r"
+            @statesman name: Payroll thresholds
+            @statesman rule: SCHADS-PAY-001
+            @statesman rule: SCHADS-PAY-002
+            ",
+        );
+
+        assert_eq!(parsed.annotations.len(), 2);
+        assert_eq!(parsed.warnings.len(), 1);
+        assert_eq!(parsed.warnings[0].line, 2);
+    }
+
+    #[test]
+    fn provenance_marker_draws_no_legacy_warning() {
+        let parsed = parse_annotations("@provenance rule: SCHADS-PAY-001");
+
+        assert!(parsed.warnings.is_empty());
+    }
+
+    /// A block that mixes markers is warned about once, at the first legacy
+    /// line, whichever marker opened the block.
+    #[test]
+    fn mixed_markers_warn_once_at_the_legacy_line() {
+        let parsed = parse_annotations(
+            r"
+            @provenance rule: SCHADS-PAY-001
+            @statesman rule: SCHADS-PAY-002
+            ",
+        );
+
+        assert_eq!(parsed.annotations.len(), 2);
+        assert_eq!(parsed.warnings.len(), 1);
+        assert_eq!(parsed.warnings[0].line, 3);
     }
 
     #[test]

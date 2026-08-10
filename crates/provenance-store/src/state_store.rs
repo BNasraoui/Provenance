@@ -1,5 +1,5 @@
 mod canonical_artifacts;
-mod domain_service_writers;
+mod domain_writers;
 mod ideation_batches;
 mod ideation_writers;
 mod inputs;
@@ -20,8 +20,8 @@ pub use inputs::{
     AddSourceReferenceInput, CreateAssertionInput, CreateBoundaryInput, CreateContributionInput,
     CreateDispositionInput, CreateDomainInput, CreateEdgeInput, CreateProposalCardInput,
     CreateQuestionInput, CreateRequirementInput, CreateResolutionInput, CreateRuleInput,
-    CreateServiceBindingInput, CreateServiceInput, CreateSourceInput, CreateSynthesisPacketInput,
-    CreateTopicInput, PostMessageInput, UpdateQuestionInput,
+    CreateSourceInput, CreateSynthesisPacketInput, CreateTopicInput, PostMessageInput,
+    UpdateQuestionInput,
 };
 pub use proposal_surfaces::{ProposalDemand, ProposalSurfaceReason, SurfacedProposal, TopicClaim};
 
@@ -29,8 +29,8 @@ use crate::{layout::ProvenanceLayout, shards};
 use ideation_batches::overlay_records;
 use provenance_core::{
     AssertionRecord, Boundary, Contribution, DispositionRecord, Domain, Edge, Manifest, Message,
-    ProposalCard, Question, Requirement, Resolution, Rule, SchemaVersion, Scope, ScopeId, Service,
-    ServiceBinding, Source, SynthesisPacket, Thread, Topic,
+    ProposalCard, Question, Requirement, Resolution, Rule, SchemaVersion, Scope, ScopeId, Source,
+    SynthesisPacket, Thread, Topic,
 };
 use readers::{
     deserialize_closed, read_edge_shards, read_jsonl, read_jsonl_closed, read_legacy_dispositions,
@@ -154,12 +154,6 @@ impl StateStore {
     pub fn list_rules(&self, scope: &ScopeId) -> anyhow::Result<Vec<Rule>> {
         read_jsonl(&shards::rules_path(&self.layout, scope))
     }
-    pub fn list_services(&self, scope: &ScopeId) -> anyhow::Result<Vec<Service>> {
-        read_jsonl(&shards::services_path(&self.layout, scope))
-    }
-    pub fn list_service_bindings(&self, scope: &ScopeId) -> anyhow::Result<Vec<ServiceBinding>> {
-        read_jsonl(&shards::service_bindings_path(&self.layout, scope))
-    }
     pub(crate) fn closed_sources(&self, scope: &ScopeId) -> anyhow::Result<Vec<Source>> {
         read_jsonl_closed(&shards::sources_path(&self.layout, scope))
     }
@@ -183,15 +177,6 @@ impl StateStore {
     }
     pub(crate) fn closed_rules(&self, scope: &ScopeId) -> anyhow::Result<Vec<Rule>> {
         read_jsonl_closed(&shards::rules_path(&self.layout, scope))
-    }
-    pub(crate) fn closed_services(&self, scope: &ScopeId) -> anyhow::Result<Vec<Service>> {
-        read_jsonl_closed(&shards::services_path(&self.layout, scope))
-    }
-    pub(crate) fn closed_service_bindings(
-        &self,
-        scope: &ScopeId,
-    ) -> anyhow::Result<Vec<ServiceBinding>> {
-        read_jsonl_closed(&shards::service_bindings_path(&self.layout, scope))
     }
     pub(crate) fn closed_edges(&self, scope: &ScopeId) -> anyhow::Result<Vec<Edge>> {
         read_edge_shards(&self.layout, Some(scope))

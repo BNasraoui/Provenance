@@ -6,8 +6,8 @@ use crate::wiki::model::{
     RulePage, ScopeIndexPage, SearchEntry, SearchIndexPage, SourceCitation, SourcePage, WikiCorpus,
 };
 use provenance_core::{
-    MessageRole, NodeType, RequirementStatus, ResolutionInputType, ResolutionStatus, RuleModality,
-    RuleSeverity, RuleStatus, RuleType, SourceType, ThreadStatus,
+    MessageRole, NodeType, RequirementStatus, ResolutionInputType, ResolutionStatus, RuleSeverity,
+    RuleStatus, SourceType, ThreadStatus,
 };
 
 pub(super) const REMOTE: &str = "git@github.com:exampleorg/ex-api.git";
@@ -65,14 +65,12 @@ pub(super) fn rule_card(resolver: &LinkResolver) -> RuleCard {
             "rule_sah_inv_016",
             "Suppress line emission for fully zero claim items",
         ),
-        rule_code: "SAH-INV-016".to_string(),
         name: Some("Suppress line emission for fully zero claim items".to_string()),
         statement: "If a claim item's participant, government, and gap portions are all <= 0 \
                     after markup, no invoice lines shall be emitted for that claim item."
             .to_string(),
         status: RuleStatus::Active,
         severity: RuleSeverity::High,
-        modality: Some(RuleModality::Prohibition),
         evidence: vec![resolver.resolve("src/UseCase.php:153-156")],
     }
 }
@@ -257,15 +255,10 @@ pub(super) fn rule_fixture() -> RulePage {
     RulePage {
         id: PageId::new(RecordKind::Rule, "rule_sah_inv_016"),
         title: "Suppress line emission for fully zero claim items".to_string(),
-        rule_code: "SAH-INV-016".to_string(),
         statement: "No invoice lines shall be emitted for fully zero claim items.".to_string(),
         description: None,
         status: RuleStatus::Active,
         severity: RuleSeverity::High,
-        modality: Some(RuleModality::Prohibition),
-        rule_type: Some(RuleType::Business),
-        confidence: Some(0.92),
-        extraction_method: Some("codebase_scan".to_string()),
         source_document: Some("src/UseCase.php".to_string()),
         source_section: Some("153-156".to_string()),
         evidence: vec![

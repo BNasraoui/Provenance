@@ -27,8 +27,6 @@ mod requirements;
 mod resolutions;
 mod rules;
 mod schema;
-mod service_bindings;
-mod services;
 mod skills;
 mod sources;
 mod stale;
@@ -104,12 +102,6 @@ pub(super) async fn dispatch(command: Command, quiet: bool) -> anyhow::Result<()
         }
         Command::Rules { command } => {
             rules::handle(command)?;
-        }
-        Command::Services { command } => {
-            services::handle(command)?;
-        }
-        Command::ServiceBindings { command } => {
-            service_bindings::handle(command)?;
         }
         Command::Traceability {
             rule_id,

@@ -8,14 +8,37 @@ provenance sources create --scope default --id source_policy --name "Policy"
 provenance domains create --scope default --id domain_policy --name "Policy"
 provenance requirements create --scope default --id req_policy --statement "Follow policy" --domain-id domain_policy
 provenance edges create --scope default --type references --from-type source --from-id source_policy --to-type requirement --to-id req_policy
-provenance services create --scope default --id service_api --name "api" --status active
-provenance service-bindings create --scope default --rule-id rule_policy --service-id service_api --binding-type enforces
 provenance materialize --format json
 provenance export --scope default --format json --output provenance-export.json
 provenance check --format json
 ```
 
 Agent-facing commands support JSON output for deterministic parsing.
+
+## Rule coverage
+
+A rule's record names it; the code that carries the rule names it back. In Rust that is
+`#[rule("rule_id")]` on the function that decides the thing the rule states, and
+`#[verifies("rule_id", method)]` on each test that verifies it. The methods are
+`exhaustion`, `property`, `examples`, `conformance`, and `construction`. A marked type
+uses `construction`, because building the value is the proof.
+
+```sh
+provenance coverage scan --path . --scope default --validate-rules
+provenance coverage scan --path . --scope default --validate-rules --strict --format json
+```
+
+Without `--validate-rules` the scan only reports what it found in the tree. With it, the
+scan loads the scope's rules and warns twice over: a marker citing an id no rule has, and
+an active rule with no verification site anywhere. That second state is derived at scan
+time and never stored, so no shard can disagree with the code.
+
+`--strict` exits non-zero when the report holds any warning; the report still prints
+first. That is the dial each repository sets for itself: strict in CI once a repository
+wants every active rule verified, plain while it is still filling them in.
+
+Code outside Rust uses the older comment channel, `@provenance rule: <rule-id>` above the
+function. It is the legacy tier, and it scans alongside the attributes.
 
 ## Wiki publication safety
 
@@ -126,8 +149,8 @@ other-scope changes but rejects selected-scope graph changes until they are comm
 All four operations emit versioned JSON. Reference identity is idempotently derived
 from the Git repository roots, `.provenance/state`, scope, full commit ID, and canonical
 graph digest. Exact exports include only graph-bearing sources, domains, requirements,
-boundaries, topics, questions, resolutions, rules, services, bindings, and edges; they
-do not add proposal, promotion, collaboration, or workflow-specific fields. The
+boundaries, topics, questions, resolutions, rules, and edges; they do not add proposal,
+promotion, collaboration, or workflow-specific fields. The
 exact-export document carries the same `graph_digest` as the reference it was cut
 from, so it verifies offline, with no repository in hand:
 `provenance validate graph-reference-export --input export.json` recomputes the
@@ -205,6 +228,11 @@ Dispositions do not rewrite proposal definitions; `proposals list` derives effec
 
 Graph edge commands: `edges create --type references|refines_into|depends_on|contradicts|supersedes|needs|resolves|spawns|produces --from-type source|requirement|resolution|rule --from-id <id> --to-type source|requirement|resolution|rule --to-id <id>`, `edges list`, and `edges delete --id <edge-id>`. Creation validates edge type/endpoints and requires both endpoint records to exist.
 
+Rule read commands: `rules list` gives one line per rule in the scope, carrying id, status,
+severity, a cut statement, and the source document and section it cites; `rules show --id
+<rule-id>` prints one rule whole. `traceability <rule-id>` walks the chain behind a rule and
+returns only the edges it crossed, not the whole scope.
+
 Shaping turn-state commands: `questions create` requires `--method` (grill, prototype, research, verify, or task); `topics claim/release/close` and `questions claim/release/answer` manage claim state (claiming an already-claimed item fails and reports the holder; closing a topic or answering a question clears its claim); `requirements fog set/show/clear` manages the deliberately unstructured fog text on an anchor requirement.
 
-Creation commands accept enriched v1 metadata for cloud-imported projects. Examples: `sources create --source-type legislation --reference "Department guidance" --commit-pin 5e1f2a9c4b6d8e0f1234567890abcdef12345678 --effective-date 1714521600000 --review-date 1717200000000 --superseded-by source_2025`, `requirements create --status discovery --description "Research note" --domain-id domain_policy`, `resolutions create --status draft --confidence 0.9 --context "Code scan" --input-type regulatory --input-reference "Program manual" --input-summary "Reviewed rules" --made-by "Analyst" --approved-by "Approver" --approved-at 1714780800000 --superseded-by res_2025`, `rules create --status draft --rule-type business --modality obligation --source-document path --source-section "lines 1-3"`, `proposals create --confidence 0.83`, and `services create --environment production --tier critical --external-id backstage:component/api`. Confidence values must be between `0.0` and `1.0`; source commit pins must be 7-64 hexadecimal characters.
+Creation commands accept enriched v1 metadata for cloud-imported projects. Examples: `sources create --source-type legislation --reference "Department guidance" --commit-pin 5e1f2a9c4b6d8e0f1234567890abcdef12345678 --effective-date 1714521600000 --review-date 1717200000000 --superseded-by source_2025`, `requirements create --status discovery --description "Research note" --domain-id domain_policy`, `resolutions create --status draft --confidence 0.9 --context "Code scan" --input-type regulatory --input-reference "Program manual" --input-summary "Reviewed rules" --made-by "Analyst" --approved-by "Approver" --approved-at 1714780800000 --superseded-by res_2025`, `rules create --status draft --source-document crates/provenance-core/src/edge_validation.rs --source-section validate_edge_endpoint` (the source section is the bare name of the marked function or type, not a line range), and `proposals create --confidence 0.83`. Confidence values must be between `0.0` and `1.0`; source commit pins must be 7-64 hexadecimal characters.

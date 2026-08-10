@@ -23,7 +23,9 @@ pub(super) fn rule_link(rule: &Rule) -> PageLink {
 }
 
 pub(super) fn rule_title(rule: &Rule) -> String {
-    rule.name.clone().unwrap_or_else(|| rule.rule_code.clone())
+    rule.name
+        .clone()
+        .unwrap_or_else(|| rule.id.as_str().to_string())
 }
 
 pub(super) fn source_link(source: &Source) -> PageLink {

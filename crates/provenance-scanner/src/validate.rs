@@ -6,7 +6,7 @@ use crate::walker::FileScan;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct ValidationWarning {
-    pub rule_code: String,
+    pub rule_id: String,
     pub file_path: Utf8PathBuf,
     pub line: usize,
     pub message: String,
@@ -14,18 +14,18 @@ pub struct ValidationWarning {
 
 pub fn validate_annotations(
     scans: &[FileScan],
-    known_rule_codes: impl IntoIterator<Item = String>,
+    known_rule_ids: impl IntoIterator<Item = String>,
 ) -> Vec<ValidationWarning> {
-    let known = known_rule_codes.into_iter().collect::<BTreeSet<_>>();
+    let known = known_rule_ids.into_iter().collect::<BTreeSet<_>>();
     let mut warnings = Vec::new();
     for scan in scans {
         for location in &scan.annotations {
             if !known.contains(&location.annotation.rule) {
                 warnings.push(ValidationWarning {
-                    rule_code: location.annotation.rule.clone(),
+                    rule_id: location.annotation.rule.clone(),
                     file_path: location.file_path.clone(),
                     line: location.line,
-                    message: format!("unknown local rule code `{}`", location.annotation.rule),
+                    message: format!("unknown rule id `{}`", location.annotation.rule),
                 });
             }
         }
@@ -52,7 +52,7 @@ pub fn validate_bindings(
     for binding in bindings {
         if !known.contains(&binding.rule_id) {
             warnings.push(ValidationWarning {
-                rule_code: binding.rule_id.clone(),
+                rule_id: binding.rule_id.clone(),
                 file_path: binding.file_path.clone(),
                 line: binding.line,
                 message: format!("unknown rule id `{}`", binding.rule_id),
@@ -60,7 +60,7 @@ pub fn validate_bindings(
         }
         if binding.verification.is_none() && !seen_rule_sites.insert(binding.rule_id.clone()) {
             warnings.push(ValidationWarning {
-                rule_code: binding.rule_id.clone(),
+                rule_id: binding.rule_id.clone(),
                 file_path: binding.file_path.clone(),
                 line: binding.line,
                 message: format!(
@@ -71,7 +71,7 @@ pub fn validate_bindings(
         }
         if binding.verification.is_some() && !rule_sites.contains(&binding.rule_id) {
             warnings.push(ValidationWarning {
-                rule_code: binding.rule_id.clone(),
+                rule_id: binding.rule_id.clone(),
                 file_path: binding.file_path.clone(),
                 line: binding.line,
                 message: format!(
@@ -119,16 +119,16 @@ mod tests {
     }
 
     #[test]
-    fn coverage_validation_warns_for_unknown_rule_code_with_location() {
+    fn coverage_validation_warns_for_unknown_rule_id_with_location() {
         let scan = scan_file(
             Utf8Path::new("unknown_rule.rs"),
             Language::Rust,
-            "// heading\n// @provenance rule: UNKNOWN-RULE\nfn test_rule() {}",
+            "// heading\n// @provenance rule: rule_unknown\nfn test_rule() {}",
         );
 
-        let warnings = validate_annotations(&[scan], ["SCHADS-PAY-001".to_string()]);
+        let warnings = validate_annotations(&[scan], ["rule_overtime".to_string()]);
 
-        assert_eq!(warnings[0].rule_code, "UNKNOWN-RULE");
+        assert_eq!(warnings[0].rule_id, "rule_unknown");
         assert_eq!(warnings[0].file_path, Utf8Path::new("unknown_rule.rs"));
         assert_eq!(warnings[0].line, 2);
     }

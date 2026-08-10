@@ -276,7 +276,8 @@ fn store_api_rejects_invalid_reference_contract() {
 
 /// The import half of the pinned-family list: a document naming a family
 /// `GraphExport` has no field for is refused, because there is nowhere to
-/// put it. Every collaboration and ideation family is tried by name.
+/// put it. Every collaboration and ideation family is tried by name, as are
+/// the service families that were deleted from the model.
 #[test]
 #[verifies("rule_pinned_graph_families", construction)]
 fn exact_export_rejects_non_canonical_graph_families() {
@@ -295,6 +296,8 @@ fn exact_export_rejects_non_canonical_graph_families() {
         "synthesis_packets",
         "threads",
         "messages",
+        "services",
+        "service_bindings",
     ] {
         let mut graph = empty_graph();
         graph
@@ -354,8 +357,6 @@ fn empty_graph() -> serde_json::Value {
         "questions": [],
         "resolutions": [],
         "rules": [],
-        "services": [],
-        "service_bindings": [],
         "edges": []
     })
 }

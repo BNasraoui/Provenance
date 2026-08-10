@@ -5,7 +5,7 @@ description: Write specific, evidence-grounded statements for requirements, rule
 
 # Grounded writing
 
-Leaf rules with `file:line` evidence read sharp. Requirements above them read like a
+Leaf rules bound to a named function read sharp. Requirements above them read like a
 capability list — "provides identity, reporting, comms, integrations" — vague enough to fit
 any product. The cause is usually altitude, not wording.
 
@@ -22,17 +22,35 @@ Ask: did someone make a decision here, or does this just name a module that exis
 If it's the former, don't create it. Put the fact on the node the real decision lives under,
 or leave it as fog.
 
+## Does this need a rule, or is it still a requirement?
+
+A rule is a function — or a type whose construction is the proof. `#[rule("<id>")]` binds
+one function to one rule record, and that function *is* the decision; it doesn't describe
+one or claim to satisfy one. So the question isn't "is this normative enough to be a rule?"
+It's: **what function decides this?**
+
+- A function decides it (or a type makes the wrong state unconstructible): write the rule,
+  bind it, verify it.
+- Nothing decides it yet: it's a requirement whose rule is unwritten. That's an ordinary
+  state — most decisions sit there for a while. Leave it as a requirement.
+
+Rules follow human decisions; they never stand in for one. Prose intent lives in the
+requirement and the resolution, and a rule record with no function behind it is neither —
+it just makes the graph look finished. `coverage scan --validate-rules` will call it out.
+
 ## Four tests for a drafted statement
 
 - **Swap.** Drop in an unrelated company or product name. Still reads true? It's a capability
   label, not a decision — name the actual mechanism or threshold instead.
 - **Name.** Does it name a mechanism, threshold, actor, or error condition — or a category
   ("identity," "reporting," "comms")? Categories aren't requirements.
-- **Evidence.** Is there a real locator for the claim — a source clause or a `file:line` —
-  or is it explicitly provisional? For graph grounding, attach a requirement source with
+- **Evidence.** Is there a real locator for the claim — a source clause or a place in the
+  code — or is it explicitly provisional? For graph grounding, attach a requirement source with
   `requirements source-ref add` (which also creates a `references` edge), or create a valid
-  `references` edge directly; otherwise gap reporting emits `missing_source_refs`. For rules,
-  put code locators in `--source-document` and `--source-section`. `fog` is unstructured text
+  `references` edge directly; otherwise gap reporting emits `missing_source_refs`. For a rule
+  the locator is a binding, not a citation: `--source-document` is the file and
+  `--source-section` is the bare symbol carrying `#[rule("<id>")]` — never a line range,
+  which is wrong by the next commit while the symbol survives the refactor. `fog` is unstructured text
   attached to a requirement, while `unsupported` / `exploratory` mark ideation evidence or
   speculation. The CLI reports grounding gaps; it does not prevent an ungrounded requirement
   or rule from being active.
@@ -81,20 +99,31 @@ Requirement, mid — bad: "ExpenseFlow shall enable end-to-end expense operation
 "Expenses that exceed an employee's delegated authority limit require second-approver
 sign-off before entering the payment run."
 
-Rule — bad: "EXP-APR-003: The system shall enforce approval validation" — restates the
-classification, names nothing testable. Good:
+Rule — bad: "The system shall enforce approval validation" — restates the classification,
+names nothing testable, and no function decides it, so it is not a rule at all yet.
+
+Start from the function. In `ApprovalService.php`, `requires_second_approver($expense,
+$employee)` is where the limit is applied — that function is the rule, and the record
+points at it by file and bare symbol:
 
 ```sh
 provenance rules create --scope <scope> \
   --id rule_exp_apr_003 \
-  --rule-code "EXP-APR-003" \
   --requirement-id <requirement_id> \
-  --statement "SubmitExpense shall throw ApprovalRequired when amount exceeds employee.delegated_authority_limit and approver_id is null" \
+  --statement "An expense strictly above the submitting employee's delegated authority limit needs a second approver; an expense at the limit does not" \
   --severity high \
   --source-document ApprovalService.php \
-  --source-section "44-51" \
+  --source-section requires_second_approver \
   --format json
 ```
+
+Then bind it in the code, so the scanner can see the pair: the deciding function carries
+the rule's id, and the test that runs the threshold cases carries the same id with the
+method it used — in Rust, `#[rule("rule_exp_apr_003")]` and
+`#[verifies("rule_exp_apr_003", examples)]`. If no such function exists — the limit is
+re-checked inline in three controllers — there is nothing to bind. Keep the requirement,
+don't write the rule, and let the code catch up. The `provenance-shaping` skill has the
+full pair-landing flow.
 
 Resolution — bad: position "Require a second approver above a threshold," rationale "Team
 decided this was the right approach" — no number, no alternative, no reason one lost. Good:

@@ -2,7 +2,6 @@ pub mod graph;
 pub mod ideation;
 pub mod knowledge;
 pub mod policy;
-pub mod services;
 pub mod shaping;
 pub mod workspace;
 
@@ -15,6 +14,8 @@ use serde::Serialize;
 
 #[derive(Parser)]
 pub struct Cli {
+    /// Drop the advisory notes commands print alongside their output, such as
+    /// the warning that this repository has no shaping skills installed.
     #[arg(long, global = true)]
     pub quiet: bool,
     #[command(subcommand)]
@@ -102,14 +103,6 @@ pub enum Command {
     Rules {
         #[command(subcommand)]
         command: policy::RulesCommand,
-    },
-    Services {
-        #[command(subcommand)]
-        command: services::ServicesCommand,
-    },
-    ServiceBindings {
-        #[command(subcommand)]
-        command: services::ServiceBindingsCommand,
     },
     Traceability {
         rule_id: String,

@@ -2,7 +2,7 @@
 
 Never lose the *why* behind your decisions.
 
-Provenance is a tool for building requirements traceability, from source to requirement to rule to the code and tests that enforce them.
+Provenance is a tool for building requirements traceability, from source to requirement to rule. A rule is a function, bound to its record in the graph by `#[rule("rule_id")]`; the tests that verify it carry `#[verifies("rule_id", method)]`.
 
 ### Installation
 
@@ -38,7 +38,7 @@ provenance prime
 | `provenance traceability <rule>` | Walk a rule back to the decision and requirement behind it |
 | `provenance proposals surface --scope default --changed-path <path>` | Surface undisposed proposals when current work touches their evidence or explicit territory |
 | `provenance wiki build` / `provenance wiki serve` | Build or serve the generated wiki with domain browsing and offline search |
-| `provenance coverage scan --path .` | Match `@provenance` code annotations against rules |
+| `provenance coverage scan --path . --validate-rules` | Check every marker against the graph and name each active rule with no verification |
 | `provenance skills install` | Install the bundled agent skills (`provenance-shaping`, `provenance-fork-tournament`, `provenance-swarm-backtrace`, `provenance-grounded-writing`) |
 
 The repository uses the `skills/<name>/SKILL.md` layout, so the bundled skills can also

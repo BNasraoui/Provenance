@@ -283,7 +283,7 @@ fn minimal_exact_export_without_digest() -> Value {
                 }], "review_on": null
             }],
             "rules": [],
-            "services": [], "service_bindings": [], "edges": []
+            "edges": []
         }
     })
 }

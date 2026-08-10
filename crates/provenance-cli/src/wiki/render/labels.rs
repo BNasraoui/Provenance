@@ -1,7 +1,7 @@
 use crate::wiki::model::PageKind;
 use provenance_core::{
-    NodeType, RequirementStatus, ResolutionInputType, ResolutionStatus, RuleModality, RuleSeverity,
-    RuleStatus, RuleType, SourceType, ThreadStatus,
+    NodeType, RequirementStatus, ResolutionInputType, ResolutionStatus, RuleSeverity, RuleStatus,
+    SourceType, ThreadStatus,
 };
 
 use provenance_macros::rule;
@@ -139,22 +139,6 @@ pub(in crate::wiki::render) const fn severity_word(severity: &RuleSeverity) -> &
         RuleSeverity::Medium => "medium",
         RuleSeverity::High => "high",
         RuleSeverity::Critical => "critical",
-    }
-}
-
-pub(in crate::wiki::render) const fn modality_word(modality: &RuleModality) -> &'static str {
-    match modality {
-        RuleModality::Obligation => "obligation",
-        RuleModality::Prohibition => "prohibition",
-        RuleModality::Necessity => "necessity",
-    }
-}
-
-pub(in crate::wiki::render) const fn rule_type_word(rule_type: &RuleType) -> &'static str {
-    match rule_type {
-        RuleType::Business => "business",
-        RuleType::Functional => "functional",
-        RuleType::Technical => "technical",
     }
 }
 

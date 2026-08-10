@@ -1,0 +1,143 @@
+//! The markdown render: which verification sites get marked as outside
+//! the module that defines the rule, and how a warning with no location
+//! is written.
+
+use super::{render_coverage, OUTSIDE_DEFINING_MODULE};
+use crate::output::OutputFormat;
+use camino::Utf8PathBuf;
+use provenance_core::coverage::{BindingResult, CoverageReport, ValidationWarning};
+
+fn binding(rule_id: &str, file_path: &str, verification: Option<&str>) -> BindingResult {
+    BindingResult {
+        rule_id: rule_id.to_string(),
+        file_path: Utf8PathBuf::from(file_path),
+        line: 12,
+        item_name: None,
+        verification: verification.map(ToOwned::to_owned),
+    }
+}
+
+fn report(bindings: Vec<BindingResult>, warnings: Vec<ValidationWarning>) -> CoverageReport {
+    CoverageReport::new(None, 1, Vec::new(), bindings, warnings)
+}
+
+#[test]
+fn verification_site_in_another_file_is_marked_outside_the_defining_module() {
+    let report = report(
+        vec![
+            binding("rule_overtime", "src/payroll.rs", None),
+            binding("rule_overtime", "tests/billing.rs", Some("examples")),
+        ],
+        Vec::new(),
+    );
+
+    let markdown = render_coverage(OutputFormat::Markdown, &report).unwrap();
+
+    assert!(markdown.contains(
+        "`rule_overtime` verified by examples at `tests/billing.rs`:12 (outside defining module)"
+    ));
+}
+
+#[test]
+fn verification_site_beside_the_rule_is_not_marked() {
+    let report = report(
+        vec![
+            binding("rule_overtime", "src/payroll.rs", None),
+            binding("rule_overtime", "src/payroll.rs", Some("exhaustion")),
+        ],
+        Vec::new(),
+    );
+
+    let markdown = render_coverage(OutputFormat::Markdown, &report).unwrap();
+
+    assert!(!markdown.contains(OUTSIDE_DEFINING_MODULE));
+}
+
+/// The `#[rule]` line itself is a definition, not a site leaning on one.
+#[test]
+fn the_defining_site_is_never_marked() {
+    let report = report(
+        vec![binding("rule_overtime", "src/payroll.rs", None)],
+        Vec::new(),
+    );
+
+    let markdown = render_coverage(OutputFormat::Markdown, &report).unwrap();
+
+    assert!(markdown.contains("`rule_overtime` is the rule at `src/payroll.rs`:12"));
+    assert!(!markdown.contains(OUTSIDE_DEFINING_MODULE));
+}
+
+/// Without a `#[rule]` site in the scanned tree there is no defining
+/// module to be outside of, so the report claims nothing either way.
+#[test]
+fn a_rule_with_no_scanned_definition_leaves_its_sites_unmarked() {
+    let report = report(
+        vec![binding(
+            "rule_overtime",
+            "tests/billing.rs",
+            Some("examples"),
+        )],
+        Vec::new(),
+    );
+
+    let markdown = render_coverage(OutputFormat::Markdown, &report).unwrap();
+
+    assert!(!markdown.contains(OUTSIDE_DEFINING_MODULE));
+}
+
+#[test]
+fn a_warning_without_a_location_is_rendered_without_one() {
+    let report = report(
+        Vec::new(),
+        vec![ValidationWarning {
+            rule_id: "rule_overtime".to_string(),
+            file_path: None,
+            line: None,
+            message: "active rule `rule_overtime` has no verification".to_string(),
+        }],
+    );
+
+    let markdown = render_coverage(OutputFormat::Markdown, &report).unwrap();
+
+    assert!(markdown
+        .contains("- Warning `rule_overtime`: active rule `rule_overtime` has no verification"));
+    assert!(!markdown.contains(":0"));
+}
+
+/// A parse warning is about the file, so there is no rule to name. Printing
+/// an empty pair of backticks would read as a rule whose name went missing.
+#[test]
+fn a_warning_about_no_rule_is_rendered_without_an_empty_id() {
+    let report = report(
+        Vec::new(),
+        vec![ValidationWarning {
+            rule_id: String::new(),
+            file_path: Some(Utf8PathBuf::from("src/payroll.rs")),
+            line: Some(4),
+            message: "legacy marker `@statesman` is deprecated".to_string(),
+        }],
+    );
+
+    let markdown = render_coverage(OutputFormat::Markdown, &report).unwrap();
+
+    assert!(markdown
+        .contains("- Warning in `src/payroll.rs`:4: legacy marker `@statesman` is deprecated"));
+    assert!(!markdown.contains("``"));
+}
+
+#[test]
+fn a_warning_with_a_location_still_shows_it() {
+    let report = report(
+        Vec::new(),
+        vec![ValidationWarning {
+            rule_id: "UNKNOWN".to_string(),
+            file_path: Some(Utf8PathBuf::from("src/payroll.rs")),
+            line: Some(4),
+            message: "unknown rule".to_string(),
+        }],
+    );
+
+    let markdown = render_coverage(OutputFormat::Markdown, &report).unwrap();
+
+    assert!(markdown.contains("- Warning `UNKNOWN` in `src/payroll.rs`:4: unknown rule"));
+}

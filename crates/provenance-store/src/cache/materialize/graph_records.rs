@@ -9,7 +9,6 @@ pub(super) async fn load_scope(
 ) -> anyhow::Result<u64> {
     let mut loaded = load_requirement_records(tx, store, scope).await?;
     loaded += load_decision_records(tx, store, scope).await?;
-    loaded += load_service_records(tx, store, scope).await?;
     Ok(loaded)
 }
 
@@ -105,35 +104,16 @@ async fn load_decision_records(
         loaded += 1;
     }
     for rule in store.list_rules(scope)? {
-        sqlx::query("INSERT INTO rules (scope_id, id, rule_code, statement, status, severity) VALUES (?, ?, ?, ?, ?, ?)")
-            .bind(rule.scope_id.as_str()).bind(rule.id.as_str()).bind(rule.rule_code)
-            .bind(rule.statement).bind(serde_name(&rule.status)?).bind(serde_name(&rule.severity)?)
-            .execute(&mut **tx).await?;
-        loaded += 1;
-    }
-    Ok(loaded)
-}
-
-async fn load_service_records(
-    tx: &mut Transaction<'_, Sqlite>,
-    store: &StateStore,
-    scope: &ScopeId,
-) -> anyhow::Result<u64> {
-    let mut loaded = 0;
-    for service in store.list_services(scope)? {
-        sqlx::query("INSERT INTO services (scope_id, id, name, description, owner, repository, environment, tier, external_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-            .bind(service.scope_id.as_str()).bind(service.id.as_str()).bind(service.name)
-            .bind(service.description).bind(service.owner).bind(service.repository)
-            .bind(service.environment.as_ref().map(serde_name).transpose()?)
-            .bind(service.tier.as_ref().map(serde_name).transpose()?).bind(service.external_id)
-            .bind(serde_name(&service.status)?).execute(&mut **tx).await?;
-        loaded += 1;
-    }
-    for binding in store.list_service_bindings(scope)? {
-        sqlx::query("INSERT INTO service_bindings (scope_id, id, rule_id, service_id, binding_type) VALUES (?, ?, ?, ?, ?)")
-            .bind(binding.scope_id.as_str()).bind(binding.id.as_str()).bind(binding.rule_id.as_str())
-            .bind(binding.service_id.as_str()).bind(serde_name(&binding.binding_type)?)
-            .execute(&mut **tx).await?;
+        sqlx::query(
+            "INSERT INTO rules (scope_id, id, statement, status, severity) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(rule.scope_id.as_str())
+        .bind(rule.id.as_str())
+        .bind(rule.statement)
+        .bind(serde_name(&rule.status)?)
+        .bind(serde_name(&rule.severity)?)
+        .execute(&mut **tx)
+        .await?;
         loaded += 1;
     }
     Ok(loaded)

@@ -1,4 +1,5 @@
 use assert_cmd::Command;
+use predicates::prelude::PredicateBooleanExt;
 
 #[allow(clippy::too_many_lines)]
 #[test]
@@ -119,8 +120,6 @@ fn cli_traceability_chain_reports_rule_upstream_nodes_and_gaps() {
             "default",
             "--id",
             "rule_schads_pay_001",
-            "--rule-code",
-            "SCHADS-PAY-001",
             "--requirement-id",
             "req_schads_overtime",
             "--resolution-id",
@@ -129,6 +128,59 @@ fn cli_traceability_chain_reports_rule_upstream_nodes_and_gaps() {
             "Pay overtime after the threshold",
             "--severity",
             "high",
+        ])
+        .assert()
+        .success();
+    // A second chain in the same scope, touching the rule nowhere. Its edges
+    // are what `traceability` used to hand back alongside the real chain.
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "sources",
+            "create",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--id",
+            "source_unrelated",
+            "--name",
+            "Unrelated Award",
+        ])
+        .assert()
+        .success();
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "requirements",
+            "create",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--id",
+            "req_unrelated",
+            "--statement",
+            "Leave accrues monthly",
+            "--domain-id",
+            "domain_payroll",
+        ])
+        .assert()
+        .success();
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "requirements",
+            "source-ref",
+            "add",
+            "--repo",
+            &repo,
+            "--scope",
+            "default",
+            "--requirement-id",
+            "req_unrelated",
+            "--source-id",
+            "source_unrelated",
         ])
         .assert()
         .success();
@@ -168,7 +220,10 @@ fn cli_traceability_chain_reports_rule_upstream_nodes_and_gaps() {
         .assert()
         .success()
         .stdout(predicates::str::contains("source_schads"))
-        .stdout(predicates::str::contains("res_schads_overtime"));
+        .stdout(predicates::str::contains("res_schads_overtime"))
+        // The other chain's records and edges stay out of a view of this rule.
+        .stdout(predicates::str::contains("req_unrelated").not())
+        .stdout(predicates::str::contains("source_unrelated").not());
     Command::cargo_bin("provenance")
         .unwrap()
         .args([

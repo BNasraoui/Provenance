@@ -2,7 +2,7 @@ use crate::wiki::model::{DecisionSection, LineageEntry, OrphanRule, PageLink, Ru
 use std::fmt::Write as _;
 
 use super::html::{escape_attr, escape_html, evidence_html, icon_svg, PageLinksRenderer};
-use super::labels::{capitalize, format_date_ms, modality_word, sev_chip, severity_word};
+use super::labels::{capitalize, format_date_ms, sev_chip, severity_word};
 
 pub(in crate::wiki::render) fn push_section_open(
     html: &mut String,
@@ -80,23 +80,18 @@ pub(in crate::wiki::render) fn push_rule_territory_card(html: &mut String, rules
             html,
             "<span class=\"rcode\"><a href=\"{}\">{}</a></span>",
             escape_attr(&rule.link.target.route()),
-            escape_html(&rule.rule_code)
+            escape_html(&rule.link.target.record_id)
         )
         .expect("writing to a String should not fail");
-        writeln!(
-            html,
-            "<span class=\"rname\">{}</span>",
-            escape_html(rule.name.as_deref().unwrap_or(&rule.rule_code))
-        )
-        .expect("writing to a String should not fail");
+        if let Some(name) = rule.name.as_deref() {
+            writeln!(html, "<span class=\"rname\">{}</span>", escape_html(name))
+                .expect("writing to a String should not fail");
+        }
         html.push_str("<span class=\"rmeta\">");
         html.push_str(&sev_chip(
             severity_word(&rule.severity),
             severity_word(&rule.severity),
         ));
-        if let Some(modality) = &rule.modality {
-            html.push_str(&sev_chip("modality", modality_word(modality)));
-        }
         html.push_str("</span>\n");
         writeln!(
             html,

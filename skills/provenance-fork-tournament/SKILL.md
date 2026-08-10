@@ -217,8 +217,18 @@ The promotion gate, with a clock. This is a grill-shaped turn against the artifa
 
    This flips each proposal's `promotion_state` — no separate update step.
 
-7. **Fan out** as any resolution does (docs/shaping.md, "Landing fan-out"): rules
-   produced, requirements spawned, fog graduated. Then continue the turn loop or hand off.
+7. **Fan out** as any resolution does (docs/shaping.md, "Landing fan-out"): requirements
+   spawned, fog graduated, rules only where a rule is real. Then continue the turn loop or
+   hand off.
+
+   A tournament settles **direction**, and direction rarely has a function. The winning
+   artifact is a sketch the human reacted to, not code that decides anything — so the
+   normal fan-out here is spawned requirements, not rules. A rule is a function bound by
+   `#[rule("<id>")]`; if no function exists yet, there is nothing to bind and no rule to
+   write. **Do not mint a rule to make the decision look landed.** The resolution is the
+   landing. An unbound rule id buys a tidier graph and pays with a lie the scanner will
+   report later. When the direction does get built and one function ends up deciding it,
+   that turn lands the pair — see the `provenance-shaping` skill.
 
 ## Caveats (empirical — from the Statesman provenance scoping record)
 

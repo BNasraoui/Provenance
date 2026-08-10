@@ -49,6 +49,41 @@ cp -rf source dest          # NOT: cp -r source dest
 - `apt-get` - use `-y` flag
 - `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
 
+## Rules
+
+A rule is a function — or a type whose construction is the proof. `#[rule("rule_id")]`
+binds one function to one rule record in the graph: the function *is* the decision, not a
+description of it and not a claim to satisfy it. Exactly one function may carry an id.
+
+`#[verifies("rule_id", method)]` marks whatever proves the rule, with one method word:
+
+- `exhaustion` — every input in a finite domain is tried
+- `property` — generated inputs checked against a stated property
+- `examples` — hand-picked cases
+- `conformance` — a copy of the rule elsewhere checked against the rule function
+- `construction` — a type or constraint makes violation impossible; the attribute goes on
+  the type, never on a test
+
+Both attributes come from `provenance-macros` (`use provenance_macros::rule;`,
+`use provenance_macros::verifies;`). They expand to nothing and cost one argument check at
+compile time; what they buy is a symbol the scanner finds and refactors carry along.
+
+Unverified is **absence**, derived and never stored. `provenance coverage scan --path .
+--scope default --validate-rules` reports it, along with unknown rule ids, a second
+function claiming one id, and a `#[verifies]` with no `#[rule]` to verify. Adding
+`--strict` makes any warning a non-zero exit; how strictly CI runs the scan is a per-repo
+dial, not a property of a rule.
+
+The rule record carries the binding in `--source-document` (the file) and
+`--source-section` (the bare symbol) — never a line range.
+
+Rules follow human decisions, not code shape. Do not mint one rule per function, and do
+not split one decision across five rules because the match has five arms. Prose intent
+lives in the requirement and the resolution. **A decision with no function is a
+requirement whose rule is unwritten** — an ordinary state, not a defect. Leave it a
+requirement; never create a rule record with no function behind it, and never write a
+`#[verifies]` test that asserts nothing to clear a warning.
+
 ## Rule Doc Headers
 
 The doc comment above a `#[rule("...")]` item is one short paragraph saying what

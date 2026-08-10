@@ -118,8 +118,6 @@ fn seed_repo() -> (tempfile::TempDir, String) {
             "default",
             "--id",
             "rule_schads_pay_001",
-            "--rule-code",
-            "SCHADS-PAY-001",
             "--requirement-id",
             "req_schads_overtime",
             "--resolution-id",

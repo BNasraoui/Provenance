@@ -1,16 +1,23 @@
 use camino::Utf8PathBuf;
 
+/// Something the scan wants to say about a rule.
+///
+/// `file_path` and `line` are `None` when the warning is about an absence.
+/// An unverified rule has no site to point at, and naming one anyway sends a
+/// reader to a file that says nothing about the problem.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct ValidationWarning {
-    pub rule_code: String,
-    pub file_path: Utf8PathBuf,
-    pub line: usize,
+    pub rule_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_path: Option<Utf8PathBuf>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line: Option<usize>,
     pub message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct AnnotationResult {
-    pub rule_code: String,
+    pub rule_id: String,
     pub file_path: Utf8PathBuf,
     pub line: usize,
     pub function_name: Option<String>,
@@ -69,7 +76,7 @@ mod tests {
             Some("abc123".into()),
             2,
             vec![AnnotationResult {
-                rule_code: "SCHADS-PAY-001".into(),
+                rule_id: "rule_overtime".into(),
                 file_path: Utf8PathBuf::from("src/payroll.rs"),
                 line: 4,
                 function_name: Some("pays_overtime".into()),

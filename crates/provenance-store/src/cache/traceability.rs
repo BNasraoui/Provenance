@@ -2,6 +2,12 @@ use crate::layout::ProvenanceLayout;
 use crate::state_store::StateStore;
 use provenance_core::{Edge, EdgeType, NodeType, Requirement, Resolution, Rule, Source};
 
+/// One rule and the chain behind it.
+///
+/// `edges` holds only the edges the walk actually crossed — the produces edge
+/// into the rule, the resolves edge from its resolution, and the source
+/// references on the requirements reached. A reader asked about one rule, so
+/// handing back every edge in the scope answers a question nobody asked.
 #[derive(Debug, serde::Serialize)]
 pub struct TraceabilityView {
     pub rule: Rule,
@@ -30,42 +36,59 @@ fn trace_rule_locked(
         .into_iter()
         .find(|rule| rule.id == *rule_id)
         .ok_or_else(|| anyhow::anyhow!("rule not found"))?;
-    let edges: Vec<Edge> = store
+    let scope_edges: Vec<Edge> = store
         .list_edges()?
         .into_iter()
         .filter(|edge| edge.scope_id == *scope)
         .collect();
-    let resolution_ids: Vec<_> = edges
+    let produces_rule = |edge: &Edge| {
+        edge.edge_type == EdgeType::Produces
+            && edge.to_type == NodeType::Rule
+            && edge.to_id == *rule_id
+            && matches!(edge.from_type, NodeType::Resolution | NodeType::Requirement)
+    };
+    let resolution_ids: Vec<_> = scope_edges
         .iter()
-        .filter(|edge| {
-            edge.edge_type == EdgeType::Produces
-                && edge.from_type == NodeType::Resolution
-                && edge.to_type == NodeType::Rule
-                && edge.to_id == *rule_id
-        })
+        .filter(|edge| produces_rule(edge) && edge.from_type == NodeType::Resolution)
         .map(|edge| edge.from_id.clone())
         .collect();
-    let requirement_ids: Vec<_> = edges
+    let resolves_requirement = |edge: &Edge| {
+        edge.edge_type == EdgeType::Resolves
+            && edge.from_type == NodeType::Resolution
+            && resolution_ids.iter().any(|id| id == &edge.from_id)
+    };
+    // A produces edge points at the rule, so the producer is its `from` end: a
+    // requirement recorded as producing the rule directly, or a resolution
+    // whose own requirement is one hop further back along its resolves edge.
+    // Reading `to_id` off both kinds collected the rule's own id and dropped
+    // every direct requirement producer.
+    let requirement_ids: Vec<_> = scope_edges
         .iter()
-        .filter(|edge| {
-            (edge.edge_type == EdgeType::Produces
-                && edge.from_type == NodeType::Requirement
-                && edge.to_type == NodeType::Rule
-                && edge.to_id == *rule_id)
-                || (edge.edge_type == EdgeType::Resolves
-                    && edge.from_type == NodeType::Resolution
-                    && resolution_ids.iter().any(|id| id == &edge.from_id))
-        })
-        .map(|edge| edge.to_id.clone())
-        .collect();
-    let source_ids: Vec<_> = edges
-        .iter()
-        .filter(|edge| {
-            edge.edge_type == EdgeType::References
-                && edge.from_type == NodeType::Source
-                && requirement_ids.iter().any(|id| id == &edge.to_id)
-        })
+        .filter(|edge| produces_rule(edge) && edge.from_type == NodeType::Requirement)
         .map(|edge| edge.from_id.clone())
+        .chain(
+            scope_edges
+                .iter()
+                .filter(|edge| resolves_requirement(edge))
+                .map(|edge| edge.to_id.clone()),
+        )
+        .collect();
+    let references_requirement = |edge: &Edge| {
+        edge.edge_type == EdgeType::References
+            && edge.from_type == NodeType::Source
+            && requirement_ids.iter().any(|id| id == &edge.to_id)
+    };
+    let source_ids: Vec<_> = scope_edges
+        .iter()
+        .filter(|edge| references_requirement(edge))
+        .map(|edge| edge.from_id.clone())
+        .collect();
+    let edges: Vec<Edge> = scope_edges
+        .iter()
+        .filter(|edge| {
+            produces_rule(edge) || resolves_requirement(edge) || references_requirement(edge)
+        })
+        .cloned()
         .collect();
     let resolutions = store
         .list_resolutions(scope)?

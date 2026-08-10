@@ -36,7 +36,7 @@ fn requirement_page_assembles_lineage_decision_rules_and_sources() {
         "direct and via-resolution rules deduplicate"
     );
     let card = &page.produced_rules[0];
-    assert_eq!(card.rule_code, "SAH-INV-001");
+    assert_eq!(card.link.target.record_id, "rule_001");
     assert_eq!(card.evidence.len(), 1);
     assert_eq!(card.evidence[0].label, "src/UseCase.php:59-69");
     assert_eq!(

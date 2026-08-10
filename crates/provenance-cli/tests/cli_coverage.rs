@@ -99,6 +99,74 @@ fn coverage_scan_writes_markdown_output_file() {
     assert!(markdown.contains("SCHADS-PAY-001"));
 }
 
+/// A change author reading the report wants to know who leans on a rule from
+/// outside the module that owns it, because that is whose tests a change to
+/// the rule breaks.
+#[test]
+fn coverage_markdown_marks_verification_sites_outside_the_defining_module() {
+    let tmp = tempfile::tempdir().unwrap();
+    let repo = tmp.path();
+    let source_dir = repo.join("src");
+    let output = repo.join("coverage.md");
+    std::fs::create_dir_all(&source_dir).unwrap();
+    std::fs::write(
+        source_dir.join("payroll.rs"),
+        "#[rule(\"rule_pays_overtime\")]\npub fn pays_overtime() {}\n\n#[verifies(\"rule_pays_overtime\", exhaustion)]\nfn covers_every_threshold() {}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        source_dir.join("billing.rs"),
+        "#[verifies(\"rule_pays_overtime\", examples)]\nfn bills_overtime_at_the_right_rate() {}\n",
+    )
+    .unwrap();
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "init",
+            "--path",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--path-prefix",
+            ".",
+        ])
+        .assert()
+        .success();
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "coverage",
+            "scan",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--path",
+            source_dir.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--format",
+            "markdown",
+            "--output",
+            output.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    let markdown = std::fs::read_to_string(output).unwrap();
+    assert!(
+        markdown.contains("verified by examples at `")
+            && markdown.contains(
+                "billing.rs`:1 (bills_overtime_at_the_right_rate) (outside defining module)"
+            ),
+        "billing site not marked as outside the defining module:\n{markdown}"
+    );
+    assert!(
+        !markdown.contains("covers_every_threshold) (outside defining module)"),
+        "site beside the rule wrongly marked:\n{markdown}"
+    );
+}
+
 #[test]
 fn coverage_scan_strict_exits_non_zero_on_unverified_active_rule_then_zero_once_verified() {
     let tmp = tempfile::tempdir().unwrap();
@@ -131,8 +199,6 @@ fn coverage_scan_strict_exits_non_zero_on_unverified_active_rule_then_zero_once_
             "default",
             "--id",
             "rule_pays_overtime",
-            "--rule-code",
-            "SCHADS-PAY-001",
             "--statement",
             "Pay overtime after the threshold",
             "--severity",
@@ -167,7 +233,7 @@ fn coverage_scan_strict_exits_non_zero_on_unverified_active_rule_then_zero_once_
     // Verified via a comment annotation carrying a `verification:` key.
     std::fs::write(
         source_dir.join("payroll.rs"),
-        "// @provenance rule: SCHADS-PAY-001\n// @provenance verification: examples\nfn pays_overtime() {}\n",
+        "// @provenance rule: rule_pays_overtime\n// @provenance verification: examples\nfn pays_overtime() {}\n",
     )
     .unwrap();
 

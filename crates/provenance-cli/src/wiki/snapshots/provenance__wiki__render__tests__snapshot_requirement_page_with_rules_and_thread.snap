@@ -85,9 +85,9 @@ expression: "render_requirement(\"default\", &requirement_fixture())"
 <div class="card-head"><svg class="icon"><use href="#i-book-open"/></svg>Produced Rules — 1</div>
 <ul class="rule-list">
 <li>
-<span class="rcode"><a href="/rules/rule_sah_inv_016/">SAH-INV-016</a></span>
+<span class="rcode"><a href="/rules/rule_sah_inv_016/">rule_sah_inv_016</a></span>
 <span class="rname">Suppress line emission for fully zero claim items</span>
-<span class="rmeta"><span class="sev high">high</span><span class="sev modality">prohibition</span></span>
+<span class="rmeta"><span class="sev high">high</span></span>
 <span class="rstatement">If a claim item's participant, government, and gap portions are all &lt;= 0 after markup, no invoice lines shall be emitted for that claim item.</span>
 <span class="rref"><a href="https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php#L153-L156">src/UseCase.php:153-156</a></span>
 </li>

@@ -112,9 +112,7 @@ fn generate(seed: u64) -> GeneratedGraph {
     let mut rule_ids = Vec::new();
     for index in 0..rule_count {
         let rule_id = format!("rule_{index:02}");
-        state
-            .rules
-            .push(rule(&rule_id, &format!("GEN-{index}"), None));
+        state.rules.push(rule(&rule_id, None));
         let target = requirement_ids[rng.below(requirement_ids.len())].clone();
         match rng.below(3) {
             0 => {

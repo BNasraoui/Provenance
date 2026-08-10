@@ -46,8 +46,7 @@ pub(in crate::handlers::schema) fn export_schema() -> Value {
                 "additionalProperties": false,
                 "required": [
                     "schema_version", "scope", "sources", "domains", "requirements",
-                    "boundaries", "topics", "questions", "resolutions", "rules",
-                    "services", "service_bindings", "edges"
+                    "boundaries", "topics", "questions", "resolutions", "rules", "edges"
                 ],
                 "properties": {
                     "schema_version": schema_version(),
@@ -60,8 +59,6 @@ pub(in crate::handlers::schema) fn export_schema() -> Value {
                     "questions": record_array("question"),
                     "resolutions": record_array("resolution"),
                     "rules": record_array("rule"),
-                    "services": record_array("service"),
-                    "service_bindings": record_array("serviceBinding"),
                     "edges": record_array("edge")
                 }
             }
@@ -183,38 +180,20 @@ fn export_definitions() -> Value {
                 "schema_version": version.clone(), "scope_id": id.clone(), "id": id.clone(),
                 "title": string.clone(), "position": string.clone(), "rationale": string.clone(),
                 "status": {"enum": ["draft", "review", "proposed", "approved", "rejected", "revised", "superseded", "abandoned"]},
-                "context": string.clone(), "enforcement": string.clone(), "confidence": confidence.clone(),
+                "context": string.clone(), "enforcement": string.clone(), "confidence": confidence,
                 "inputs": {"type": "array", "items": {"$ref": "#/$defs/resolutionInput"}},
                 "made_by": string.clone(), "approved_by": string.clone(), "approved_at": {"type": "integer"},
                 "superseded_by": id.clone(), "review_on": {"type": ["string", "null"]}
             })
         ),
         "rule": closed_record(
-            &["schema_version", "scope_id", "id", "rule_code", "statement", "status", "severity"],
+            &["schema_version", "scope_id", "id", "statement", "status", "severity"],
             json!({
                 "schema_version": version.clone(), "scope_id": id.clone(), "id": id.clone(),
-                "rule_code": string.clone(), "name": string.clone(), "description": string.clone(),
+                "name": string.clone(), "description": string.clone(),
                 "statement": string.clone(), "status": {"enum": ["draft", "review", "active", "deprecated", "archived"]},
                 "severity": {"enum": ["low", "medium", "high", "critical"]},
-                "rule_type": {"enum": ["business", "functional", "technical"]},
-                "modality": {"enum": ["obligation", "prohibition", "necessity"]},
-                "confidence": confidence, "extraction_method": string.clone(),
                 "source_document": string.clone(), "source_section": string.clone()
-            })
-        ),
-        "service": closed_record(&["schema_version", "scope_id", "id", "name", "status"], json!({
-            "schema_version": version.clone(), "scope_id": id.clone(), "id": id.clone(),
-            "name": string.clone(), "description": string.clone(), "owner": string.clone(),
-            "repository": string.clone(), "environment": {"enum": ["production", "staging", "development"]},
-            "tier": {"enum": ["critical", "standard", "internal"]}, "external_id": string.clone(),
-            "status": {"enum": ["active", "deprecated", "decommissioned"]}
-        })),
-        "serviceBinding": closed_record(
-            &["schema_version", "scope_id", "id", "rule_id", "service_id", "binding_type"],
-            json!({
-                "schema_version": version.clone(), "scope_id": id.clone(), "id": id.clone(),
-                "rule_id": id.clone(), "service_id": id.clone(),
-                "binding_type": {"enum": ["enforces", "consumes", "monitors"]}
             })
         ),
         "edge": closed_record(
