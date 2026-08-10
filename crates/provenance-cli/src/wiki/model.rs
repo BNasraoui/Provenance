@@ -103,19 +103,12 @@ pub struct OrphanRecord {
     pub reason: String,
 }
 
-/// Records that exist but are attached to nothing, listed on the index.
+/// Records that exist but are attached to nothing, listed on the unfinished page.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct OrphanReport {
     pub rules: Vec<OrphanRecord>,
     pub resolutions: Vec<OrphanRecord>,
     pub sources: Vec<OrphanRecord>,
-}
-
-#[cfg(test)]
-impl OrphanReport {
-    pub const fn is_empty(&self) -> bool {
-        self.rules.is_empty() && self.resolutions.is_empty() && self.sources.is_empty()
-    }
 }
 
 /// Record totals for the scope, shown on the index page.
@@ -127,27 +120,13 @@ pub struct CorpusCounts {
     pub rules: usize,
 }
 
-/// One root requirement on the scope index (low-res view: a link plus
-/// counts, full bodies live on the detail pages).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct IndexEntry {
-    pub link: PageLink,
-    pub status: RequirementStatus,
-    pub children: usize,
-    pub resolutions: usize,
-    pub rules: usize,
-}
-
-/// The scope index: root requirements overview plus scope-level gaps and
-/// orphans.
+/// The scope index: search, domain discovery, record totals, and an
+/// unfinished-work summary.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ScopeIndexPage {
     pub scope: String,
     pub title: String,
     pub counts: CorpusCounts,
-    pub roots: Vec<IndexEntry>,
-    pub gaps: Vec<GapNotice>,
-    pub orphans: OrphanReport,
     pub search_coverage: String,
     pub search_example: Option<String>,
     pub domains: Vec<HomepageDomain>,

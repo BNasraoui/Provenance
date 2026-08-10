@@ -34,12 +34,11 @@ pub fn homepage_entry_order_is_valid(html: &str, width: u16, height: u16) -> boo
 
 /// Checks rendered homepage HTML for the ratified everyday reader labels.
 pub fn homepage_plain_language_is_valid(html: &str) -> bool {
-    let lower = html.to_ascii_lowercase();
-    !lower.contains("corpus")
-        && !lower.contains(">atlas<")
-        && lower.contains("documentation")
-        && lower.contains("project records")
-        && lower.contains("unfinished")
+    html.contains("<h2>Search the documentation</h2>")
+        && html.contains("<h3 class=\"margin-head\">Project records</h3>")
+        && html.contains("<section data-homepage-traceability><h2>Unfinished</h2>")
+        && !html.contains("<h2>Atlas</h2>")
+        && !html.contains("<h3 class=\"margin-head\">Corpus</h3>")
 }
 
 fn traceability_summary_html(unfinished_count: usize) -> String {

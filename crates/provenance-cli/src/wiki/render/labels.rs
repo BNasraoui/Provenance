@@ -62,7 +62,6 @@ pub(in crate::wiki::render) fn display_name(actor: &str) -> String {
         || actor.contains(char::is_whitespace)
         || actor.starts_with('@')
         || actor.contains('@')
-        || (!actor.contains('_') && !actor.contains('-'))
     {
         return actor.to_string();
     }

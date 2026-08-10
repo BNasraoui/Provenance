@@ -34,8 +34,8 @@ pub fn load_corpus(
     let coverage = coverage
         .map(|path| load_coverage_report(path, &repo))
         .transpose()?;
+    let resolver = LinkResolver::new(remote_url.as_deref()).with_repository(repo.as_std_path());
     let state = crate::handlers::export_scope(repo, scope)?;
-    let resolver = LinkResolver::new(remote_url.as_deref());
     Ok(build_corpus_with_coverage(
         &state,
         &resolver,

@@ -5,6 +5,7 @@ use provenance_core::coverage::CoverageScan;
 use provenance_macros::rule;
 use serde::Serialize;
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 #[cfg(test)]
 mod reference_links;
@@ -17,6 +18,8 @@ pub struct EvidenceRef {
     pub label: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub href: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub snippet: Option<EvidenceSnippet>,
 }
@@ -45,11 +48,20 @@ struct ScanContext {
     files: BTreeMap<String, String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PathResolution {
+    Exists,
+    Missing,
+    Unavailable,
+    Unknown,
+}
+
 /// Resolves evidence references against an optional git remote.
 #[derive(Debug, Clone, Default)]
 pub struct LinkResolver {
     remote: Option<GitRemote>,
     scan: Option<ScanContext>,
+    repository: Option<PathBuf>,
 }
 
 impl LinkResolver {
@@ -57,11 +69,20 @@ impl LinkResolver {
         Self {
             remote: remote_url.and_then(parse_git_remote),
             scan: None,
+            repository: None,
+        }
+    }
+
+    pub fn with_repository(&self, repository: &Path) -> Self {
+        Self {
+            remote: self.remote.clone(),
+            scan: self.scan.clone(),
+            repository: Some(repository.to_path_buf()),
         }
     }
 
     pub fn with_coverage(&self, scan: &CoverageScan) -> Self {
-        let files = scan
+        let mut files: BTreeMap<String, String> = scan
             .scanned_files
             .iter()
             .map(|file| {
@@ -71,16 +92,22 @@ impl LinkResolver {
                 )
             })
             .collect();
+        for binding in &scan.report.bindings {
+            files
+                .entry(normalized_path(binding.file_path.as_str()).to_string())
+                .or_default();
+        }
         Self {
             remote: self.remote.clone(),
             scan: Some(ScanContext {
                 commit: scan.commit.clone(),
                 files,
             }),
+            repository: self.repository.clone(),
         }
     }
 
-    /// Resolves a reference at the default `HEAD` revision.
+    /// Resolves a reference without promising a mutable revision.
     pub fn resolve(&self, reference: &str) -> EvidenceRef {
         self.resolve_at(reference, None)
     }
@@ -90,10 +117,17 @@ impl LinkResolver {
     /// A recorded reference is shown as a clickable link only when the link
     /// would actually work: either the reference is already a web address,
     /// which is used as it stands, or it reads as a file path that a known
-    /// code host can turn into a real blob URL. With no known remote, a
-    /// relative path would resolve against the wiki page's own route and give
-    /// the reader a 404, so everything else stays plain text: text the reader
-    /// can search for beats a link that lies.
+    /// code host can turn into a real blob URL at a known immutable revision.
+    /// With no known remote or commit, a path would either resolve against the
+    /// wiki page's route or require a mutable `HEAD` link, so it stays plain
+    /// text: text the reader can search for beats a link that lies.
+    ///
+    /// A file path is also checked against the tree it cites: the scanned
+    /// file list when the scan covers the requested commit, otherwise
+    /// `git ls-tree` at the pinned commit (`HEAD` when unpinned). A path the
+    /// tree does not contain stays plain text with a short note saying why.
+    /// `file://` URLs never link at all — a reader's browser cannot reach
+    /// them — so they carry the same kind of note instead.
     ///
     /// "Reads as a file path" is decided in one place, `parse_code_ref`: a
     /// directory separator, or a bare name carrying a line group. A bare
@@ -110,19 +144,26 @@ impl LinkResolver {
             return EvidenceRef {
                 label,
                 href,
+                note: None,
                 snippet: None,
             };
         }
-        let (href, snippet) = parse_code_ref(&label).map_or((None, None), |code_ref| {
-            (
-                self.href_for(&code_ref, commit),
-                self.snippet_for(&code_ref, commit),
-            )
-        });
+        if label.starts_with("file://") {
+            return EvidenceRef {
+                label,
+                href: None,
+                note: Some("local file URL is unavailable to wiki readers".to_string()),
+                snippet: None,
+            };
+        }
+        if let Some(code_ref) = parse_code_ref(&label) {
+            return self.resolve_code_ref(label, &code_ref, commit);
+        }
         EvidenceRef {
             label,
-            href,
-            snippet,
+            href: None,
+            note: None,
+            snippet: None,
         }
     }
 
@@ -142,12 +183,7 @@ impl LinkResolver {
         let combined = format!("{document}:{section}");
         if let Some(code_ref) = parse_code_ref(&combined) {
             if !code_ref.lines.is_empty() {
-                let href = self.href_for(&code_ref, commit);
-                return EvidenceRef {
-                    label: combined,
-                    href,
-                    snippet: self.snippet_for(&code_ref, commit),
-                };
+                return self.resolve_code_ref(combined, &code_ref, commit);
             }
         }
         let mut evidence = self.resolve_at(document, commit);
@@ -221,24 +257,148 @@ impl LinkResolver {
         refs
     }
 
-    /// Builds a blob URL for `code_ref` on the known remote. Returns `None`
-    /// without a remote: a path like `src/UseCase.php` is relative to the
-    /// repo root, not to the wiki page it would be rendered on, so it would
-    /// always 404 as an `<a href>` inside the generated site.
+    /// Builds a commit-pinned blob URL for `code_ref` on the known remote.
+    /// Returns `None` without both a remote and an immutable revision.
     fn href_for(&self, code_ref: &CodeRef, commit: Option<&str>) -> Option<String> {
+        if self.scanned_file_excludes_location(code_ref, commit) {
+            return None;
+        }
         let reference = commit
             .map(str::to_string)
             .or_else(|| self.scan.as_ref().and_then(|scan| scan.commit.clone()))
-            .or_else(|| self.scan.is_none().then(|| "HEAD".to_string()))?;
+            .filter(|reference| !reference.eq_ignore_ascii_case("HEAD"))?;
         self.remote
             .as_ref()
             .map(|remote| blob_url(remote, &reference, code_ref))
+    }
+
+    fn scanned_file_excludes_location(&self, code_ref: &CodeRef, commit: Option<&str>) -> bool {
+        if code_ref.lines.is_empty() {
+            return false;
+        }
+        let Some(scan) = self.scan.as_ref() else {
+            return false;
+        };
+        if commit.is_some_and(|commit| {
+            !scan
+                .commit
+                .as_deref()
+                .is_some_and(|scan_commit| commit_matches(scan_commit, commit))
+        }) {
+            return false;
+        }
+        let Some(content) = scan.files.get(normalized_path(&code_ref.path)) else {
+            return false;
+        };
+        // Binding-registered paths carry no content: the scan attests the
+        // file exists at the commit but says nothing about its length.
+        if content.is_empty() {
+            return false;
+        }
+        let line_count = content.lines().count();
+        code_ref
+            .lines
+            .iter()
+            .any(|range| range.start == 0 || range.end.unwrap_or(range.start) as usize > line_count)
     }
 
     fn scan_contains(&self, path: &str) -> bool {
         self.scan
             .as_ref()
             .is_some_and(|scan| scan.files.contains_key(normalized_path(path)))
+    }
+
+    fn resolve_code_ref(
+        &self,
+        label: String,
+        code_ref: &CodeRef,
+        commit: Option<&str>,
+    ) -> EvidenceRef {
+        let path_resolution = self.path_resolution(&code_ref.path, commit);
+        let linkable = matches!(
+            path_resolution,
+            PathResolution::Exists | PathResolution::Unknown
+        );
+        EvidenceRef {
+            label,
+            href: linkable.then(|| self.href_for(code_ref, commit)).flatten(),
+            note: match path_resolution {
+                PathResolution::Missing => Some(self.missing_path_note(commit).to_string()),
+                PathResolution::Unavailable => Some(self.unavailable_tree_note(commit).to_string()),
+                PathResolution::Exists | PathResolution::Unknown => None,
+            },
+            snippet: linkable
+                .then(|| self.snippet_for(code_ref, commit))
+                .flatten(),
+        }
+    }
+
+    fn missing_path_note(&self, commit: Option<&str>) -> &'static str {
+        if self.tree_is_pinned(commit) {
+            "path not found in the pinned tree"
+        } else if self.scan.is_some() {
+            "path not found in the scanned files"
+        } else {
+            "path not found in the repository tree"
+        }
+    }
+
+    fn unavailable_tree_note(&self, commit: Option<&str>) -> &'static str {
+        if self.tree_is_pinned(commit) {
+            "pinned tree unavailable"
+        } else {
+            "repository tree unavailable"
+        }
+    }
+
+    fn tree_is_pinned(&self, commit: Option<&str>) -> bool {
+        commit.is_some() || self.scan.as_ref().is_some_and(|scan| scan.commit.is_some())
+    }
+
+    fn path_resolution(&self, path: &str, commit: Option<&str>) -> PathResolution {
+        let mut absent_from_matching_scan = false;
+        if let Some(scan) = &self.scan {
+            let same_tree = commit.is_none_or(|commit| {
+                scan.commit
+                    .as_deref()
+                    .is_some_and(|scan_commit| commit_matches(scan_commit, commit))
+            });
+            if same_tree {
+                if scan.files.contains_key(normalized_path(path)) {
+                    return PathResolution::Exists;
+                }
+                absent_from_matching_scan = true;
+            }
+        }
+        let Some(repository) = self.repository.as_ref() else {
+            return if absent_from_matching_scan {
+                PathResolution::Missing
+            } else {
+                PathResolution::Unknown
+            };
+        };
+        let revision = commit
+            .or_else(|| self.scan.as_ref().and_then(|scan| scan.commit.as_deref()))
+            .unwrap_or("HEAD");
+        let Ok(output) = std::process::Command::new("git")
+            .current_dir(repository)
+            .args(["ls-tree", "-r", "-z", "--name-only", revision, "--", path])
+            .output()
+        else {
+            return PathResolution::Unavailable;
+        };
+        if !output.status.success() {
+            return PathResolution::Unavailable;
+        }
+        if output
+            .stdout
+            .split(|byte| *byte == 0)
+            .any(|candidate| candidate == normalized_path(path).as_bytes())
+        {
+            PathResolution::Exists
+        } else {
+            PathResolution::Missing
+        }
     }
 
     fn snippet_for(&self, code_ref: &CodeRef, commit: Option<&str>) -> Option<EvidenceSnippet> {

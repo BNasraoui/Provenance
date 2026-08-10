@@ -123,10 +123,14 @@ pub fn render_domains(scope: &str, page: &DomainIndexPage) -> String {
 }
 
 fn domain_margin(page: &DomainIndexPage) -> String {
-    format!(
-        "<h3 class=\"margin-head\">Domains</h3><p class=\"prose\">{}. Rules inherit every Domain represented by their upstream requirements.</p>",
-        counted(page.authored_group_count, "group", "groups")
-    )
+    let count = counted(page.authored_group_count, "group", "groups");
+    if page.authored_group_count == 0 {
+        format!("<h3 class=\"margin-head\">Domains</h3><p class=\"prose\">{count}.</p>")
+    } else {
+        format!(
+            "<h3 class=\"margin-head\">Domains</h3><p class=\"prose\">{count}. Rules inherit every Domain represented by their upstream requirements.</p>"
+        )
+    }
 }
 
 fn push_all_records(
