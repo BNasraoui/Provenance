@@ -14,3 +14,7 @@ node_modules/
 
 # Riptide artifacts (cloud-synced)
 .humanlayer/tasks/
+
+# Local Claude Code state (skills are tracked)
+.claude/worktrees/
+.claude/settings.local.json
