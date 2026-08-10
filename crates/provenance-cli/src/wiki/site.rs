@@ -91,10 +91,11 @@ fn print_build_report(
 pub async fn serve(
     repo: Utf8PathBuf,
     scope: String,
+    coverage: Option<&Utf8Path>,
     host: String,
     port: u16,
 ) -> anyhow::Result<()> {
-    let site = WikiSite::load(repo, scope)?;
+    let site = WikiSite::load(repo, scope, coverage)?;
     let app = router(site);
     let listener = tokio::net::TcpListener::bind((host.as_str(), port))
         .await
@@ -108,8 +109,8 @@ pub async fn serve(
 }
 
 impl WikiSite {
-    fn load(repo: Utf8PathBuf, scope: String) -> anyhow::Result<Self> {
-        let corpus = assemble::load_corpus(repo, scope, None)?;
+    fn load(repo: Utf8PathBuf, scope: String, coverage: Option<&Utf8Path>) -> anyhow::Result<Self> {
+        let corpus = assemble::load_corpus(repo, scope, coverage)?;
         let page_by_route = render::render_corpus(&corpus)
             .into_iter()
             .map(|page| (page.route.clone(), page))

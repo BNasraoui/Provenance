@@ -113,7 +113,10 @@ fn an_uncommitted_scan_is_recorded_without_a_commit() {
             vec![binding("src/rules.rs", 7, "decide_rule", None)],
             Vec::new(),
         ),
-        scanned_files: Vec::new(),
+        scanned_files: vec![ScannedFile {
+            file_path: "src/rules.rs".into(),
+            content: "one\ntwo\nthree\nfour\nfive\nsix\nfn decide_rule() {}\n".to_string(),
+        }],
     };
     let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
 
@@ -122,7 +125,12 @@ fn an_uncommitted_scan_is_recorded_without_a_commit() {
 
     let scan = page.code_scan.as_ref().unwrap();
     assert!(scan.commit.is_none());
-    assert!(page.rule_function.is_some());
+    let function = page.rule_function.as_ref().unwrap();
+    assert!(function.location.href.is_none());
+    assert_eq!(
+        function.location.snippet.as_ref().unwrap().content,
+        "fn decide_rule() {}"
+    );
 }
 
 #[test]
