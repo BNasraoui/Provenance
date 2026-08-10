@@ -381,6 +381,31 @@ fn exact_export_rejects_unsupported_record_schema_versions() {
 }
 
 #[test]
+fn exact_export_rejection_names_the_unsupported_document_version() {
+    let mut document = export_document(&empty_graph());
+    document["schema_version"] = json!(2);
+
+    let error = ExactExport::from_json(&serde_json::to_vec(&document).unwrap()).unwrap_err();
+
+    assert!(error
+        .to_string()
+        .contains("exact export has unsupported schema_version 2; expected 1"));
+}
+
+#[test]
+fn exact_export_rejection_names_the_unsupported_graph_version() {
+    let mut graph = empty_graph();
+    graph["schema_version"] = json!(2);
+    let document = export_document(&graph);
+
+    let error = ExactExport::from_json(&serde_json::to_vec(&document).unwrap()).unwrap_err();
+
+    assert!(error
+        .to_string()
+        .contains("graph has unsupported schema_version 2; expected 1"));
+}
+
+#[test]
 #[verifies("rule_export_strips_collaboration", examples)]
 fn exact_export_rejects_collaboration_metadata() {
     let mut graph = empty_graph();

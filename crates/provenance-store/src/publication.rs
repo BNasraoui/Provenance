@@ -1,5 +1,7 @@
 use crate::layout::ProvenanceLayout;
+use anyhow::Context;
 use camino::{Utf8Path, Utf8PathBuf};
+use provenance_core::{ensure_supported_schema_version, SchemaVersion, SUPPORTED_SCHEMA_VERSION};
 use provenance_macros::rule;
 use serde::{de::DeserializeOwned, Serialize};
 use std::cell::RefCell;
@@ -141,7 +143,7 @@ pub fn write_publication_marker(
 ) -> anyhow::Result<()> {
     let transaction_dir = validated_transaction_dir(layout, transaction_dir)?;
     let marker = PublicationMarker {
-        schema_version: 1,
+        schema_version: SUPPORTED_SCHEMA_VERSION.0,
         transaction_dir,
         phase,
     };
@@ -169,10 +171,13 @@ pub fn recover_pending_publication(layout: &ProvenanceLayout) -> anyhow::Result<
         return Ok(());
     }
     let marker: PublicationMarker = serde_json::from_str(&std::fs::read_to_string(&marker_path)?)?;
-    anyhow::ensure!(
-        marker.schema_version == 1,
-        "unsupported publication marker version"
-    );
+    ensure_supported_schema_version("publication marker", SchemaVersion(marker.schema_version))
+        .with_context(|| {
+            format!(
+                "{marker_path}: publication marker has unsupported schema_version {}; expected {}",
+                marker.schema_version, SUPPORTED_SCHEMA_VERSION.0
+            )
+        })?;
     if matches!(marker.phase, PublicationPhase::Published) && !marker.transaction_dir.exists() {
         validate_missing_transaction_dir(layout, &marker.transaction_dir)?;
         return clear_publication_marker(layout);
