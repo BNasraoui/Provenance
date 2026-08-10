@@ -1,10 +1,10 @@
 use crate::wiki::links::LinkResolver;
 use crate::wiki::model::{
     CodeScan, CorpusCounts, DecisionSection, DomainGroup, DomainIndexPage, DomainState,
-    EvidenceThread, FieldNote, GapKind, GapNotice, HomepageDomain, IndexEntry, InputCitation,
-    LineageEntry, OrphanRecord, OrphanReport, PageId, PageKind, PageLink, RecordKind,
-    RequirementPage, ResolutionPage, RuleCard, RuleFunction, RulePage, ScopeIndexPage, SearchEntry,
-    SourceCitation, SourcePage, VerificationSite, WikiCorpus,
+    EvidenceThread, FieldNote, GapKind, GapNotice, HomepageDomain, InputCitation, LineageEntry,
+    PageId, PageKind, PageLink, RecordKind, RequirementPage, ResolutionPage, RuleCard,
+    RuleFunction, RulePage, ScopeIndexPage, SearchEntry, SourceCitation, SourcePage,
+    VerificationSite, WikiCorpus,
 };
 use provenance_core::coverage::{CoverageReport, CoverageScan, ScannedFile};
 use provenance_core::{
@@ -368,30 +368,6 @@ pub(super) fn index_fixture() -> ScopeIndexPage {
             requirements: 3,
             resolutions: 1,
             rules: 1,
-        },
-        roots: vec![IndexEntry {
-            link: link(PageKind::Requirement, "req_platform", "ExampleOrg platform"),
-            status: RequirementStatus::Active,
-            children: 2,
-            resolutions: 1,
-            rules: 1,
-        }],
-        gaps: vec![GapNotice {
-            kind: GapKind::UnreferencedSource,
-            subject: None,
-            related: None,
-            detail: "A source is not referenced by a requirement.".to_string(),
-        }],
-        orphans: OrphanReport {
-            rules: vec![OrphanRecord {
-                link: link(PageKind::Rule, "rule_orphan", "ORPH-001"),
-                reason: "no resolution produces this rule".to_string(),
-            }],
-            resolutions: vec![],
-            sources: vec![OrphanRecord {
-                link: link(PageKind::Source, "source_unused", "Unused API spec"),
-                reason: "referenced by nothing".to_string(),
-            }],
         },
         search_coverage: "Search covers requirements, decisions, rules, and sources.".to_string(),
         search_example: Some("Invoice & participant".to_string()),

@@ -40,6 +40,22 @@ fn attribution_normalizes_machine_shaped_actor_names() {
 }
 
 #[test]
+fn attribution_title_cases_single_tokens_but_preserves_emails_and_names() {
+    let mut page = resolution_fixture();
+    page.made_by = Some("ben".to_string());
+    page.approved_by = Some("reviewer@example.com".to_string());
+
+    let html = render_resolution("default", &page);
+
+    assert!(html.contains("Ben"), "{html}");
+    assert!(html.contains("reviewer@example.com"), "{html}");
+
+    page.made_by = Some("Ben Nasraoui".to_string());
+    let html = render_resolution("default", &page);
+    assert!(html.contains("Ben Nasraoui"), "{html}");
+}
+
+#[test]
 fn rule_page_links_the_function_and_lists_verification_sites() {
     let html = render_rule("default", &rule_fixture());
     assert!(html.contains("class=\"accent-bar rule\""));
@@ -150,9 +166,17 @@ fn rule_pages_use_shields_and_explain_orphaned_provenance_without_raw_ids() {
         html.contains("No requirement or decision is recorded as producing this rule."),
         "{html}"
     );
-    let gap_start = html.find("citation gap").unwrap();
-    let gap_end = html[gap_start..].find("</div>").unwrap() + gap_start;
-    assert!(!html[gap_start..gap_end].contains("rule_orphan"), "{html}");
+    assert_eq!(
+        html.matches("No requirement or decision is recorded as producing this rule.")
+            .count(),
+        1,
+        "{html}"
+    );
+    assert!(
+        !html.contains("<h3 class=\"margin-head\">Gaps</h3>"),
+        "{html}"
+    );
+    assert!(!html.contains("citation gap"), "{html}");
 }
 
 #[test]

@@ -12,9 +12,10 @@ pub(super) async fn handle(command: WikiCommand) -> anyhow::Result<()> {
         WikiCommand::Serve {
             repo,
             scope,
+            coverage,
             host,
             port,
-        } => crate::wiki::site::serve(repo, scope, host, port).await?,
+        } => crate::wiki::site::serve(repo, scope, coverage.as_deref(), host, port).await?,
     }
     Ok(())
 }

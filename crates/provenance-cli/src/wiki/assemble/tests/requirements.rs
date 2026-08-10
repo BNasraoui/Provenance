@@ -25,10 +25,7 @@ fn requirement_page_assembles_lineage_decision_rules_and_sources() {
     assert_eq!(decision.link.target.kind, RecordKind::Resolution);
     assert_eq!(decision.position, "Adopt the split");
     assert_eq!(decision.inputs.len(), 1);
-    assert_eq!(
-        decision.inputs[0].reference.href.as_deref(),
-        Some("https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php#L59-L69")
-    );
+    assert!(decision.inputs[0].reference.href.is_none());
 
     assert_eq!(
         page.produced_rules.len(),
@@ -39,10 +36,7 @@ fn requirement_page_assembles_lineage_decision_rules_and_sources() {
     assert_eq!(card.link.target.record_id, "rule_001");
     assert_eq!(card.evidence.len(), 1);
     assert_eq!(card.evidence[0].label, "src/UseCase.php:59-69");
-    assert_eq!(
-        card.evidence[0].href.as_deref(),
-        Some("https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php#L59-L69")
-    );
+    assert!(card.evidence[0].href.is_none());
 
     assert_eq!(page.sources.len(), 1);
     assert_eq!(page.sources[0].link.target.record_id, "source_schads");
@@ -167,7 +161,7 @@ fn requirement_page_lists_siblings_from_all_parents_without_self_or_duplicates()
 }
 
 #[test]
-fn requirement_and_index_pages_flag_requirements_without_domain_id_only() {
+fn requirement_and_unfinished_pages_flag_requirements_without_domain_id_only() {
     let mut state = empty_state();
     let mut missing_domain = requirement(
         "req_missing_domain",
@@ -199,14 +193,14 @@ fn requirement_and_index_pages_flag_requirements_without_domain_id_only() {
         .gaps
         .iter()
         .any(|gap| gap.kind == GapKind::MissingDomainId));
-    assert!(corpus.index.gaps.iter().any(|gap| {
+    assert!(corpus.unfinished.gaps.iter().any(|gap| {
         gap.kind == GapKind::MissingDomainId
             && gap
                 .subject
                 .as_ref()
                 .is_some_and(|subject| subject.target.record_id == "req_missing_domain")
     }));
-    assert!(!corpus.index.gaps.iter().any(|gap| {
+    assert!(!corpus.unfinished.gaps.iter().any(|gap| {
         gap.kind == GapKind::MissingDomainId
             && gap
                 .subject
@@ -237,7 +231,7 @@ fn requirement_page_flags_dangling_refs_and_frontier_gaps() {
 }
 
 #[test]
-fn requirement_and_index_pages_anchor_dangling_edges_in_both_directions() {
+fn requirement_and_unfinished_pages_anchor_dangling_edges_in_both_directions() {
     let mut state = empty_state();
     state.requirements = vec![requirement(
         "req_surviving",
@@ -274,7 +268,7 @@ fn requirement_and_index_pages_anchor_dangling_edges_in_both_directions() {
         .all(|detail| detail.contains("requirement that is missing")));
     assert_eq!(
         corpus
-            .index
+            .unfinished
             .gaps
             .iter()
             .filter(|gap| {

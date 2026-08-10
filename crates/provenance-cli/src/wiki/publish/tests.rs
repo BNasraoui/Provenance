@@ -24,9 +24,6 @@ fn empty_corpus() -> WikiCorpus {
             scope: "default".to_string(),
             title: "Provenance Wiki".to_string(),
             counts: CorpusCounts::default(),
-            roots: Vec::new(),
-            gaps: Vec::new(),
-            orphans: OrphanReport::default(),
             search_coverage: "Search covers requirements, decisions, rules, and sources."
                 .to_string(),
             search_example: None,

@@ -4,7 +4,7 @@ use provenance_macros::verifies;
 use std::fmt::Write as _;
 
 fn scanned_resolver(path: &str) -> LinkResolver {
-    scanned_resolver_at(path, "HEAD")
+    scanned_resolver_at(path, "abcdef1")
 }
 
 fn scanned_resolver_at(path: &str, commit: &str) -> LinkResolver {
@@ -29,13 +29,10 @@ fn scanned_resolver_at(path: &str, commit: &str) -> LinkResolver {
 
 #[test]
 #[verifies("rule_wiki_reference_links", examples)]
-fn resolve_document_anchors_a_lines_prefixed_section() {
+fn resolve_document_suppresses_an_unpinned_lines_prefixed_section() {
     let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
     let evidence = resolver.resolve_document("src/UseCase.php", Some("lines 153-156"), None);
-    assert_eq!(
-        evidence.href.as_deref(),
-        Some("https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php#L153-L156")
-    );
+    assert_eq!(evidence.href.as_deref(), None);
 }
 
 #[test]
@@ -51,14 +48,11 @@ fn resolver_passes_http_urls_through() {
 
 #[test]
 #[verifies("rule_wiki_reference_links", examples)]
-fn resolver_builds_blob_urls_when_a_remote_is_known() {
+fn resolver_suppresses_unpinned_blob_urls_when_a_remote_is_known() {
     let evidence = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"))
         .resolve("src/UseCase.php:153-156");
     assert_eq!(evidence.label, "src/UseCase.php:153-156");
-    assert_eq!(
-        evidence.href.as_deref(),
-        Some("https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php#L153-L156")
-    );
+    assert!(evidence.href.is_none());
 }
 
 #[test]
@@ -206,6 +200,14 @@ fn git_output(repo: &std::path::Path, args: &[&str]) -> String {
 }
 
 #[test]
+fn resolver_suppresses_the_mutable_head_revision() {
+    let evidence = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"))
+        .resolve_at("src/UseCase.php:153", Some("HEAD"));
+
+    assert!(evidence.href.is_none());
+}
+
+#[test]
 #[verifies("rule_wiki_reference_links", examples)]
 fn resolver_leaves_code_refs_unlinked_without_a_remote() {
     let evidence = LinkResolver::new(None).resolve("src/UseCase.php:153-156");
@@ -239,37 +241,28 @@ fn resolver_leaves_bare_dotted_tokens_unlinked() {
 
 #[test]
 #[verifies("rule_wiki_reference_links", examples)]
-fn resolver_links_a_bare_file_name_carrying_a_line_group() {
+fn resolver_suppresses_an_unpinned_bare_file_name_with_lines() {
     let evidence =
         LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git")).resolve("parser.rs:12");
-    assert_eq!(
-        evidence.href.as_deref(),
-        Some("https://github.com/exampleorg/ex-api/blob/HEAD/parser.rs#L12")
-    );
+    assert!(evidence.href.is_none());
 }
 
 #[test]
 #[verifies("rule_wiki_reference_links", examples)]
-fn resolver_combines_documents_with_line_sections() {
+fn resolver_combines_documents_with_line_sections_without_linking() {
     let evidence = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"))
         .resolve_document("src/UseCase.php", Some("153-156"), None);
     assert_eq!(evidence.label, "src/UseCase.php:153-156");
-    assert_eq!(
-        evidence.href.as_deref(),
-        Some("https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php#L153-L156")
-    );
+    assert!(evidence.href.is_none());
 }
 
 #[test]
 #[verifies("rule_wiki_reference_links", examples)]
-fn resolver_keeps_prose_sections_visible_but_links_the_document() {
+fn resolver_keeps_prose_sections_visible_without_an_unpinned_link() {
     let evidence = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"))
         .resolve_document("src/UseCase.php", Some("save flow"), None);
     assert_eq!(evidence.label, "src/UseCase.php (save flow)");
-    assert_eq!(
-        evidence.href.as_deref(),
-        Some("https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php")
-    );
+    assert!(evidence.href.is_none());
 }
 
 #[test]
@@ -291,7 +284,7 @@ fn annotate_links_file_references_in_free_text() {
     assert_eq!(&text[refs[0].start..refs[0].end], "src/UseCase.php:153-156");
     assert_eq!(
         refs[0].href.as_deref(),
-        Some("https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php#L153-L156")
+        Some("https://github.com/exampleorg/ex-api/blob/abcdef1/src/UseCase.php#L153-L156")
     );
     assert_eq!(
         refs[0].snippet.as_ref().unwrap().content,
@@ -331,11 +324,23 @@ fn long_snippets_label_the_lines_they_actually_show() {
 }
 
 #[test]
+fn scanned_locations_beyond_the_file_are_not_linked() {
+    let evidence = scanned_resolver("src/UseCase.php").resolve("src/UseCase.php:241");
+
+    assert!(evidence.href.is_none());
+    assert!(evidence.snippet.is_none());
+}
+
+#[test]
 fn snippets_are_suppressed_when_the_link_targets_another_commit() {
     let evidence =
-        scanned_resolver("src/UseCase.php").resolve_at("src/UseCase.php:10", Some("deadbee"));
+        scanned_resolver("src/UseCase.php").resolve_at("src/UseCase.php:241", Some("deadbee"));
 
     assert!(evidence.snippet.is_none());
+    assert_eq!(
+        evidence.href.as_deref(),
+        Some("https://github.com/exampleorg/ex-api/blob/deadbee/src/UseCase.php#L241")
+    );
 }
 
 #[test]
@@ -364,7 +369,7 @@ fn annotate_links_test_case_names_to_the_nearby_file_reference() {
     assert_eq!(refs[1].label, "testCreateGapInvoiceOnly");
     assert_eq!(
         refs[1].href.as_deref(),
-        Some("https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php")
+        Some("https://github.com/exampleorg/ex-api/blob/abcdef1/src/UseCase.php")
     );
 }
 

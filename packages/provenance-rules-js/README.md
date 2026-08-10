@@ -24,7 +24,7 @@ Provenance's scanner is deliberately line-oriented. Keep `rule("id",` on one
 line (the assignment may be on that line or immediately above it), and put
 `verifies("id", "method")` inside a named function or function-valued `const`.
 The supported methods are `exhaustion`, `property`, `examples`, `conformance`,
-and `construction`.
+`construction`, and `proof`.
 
 The package is TypeScript-first and uses only `tsc`:
 

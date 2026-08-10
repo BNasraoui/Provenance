@@ -22,12 +22,13 @@ pub fn rule(attr: TokenStream, item: TokenStream) -> TokenStream {
     item
 }
 
-const VERIFICATION_METHODS: [&str; 5] = [
+const VERIFICATION_METHODS: [&str; 6] = [
     "exhaustion",
     "property",
     "examples",
     "conformance",
     "construction",
+    "proof",
 ];
 
 /// Marks an item as verifying a provenance rule, and says how.
@@ -44,7 +45,10 @@ const VERIFICATION_METHODS: [&str; 5] = [
 /// `property` (generated inputs checked against a stated property),
 /// `examples` (hand-picked cases), `conformance` (a copy of the rule
 /// elsewhere is checked against the rule function), `construction` (a type
-/// or constraint makes violation impossible; goes on the type, not a test).
+/// or constraint makes violation impossible; goes on the type, not a test),
+/// `proof` (a machine-checked proof outside this test runner backs the rule;
+/// the marked site is the bridge that pins the implementation to the proved
+/// model, such as a golden-vector test shared with a Lean theorem).
 ///
 /// A rule with no `#[verifies]` site anywhere is unverified; that state is
 /// reported by the scanner, never written.
