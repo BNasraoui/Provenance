@@ -91,6 +91,11 @@ fn store_scan_matches_every_rust_rule_and_verification_attribute() {
         .into_iter()
         .flat_map(|scan| {
             scan.bindings.into_iter().map(|binding| {
+                assert!(
+                    binding.anchor.symbol.is_some(),
+                    "dogfood binding has no enclosing item: {binding:?}"
+                );
+                assert!(binding.anchor.content_hash.starts_with("sha256:"));
                 (
                     binding.file_path,
                     binding.line,

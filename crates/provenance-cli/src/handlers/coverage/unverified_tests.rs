@@ -3,6 +3,7 @@
 
 use super::unverified_rule_warnings;
 use camino::Utf8PathBuf;
+use provenance_core::coverage::EvidenceAnchor;
 use provenance_core::{Rule, RuleSeverity, RuleStatus, SchemaVersion, ScopeId, StableId};
 use provenance_scanner::{
     Annotation, AnnotationLocation, AttributeBinding, CoverageLevel, FileScan, Language,
@@ -44,6 +45,7 @@ fn scan_with_binding(rule_id: &str, verification: Option<Verification>) -> FileS
             item_name: Some("checks_it".to_string()),
             rule_id: rule_id.to_string(),
             verification,
+            anchor: EvidenceAnchor::new(Some("checks_it".to_string()), "#[verifies]"),
         }],
         ..empty_scan()
     }
@@ -55,6 +57,7 @@ fn scan_with_annotation(rule_id: &str, verification: Option<Verification>) -> Fi
             file_path: Utf8PathBuf::from("src/lib.rs"),
             line: 1,
             function_name: Some("checks_it".to_string()),
+            anchor: EvidenceAnchor::new(Some("checks_it".to_string()), "// @provenance"),
             annotation: Annotation {
                 rule: rule_id.to_string(),
                 name: None,

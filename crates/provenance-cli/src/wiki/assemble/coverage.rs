@@ -1,5 +1,5 @@
 use crate::wiki::model::{CodeScan, RuleFunction, VerificationSite};
-use provenance_core::coverage::BindingResult;
+use provenance_core::coverage::{AnchorState, BindingResult};
 
 use super::context::Assembler;
 
@@ -13,11 +13,11 @@ impl Assembler<'_> {
     }
 
     pub(super) fn rule_function(&self, rule_id: &str) -> Option<RuleFunction> {
-        let binding = self
-            .coverage?
-            .bindings
-            .iter()
-            .find(|binding| binding.rule_id == rule_id && binding.verification.is_none())?;
+        let binding = self.coverage?.bindings.iter().find(|binding| {
+            binding.rule_id == rule_id
+                && binding.verification.is_none()
+                && binding.anchor_state != AnchorState::Gone
+        })?;
         Some(RuleFunction {
             symbol: binding.item_name.clone(),
             location: self.binding_location(binding),
@@ -31,12 +31,17 @@ impl Assembler<'_> {
         let defining_file = report
             .bindings
             .iter()
-            .find(|binding| binding.rule_id == rule_id && binding.verification.is_none())
+            .find(|binding| {
+                binding.rule_id == rule_id
+                    && binding.verification.is_none()
+                    && binding.anchor_state != AnchorState::Gone
+            })
             .map(|binding| &binding.file_path);
         report
             .bindings
             .iter()
             .filter(|binding| binding.rule_id == rule_id)
+            .filter(|binding| binding.anchor_state != AnchorState::Gone)
             .filter_map(|binding| {
                 binding
                     .verification
