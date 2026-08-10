@@ -279,7 +279,7 @@ impl StateStore {
     }
 }
 
-pub(crate) fn serde_name<T: serde::Serialize>(value: &T) -> anyhow::Result<String> {
+pub fn serde_name<T: serde::Serialize>(value: &T) -> anyhow::Result<String> {
     Ok(serde_json::to_value(value)?
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("expected string enum serialization"))?

@@ -87,10 +87,10 @@ fn validate_threads(threads: &[Thread]) -> anyhow::Result<()> {
         if let Some(earlier) = threads[..index].iter().find(|earlier| {
             earlier.status == ThreadStatus::Active && earlier.parent == thread.parent
         }) {
-            let node_type = serde_json::to_string(&thread.parent.node_type)?;
+            let node_type = provenance_store::state_store::serde_name(&thread.parent.node_type)?;
             anyhow::bail!(
                 "multiple active threads for {} {}: {} and {}",
-                node_type.trim_matches('"'),
+                node_type,
                 thread.parent.node_id.as_str(),
                 earlier.id.as_str(),
                 thread.id.as_str()
