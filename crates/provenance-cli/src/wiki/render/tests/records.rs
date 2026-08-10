@@ -28,17 +28,63 @@ fn resolution_page_renders_inputs_as_citations_and_attribution() {
 }
 
 #[test]
-fn rule_page_links_evidence_but_leaves_prose_references_as_text() {
+fn rule_page_links_the_function_and_lists_verification_sites() {
     let html = render_rule("default", &rule_fixture());
     assert!(html.contains("class=\"accent-bar rule\""));
     assert!(html.contains("Suppress line emission for fully zero claim items"));
-    assert!(
-        html.contains("https://github.com/exampleorg/ex-api/blob/HEAD/src/UseCase.php#L153-L156")
-    );
-    assert!(html.contains("SCHADS Award clause 10.3"));
-    assert!(!html.contains("<a>SCHADS Award clause 10.3</a>"));
+    assert!(html
+        .contains("https://github.com/exampleorg/ex-api/blob/9f2c1ab4e5f6/src/UseCase.php#L153"));
+    assert!(html.contains("Rule Function"));
+    assert!(html.contains("suppress_zero_claim_items"));
+    assert!(html.contains("Verification"));
+    assert!(html.contains("zero_claim_items_emit_no_lines"));
+    assert!(html.contains("outside defining module"));
+    assert!(html.contains("Code scan at commit <code>9f2c1ab</code>"));
+    assert!(!html.contains(">Evidence</h2>"));
     assert!(!html.contains("href=\"\""));
     assert!(html.contains("sev high"));
+}
+
+/// A page built with a scan that bound nothing still says which scan looked,
+/// which is what makes "No function bound" a claim rather than a blank.
+#[test]
+fn rule_page_names_the_scan_behind_its_empty_binding_sections() {
+    let mut page = rule_fixture();
+    page.rule_function = None;
+    page.verifications.clear();
+
+    let html = render_rule("default", &page);
+
+    assert!(html.contains("No function bound"));
+    assert!(html.contains("Not verified"));
+    assert_eq!(html.matches("Code scan at commit").count(), 1);
+}
+
+#[test]
+fn rule_page_built_without_a_scan_claims_nothing_about_bindings() {
+    let mut page = rule_fixture();
+    page.code_scan = None;
+    page.rule_function = None;
+    page.verifications.clear();
+
+    let html = render_rule("default", &page);
+
+    assert!(html.contains("No code scan was supplied to this build"));
+    assert!(!html.contains("No function bound"));
+    assert!(!html.contains("Not verified"));
+    assert!(!html.contains(">Rule Function</h2>"));
+    assert!(!html.contains(">Verification</h2>"));
+}
+
+#[test]
+fn rule_page_says_when_the_scan_read_an_uncommitted_tree() {
+    let mut page = rule_fixture();
+    page.code_scan = Some(crate::wiki::model::CodeScan { commit: None });
+
+    let html = render_rule("default", &page);
+
+    assert!(html.contains("Code scan of an uncommitted working tree"));
+    assert!(!html.contains("Code scan at commit"));
 }
 
 #[test]

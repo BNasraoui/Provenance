@@ -1,3 +1,4 @@
+mod coverage;
 mod discovery;
 mod domain_attribution;
 mod fixtures;

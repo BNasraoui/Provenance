@@ -72,7 +72,12 @@ fn wiki_build_writes_static_pages_and_stylesheet() {
     );
 
     let rule = std::fs::read_to_string(out.join("rules/rule_sah_001/index.html")).unwrap();
-    assert!(rule.contains("Example-API-main/src/example.php"), "{rule}");
+    assert!(
+        rule.contains("No code scan was supplied to this build"),
+        "{rule}"
+    );
+    assert!(!rule.contains("No function bound"), "{rule}");
+    assert!(!rule.contains("Not verified"), "{rule}");
 
     let gapped = std::fs::read_to_string(out.join("requirements/req_gap/index.html")).unwrap();
     assert!(gapped.contains("citation gap"), "{gapped}");

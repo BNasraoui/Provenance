@@ -21,7 +21,7 @@ use axum::{
     routing::get,
     Router,
 };
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use provenance_store::layout::ProvenanceLayout;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -40,6 +40,7 @@ pub fn build(
     repo: Utf8PathBuf,
     scope: String,
     out: Option<Utf8PathBuf>,
+    coverage: Option<&Utf8Path>,
     format: OutputFormat,
 ) -> anyhow::Result<()> {
     let output = if let Some(out) = out {
@@ -51,7 +52,7 @@ pub fn build(
         PublicationOutput::generator_owned(ProvenanceLayout::new(repo.clone()).wiki_dir())
     };
     let repo_hint = repo.clone();
-    let corpus = assemble::load_corpus(repo, scope)?;
+    let corpus = assemble::load_corpus(repo, scope, coverage)?;
     let report = publish::publish(&corpus, output)?;
     print_build_report(format, &report, &repo_hint)?;
     Ok(())
@@ -108,7 +109,7 @@ pub async fn serve(
 
 impl WikiSite {
     fn load(repo: Utf8PathBuf, scope: String) -> anyhow::Result<Self> {
-        let corpus = assemble::load_corpus(repo, scope)?;
+        let corpus = assemble::load_corpus(repo, scope, None)?;
         let page_by_route = render::render_corpus(&corpus)
             .into_iter()
             .map(|page| (page.route.clone(), page))

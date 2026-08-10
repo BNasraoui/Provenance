@@ -6,8 +6,9 @@ pub(super) async fn handle(command: WikiCommand) -> anyhow::Result<()> {
             repo,
             scope,
             out,
+            coverage,
             format,
-        } => crate::wiki::site::build(repo, scope, out, format)?,
+        } => crate::wiki::site::build(repo, scope, out, coverage.as_deref(), format)?,
         WikiCommand::Serve {
             repo,
             scope,
