@@ -1,5 +1,7 @@
 use std::{fmt, str::FromStr};
 
+use provenance_macros::rule;
+
 use crate::string_context::obvious_string_is_open;
 
 pub(crate) const PRIMARY_ANNOTATION_MARKER: &str = "@provenance";
@@ -42,14 +44,18 @@ impl FromStr for CoverageLevel {
     }
 }
 
+/// The scanner's copy of the method words the `verifies` macro accepts; the
+/// two lists are held identical by `tests/method_word_conformance.rs`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
+#[rule("rule_verification_method_words")]
 pub enum Verification {
     Exhaustion,
     Property,
     Examples,
     Conformance,
     Construction,
+    Proof,
 }
 
 impl fmt::Display for Verification {
@@ -60,6 +66,7 @@ impl fmt::Display for Verification {
             Self::Examples => write!(f, "examples"),
             Self::Conformance => write!(f, "conformance"),
             Self::Construction => write!(f, "construction"),
+            Self::Proof => write!(f, "proof"),
         }
     }
 }
@@ -74,6 +81,7 @@ impl FromStr for Verification {
             "examples" => Ok(Self::Examples),
             "conformance" => Ok(Self::Conformance),
             "construction" => Ok(Self::Construction),
+            "proof" => Ok(Self::Proof),
             other => Err(format!("invalid verification method: {other}")),
         }
     }

@@ -1,0 +1,96 @@
+//! The scanner's verification methods, held to the macro's.
+//!
+//! `provenance-macros` validates `#[verifies]` method words against its
+//! `VERIFICATION_METHODS` list at compile time; the scanner parses the same
+//! words into `Verification` long after, from repositories the macro never
+//! saw. The two live in different crates with no shared dependency to carry
+//! the list, so this reads the macro's source and checks every word it
+//! accepts round-trips through the scanner, and that neither side knows a
+//! word the other refuses.
+
+use std::str::FromStr;
+
+use provenance_macros::verifies;
+use provenance_scanner::Verification;
+
+/// Every variant, and the compiler refuses this list going stale: adding a
+/// variant breaks the match, and the match names exactly this list.
+fn all_verifications() -> Vec<Verification> {
+    let listed = [
+        Verification::Exhaustion,
+        Verification::Property,
+        Verification::Examples,
+        Verification::Conformance,
+        Verification::Construction,
+        Verification::Proof,
+    ];
+    for variant in listed {
+        match variant {
+            Verification::Exhaustion
+            | Verification::Property
+            | Verification::Examples
+            | Verification::Conformance
+            | Verification::Construction
+            | Verification::Proof => {}
+        }
+    }
+    listed.to_vec()
+}
+
+fn macro_method_words() -> Vec<String> {
+    let source = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../provenance-macros/src/lib.rs"),
+    )
+    .expect("read provenance-macros source");
+    let (_, tail) = source
+        .split_once("const VERIFICATION_METHODS")
+        .expect("provenance-macros no longer declares VERIFICATION_METHODS");
+    let (_, initializer) = tail
+        .split_once('=')
+        .expect("VERIFICATION_METHODS has no initializer");
+    let (list, _) = initializer
+        .split_once(']')
+        .expect("VERIFICATION_METHODS list is unterminated");
+    let words = list
+        .split('"')
+        .skip(1)
+        .step_by(2)
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    assert!(
+        !words.is_empty(),
+        "parsed no method words out of provenance-macros"
+    );
+    words
+}
+
+#[test]
+#[verifies("rule_verification_method_words", conformance)]
+fn every_macro_method_word_is_a_scanner_verification() {
+    for word in macro_method_words() {
+        let parsed = Verification::from_str(&word)
+            .unwrap_or_else(|_| panic!("the macro accepts `{word}`; the scanner refuses it"));
+        assert_eq!(
+            parsed.to_string(),
+            word,
+            "`{word}` does not round-trip through the scanner"
+        );
+    }
+}
+
+#[test]
+#[verifies("rule_verification_method_words", conformance)]
+fn the_scanner_knows_no_method_word_the_macro_refuses() {
+    let macro_words = macro_method_words();
+    for variant in all_verifications() {
+        assert!(
+            macro_words.contains(&variant.to_string()),
+            "the scanner parses `{variant}`; the macro would refuse it at the attribute"
+        );
+    }
+    assert_eq!(
+        macro_words.len(),
+        all_verifications().len(),
+        "the two method lists differ in size"
+    );
+}
