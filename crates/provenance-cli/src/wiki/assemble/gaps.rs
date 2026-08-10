@@ -1,10 +1,18 @@
-use crate::wiki::model::GapNotice;
+use crate::wiki::model::{FindingsPage, GapNotice};
 use provenance_core::{NodeType, StableId};
 use provenance_store::cache::{node_type_word, GapItem, GapKind};
 
 use super::context::Assembler;
 
 impl Assembler<'_> {
+    pub(super) fn findings_page(&self) -> FindingsPage {
+        FindingsPage {
+            scope: self.state.scope.clone(),
+            title: "Missing evidence".to_string(),
+            findings: self.gaps.iter().map(Self::gap_notice).collect(),
+        }
+    }
+
     pub(super) fn gap_notice(gap: &GapItem) -> GapNotice {
         GapNotice {
             kind: gap.kind,

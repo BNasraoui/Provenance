@@ -1,5 +1,6 @@
 mod domains;
-mod index;
+mod findings;
+pub mod index;
 mod not_found;
 mod requirement;
 mod resolution;
@@ -8,6 +9,7 @@ mod search;
 mod source;
 
 pub use domains::render_domains;
+pub use findings::render_findings;
 pub use index::render_index;
 pub use not_found::render_not_found;
 pub use requirement::render_requirement;

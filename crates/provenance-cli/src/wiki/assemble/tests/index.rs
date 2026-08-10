@@ -162,3 +162,22 @@ fn index_reports_a_gap_for_a_thread_whose_parent_record_is_gone() {
     assert!(dangling.detail.contains("thr_ghost"));
     assert!(dangling.detail.contains("res_missing"));
 }
+
+#[test]
+fn findings_page_preserves_every_computed_gap_exactly_once() {
+    let state = fixture_state();
+    let expected = compute_state_gaps(&state)
+        .into_iter()
+        .map(|gap| (gap.kind, format!("{}: {}", gap.subject(), gap.reason)))
+        .collect::<Vec<_>>();
+    let corpus = build_corpus(&state, &LinkResolver::new(None));
+    let actual = corpus
+        .findings
+        .findings
+        .iter()
+        .map(|gap| (gap.kind, gap.detail.clone()))
+        .collect::<Vec<_>>();
+
+    assert_eq!(actual, expected);
+    assert_eq!(corpus.index.finding_count, actual.len());
+}

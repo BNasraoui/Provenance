@@ -34,7 +34,8 @@ fn wiki_build_writes_static_pages_and_stylesheet() {
 
     let index = std::fs::read_to_string(out.join("index.html")).unwrap();
     assert!(index.contains("Provenance Wiki"), "{index}");
-    assert!(index.contains("href=\"/requirements/req_sah/\""), "{index}");
+    assert!(index.contains("role=\"search\""), "{index}");
+    assert!(index.contains("href=\"/findings/\""), "{index}");
 
     let stylesheet = std::fs::read_to_string(out.join("assets/provenance-wiki.css")).unwrap();
     assert!(stylesheet.contains("--pv-"), "stylesheet missing tokens");
@@ -105,9 +106,9 @@ fn wiki_build_default_format_prints_a_concise_summary_not_a_page_dump() {
 
     assert!(!stdout.contains("\"pages\""), "{stdout}");
     assert!(!stdout.contains("\"route\""), "{stdout}");
-    // 3 singleton pages + 2 requirements + 1 resolution + 1 rule + 1 source = 8 pages.
+    // 4 singleton pages + 2 requirements + 1 resolution + 1 rule + 1 source = 9 pages.
     assert!(
-        stdout.contains("8 pages"),
+        stdout.contains("9 pages"),
         "expected the page count: {stdout}"
     );
     assert!(
@@ -276,6 +277,7 @@ fn wiki_serve_serves_pages_stylesheet_and_not_found() {
     let bare_route = wait_for_http(port, "/requirements/req_sah");
     let domains = wait_for_http(port, "/domains");
     let search = wait_for_http(port, "/search/");
+    let findings = wait_for_http(port, "/findings/");
     let no_json_index = wait_for_http(port, "/assets/search-index.json");
     let missing = wait_for_http(port, "/nope/");
     child.kill().ok();
@@ -283,7 +285,7 @@ fn wiki_serve_serves_pages_stylesheet_and_not_found() {
 
     assert!(index.contains("200 OK"), "{index}");
     assert!(index.contains("- Provenance Wiki</title>"), "{index}");
-    assert!(index.contains("href=\"/requirements/req_sah/\""), "{index}");
+    assert!(index.contains("role=\"search\""), "{index}");
 
     assert!(stylesheet.contains("200 OK"), "{stylesheet}");
     assert!(stylesheet.contains("text/css"), "{stylesheet}");
@@ -305,6 +307,7 @@ fn wiki_serve_serves_pages_stylesheet_and_not_found() {
     assert!(domains.contains("Unassigned"), "{domains}");
     assert!(search.contains("200 OK"), "{search}");
     assert!(search.contains("id=\"wiki-search\""), "{search}");
+    assert!(findings.contains("200 OK"), "{findings}");
     assert!(no_json_index.contains("404 Not Found"), "{no_json_index}");
 
     assert!(missing.contains("404 Not Found"), "{missing}");

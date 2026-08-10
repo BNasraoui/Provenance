@@ -47,8 +47,8 @@ pub fn render_search(scope: &str, page: &SearchIndexPage) -> String {
     }
     main.push_str("</ol>\n");
     let margin = format!(
-        "<h3 class=\"margin-head\">Indexed fields</h3><p class=\"prose\">{} requirements and rules. All words must match; title matches rank first.</p>",
-        page.entries.len()
+        "<h3 class=\"margin-head\">Search coverage</h3><p class=\"prose\">{} All words must match; title matches rank first.</p>",
+        escape_html(&page.coverage)
     );
     let container = container_html(
         Some((

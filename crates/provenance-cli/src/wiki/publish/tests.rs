@@ -3,7 +3,7 @@ use super::{
     TransactionPaths, OWNERSHIP_MANIFEST,
 };
 use crate::wiki::model::{
-    CorpusCounts, DomainIndexPage, OrphanReport, PageId, RecordKind, RequirementPage,
+    CorpusCounts, DomainIndexPage, FindingsPage, OrphanReport, PageId, RecordKind, RequirementPage,
     ScopeIndexPage, SearchIndexPage, WikiCorpus,
 };
 use camino::Utf8PathBuf;
@@ -27,6 +27,10 @@ fn empty_corpus() -> WikiCorpus {
             roots: Vec::new(),
             gaps: Vec::new(),
             orphans: OrphanReport::default(),
+            search_coverage: "Search covers requirements and rules.".to_string(),
+            domains: Vec::new(),
+            authored_domain_count: 0,
+            finding_count: 0,
         },
         domains: DomainIndexPage {
             scope: "default".to_string(),
@@ -36,7 +40,13 @@ fn empty_corpus() -> WikiCorpus {
         search: SearchIndexPage {
             scope: "default".to_string(),
             title: "Search requirements and rules".to_string(),
+            coverage: "Search covers requirements and rules.".to_string(),
             entries: Vec::new(),
+        },
+        findings: FindingsPage {
+            scope: "default".to_string(),
+            title: "Missing evidence".to_string(),
+            findings: Vec::new(),
         },
         requirements: Vec::new(),
         resolutions: Vec::new(),

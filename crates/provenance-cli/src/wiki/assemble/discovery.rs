@@ -1,7 +1,7 @@
 use crate::handlers::ScopeExport;
 use crate::wiki::model::{
-    DomainGroup, DomainIndexPage, DomainState, PageId, PageLink, RequirementPage, RulePage,
-    SearchEntry, SearchIndexPage,
+    DomainGroup, DomainIndexPage, DomainState, PageId, PageLink, RecordKind, RequirementPage,
+    RulePage, SearchEntry, SearchIndexPage,
 };
 use provenance_core::{EdgeType, NodeType};
 use provenance_macros::rule;
@@ -18,6 +18,11 @@ struct RuleRecord<'a> {
     link: PageLink,
     statement: &'a str,
     requirement_ids: Vec<&'a str>,
+}
+
+struct SearchCollection {
+    kind: RecordKind,
+    entries: Vec<SearchEntry>,
 }
 
 pub(super) fn build_discovery_pages(
@@ -53,27 +58,70 @@ pub(super) fn build_discovery_pages(
     )
 }
 
+/// Builds the offline index and names the record kinds it actually includes.
+#[rule("rule_wiki_homepage_search_coverage")]
 fn search_index(
     scope: &str,
     requirements: &[RequirementRecord<'_>],
     rules: &[RuleRecord<'_>],
 ) -> SearchIndexPage {
-    let entries = requirements
-        .iter()
-        .map(|requirement| SearchEntry {
-            link: requirement.link.clone(),
-            statement: requirement.statement.to_string(),
-        })
-        .chain(rules.iter().map(|rule| SearchEntry {
-            link: rule.link.clone(),
-            statement: rule.statement.to_string(),
-        }))
+    let collections = vec![
+        SearchCollection {
+            kind: RecordKind::Requirement,
+            entries: requirements
+                .iter()
+                .map(|requirement| SearchEntry {
+                    link: requirement.link.clone(),
+                    statement: requirement.statement.to_string(),
+                })
+                .collect(),
+        },
+        SearchCollection {
+            kind: RecordKind::Rule,
+            entries: rules
+                .iter()
+                .map(|rule| SearchEntry {
+                    link: rule.link.clone(),
+                    statement: rule.statement.to_string(),
+                })
+                .collect(),
+        },
+    ];
+    let coverage = coverage_sentence(&collections);
+    let entries = collections
+        .into_iter()
+        .flat_map(|collection| collection.entries)
         .collect();
     SearchIndexPage {
         scope: scope.to_string(),
         title: "Search requirements and rules".to_string(),
+        coverage,
         entries,
     }
+}
+
+fn coverage_sentence(collections: &[SearchCollection]) -> String {
+    let labels = collections
+        .iter()
+        .map(|collection| match collection.kind {
+            RecordKind::Requirement => "requirements",
+            RecordKind::Resolution => "decisions",
+            RecordKind::Rule => "rules",
+            RecordKind::Source => "sources",
+        })
+        .collect::<Vec<_>>();
+    let covered = match labels.as_slice() {
+        [] => "nothing".to_string(),
+        [only] => (*only).to_string(),
+        [first, second] => format!("{first} and {second}"),
+        _ => {
+            let (last, rest) = labels
+                .split_last()
+                .expect("a non-empty slice has a last item");
+            format!("{}, and {last}", rest.join(", "))
+        }
+    };
+    format!("Search covers {covered}.")
 }
 
 fn domain_index(

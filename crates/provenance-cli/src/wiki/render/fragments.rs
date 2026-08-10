@@ -1,4 +1,4 @@
-use crate::wiki::model::{DecisionSection, LineageEntry, OrphanRule, PageLink, RuleCard};
+use crate::wiki::model::{DecisionSection, LineageEntry, PageLink, RuleCard};
 use std::fmt::Write as _;
 
 use super::html::{escape_attr, escape_html, evidence_html, icon_svg, PageLinksRenderer};
@@ -216,52 +216,4 @@ pub(in crate::wiki::render) fn push_lineage(
         }
     }
     html.push_str("</ol>\n</div>\n");
-}
-
-pub(in crate::wiki::render) fn push_orphan_group(
-    html: &mut String,
-    links: &PageLinksRenderer,
-    head: &str,
-    group: &[PageLink],
-) {
-    if group.is_empty() {
-        return;
-    }
-    write!(
-        html,
-        "<h3>{}</h3>\n{}",
-        escape_html(head),
-        links.link_list(group)
-    )
-    .expect("writing to a String should not fail");
-}
-
-/// The orphan rules, each with the end of its trace that is missing. The
-/// reason comes from the gap that named the rule, so the panel says which
-/// producer is absent rather than leaving the reader to guess.
-pub(in crate::wiki::render) fn push_orphan_rules(
-    html: &mut String,
-    links: &PageLinksRenderer,
-    head: &str,
-    rules: &[OrphanRule],
-) {
-    if rules.is_empty() {
-        return;
-    }
-    write!(
-        html,
-        "<h3>{}</h3>\n<ul class=\"link-list\">\n",
-        escape_html(head)
-    )
-    .expect("writing to a String should not fail");
-    for rule in rules {
-        writeln!(
-            html,
-            "<li>{} <span class=\"why\">{}</span></li>",
-            links.link(&rule.link, None),
-            escape_html(&rule.reason)
-        )
-        .expect("writing to a String should not fail");
-    }
-    html.push_str("</ul>\n");
 }

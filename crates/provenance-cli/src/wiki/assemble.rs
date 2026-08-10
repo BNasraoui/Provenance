@@ -72,11 +72,14 @@ pub fn build_corpus(state: &ScopeExport, resolver: &LinkResolver) -> WikiCorpus 
         .map(|source| assembler.source_page(source))
         .collect::<Vec<_>>();
     let (domains, search) = discovery::build_discovery_pages(state, &requirements, &rules);
+    let findings = assembler.findings_page();
+    let index = assembler.index_page(&domains, &search, findings.findings.len());
     WikiCorpus {
         scope: state.scope.clone(),
-        index: assembler.index_page(),
+        index,
         domains,
         search,
+        findings,
         requirements,
         resolutions,
         rules,

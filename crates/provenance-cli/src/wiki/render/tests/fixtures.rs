@@ -1,9 +1,10 @@
 use crate::wiki::links::{EvidenceRef, LinkResolver};
 use crate::wiki::model::{
     CorpusCounts, DecisionSection, DomainGroup, DomainIndexPage, DomainState, EvidenceThread,
-    FieldNote, GapKind, GapNotice, IndexEntry, InputCitation, LineageEntry, OrphanReport,
-    OrphanRule, PageId, PageKind, PageLink, RecordKind, RequirementPage, ResolutionPage, RuleCard,
-    RulePage, ScopeIndexPage, SearchEntry, SearchIndexPage, SourceCitation, SourcePage, WikiCorpus,
+    FieldNote, FindingsPage, GapKind, GapNotice, HomepageDomain, IndexEntry, InputCitation,
+    LineageEntry, OrphanReport, OrphanRule, PageId, PageKind, PageLink, RecordKind,
+    RequirementPage, ResolutionPage, RuleCard, RulePage, ScopeIndexPage, SearchEntry,
+    SearchIndexPage, SourceCitation, SourcePage, WikiCorpus,
 };
 use provenance_core::{
     MessageRole, NodeType, RequirementStatus, ResolutionInputType, ResolutionStatus, RuleSeverity,
@@ -18,7 +19,10 @@ pub(super) fn link(kind: PageKind, id: &str, title: &str) -> PageLink {
         PageKind::Resolution => RecordKind::Resolution,
         PageKind::Rule => RecordKind::Rule,
         PageKind::Source => RecordKind::Source,
-        PageKind::ScopeIndex | PageKind::DomainIndex | PageKind::SearchIndex => {
+        PageKind::ScopeIndex
+        | PageKind::DomainIndex
+        | PageKind::SearchIndex
+        | PageKind::Findings => {
             panic!("singleton pages are not record links")
         }
     };
@@ -313,7 +317,7 @@ pub(super) fn source_fixture() -> SourcePage {
 pub(super) fn index_fixture() -> ScopeIndexPage {
     ScopeIndexPage {
         scope: "default".to_string(),
-        title: "Provenance atlas — default".to_string(),
+        title: "default documentation".to_string(),
         counts: CorpusCounts {
             sources: 2,
             requirements: 3,
@@ -339,6 +343,16 @@ pub(super) fn index_fixture() -> ScopeIndexPage {
             resolutions: vec![],
             sources: vec![link(PageKind::Source, "source_unused", "Unused API spec")],
         },
+        search_coverage: "Search covers requirements and rules.".to_string(),
+        domains: vec![HomepageDomain {
+            id: "domain_default".to_string(),
+            name: "Invoicing".to_string(),
+            description: Some("Invoice behavior".to_string()),
+            requirements: 1,
+            rules: 1,
+        }],
+        authored_domain_count: 1,
+        finding_count: 4,
     }
 }
 
@@ -348,6 +362,7 @@ pub(super) fn corpus_fixture() -> WikiCorpus {
         index: index_fixture(),
         domains: domain_index_fixture(),
         search: search_fixture(),
+        findings: findings_fixture(),
         requirements: vec![requirement_fixture(), gappy_requirement_fixture()],
         resolutions: vec![resolution_fixture()],
         rules: vec![rule_fixture()],
@@ -397,6 +412,7 @@ pub(super) fn search_fixture() -> SearchIndexPage {
     SearchIndexPage {
         scope: "default".to_string(),
         title: "Search requirements and rules".to_string(),
+        coverage: "Search covers requirements and rules.".to_string(),
         entries: vec![SearchEntry {
             link: link(
                 PageKind::Requirement,
@@ -405,5 +421,30 @@ pub(super) fn search_fixture() -> SearchIndexPage {
             ),
             statement: "Invoice & participant statement".to_string(),
         }],
+    }
+}
+
+pub(super) fn findings_fixture() -> FindingsPage {
+    FindingsPage {
+        scope: "default".to_string(),
+        title: "Missing evidence".to_string(),
+        findings: vec![
+            GapNotice {
+                kind: GapKind::UnreferencedSource,
+                detail: "source_unused is referenced by nothing".to_string(),
+            },
+            GapNotice {
+                kind: GapKind::DanglingReference,
+                detail: "source ref points at source_missing, which does not exist".to_string(),
+            },
+            GapNotice {
+                kind: GapKind::MissingSourceRefs,
+                detail: "no source refs recorded on this requirement".to_string(),
+            },
+            GapNotice {
+                kind: GapKind::NoResolvingDecision,
+                detail: "resolved with no resolving decision".to_string(),
+            },
+        ],
     }
 }

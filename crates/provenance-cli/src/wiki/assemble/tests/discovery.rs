@@ -17,6 +17,7 @@ fn domain(id: &str, name: &str) -> Domain {
 }
 
 #[test]
+#[verifies("rule_wiki_homepage_search_coverage", examples)]
 fn discovery_indexes_requirement_and_rule_titles_and_statements() {
     let mut state = empty_state();
     state.requirements = vec![requirement(
@@ -42,6 +43,10 @@ fn discovery_indexes_requirement_and_rule_titles_and_statements() {
     assert_eq!(
         corpus.search.entries[1].statement,
         "Claim items shall be grouped by participant"
+    );
+    assert_eq!(
+        corpus.search.coverage,
+        "Search covers requirements and rules."
     );
 }
 
