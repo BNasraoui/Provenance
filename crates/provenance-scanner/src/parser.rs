@@ -1,5 +1,7 @@
 use std::{fmt, str::FromStr};
 
+use crate::string_context::obvious_string_is_open;
+
 pub(crate) const PRIMARY_ANNOTATION_MARKER: &str = "@provenance";
 const LEGACY_ANNOTATION_MARKER: &str = "@statesman";
 const ANNOTATION_MARKERS: [&str; 2] = [PRIMARY_ANNOTATION_MARKER, LEGACY_ANNOTATION_MARKER];
@@ -293,17 +295,30 @@ fn parse_confidence(value: &str) -> Result<f64, ConfidenceRejection> {
     }
 }
 
-pub(crate) fn contains_annotation_marker(line: &str) -> bool {
+pub(crate) fn annotation_marker_position(line: &str) -> Option<usize> {
+    annotation_marker(line).map(|(_, position)| position)
+}
+
+pub(crate) fn annotation_marker_positions(line: &str) -> impl Iterator<Item = usize> + '_ {
     ANNOTATION_MARKERS
         .iter()
-        .any(|marker| line.contains(marker))
+        .flat_map(|marker| line.match_indices(marker).map(|(position, _)| position))
 }
 
 fn split_annotation_marker(line: &str) -> Option<(&'static str, &str)> {
-    ANNOTATION_MARKERS.iter().find_map(|marker| {
-        line.split_once(marker)
-            .map(|(_, rest)| (*marker, rest.trim()))
-    })
+    let (marker, position) = annotation_marker(line)?;
+    Some((marker, line[position + marker.len()..].trim()))
+}
+
+fn annotation_marker(line: &str) -> Option<(&'static str, usize)> {
+    ANNOTATION_MARKERS
+        .iter()
+        .flat_map(|marker| {
+            line.match_indices(marker)
+                .filter(|(position, _)| !obvious_string_is_open(&line[..*position]))
+                .map(|(position, _)| (*marker, position))
+        })
+        .min_by_key(|(_, position)| *position)
 }
 
 fn set_field<F>(annotations: &mut [Annotation], shared: &mut Annotation, apply: F)

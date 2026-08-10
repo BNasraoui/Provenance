@@ -174,6 +174,37 @@ fn ambiguous_or_unknown_export_fields_are_rejected() {
     }
 }
 
+#[test]
+fn pre_service_family_removal_exports_name_the_re_export_remedy() {
+    let dir = tempfile::tempdir().unwrap();
+    let baseline = export_shipped(&dir);
+    for legacy_field in ["services", "service_bindings"] {
+        let mut value = baseline.clone();
+        value[legacy_field] = serde_json::json!([]);
+        let input = dir.path().join(format!("legacy-{legacy_field}.json"));
+        std::fs::write(&input, serde_json::to_vec(&value).unwrap()).unwrap();
+        let repo = dir.path().join(format!("repo-{legacy_field}"));
+        init(&repo);
+
+        Command::cargo_bin("provenance")
+            .unwrap()
+            .args([
+                "import",
+                "--repo",
+                repo.to_str().unwrap(),
+                "--scope",
+                "default",
+                "--input",
+                input.to_str().unwrap(),
+            ])
+            .assert()
+            .failure()
+            .stderr(predicates::str::contains(
+                "this export predates the service family removal; re-export from current provenance",
+            ));
+    }
+}
+
 fn export_shipped(dir: &tempfile::TempDir) -> serde_json::Value {
     let output = dir.path().join("shipped.json");
     let shipped = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

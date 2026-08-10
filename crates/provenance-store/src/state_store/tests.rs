@@ -66,6 +66,7 @@ mod edges;
 mod ideation;
 mod ideation_duplicates;
 mod legacy_coexistence;
+mod manifest;
 mod proposal_surfaces;
 mod proposals;
 mod shaping;

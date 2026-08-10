@@ -36,14 +36,15 @@ impl StateStore {
                 );
                 canonical
             } else {
+                let base_id = format!(
+                    "thread_{}_{}",
+                    serde_name(&parent.node_type)?,
+                    parent.node_id.as_str()
+                );
                 let thread = Thread {
                     schema_version: SchemaVersion(1),
                     scope_id: scope_id.clone(),
-                    id: StableId::new(format!(
-                        "thread_{}_{}",
-                        serde_name(&parent.node_type)?,
-                        parent.node_id.as_str()
-                    ))?,
+                    id: next_thread_id(threads, &base_id)?,
                     parent: parent.clone(),
                     status: ThreadStatus::Active,
                     created_at: 1,
@@ -84,4 +85,16 @@ impl StateStore {
             })?;
         Ok(PostMessageResult { thread, message })
     }
+}
+
+fn next_thread_id(threads: &[Thread], base_id: &str) -> anyhow::Result<StableId> {
+    let mut candidate = base_id.to_string();
+    let mut suffix = 2_u64;
+    while threads.iter().any(|thread| thread.id.as_str() == candidate) {
+        candidate = format!("{base_id}_{suffix}");
+        suffix = suffix
+            .checked_add(1)
+            .ok_or_else(|| anyhow::anyhow!("thread id suffix overflow for {base_id}"))?;
+    }
+    StableId::new(candidate)
 }

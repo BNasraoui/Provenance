@@ -114,6 +114,9 @@ fn closing_plain_quote(bytes: &[u8], mut idx: usize) -> Option<usize> {
     None
 }
 
+/// Everything between a delimiter pair is string content: quotes, comment
+/// openers, and hash marks inside it must not derail the scan for the
+/// closing delimiter (a Go `` `"` `` literal is closed, not an open quote).
 fn unpaired_delimiter_start(
     line: &str,
     delimiter: &str,
@@ -126,6 +129,15 @@ fn unpaired_delimiter_start(
     let mut escaped = false;
     let mut idx = 0;
     while idx < bytes.len() {
+        if positions.len() % 2 == 1 {
+            if bytes[idx..].starts_with(marker) {
+                positions.push(idx);
+                idx += marker.len();
+            } else {
+                idx += 1;
+            }
+            continue;
+        }
         if let Some(active_quote) = quote {
             if escaped {
                 escaped = false;

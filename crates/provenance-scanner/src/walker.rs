@@ -1,13 +1,15 @@
 use anyhow::Context;
 use camino::{Utf8Path, Utf8PathBuf};
 
-use std::str::FromStr;
-
-use crate::binding_lexer::{
-    block_comment_state, call_arguments, code_outside_multiline_string, MultilineStyle,
-};
-use crate::parser::{contains_annotation_marker, Verification};
+use crate::binding_lexer::{block_comment_state, code_outside_multiline_string, MultilineStyle};
+use crate::parser::{annotation_marker_position, Verification};
 use crate::{parse_annotations, Annotation, ParseWarning};
+
+use bindings::parse_binding_line;
+use rust_lines::{rust_annotation_marker_position, rust_line_states, RustLexicalState};
+
+mod bindings;
+mod rust_lines;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum Language {
@@ -85,15 +87,24 @@ pub fn scan_path(path: &Utf8Path) -> anyhow::Result<Vec<FileScan>> {
     Ok(scans)
 }
 
+/// Walks a file line by line, feeding two channels: bindings (`#[rule]`,
+/// `#[verifies]`, decorators, and calls) and comment annotations.
+///
+/// Two lexers cooperate. The binding lexer tracks multiline strings and block
+/// comments for every language; for Rust the per-line lexical states add
+/// honest string, raw-string, and nested-comment tracking on top, gating both
+/// channels.
 pub fn scan_file(file_path: &Utf8Path, language: Language, content: &str) -> FileScan {
     let mut annotations = Vec::new();
     let mut bindings = Vec::new();
     let mut warnings = Vec::new();
     let lines = content.lines().collect::<Vec<_>>();
+    let rust_states = rust_line_states(language, &lines);
     let mut idx = 0;
     let mut in_block_comment = false;
     let mut multiline_delimiter = None;
     while idx < lines.len() {
+        let started_in_multiline_string = multiline_delimiter.is_some();
         let Some(line) = code_outside_multiline_string(
             lines[idx],
             multiline_style(language),
@@ -104,13 +115,13 @@ pub fn scan_file(file_path: &Utf8Path, language: Language, content: &str) -> Fil
             continue;
         };
         let started_in_block_comment = in_block_comment;
-        let next_block_comment = if language == Language::Python {
-            false
-        } else {
-            block_comment_state(line, in_block_comment)
-        };
-        if let Some((rule_id, verification)) = parse_binding_line(language, line, in_block_comment)
-        {
+        if language != Language::Python {
+            in_block_comment = block_comment_state(line, in_block_comment);
+        }
+        let binding = (language != Language::Rust || rust_states[idx] == RustLexicalState::Code)
+            .then(|| parse_binding_line(language, line, started_in_block_comment))
+            .flatten();
+        if let Some((rule_id, verification)) = binding {
             bindings.push(AttributeBinding {
                 file_path: file_path.to_path_buf(),
                 line: idx + 1,
@@ -118,18 +129,21 @@ pub fn scan_file(file_path: &Utf8Path, language: Language, content: &str) -> Fil
                 rule_id,
                 verification,
             });
-            in_block_comment = next_block_comment;
             idx += 1;
             continue;
         }
-        in_block_comment = next_block_comment;
-        if !is_annotation_comment_line(language, line, started_in_block_comment)
-            || !contains_annotation_marker(line)
-        {
+        let marker_position = annotation_marker_start(
+            language,
+            lines[idx],
+            rust_states[idx],
+            started_in_block_comment,
+            started_in_multiline_string,
+        );
+        let Some(marker_position) = marker_position else {
             idx += 1;
             continue;
-        }
-        let (comment, end_idx) = collect_annotation_comment(&lines, idx);
+        };
+        let (comment, end_idx) = collect_annotation_comment(&lines, idx, marker_position);
         let parsed = parse_annotations(&comment);
         warnings.extend(parsed.warnings);
         let function_name = next_function_name(language, &lines[end_idx.saturating_add(1)..]);
@@ -166,6 +180,36 @@ const fn multiline_style(language: Language) -> MultilineStyle {
     }
 }
 
+/// Finds the annotation marker on a line the comment-line gate admits.
+///
+/// The gate is ratified behavior (`rule_prov_annot_014`): a directive binds
+/// only when, after leading whitespace, the line starts with `//`, `/*`, or
+/// `*` (or `#` in Python), or continues an open block comment. A marker
+/// trailing code on the same line never binds. Past the gate, markers sitting
+/// inside string literals quoted within the comment are still skipped.
+fn annotation_marker_start(
+    language: Language,
+    line: &str,
+    rust_state: RustLexicalState,
+    started_in_block_comment: bool,
+    started_in_multiline_string: bool,
+) -> Option<usize> {
+    if language == Language::Rust {
+        let in_string = matches!(
+            rust_state,
+            RustLexicalState::Quoted | RustLexicalState::Raw(_)
+        );
+        let in_comment = matches!(rust_state, RustLexicalState::BlockComment(_));
+        return (!in_string && is_annotation_comment_line(language, line, in_comment))
+            .then(|| rust_annotation_marker_position(line, rust_state))
+            .flatten();
+    }
+    (!started_in_multiline_string
+        && is_annotation_comment_line(language, line, started_in_block_comment))
+    .then(|| annotation_marker_position(line))
+    .flatten()
+}
+
 fn is_annotation_comment_line(
     language: Language,
     line: &str,
@@ -179,97 +223,6 @@ fn is_annotation_comment_line(
         || trimmed.starts_with("/*")
         || trimmed.starts_with('*')
         || (language == Language::Python && trimmed.starts_with('#'))
-}
-
-fn parse_binding_line(
-    language: Language,
-    line: &str,
-    in_block_comment: bool,
-) -> Option<(String, Option<Verification>)> {
-    match language {
-        Language::Rust => (!in_block_comment)
-            .then(|| parse_attribute_line(line))
-            .flatten(),
-        Language::Python => parse_python_decorator(line),
-        Language::JavaScript | Language::TypeScript => parse_script_call(line, in_block_comment),
-        Language::Go | Language::Java => parse_rule_call(line, in_block_comment),
-    }
-}
-
-fn parse_python_decorator(line: &str) -> Option<(String, Option<Verification>)> {
-    let trimmed = line.trim_start();
-    let decorator = trimmed.strip_prefix('@')?;
-    let rest = decorator.strip_prefix("rule(").or_else(|| {
-        decorator
-            .split_once(".rule(")
-            .filter(|(qualifier, _)| !qualifier.is_empty())
-            .map(|(_, rest)| rest)
-    })?;
-    Some((quoted_literal(rest)?.0, None))
-}
-
-fn parse_script_call(line: &str, in_block_comment: bool) -> Option<(String, Option<Verification>)> {
-    if let Some(rest) = call_arguments(line, in_block_comment, "verifies") {
-        let (rule_id, after_id) = quoted_literal(rest)?;
-        let method = argument_after_comma(after_id)?;
-        return Some((rule_id, Some(Verification::from_str(method).ok()?)));
-    }
-    parse_rule_call(line, in_block_comment)
-}
-
-fn parse_rule_call(line: &str, in_block_comment: bool) -> Option<(String, Option<Verification>)> {
-    let rest = call_arguments(line, in_block_comment, "rule")?;
-    let (rule_id, after_id) = quoted_literal(rest)?;
-    after_id
-        .trim_start()
-        .starts_with(',')
-        .then_some((rule_id, None))
-}
-
-fn quoted_literal(rest: &str) -> Option<(String, &str)> {
-    let rest = rest.trim_start();
-    let quote = rest.chars().next()?;
-    if !matches!(quote, '\'' | '"' | '`') {
-        return None;
-    }
-    let after_quote = &rest[quote.len_utf8()..];
-    let end = after_quote.find(quote)?;
-    let literal = &after_quote[..end];
-    if literal.is_empty() {
-        return None;
-    }
-    Some((literal.to_string(), &after_quote[end + quote.len_utf8()..]))
-}
-
-fn argument_after_comma(rest: &str) -> Option<&str> {
-    let argument = rest.trim_start().strip_prefix(',')?.trim_start();
-    let unquoted = argument.strip_prefix(['\'', '"', '`']).unwrap_or(argument);
-    let method = unquoted
-        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
-        .next()?;
-    (!method.is_empty()).then_some(method)
-}
-
-/// Recognizes single-line `#[rule("id")]` and `#[verifies("id", method)]`
-/// attributes. The proc macros reject malformed arguments at compile time, so
-/// anything found in compiling code is well-formed; lines that do not match
-/// are silently skipped.
-fn parse_attribute_line(line: &str) -> Option<(String, Option<Verification>)> {
-    let trimmed = line.trim_start();
-    if let Some(rest) = trimmed.strip_prefix("#[rule(") {
-        return Some((string_literal(rest)?, None));
-    }
-    let rest = trimmed.strip_prefix("#[verifies(")?;
-    let rule_id = string_literal(rest)?;
-    let after_literal = rest.split_once(',')?.1;
-    let method = after_literal.trim().trim_end_matches(")]").trim();
-    Some((rule_id, Some(Verification::from_str(method).ok()?)))
-}
-
-fn string_literal(rest: &str) -> Option<String> {
-    let after_quote = rest.strip_prefix('"')?;
-    let (literal, _) = after_quote.split_once('"')?;
-    (!literal.is_empty()).then(|| literal.to_string())
 }
 
 fn binding_item_name(
@@ -357,12 +310,21 @@ fn type_name(line: &str) -> Option<String> {
         .and_then(|marker| token_after(line, marker))
 }
 
-fn collect_annotation_comment(lines: &[&str], start: usize) -> (String, usize) {
+fn collect_annotation_comment(
+    lines: &[&str],
+    start: usize,
+    marker_position: usize,
+) -> (String, usize) {
     let mut end = start;
     while end + 1 < lines.len() && is_comment_continuation(lines[end + 1]) {
         end += 1;
     }
-    (lines[start..=end].join("\n"), end)
+    let mut comment = lines[start][marker_position..].to_string();
+    for continuation in lines.iter().take(end + 1).skip(start + 1) {
+        comment.push('\n');
+        comment.push_str(continuation);
+    }
+    (comment, end)
 }
 
 fn is_comment_continuation(line: &str) -> bool {
