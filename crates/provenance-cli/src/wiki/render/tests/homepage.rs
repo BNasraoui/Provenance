@@ -185,6 +185,9 @@ fn pr_45_scale_homepage_is_bounded_ordered_and_summary_only() {
     assert_eq!(corpus.unfinished.item_count(), 42);
     let html = super::super::render_index(&corpus.scope, &corpus.index);
 
+    // The PR #45 corpus holds 12 domains, below the 20-row homepage cap, so
+    // removing the cap would not change this page; cap enforcement is
+    // exercised by homepage_caps_authored_domain_rows above.
     assert_eq!(html.matches("data-homepage-domain-row").count(), 12);
     assert!(html.matches("data-homepage-domain-row").count() <= 20);
     assert!(html.len() < 50_000, "homepage grew to {} bytes", html.len());

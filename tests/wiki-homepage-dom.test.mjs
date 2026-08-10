@@ -17,7 +17,10 @@ function tabbableControls(document) {
 test("PR 45 scale remains bounded and keeps complete indexes off the homepage", () => {
   const document = new JSDOM(html).window.document;
 
-  assert.equal(document.querySelectorAll("[data-homepage-domain-row]").length, 12);
+  // The PR #45 corpus holds 12 domains, below the 20-row homepage cap, so
+  // this asserts one row per authored domain; cap enforcement itself is
+  // covered by homepage_caps_authored_domain_rows in the Rust suite.
+  assert.equal(document.querySelectorAll("[data-homepage-domain-row]").length, scale.domains.length);
   assert.ok(document.querySelectorAll("[data-homepage-domain-row]").length <= 20);
   assert.ok(Buffer.byteLength(html) < 50_000);
   for (const count of [228, 165, 576, 7, 42]) {
