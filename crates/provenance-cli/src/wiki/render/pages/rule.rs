@@ -143,9 +143,19 @@ pub fn render_rule(scope: &str, page: &RulePage) -> String {
     }
 
     let mut margin = String::new();
-    if !page.gaps.is_empty() {
+    if page
+        .gaps
+        .iter()
+        .any(|gap| gap.kind != crate::wiki::model::GapKind::OrphanRule)
+    {
         margin.push_str("<h3 class=\"margin-head\">Gaps</h3>\n");
-        push_gap_citations(&mut margin, &links, &page.gaps);
+        for gap in page
+            .gaps
+            .iter()
+            .filter(|gap| gap.kind != crate::wiki::model::GapKind::OrphanRule)
+        {
+            push_gap_citations(&mut margin, &links, std::slice::from_ref(gap));
+        }
     }
     let mut rows = String::new();
     push_classification_row(
