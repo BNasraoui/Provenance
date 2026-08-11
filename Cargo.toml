@@ -24,7 +24,12 @@ axum = "0.7"
 camino = { version = "1.1", features = ["serde1"] }
 clap = { version = "4.5", features = ["derive"] }
 fs2 = "0.4"
-fs_at = "0.2"
+# workaround-procmon: GitHub's Windows runners carry filter drivers that turn
+# fs_at's internal FSCTL_GET_REPARSE_POINT probe into ACCESS_DENIED on plain
+# directories. The engine's own symlink verdicts read the reparse attribute
+# bit from metadata, never that probe, so masking it does not weaken the
+# no-follow guarantees. Opt-in at runtime via FS_AT_WORKAROUND_PROCMON.
+fs_at = { version = "0.2", features = ["workaround-procmon"] }
 insta = "1.39"
 jsonschema = "0.18"
 pulldown-cmark = "0.10"

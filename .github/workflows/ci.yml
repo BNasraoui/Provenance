@@ -46,6 +46,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace --all-features
+        env:
+          # The runners' filesystem filter drivers break fs_at's reparse
+          # probe on plain directories; see the fs_at note in Cargo.toml.
+          FS_AT_WORKAROUND_PROCMON: 1
 
   rule-coverage:
     name: Rule Coverage

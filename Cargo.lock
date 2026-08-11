@@ -589,6 +589,7 @@ dependencies = [
  "cvt",
  "libc",
  "nix",
+ "once_cell",
  "windows-sys 0.52.0",
 ]
 
