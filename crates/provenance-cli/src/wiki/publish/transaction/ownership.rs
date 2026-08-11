@@ -153,7 +153,10 @@ pub(super) fn child_kind(parent: &File, leaf: &str) -> std::io::Result<Option<Ch
     #[cfg(windows)]
     use std::os::windows::fs::MetadataExt;
     let mut options = fs_at::OpenOptions::default();
-    options.follow(false);
+    // Read access matters on Windows: a SYNCHRONIZE-only handle lacks
+    // FILE_READ_ATTRIBUTES, and the metadata call below is refused with
+    // ERROR_ACCESS_DENIED.
+    options.read(true).follow(false);
     let file = match options.open_path_at(parent, leaf) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
