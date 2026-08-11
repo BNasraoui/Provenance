@@ -130,12 +130,22 @@ fn remove_services_shards(layout: &ProvenanceLayout) -> anyhow::Result<()> {
         if !services_dir.exists() {
             continue;
         }
-        for shard in std::fs::read_dir(&services_dir)? {
+        for shard in std::fs::read_dir(&services_dir).with_context(|| {
+            format!(
+                "failed to read services directory {}",
+                services_dir.display()
+            )
+        })? {
             let shard = shard?;
             if shard.file_type()?.is_file()
                 && shard.path().extension().is_some_and(|ext| ext == "jsonl")
             {
-                std::fs::remove_file(shard.path())?;
+                std::fs::remove_file(shard.path()).with_context(|| {
+                    format!(
+                        "failed to remove legacy services shard {}",
+                        shard.path().display()
+                    )
+                })?;
             }
         }
     }
