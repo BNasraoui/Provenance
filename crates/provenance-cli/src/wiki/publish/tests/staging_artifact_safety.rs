@@ -99,7 +99,21 @@ fn parent_replacement_does_not_redirect_the_transaction() {
     )
     .unwrap_err();
 
-    assert!(matches!(error, PublishError::OutputChanged { .. }));
+    // Unix detects the displacement at the identity check; Windows refuses
+    // the displaced-handle create outright, failing closed one step earlier.
+    #[cfg(not(windows))]
+    assert!(
+        matches!(error, PublishError::OutputChanged { .. }),
+        "got {error:?}"
+    );
+    #[cfg(windows)]
+    assert!(
+        matches!(
+            &error,
+            PublishError::OutputChanged { .. } | PublishError::Io { .. }
+        ),
+        "got {error:?}"
+    );
     assert!(!displaced_parent.join("wiki").exists());
     assert!(!output.exists());
     assert!(std::fs::read_dir(&parent).unwrap().next().is_none());
@@ -148,9 +162,23 @@ fn staged_child_reparse_point_cannot_redirect_generated_writes() {
         Ok(_) => panic!("publication followed a staged reparse point"),
     };
 
-    assert!(matches!(error, PublishError::Io { .. }));
+    // The write through the reparse point is refused either way. Removing
+    // the owned tree afterwards cannot delete the hostile reparse on these
+    // runners, so the refusal surfaces wrapped in CleanupFailed with the
+    // residue reported for the operator, per the publication doctrine.
+    match &error {
+        PublishError::Io { .. } => {
+            assert!(!artifact(&output, "stage").exists());
+        }
+        PublishError::CleanupFailed { primary, .. } => {
+            assert!(
+                matches!(**primary, PublishError::Io { .. }),
+                "got {error:?}"
+            );
+        }
+        _ => panic!("got {error:?}"),
+    }
     assert!(!external.join("provenance-wiki.css").exists());
-    assert!(!artifact(&output, "stage").exists());
     assert!(!output.exists());
 }
 

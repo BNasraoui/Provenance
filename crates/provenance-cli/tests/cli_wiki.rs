@@ -176,7 +176,10 @@ fn wiki_build_defaults_output_to_the_provenance_wiki_dir_and_gitignores_it() {
         .args(["wiki", "build", "--repo", &repo, "--format", "json"])
         .assert()
         .success()
-        .stdout(predicates::str::contains(".provenance/wiki"));
+        // Windows reports the default out with backslashes.
+        .stdout(predicates::function::function(|text: &str| {
+            text.replace("\\\\", "/").contains(".provenance/wiki")
+        }));
 
     let default_out = std::path::Path::new(&repo).join(".provenance/wiki");
     let index = std::fs::read_to_string(default_out.join("index.html")).unwrap();

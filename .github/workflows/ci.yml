@@ -40,14 +40,12 @@ jobs:
         os:
           - ubuntu-latest
           - macos-latest
-          # windows-latest is out until the wiki publish transaction engine
-          # is ported (30 failures across its no-follow filesystem walk);
-          # the release workflow still builds the Windows binary.
+          - windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --workspace --all-features
+      - run: cargo test --workspace --all-features --no-fail-fast
 
   rule-coverage:
     name: Rule Coverage

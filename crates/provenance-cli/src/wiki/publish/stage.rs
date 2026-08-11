@@ -18,8 +18,24 @@ pub(super) struct StageDirectory {
 
 impl StageDirectory {
     pub(super) fn from_file(root: File, path: &Utf8Path) -> Result<Self, PublishError> {
+        // The identity is bound to the handle publication already holds, so
+        // nothing swapped in between creating the stage and recording it can
+        // be vouched for later. Windows cannot read identity from that
+        // handle (fs_at's mkdir_at hardcodes an access mask without
+        // FILE_READ_ATTRIBUTES), so there alone the identity comes from a
+        // second no-follow open of the same path.
+        #[cfg(not(windows))]
         let identity = StageIdentity::from_file(&root)
             .map_err(|error| PublishError::io("record staging directory identity", path, error))?;
+        #[cfg(windows)]
+        let identity = {
+            let handle = super::transaction::open_directory_no_follow(path.as_std_path()).map_err(
+                |error| PublishError::io("open staging directory identity", path, error),
+            )?;
+            StageIdentity::from_file(&handle).map_err(|error| {
+                PublishError::io("record staging directory identity", path, error)
+            })?
+        };
         Ok(Self { root, identity })
     }
 
@@ -40,11 +56,12 @@ impl StageDirectory {
             directory = match fs_at::OpenOptions::default().mkdir_at(&directory, *segment) {
                 Ok(created) => created,
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                    let mut options = fs_at::OpenOptions::default();
-                    options.read(true).follow(false);
-                    options.open_dir_at(&directory, *segment).map_err(|error| {
-                        PublishError::io("open staged directory", display_path, error)
-                    })?
+                    // The attribute-bit check inside this open independently
+                    // refuses a reparse point planted at the segment.
+                    super::transaction::open_child_directory_no_follow(&directory, segment)
+                        .map_err(|error| {
+                            PublishError::io("open staged directory", display_path, error)
+                        })?
                 }
                 Err(error) => {
                     return Err(PublishError::io(
@@ -124,7 +141,7 @@ pub(super) fn generate_and_replace(
 
 #[cfg(test)]
 pub(super) fn write_page(stage: &Utf8Path, route: &str, html: &str) -> Result<(), PublishError> {
-    let root = File::open(stage)
+    let root = super::transaction::open_directory_no_follow(stage.as_std_path())
         .map_err(|error| PublishError::io("open staging directory", stage, error))?;
     let stage_directory = StageDirectory::from_file(root, stage)?;
     write_page_in(&stage_directory, stage, route, html)

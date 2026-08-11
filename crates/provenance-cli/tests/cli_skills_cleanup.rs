@@ -106,9 +106,14 @@ fn rerun_reports_legacy_cleanup_as_an_update() {
     let report: serde_json::Value = serde_json::from_slice(&output).unwrap();
 
     assert_eq!(report["status"], "updated");
+    // Path spellings differ per platform (verbatim prefixes, separators,
+    // Windows 8.3 short names); the stable identity is the repo-relative
+    // suffix of an absolute path.
     assert!(report["files"].as_array().unwrap().iter().any(|file| {
-        file["path"].as_str() == Some(legacy.join("SKILL.md").to_str().unwrap())
-            && file["status"] == "removed"
+        file["path"].as_str().is_some_and(|path| {
+            Path::new(path).is_absolute()
+                && normalized(path).ends_with(".agents/skills/shaping/SKILL.md")
+        }) && file["status"] == "removed"
     }));
 }
 
@@ -312,4 +317,8 @@ fn fnv1a64(content: &str) -> String {
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
     }
     format!("{hash:016x}")
+}
+
+fn normalized(path: &str) -> String {
+    path.trim_start_matches("\\\\?\\").replace('\\', "/")
 }

@@ -227,7 +227,8 @@ fn apply_import(
     let layout = ProvenanceLayout::new(staged_repo.clone());
     let staged_scope = layout.scopes_dir().join(scope_id.as_str());
     if staged_scope.exists() {
-        std::fs::remove_dir_all(staged_scope)?;
+        std::fs::remove_dir_all(&staged_scope)
+            .map_err(|error| anyhow::anyhow!("clear staged scope {staged_scope}: {error}"))?;
     }
     write_scope(&layout, scope_id, exported)?;
     super::check::validate_repository(staged_repo)?;
@@ -239,7 +240,12 @@ fn apply_import(
             &transaction,
             provenance_store::publication::PublicationPhase::Prepared,
         )?;
-        std::fs::rename(live_layout.state_dir(), &backup)?;
+        std::fs::rename(live_layout.state_dir(), &backup).map_err(|error| {
+            anyhow::anyhow!(
+                "move live state {} to backup: {error}",
+                live_layout.state_dir()
+            )
+        })?;
         if let Err(error) =
             provenance_store::publication::sync_directory(&live_layout.provenance_dir())
                 .and_then(|()| {
@@ -250,7 +256,9 @@ fn apply_import(
                     )
                 })
                 .and_then(|()| {
-                    std::fs::rename(layout.state_dir(), live_layout.state_dir()).map_err(Into::into)
+                    std::fs::rename(layout.state_dir(), live_layout.state_dir()).map_err(|error| {
+                        anyhow::anyhow!("install staged state {}: {error}", layout.state_dir())
+                    })
                 })
                 .and_then(|()| {
                     provenance_store::publication::sync_directory(&live_layout.provenance_dir())
@@ -271,7 +279,8 @@ fn apply_import(
         }
         return Ok(());
     }
-    std::fs::remove_dir_all(transaction)?;
+    std::fs::remove_dir_all(&transaction)
+        .map_err(|error| anyhow::anyhow!("remove import transaction {transaction}: {error}"))?;
     Ok(())
 }
 
@@ -313,10 +322,13 @@ fn rollback_publication(
     backup: &camino::Utf8Path,
 ) -> anyhow::Result<()> {
     if live_layout.state_dir().exists() {
-        std::fs::rename(live_layout.state_dir(), staged_layout.state_dir())?;
+        std::fs::rename(live_layout.state_dir(), staged_layout.state_dir()).map_err(|error| {
+            anyhow::anyhow!("return live state to stage during rollback: {error}")
+        })?;
     }
     if backup.exists() {
-        std::fs::rename(backup, live_layout.state_dir())?;
+        std::fs::rename(backup, live_layout.state_dir())
+            .map_err(|error| anyhow::anyhow!("restore backup state during rollback: {error}"))?;
     }
     provenance_store::publication::sync_directory(&live_layout.provenance_dir())?;
     provenance_store::publication::clear_publication_marker(live_layout)

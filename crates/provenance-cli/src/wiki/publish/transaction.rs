@@ -6,7 +6,12 @@ mod cleanup;
 mod ownership;
 mod replacement;
 
+pub(super) use ownership::open_child_directory_no_follow;
 pub(super) use ownership::{acquire_lock, preflight};
+// Stage identity reads through a path on Windows only; the test helper uses
+// it on every platform.
+#[cfg(any(windows, test))]
+pub(super) use ownership::open_directory_no_follow;
 pub(super) use replacement::replace_output;
 #[cfg(test)]
 pub(super) use replacement::replace_output_with;
@@ -59,12 +64,19 @@ impl TransactionDirectory {
     }
 
     pub(super) fn create_stage(&self) -> std::io::Result<File> {
+        // mkdir_at hardcodes its access mask (no read-attributes right on
+        // Windows), which is why the stage identity comes from a separate
+        // no-follow reopen rather than this handle.
         fs_at::OpenOptions::default().mkdir_at(&self.parent, &self.leaves.stage)
     }
 
     fn create_file(&self, leaf: &str) -> std::io::Result<File> {
         let mut options = fs_at::OpenOptions::default();
+        // Read access too: the lock handle's identity is read back via
+        // GetFileInformationByHandle on Windows, which a write-only handle
+        // refuses with ERROR_ACCESS_DENIED.
         options
+            .read(true)
             .write(fs_at::OpenOptionsWriteMode::Write)
             .create_new(true)
             .follow(false);
@@ -87,7 +99,15 @@ impl TransactionDirectory {
     }
 
     fn rename(&self, from: &str, to: &str) -> std::io::Result<()> {
-        replacement::rename_no_replace_at(&self.parent, from, to)
+        replacement::rename_no_replace_at(&self.parent, self.parent_path(), from, to)
+    }
+
+    /// The directory every transaction artifact sits in, as a path.
+    fn parent_path(&self) -> &Utf8Path {
+        self.paths
+            .lock
+            .parent()
+            .expect("transaction artifacts have a parent directory")
     }
 
     fn remove_file(&self, leaf: &str) -> std::io::Result<()> {

@@ -58,7 +58,11 @@ fn wiki_and_check_refuse_v2_rows_in_every_stored_family() {
             invocation
                 .assert()
                 .failure()
-                .stderr(contains(relative_path))
+                // Windows spells ancestor components with backslashes, and
+                // joins can mix separators; compare slash-normalized text.
+                .stderr(predicates::function::function(move |text: &str| {
+                    text.replace('\\', "/").contains(relative_path)
+                }))
                 .stderr(contains(format!("record {record_id}")))
                 .stderr(contains(
                     "has schema_version 2, but this build reads schema_version 1 only",
@@ -93,7 +97,10 @@ fn coverage_rule_validation_refuses_a_v2_rule_row() {
         ])
         .assert()
         .failure()
-        .stderr(contains("scopes/default/rules/rule.jsonl line 1"))
+        .stderr(predicates::function::function(|text: &str| {
+            text.replace('\\', "/")
+                .contains("scopes/default/rules/rule.jsonl line 1")
+        }))
         .stderr(contains("record rule_future"))
         .stderr(contains(
             "has schema_version 2, but this build reads schema_version 1 only",

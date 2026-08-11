@@ -154,6 +154,15 @@ pub(super) fn child_kind(parent: &File, leaf: &str) -> std::io::Result<Option<Ch
     use std::os::windows::fs::MetadataExt;
     let mut options = fs_at::OpenOptions::default();
     options.follow(false);
+    // open_path_at grants only SYNCHRONIZE by default and ignores read();
+    // the metadata call below needs FILE_READ_ATTRIBUTES or Windows refuses
+    // it with ERROR_ACCESS_DENIED.
+    #[cfg(windows)]
+    {
+        use fs_at::os::windows::OpenOptionsExt;
+        const FILE_READ_ATTRIBUTES: u32 = 0x0080;
+        options.desired_access(FILE_READ_ATTRIBUTES);
+    }
     let file = match options.open_path_at(parent, leaf) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -268,10 +277,38 @@ fn resolve_existing_parent_prefix(parent: &Path) -> std::io::Result<PathBuf> {
     } else {
         std::fs::canonicalize(existing)?
     };
+    #[cfg(windows)]
+    {
+        resolved = normalize_verbatim_prefix_for_walk(&resolved);
+    }
     for leaf in created_below.iter().rev() {
         resolved.push(leaf);
     }
     Ok(resolved)
+}
+
+#[cfg(windows)]
+fn normalize_verbatim_prefix_for_walk(path: &Path) -> PathBuf {
+    use std::ffi::OsString;
+    use std::path::Prefix;
+
+    let mut components = path.components();
+    let Some(Component::Prefix(prefix)) = components.next() else {
+        return path.to_path_buf();
+    };
+    let mut normalized = match prefix.kind() {
+        Prefix::VerbatimDisk(drive) => PathBuf::from(format!("{}:", char::from(drive))),
+        Prefix::VerbatimUNC(server, share) => {
+            let mut root = OsString::from(r"\\");
+            root.push(server);
+            root.push(r"\");
+            root.push(share);
+            PathBuf::from(root)
+        }
+        _ => return path.to_path_buf(),
+    };
+    normalized.extend(components);
+    normalized
 }
 
 pub(super) fn open_or_create_parent(
@@ -361,7 +398,10 @@ pub(super) fn open_or_create_parent(
 }
 
 #[cfg(unix)]
-pub(super) fn open_child_directory_no_follow(parent: &File, leaf: &str) -> std::io::Result<File> {
+pub(in crate::wiki::publish) fn open_child_directory_no_follow(
+    parent: &File,
+    leaf: &str,
+) -> std::io::Result<File> {
     rustix::fs::openat(
         parent,
         leaf,
@@ -376,11 +416,14 @@ pub(super) fn open_child_directory_no_follow(parent: &File, leaf: &str) -> std::
 }
 
 #[cfg(windows)]
-pub(super) fn open_child_directory_no_follow(parent: &File, leaf: &str) -> std::io::Result<File> {
+pub(in crate::wiki::publish) fn open_child_directory_no_follow(
+    parent: &File,
+    leaf: &str,
+) -> std::io::Result<File> {
     use std::os::windows::fs::MetadataExt;
 
     let mut options = fs_at::OpenOptions::default();
-    options.follow(false);
+    options.read(true).follow(false);
     let directory = options.open_dir_at(parent, leaf)?;
     if directory.metadata()?.file_attributes() & 0x0000_0400 != 0 {
         return Err(std::io::Error::new(
@@ -392,14 +435,17 @@ pub(super) fn open_child_directory_no_follow(parent: &File, leaf: &str) -> std::
 }
 
 #[cfg(not(any(unix, windows)))]
-pub(super) fn open_child_directory_no_follow(parent: &File, leaf: &str) -> std::io::Result<File> {
+pub(in crate::wiki::publish) fn open_child_directory_no_follow(
+    parent: &File,
+    leaf: &str,
+) -> std::io::Result<File> {
     let mut options = fs_at::OpenOptions::default();
     options.follow(false);
     options.open_dir_at(parent, leaf)
 }
 
 #[cfg(unix)]
-pub(super) fn open_directory_no_follow(path: &Path) -> std::io::Result<File> {
+pub(in crate::wiki::publish) fn open_directory_no_follow(path: &Path) -> std::io::Result<File> {
     rustix::fs::openat(
         rustix::fs::CWD,
         path,
@@ -414,7 +460,7 @@ pub(super) fn open_directory_no_follow(path: &Path) -> std::io::Result<File> {
 }
 
 #[cfg(windows)]
-pub(super) fn open_directory_no_follow(path: &Path) -> std::io::Result<File> {
+pub(in crate::wiki::publish) fn open_directory_no_follow(path: &Path) -> std::io::Result<File> {
     use std::os::windows::fs::MetadataExt;
     use std::os::windows::fs::OpenOptionsExt;
     const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
@@ -435,6 +481,6 @@ pub(super) fn open_directory_no_follow(path: &Path) -> std::io::Result<File> {
 }
 
 #[cfg(not(any(unix, windows)))]
-pub(super) fn open_directory_no_follow(path: &Path) -> std::io::Result<File> {
+pub(in crate::wiki::publish) fn open_directory_no_follow(path: &Path) -> std::io::Result<File> {
     File::open(path)
 }

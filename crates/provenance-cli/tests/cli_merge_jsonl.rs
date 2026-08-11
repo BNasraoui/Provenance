@@ -198,8 +198,10 @@ fn the_documented_driver_configuration_merges_two_branches() {
             "config",
             "merge.provenance-jsonl.driver",
             &format!(
-                "{} merge-jsonl %O %A %B --output %A --path %P",
-                binary.to_str().unwrap()
+                "'{}' merge-jsonl %O %A %B --output %A --path %P",
+                // Git runs the driver through sh, which eats backslashes;
+                // Windows accepts forward slashes in exec paths.
+                binary.to_str().unwrap().replace('\\', "/")
             ),
         ],
     );
@@ -247,8 +249,10 @@ fn the_documented_driver_configuration_refuses_an_invalid_merge() {
             "config",
             "merge.provenance-jsonl.driver",
             &format!(
-                "{} merge-jsonl %O %A %B --output %A --path %P",
-                binary.to_str().unwrap()
+                "'{}' merge-jsonl %O %A %B --output %A --path %P",
+                // Git runs the driver through sh, which eats backslashes;
+                // Windows accepts forward slashes in exec paths.
+                binary.to_str().unwrap().replace('\\', "/")
             ),
         ],
     );

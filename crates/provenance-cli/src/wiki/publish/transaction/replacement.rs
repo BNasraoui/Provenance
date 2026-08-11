@@ -30,9 +30,13 @@ pub(in crate::wiki::publish) fn replace_output_with(
 ) -> Result<Vec<CleanupWarning>, PublishError> {
     let transaction = TransactionDirectory::open(output)?;
     let output_state = super::ownership::output_identity(output)?;
-    let stage = File::open(&paths.stage).map_err(|error| {
-        PublishError::io("open staging directory identity", &paths.stage, error)
-    })?;
+    // A plain File::open on a directory fails ERROR_ACCESS_DENIED on Windows
+    // (no backup semantics); the no-follow directory open is also the right
+    // semantics for a transaction-owned stage.
+    let stage =
+        super::ownership::open_directory_no_follow(paths.stage.as_std_path()).map_err(|error| {
+            PublishError::io("open staging directory identity", &paths.stage, error)
+        })?;
     let stage_identity = StageIdentity::from_file(&stage).map_err(|error| {
         PublishError::io("record staging directory identity", &paths.stage, error)
     })?;
@@ -167,13 +171,23 @@ pub(super) fn verify_stage_identity(
 }
 
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
-pub(super) fn rename_no_replace_at(parent: &File, from: &str, to: &str) -> std::io::Result<()> {
+pub(super) fn rename_no_replace_at(
+    parent: &File,
+    _parent_path: &Utf8Path,
+    from: &str,
+    to: &str,
+) -> std::io::Result<()> {
     rustix::fs::renameat_with(parent, from, parent, to, rustix::fs::RenameFlags::NOREPLACE)
         .map_err(std::io::Error::from)
 }
 
 #[cfg(target_os = "macos")]
-pub(super) fn rename_no_replace_at(parent: &File, from: &str, to: &str) -> std::io::Result<()> {
+pub(super) fn rename_no_replace_at(
+    parent: &File,
+    _parent_path: &Utf8Path,
+    from: &str,
+    to: &str,
+) -> std::io::Result<()> {
     use std::ffi::CString;
     use std::os::raw::{c_char, c_int, c_uint};
     use std::os::unix::ffi::OsStrExt;
@@ -211,7 +225,12 @@ pub(super) fn rename_no_replace_at(parent: &File, from: &str, to: &str) -> std::
 }
 
 #[cfg(windows)]
-pub(super) fn rename_no_replace_at(parent: &File, from: &str, to: &str) -> std::io::Result<()> {
+pub(super) fn rename_no_replace_at(
+    parent: &File,
+    parent_path: &Utf8Path,
+    from: &str,
+    to: &str,
+) -> std::io::Result<()> {
     use fs_at::os::windows::OpenOptionsExt;
     use std::ffi::OsStr;
     use std::mem::size_of;
@@ -225,7 +244,12 @@ pub(super) fn rename_no_replace_at(parent: &File, from: &str, to: &str) -> std::
     let mut options = fs_at::OpenOptions::default();
     options.desired_access(DELETE_ACCESS).follow(false);
     let source = options.open_path_at(parent, from)?;
-    let name: Vec<u16> = OsStr::new(to).encode_wide().collect();
+    // SetFileInformationByHandle refuses a non-null RootDirectory with
+    // ERROR_INVALID_PARAMETER; the destination must be a full path.
+    let destination = parent_path.join(to);
+    let name: Vec<u16> = OsStr::new(destination.as_std_path())
+        .encode_wide()
+        .collect();
     let name_bytes = name
         .len()
         .checked_mul(size_of::<u16>())
@@ -238,7 +262,7 @@ pub(super) fn rename_no_replace_at(parent: &File, from: &str, to: &str) -> std::
     unsafe {
         info.write(FILE_RENAME_INFO {
             Anonymous: FILE_RENAME_INFO_0 { Flags: 0 },
-            RootDirectory: parent.as_raw_handle() as HANDLE,
+            RootDirectory: 0 as HANDLE,
             FileNameLength: u32::try_from(name_bytes)
                 .map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput))?,
             FileName: [0],
