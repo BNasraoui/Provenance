@@ -64,7 +64,11 @@ impl TransactionDirectory {
 
     fn create_file(&self, leaf: &str) -> std::io::Result<File> {
         let mut options = fs_at::OpenOptions::default();
+        // Read access too: the lock handle's identity is read back via
+        // GetFileInformationByHandle on Windows, which a write-only handle
+        // refuses with ERROR_ACCESS_DENIED.
         options
+            .read(true)
             .write(fs_at::OpenOptionsWriteMode::Write)
             .create_new(true)
             .follow(false);

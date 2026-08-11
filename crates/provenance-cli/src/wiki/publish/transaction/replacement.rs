@@ -30,9 +30,13 @@ pub(in crate::wiki::publish) fn replace_output_with(
 ) -> Result<Vec<CleanupWarning>, PublishError> {
     let transaction = TransactionDirectory::open(output)?;
     let output_state = super::ownership::output_identity(output)?;
-    let stage = File::open(&paths.stage).map_err(|error| {
-        PublishError::io("open staging directory identity", &paths.stage, error)
-    })?;
+    // A plain File::open on a directory fails ERROR_ACCESS_DENIED on Windows
+    // (no backup semantics); the no-follow directory open is also the right
+    // semantics for a transaction-owned stage.
+    let stage =
+        super::ownership::open_directory_no_follow(paths.stage.as_std_path()).map_err(|error| {
+            PublishError::io("open staging directory identity", &paths.stage, error)
+        })?;
     let stage_identity = StageIdentity::from_file(&stage).map_err(|error| {
         PublishError::io("record staging directory identity", &paths.stage, error)
     })?;
