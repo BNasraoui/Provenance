@@ -7,7 +7,7 @@ use provenance_store::{layout::ProvenanceLayout, state_store::StateStore};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
-mod anchors;
+pub(super) mod anchors;
 
 pub(super) fn coverage_scan(
     repo: &camino::Utf8Path,

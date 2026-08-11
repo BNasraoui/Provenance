@@ -39,6 +39,7 @@ provenance prime
 | `provenance proposals surface --scope default --changed-path <path>` | Surface undisposed proposals when current work touches their evidence or explicit territory |
 | `provenance wiki build` / `provenance wiki serve` | Build or serve the generated wiki with domain browsing and offline search |
 | `provenance coverage scan --path . --validate-rules` | Check every marker against the graph and name each active rule with no verification |
+| `provenance stale --since main` | Report whether a diff touched, moved, or removed any graph evidence path |
 | `provenance skills install` | Install the bundled agent skills (`provenance-shaping`, `provenance-fork-tournament`, `provenance-swarm-backtrace`, `provenance-grounded-writing`) |
 
 The repository uses the `skills/<name>/SKILL.md` layout, so the bundled skills can also

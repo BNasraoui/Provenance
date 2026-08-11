@@ -171,16 +171,20 @@ pub enum Command {
         format: OutputFormat,
     },
     Stale {
+        /// Older endpoint of the diff range; supply HEAD as the second endpoint.
+        base: Option<String>,
+        /// Newer endpoint of the diff range.
+        head: Option<String>,
+        /// Compare this commit with HEAD instead of supplying two endpoints.
+        #[arg(long, conflicts_with_all = ["base", "head"])]
+        since: Option<String>,
         #[arg(long, default_value = ".")]
         repo: Utf8PathBuf,
         #[arg(long, default_value = "default")]
         scope: String,
-        #[arg(long, default_value_t = 0)]
-        min_age_days: u32,
+        /// Exit non-zero when evidence is touched or gone.
         #[arg(long)]
-        rule_severities: Option<String>,
-        #[arg(long, default_value_t = 0)]
-        min_downstream_rules: u32,
+        strict: bool,
         #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
         format: OutputFormat,
     },

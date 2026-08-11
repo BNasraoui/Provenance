@@ -36,6 +36,63 @@ pub enum AnchorState {
     Gone,
 }
 
+/// How one graph evidence path relates to a selected Git diff.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EvidenceDiffState {
+    #[default]
+    Untouched,
+    Touched,
+    Moved,
+    Gone,
+}
+
+/// The graph relationship that makes a path evidence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EvidenceSiteKind {
+    RuleBinding,
+    Verification,
+    Annotation,
+    SourceReference,
+}
+
+/// One graph-cited evidence site resolved against both ends of a diff.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub struct EvidenceDiffSite {
+    pub kind: EvidenceSiteKind,
+    pub subject_id: String,
+    pub file_path: Utf8PathBuf,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end_line: Option<usize>,
+    pub state: EvidenceDiffState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_file_path: Option<Utf8PathBuf>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_line: Option<usize>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub struct EvidenceDiffSummary {
+    pub total_sites: usize,
+    pub untouched: usize,
+    pub touched: usize,
+    pub moved: usize,
+    pub gone: usize,
+}
+
+/// Read-only answer to whether a Git diff intersects graph evidence.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub struct EvidenceDiffReport {
+    pub base: String,
+    pub head: String,
+    pub files_changed: usize,
+    pub summary: EvidenceDiffSummary,
+    pub sites: Vec<EvidenceDiffSite>,
+}
+
 /// Something the scan wants to say about a rule.
 ///
 /// `file_path` and `line` are `None` when the warning is about an absence.
