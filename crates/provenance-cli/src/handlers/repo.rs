@@ -23,7 +23,9 @@ pub(super) fn init(
         "disposition actor IDs must not be empty"
     );
     let mut manifest = if manifest_exists {
-        serde_json::from_slice::<Manifest>(&std::fs::read(layout.manifest_path())?)?
+        let manifest = serde_json::from_slice::<Manifest>(&std::fs::read(layout.manifest_path())?)?;
+        provenance_core::ensure_supported_schema_version("manifest", manifest.schema_version)?;
+        manifest
     } else {
         let scope = scope.as_deref().ok_or_else(|| {
             anyhow::anyhow!("--scope is required when initializing a new repository")

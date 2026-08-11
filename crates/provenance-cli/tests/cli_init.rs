@@ -101,7 +101,6 @@ fn init_rerun_without_manifest_flags_preserves_every_manifest_field() {
     )
     .success();
     let mut original = read_manifest(&repo);
-    original["schema_version"] = serde_json::json!(17);
     original["scopes"]
         .as_array_mut()
         .unwrap()
@@ -109,6 +108,25 @@ fn init_rerun_without_manifest_flags_preserves_every_manifest_field() {
     write_manifest(&repo, &original);
 
     init(&repo, &[]).success();
+
+    assert_eq!(read_manifest(&repo), original);
+}
+
+/// A future manifest is refused outright, not preserved: the guard-all-reads
+/// ruling covers init like every other read, so re-init never rewrites a
+/// manifest this build cannot understand.
+#[test]
+fn init_rerun_refuses_a_future_manifest_version() {
+    let temp = tempfile::tempdir().unwrap();
+    let repo = temp.path().join("repo");
+    init(&repo, &["--scope", "default"]).success();
+    let mut original = read_manifest(&repo);
+    original["schema_version"] = serde_json::json!(2);
+    write_manifest(&repo, &original);
+
+    init(&repo, &[])
+        .failure()
+        .stderr(predicates::str::contains("schema_version must be 1"));
 
     assert_eq!(read_manifest(&repo), original);
 }
