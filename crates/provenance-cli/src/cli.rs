@@ -28,13 +28,16 @@ pub enum Command {
         #[arg(long)]
         path: Utf8PathBuf,
         #[arg(long)]
-        scope: String,
-        #[arg(long, default_value = ".")]
-        path_prefix: Utf8PathBuf,
+        scope: Option<String>,
+        #[arg(long, requires = "scope")]
+        path_prefix: Option<Utf8PathBuf>,
         /// Repository-local actor ID allowed to attest proposal dispositions.
-        /// Repeat for multiple actors; if omitted, no actor may dispose.
+        /// Repeat for multiple actors. On re-init, omission preserves the allowlist.
         #[arg(long)]
         disposition_actor_id: Vec<String>,
+        /// Empty the repository-local disposition actor allowlist.
+        #[arg(long, conflicts_with = "disposition_actor_id")]
+        clear_disposition_actors: bool,
     },
     Check {
         #[arg(long, default_value = ".")]
