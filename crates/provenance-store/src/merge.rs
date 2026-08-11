@@ -1,3 +1,6 @@
+use crate::state_store::readers::{
+    ensure_supported_ideation_landing_versions, ensure_supported_record_version,
+};
 use provenance_macros::rule;
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -145,14 +148,30 @@ pub fn merge_records(
 }
 
 pub fn read_jsonl_records(path: &camino::Utf8Path) -> anyhow::Result<Vec<CanonicalRecord>> {
+    read_jsonl_records_for_shard(path, path)
+}
+
+pub fn read_jsonl_records_for_shard(
+    path: &camino::Utf8Path,
+    shard_path: &camino::Utf8Path,
+) -> anyhow::Result<Vec<CanonicalRecord>> {
     if !path.exists() {
         return Ok(Vec::new());
     }
-    std::fs::read_to_string(path)?
-        .lines()
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| Ok(serde_json::from_str(line)?))
-        .collect()
+    let contents = std::fs::read_to_string(path)?;
+    let mut records = Vec::new();
+    for (index, line) in contents.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let record = serde_json::from_str(line)?;
+        ensure_supported_record_version(shard_path, index + 1, &record)?;
+        if ShardFamily::for_shard_path(shard_path) == ShardFamily::IdeationLandings {
+            ensure_supported_ideation_landing_versions(shard_path, index + 1, &record)?;
+        }
+        records.push(record);
+    }
+    Ok(records)
 }
 
 fn index_by_id(records: &[CanonicalRecord]) -> anyhow::Result<BTreeMap<String, CanonicalRecord>> {

@@ -4,7 +4,7 @@ mod git;
 mod projection;
 
 use camino::Utf8Path;
-use provenance_core::SUPPORTED_SCHEMA_VERSION;
+use provenance_core::{ensure_supported_schema_version, SchemaVersion, SUPPORTED_SCHEMA_VERSION};
 use provenance_macros::rule;
 use serde::{Deserialize, Serialize};
 
@@ -402,4 +402,16 @@ fn incomplete(error: impl std::fmt::Display) -> GraphReferenceError {
     GraphReferenceError::Incomplete {
         detail: error.to_string(),
     }
+}
+
+fn ensure_graph_schema_version(
+    kind: &str,
+    version: SchemaVersion,
+) -> Result<(), GraphReferenceError> {
+    ensure_supported_schema_version(kind, version).map_err(|_| {
+        incomplete(format!(
+            "{kind} has unsupported schema_version {}; expected {}",
+            version.0, SUPPORTED_SCHEMA_VERSION.0
+        ))
+    })
 }

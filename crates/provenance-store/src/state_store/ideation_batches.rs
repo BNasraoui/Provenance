@@ -1,4 +1,6 @@
-use super::{read_jsonl, read_legacy_dispositions, IdeationLandingBatch, StateStore};
+use super::{
+    read_ideation_landings, read_jsonl, read_legacy_dispositions, IdeationLandingBatch, StateStore,
+};
 use crate::shards;
 use provenance_core::{
     AssertionRecord, Contribution, DispositionRecord, IdeationAggregate, ProposalCard, ScopeId,
@@ -22,7 +24,7 @@ impl StateStore {
         &self,
         scope: &ScopeId,
     ) -> anyhow::Result<Vec<IdeationLandingBatch>> {
-        read_jsonl(&shards::ideation_landings_path(&self.layout, scope))
+        read_ideation_landings(&shards::ideation_landings_path(&self.layout, scope))
     }
 
     pub fn land_ideation_batch(
@@ -199,15 +201,12 @@ impl StateStore {
         let assertions = self.list_assertion_records(scope)?;
         let dispositions = self.list_dispositions(scope)?;
         validate_legacy_disposition_shard(&legacy_dispositions, &proposals)?;
-        // The allowlist is read whatever the scope holds, as every other
-        // caller of the aggregate reads it. When to apply it belongs to
-        // `rule_disposition_actor_allowlist`, which asks only about
-        // dispositions of proposals still claiming `proposed`; a scope holding
-        // no such disposition never reaches the check, so handing it the real
-        // list here decides nothing this read path is entitled to decide. The
-        // one thing the read adds is the read itself: a repository whose
-        // manifest is missing or unreadable now fails here rather than
-        // validating around it, which is what every write path already does.
+        // Always supply manifest state. `rule_disposition_actor_allowlist`
+        // alone decides whether a disposition's derived pre-disposition state
+        // requires an allowlisted actor; this read path must not copy that
+        // trigger or substitute an empty list when it believes the rule cannot
+        // fire. Reading unconditionally also refuses a missing manifest just as
+        // every write path does.
         let manifest = self.manifest()?;
         provenance_core::validate_ideation_aggregate(IdeationAggregate {
             legacy_policy: provenance_core::LegacyProposalPolicy::ShippedV1,

@@ -2,7 +2,9 @@ use super::super::{build_corpus_with_coverage, repository_relative_path};
 use super::fixtures::*;
 use crate::wiki::links::LinkResolver;
 use camino::Utf8PathBuf;
-use provenance_core::coverage::{BindingResult, CoverageReport, CoverageScan, ScannedFile};
+use provenance_core::coverage::{
+    AnchorState, BindingResult, CoverageReport, CoverageScan, ScannedFile,
+};
 use std::fmt::Write as _;
 
 fn binding(
@@ -17,6 +19,10 @@ fn binding(
         line,
         item_name: Some(item_name.to_string()),
         verification: verification.map(str::to_string),
+        anchor: None,
+        anchor_state: AnchorState::Unchanged,
+        original_line: None,
+        original_file_path: None,
     }
 }
 
@@ -99,6 +105,36 @@ fn a_corpus_built_without_a_report_records_no_code_scan() {
     let page = rule_page(&corpus, "rule_001");
 
     assert!(page.code_scan.is_none());
+    assert!(page.rule_function.is_none());
+    assert!(page.verifications.is_empty());
+}
+
+#[test]
+fn gone_bindings_are_not_presented_as_current_code_sites() {
+    let mut gone_rule = binding("src/rules.rs", 7, "decide_rule", None);
+    gone_rule.anchor_state = AnchorState::Gone;
+    let mut gone_verification = binding(
+        "tests/rules.rs",
+        12,
+        "rule_holds_for_examples",
+        Some("examples"),
+    );
+    gone_verification.anchor_state = AnchorState::Gone;
+    let report = CoverageScan {
+        report: CoverageReport::new(
+            Some("abc1234".to_string()),
+            2,
+            Vec::new(),
+            vec![gone_rule, gone_verification],
+            Vec::new(),
+        ),
+        scanned_files: Vec::new(),
+    };
+    let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
+
+    let corpus = build_corpus_with_coverage(&fixture_state(), &resolver, Some(&report));
+    let page = rule_page(&corpus, "rule_001");
+
     assert!(page.rule_function.is_none());
     assert!(page.verifications.is_empty());
 }

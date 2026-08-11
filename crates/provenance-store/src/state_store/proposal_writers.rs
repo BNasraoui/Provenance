@@ -5,7 +5,7 @@ use super::{
 use crate::shards;
 use provenance_core::{
     validate_optional_confidence_score, AssertionRecord, DispositionRecord, PromotionState,
-    ProposalCard, SchemaVersion, ScopeId, StableId,
+    ProposalCard, ScopeId, StableId, SUPPORTED_SCHEMA_VERSION,
 };
 use provenance_macros::rule;
 
@@ -27,7 +27,7 @@ impl StateStore {
         self.with_lifecycle_lock(&scope, || {
             let proposal = proposal_from_input(proposal)?;
             let assertion = AssertionRecord {
-                schema_version: SchemaVersion(1),
+                schema_version: SUPPORTED_SCHEMA_VERSION,
                 scope_id: assertion.scope_id,
                 id: assertion.id,
                 proposal_id: assertion.proposal_id,
@@ -92,7 +92,7 @@ impl StateStore {
                     || !decision_keys.contains(decision.decision_key.as_str())
             });
             let assertion = AssertionRecord {
-                schema_version: SchemaVersion(1),
+                schema_version: SUPPORTED_SCHEMA_VERSION,
                 scope_id: input.scope_id,
                 id: input.id,
                 proposal_id: input.proposal_id,
@@ -134,7 +134,7 @@ impl StateStore {
 
     fn write_assertion(&self, input: CreateAssertionInput) -> anyhow::Result<AssertionRecord> {
         let assertion = AssertionRecord {
-            schema_version: SchemaVersion(1),
+            schema_version: SUPPORTED_SCHEMA_VERSION,
             scope_id: input.scope_id.clone(),
             id: input.id,
             proposal_id: input.proposal_id,
@@ -225,7 +225,7 @@ impl StateStore {
             external_action,
         } = input;
         let disposition = DispositionRecord {
-            schema_version: SchemaVersion(1),
+            schema_version: SUPPORTED_SCHEMA_VERSION,
             scope_id: scope_id.clone(),
             id,
             proposal_id,
@@ -384,7 +384,7 @@ fn proposal_from_input(input: CreateProposalCardInput) -> anyhow::Result<Proposa
         | PromotionState::Deferred => {}
     }
     let proposal = ProposalCard {
-        schema_version: SchemaVersion(1),
+        schema_version: SUPPORTED_SCHEMA_VERSION,
         scope_id: input.scope_id,
         id: input.id,
         proposal_key: input.proposal_key,

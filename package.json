@@ -2,7 +2,7 @@
   "name": "provenance-wiki-dom-tests",
   "private": true,
   "scripts": {
-    "test:dom": "node --test tests/wiki-search-dom.test.mjs tests/wiki-discussion-dom.test.mjs"
+    "test:dom": "node --test tests/*.test.mjs"
   },
   "devDependencies": {
     "jsdom": "29.1.1"

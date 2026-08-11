@@ -1,6 +1,6 @@
 use super::{CreateResolutionInput, CreateRuleInput, StateStore};
 use crate::shards;
-use provenance_core::{EdgeType, NodeType, Resolution, Rule, SchemaVersion};
+use provenance_core::{EdgeType, NodeType, Resolution, Rule, SUPPORTED_SCHEMA_VERSION};
 
 impl StateStore {
     pub fn create_resolution(&self, input: CreateResolutionInput) -> anyhow::Result<Resolution> {
@@ -38,7 +38,7 @@ impl StateStore {
         let path = shards::resolutions_path(&self.layout, &scope_id);
         let resolution = self.mutate_jsonl_records(&path, |records: &mut Vec<Resolution>| {
             let resolution = Resolution {
-                schema_version: SchemaVersion(1),
+                schema_version: SUPPORTED_SCHEMA_VERSION,
                 scope_id: scope_id.clone(),
                 id: id.clone(),
                 title,
@@ -125,7 +125,7 @@ impl StateStore {
         let path = shards::rules_path(&self.layout, &scope_id);
         let rule = self.mutate_jsonl_records(&path, |records: &mut Vec<Rule>| {
             let rule = Rule {
-                schema_version: SchemaVersion(1),
+                schema_version: SUPPORTED_SCHEMA_VERSION,
                 scope_id: scope_id.clone(),
                 id: id.clone(),
                 name,
