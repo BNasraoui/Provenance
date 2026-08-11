@@ -19,8 +19,10 @@ impl AdvisoryLock {
             .write(true)
             .create(true)
             .truncate(false)
-            .open(path)?;
-        file.lock_exclusive()?;
+            .open(path)
+            .map_err(|error| anyhow::anyhow!("open advisory lock {path}: {error}"))?;
+        file.lock_exclusive()
+            .map_err(|error| anyhow::anyhow!("acquire advisory lock {path}: {error}"))?;
         Ok(Self { file })
     }
 }
