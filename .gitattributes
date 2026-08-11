@@ -1,3 +1,7 @@
 # Canonical graph state merges record by record, not line by line.
 # Each clone must configure the driver once; see docs/cli.md, "JSONL merge driver".
 .provenance/state/**/*.jsonl merge=provenance-jsonl
+
+# Embedded skill sources are compiled into the binary with include_str!;
+# their bytes must be identical on every platform's checkout.
+skills/** text eol=lf
