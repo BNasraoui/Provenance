@@ -244,7 +244,8 @@ and no contested claim or blocking gate, record `provenance proposals assert --i
 Only then may `dispositions create` record accepted, rejected, or deferred state.
 The actor ID must appear in the manifest allowlist configured by repeatable
 `provenance init --disposition-actor-id`; this is local audit attestation, not cryptographic
-authentication.
+authentication. Re-running `init` preserves manifest settings whose flags are omitted; use
+`--clear-disposition-actors` to empty the allowlist explicitly.
 
 Demand-driven proposal review uses `provenance proposals surface`. Pass one or more exact,
 repository-relative `--changed-path` values to surface undisposed proposals whose own
