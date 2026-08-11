@@ -6,8 +6,12 @@ mod cleanup;
 mod ownership;
 mod replacement;
 
+pub(super) use ownership::open_child_directory_no_follow;
 pub(super) use ownership::{acquire_lock, preflight};
-pub(super) use ownership::{open_child_directory_no_follow, open_directory_no_follow};
+// Stage identity reads through a path on Windows only; the test helper uses
+// it on every platform.
+#[cfg(any(windows, test))]
+pub(super) use ownership::open_directory_no_follow;
 pub(super) use replacement::replace_output;
 #[cfg(test)]
 pub(super) use replacement::replace_output_with;
