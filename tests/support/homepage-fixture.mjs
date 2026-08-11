@@ -79,7 +79,9 @@ export async function measureMobileViewport(html, width, height) {
   ]);
   let stderr = "";
   browser.stderr.on("data", (chunk) => { stderr += chunk; });
-  const timeout = setTimeout(() => rejectReport(new Error(`Firefox report timed out: ${stderr}`)), 20_000);
+  // A cold CI runner can take well over 20s to boot Firefox the first time;
+  // the assertion budget is startup, not rendering, so give it room.
+  const timeout = setTimeout(() => rejectReport(new Error(`Firefox report timed out: ${stderr}`)), 90_000);
   browser.once("error", rejectReport);
   browser.once("exit", (code) => {
     if (!report) rejectReport(new Error(`Firefox exited ${code}: ${stderr}`));
