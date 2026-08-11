@@ -8,6 +8,7 @@ use provenance_core::{
     SuggestedArtifactChange, ThreadParent, TopicStatus, UncertaintyRating,
     UnsupportedRecommendation, UnsupportedSpeculation,
 };
+use serde::{Deserialize, Serialize};
 
 pub struct CreateSourceInput {
     pub scope_id: ScopeId,
@@ -131,6 +132,115 @@ pub struct CreateRuleInput {
     pub source_section: Option<String>,
     pub origin_thread: Option<StableId>,
     pub origin_message: Option<StableId>,
+}
+
+/// One language-authored desired-state document.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TypedSpecInput {
+    pub schema_version: u32,
+    pub declared_by: String,
+    #[serde(default)]
+    pub sources: Vec<TypedSourceInput>,
+    #[serde(default)]
+    pub requirements: Vec<TypedRequirementInput>,
+    #[serde(default)]
+    pub rules: Vec<TypedRuleInput>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TypedSourceInput {
+    pub key: String,
+    #[serde(default)]
+    pub id: Option<String>,
+    pub name: String,
+    pub kind: String,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub reference: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TypedRequirementInput {
+    pub key: String,
+    #[serde(default)]
+    pub id: Option<String>,
+    pub statement: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub sources: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TypedRuleInput {
+    pub key: String,
+    #[serde(default)]
+    pub id: Option<String>,
+    pub requirement: String,
+    pub statement: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TypedResourceKind {
+    Source,
+    Requirement,
+    Rule,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReconcileState {
+    Created,
+    Updated,
+    Unchanged,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ReconciledResource {
+    pub kind: TypedResourceKind,
+    pub key: String,
+    pub id: StableId,
+    pub state: ReconcileState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct TypedSpecResult {
+    pub declared_by: String,
+    pub created: usize,
+    pub updated: usize,
+    pub unchanged: usize,
+    pub resources: Vec<ReconciledResource>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BeginVerificationInput {
+    pub rule: String,
+    pub method: String,
+    pub declared_by: String,
+    #[serde(default)]
+    pub file: Option<camino::Utf8PathBuf>,
+    #[serde(default)]
+    pub symbol: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CompleteVerificationInput {
+    pub run: String,
+    pub status: String,
+    #[serde(default)]
+    pub error: Option<String>,
 }
 
 pub struct PostMessageInput {

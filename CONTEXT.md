@@ -60,6 +60,10 @@ An optional association between a graph reference and an identifier owned by ano
 
 An optional immutable association between a Disposition and one action owned by another system. Its identity is the exact system, external scope, action kind, and stable key tuple; equal keys in different systems, scopes, or kinds are distinct. It is audit context, not Disposition identity or workflow state.
 
+## Declaration owner
+
+The integration URI allowed to reconcile a Source, Requirement, or Rule definition carrying the same owner. It grants no authority over other records, the whole graph, or facts the declaration does not state.
+
 ## Commit-then-issue
 
 The handoff in which canonical graph changes are committed before a graph reference is issued, so issuance does not create new canonical state.

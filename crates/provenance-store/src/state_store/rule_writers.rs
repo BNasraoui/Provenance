@@ -128,6 +128,7 @@ impl StateStore {
                 schema_version: SUPPORTED_SCHEMA_VERSION,
                 scope_id: scope_id.clone(),
                 id: id.clone(),
+                declared_by: None,
                 name,
                 description,
                 statement,

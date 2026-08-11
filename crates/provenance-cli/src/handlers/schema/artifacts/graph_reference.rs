@@ -121,7 +121,7 @@ fn export_definitions() -> Value {
             &["schema_version", "scope_id", "id", "name", "source_type", "url"],
             json!({
                 "schema_version": version.clone(), "scope_id": id.clone(), "id": id.clone(),
-                "name": string.clone(),
+                "declared_by": string.clone(), "name": string.clone(),
                 "source_type": {"enum": ["policy", "document", "legislation", "company_agreement", "system_state", "external_integration", "domain_knowledge", "project_artifact", "incident", "api_spec"]},
                 "url": {"type": ["string", "null"]}, "reference": string.clone(),
                 "commit_pin": {
@@ -140,7 +140,8 @@ fn export_definitions() -> Value {
             &["schema_version", "scope_id", "id", "statement", "status"],
             json!({
                 "schema_version": version.clone(), "scope_id": id.clone(), "id": id.clone(),
-                "statement": string.clone(), "description": string.clone(), "fog": string.clone(),
+                "declared_by": string.clone(), "statement": string.clone(),
+                "description": string.clone(), "fog": string.clone(),
                 "status": {"enum": ["active", "discovery", "refinement", "resolved"]},
                 "domain_id": id.clone(),
                 "source_refs": {"type": "array", "items": {"$ref": "#/$defs/sourceReference"}}
@@ -190,7 +191,8 @@ fn export_definitions() -> Value {
             &["schema_version", "scope_id", "id", "statement", "status", "severity"],
             json!({
                 "schema_version": version.clone(), "scope_id": id.clone(), "id": id.clone(),
-                "name": string.clone(), "description": string.clone(),
+                "declared_by": string.clone(), "name": string.clone(),
+                "description": string.clone(),
                 "statement": string.clone(), "status": {"enum": ["draft", "review", "active", "deprecated", "archived"]},
                 "severity": {"enum": ["low", "medium", "high", "critical"]},
                 "source_document": string.clone(), "source_section": string.clone()

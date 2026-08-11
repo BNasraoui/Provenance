@@ -39,6 +39,7 @@ provenance prime
 | `provenance proposals surface --scope default --changed-path <path>` | Surface undisposed proposals when current work touches their evidence or explicit territory |
 | `provenance wiki build` / `provenance wiki serve` | Build or serve the generated wiki with domain browsing and offline search |
 | `provenance coverage scan --path . --validate-rules` | Check every marker against the graph and name each active rule with no verification |
+| `provenance sdk apply` / `provenance sdk verification-runs` | Experimental typed-language desired state and callback evidence protocol |
 | `provenance stale --since main` | Report whether a diff touched, moved, or removed any graph evidence path |
 | `provenance skills install` | Install the bundled agent skills (`provenance-shaping`, `provenance-fork-tournament`, `provenance-swarm-backtrace`, `provenance-grounded-writing`) |
 
@@ -50,5 +51,6 @@ be installed through the skills.sh ecosystem with `npx skills add <owner/repo>`.
 - [Shaping](docs/shaping.md), the refinement method and how agent sessions run it
 - [CLI](docs/cli.md), the full command surface
 - [State format](docs/state-format.md) and [cache](docs/cache.md), how storage works
+- [TypeScript SDK POC](docs/typescript-sdk-poc.md), typed declarations, Node verification, and findings
 
 Licensed under BUSL-1.1.

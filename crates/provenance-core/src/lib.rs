@@ -24,5 +24,6 @@ pub use model::{
     SchemaVersion, Scope, ScopeId, Source, SourceReference, SourceType, SpeculationMarker,
     StableId, SuggestedArtifact, SuggestedArtifactChange, SynthesisPacket, Thread, ThreadParent,
     ThreadStatus, Topic, TopicStatus, UncertaintyLevel, UncertaintyRating,
-    UnsupportedRecommendation, UnsupportedSpeculation, SUPPORTED_SCHEMA_VERSION,
+    UnsupportedRecommendation, UnsupportedSpeculation, VerificationRun, VerificationRunStatus,
+    SUPPORTED_SCHEMA_VERSION,
 };

@@ -73,3 +73,34 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:dom
+
+  typescript-sdk:
+    name: TypeScript SDK POC
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: cargo build -p provenance-cli
+      - run: npm ci --prefix packages/provenance
+      - run: npm test --prefix packages/provenance
+      - run: npm ci --prefix packages/provenance-rules-js
+      - run: npm test --prefix packages/provenance-rules-js
+      - run: npm ci --prefix examples/typescript-sdk
+      - name: Run packaged fixture
+        shell: bash
+        run: |
+          fixture_repo=$(mktemp -d)
+          target/debug/provenance init --path "$fixture_repo" --scope default --path-prefix .
+          PROVENANCE_BIN="$PWD/target/debug/provenance" \
+          PROVENANCE_REPO="$fixture_repo" \
+          PROVENANCE_SPEC_OWNER="spec://typescript/share-links" \
+          PROVENANCE_VERIFICATION_OWNER="ci://typescript-example" \
+          npm test --prefix examples/typescript-sdk
+          target/debug/provenance rules show \
+            --repo "$fixture_repo" --scope default --id expiry --format json
+          target/debug/provenance sdk verification-runs \
+            --repo "$fixture_repo" --scope default --rule expiry --format json

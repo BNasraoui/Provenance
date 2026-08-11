@@ -15,6 +15,26 @@ provenance check --format json
 
 Agent-facing commands support JSON output for deterministic parsing.
 
+## Typed SDK protocol (POC)
+
+The TypeScript package named `provenance` uses four one-shot commands. Apply,
+begin, and complete read one JSON document from stdin; all four write JSON:
+
+```sh
+provenance sdk apply --repo . --scope default --format json < declarations.json
+provenance sdk begin-verification --repo . --scope default --format json < begin.json
+provenance sdk complete-verification --repo . --scope default --format json < complete.json
+provenance sdk verification-runs --repo . --scope default --rule expiry --format json
+```
+
+`apply` creates missing records and updates records whose `declared_by` matches
+the document. It refuses unowned and foreign-owned collisions before writing,
+does not delete omissions, and adds relationships idempotently. Verification
+runs live in the derived cache and always cite an existing Rule. The language
+callback itself runs in Node and never crosses into Rust. See
+[`typescript-sdk-poc.md`](typescript-sdk-poc.md) for the package interface,
+identity rules, limits, and experiment results.
+
 ## Rule coverage
 
 A rule's record names it; the code that carries the rule names it back. In Rust that is

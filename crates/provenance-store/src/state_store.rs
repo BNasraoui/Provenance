@@ -9,6 +9,8 @@ pub(crate) mod readers;
 mod rule_writers;
 mod shaping_writers;
 mod thread_writers;
+mod typed_specs;
+mod verification_runs;
 mod writers;
 
 pub use ideation_batches::{
@@ -17,11 +19,13 @@ pub use ideation_batches::{
     SYNTHESIS_KIND,
 };
 pub use inputs::{
-    AddSourceReferenceInput, CreateAssertionInput, CreateBoundaryInput, CreateContributionInput,
-    CreateDispositionInput, CreateDomainInput, CreateEdgeInput, CreateProposalCardInput,
-    CreateQuestionInput, CreateRequirementInput, CreateResolutionInput, CreateRuleInput,
-    CreateSourceInput, CreateSynthesisPacketInput, CreateTopicInput, PostMessageInput,
-    UpdateQuestionInput,
+    AddSourceReferenceInput, BeginVerificationInput, CompleteVerificationInput,
+    CreateAssertionInput, CreateBoundaryInput, CreateContributionInput, CreateDispositionInput,
+    CreateDomainInput, CreateEdgeInput, CreateProposalCardInput, CreateQuestionInput,
+    CreateRequirementInput, CreateResolutionInput, CreateRuleInput, CreateSourceInput,
+    CreateSynthesisPacketInput, CreateTopicInput, PostMessageInput, ReconcileState,
+    ReconciledResource, TypedRequirementInput, TypedResourceKind, TypedRuleInput, TypedSourceInput,
+    TypedSpecInput, TypedSpecResult, UpdateQuestionInput,
 };
 pub use proposal_surfaces::{ProposalDemand, ProposalSurfaceReason, SurfacedProposal, TopicClaim};
 
