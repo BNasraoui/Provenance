@@ -26,7 +26,6 @@ fn cli_domains_roundtrip_materialize_and_export() {
 fn provenance(args: &[&str]) -> assert_cmd::assert::Assert {
     Command::cargo_bin("provenance")
         .unwrap()
-        .env("RUST_BACKTRACE", "1")
         .args(args)
         .assert()
 }

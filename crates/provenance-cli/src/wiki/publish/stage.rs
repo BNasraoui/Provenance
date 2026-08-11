@@ -45,9 +45,8 @@ impl StageDirectory {
             directory = match fs_at::OpenOptions::default().mkdir_at(&directory, *segment) {
                 Ok(created) => created,
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                    // The attribute-bit check inside this open refuses a
-                    // reparse point planted at the segment even when fs_at's
-                    // own probe is masked (workaround-procmon).
+                    // The attribute-bit check inside this open independently
+                    // refuses a reparse point planted at the segment.
                     super::transaction::open_child_directory_no_follow(&directory, segment)
                         .map_err(|error| {
                             PublishError::io("open staged directory", display_path, error)
