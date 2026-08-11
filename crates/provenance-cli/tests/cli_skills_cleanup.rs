@@ -108,12 +108,12 @@ fn rerun_reports_legacy_cleanup_as_an_update() {
     assert_eq!(report["status"], "updated");
     // Path spellings differ per platform (verbatim prefixes, separators,
     // Windows 8.3 short names); the stable identity is the repo-relative
-    // suffix.
+    // suffix of an absolute path.
     assert!(report["files"].as_array().unwrap().iter().any(|file| {
-        file["path"]
-            .as_str()
-            .is_some_and(|path| normalized(path).ends_with(".agents/skills/shaping/SKILL.md"))
-            && file["status"] == "removed"
+        file["path"].as_str().is_some_and(|path| {
+            Path::new(path).is_absolute()
+                && normalized(path).ends_with(".agents/skills/shaping/SKILL.md")
+        }) && file["status"] == "removed"
     }));
 }
 
