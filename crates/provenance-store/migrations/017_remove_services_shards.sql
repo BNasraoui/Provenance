@@ -1,0 +1,1 @@
+-- The migration runner removes legacy services/*.jsonl shards from state stores.

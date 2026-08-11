@@ -9,7 +9,7 @@ pub async fn materialize_empty_state(
     layout: &ProvenanceLayout,
 ) -> anyhow::Result<MaterializeReport> {
     let pool = open_cache(layout).await?;
-    let migrations_applied = migrations::run_migrations(&pool).await?;
+    let migrations_applied = migrations::run_migrations(&pool, layout).await?;
     Ok(MaterializeReport {
         records_loaded: 0,
         migrations_applied,
@@ -24,7 +24,7 @@ pub async fn materialize_state(layout: &ProvenanceLayout) -> anyhow::Result<Mate
         store.validate_ideation_scope(&scope.id)?;
     }
     let pool = open_cache(layout).await?;
-    let migrations_applied = migrations::run_migrations(&pool).await?;
+    let migrations_applied = migrations::run_migrations(&pool, layout).await?;
     let mut tx = pool.begin().await?;
     clear_cache(&mut tx).await?;
 
