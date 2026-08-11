@@ -6,6 +6,8 @@ mod cleanup;
 mod ownership;
 mod replacement;
 
+#[cfg(test)]
+pub(super) use ownership::open_directory_no_follow;
 pub(super) use ownership::{acquire_lock, preflight};
 pub(super) use replacement::replace_output;
 #[cfg(test)]
@@ -59,7 +61,11 @@ impl TransactionDirectory {
     }
 
     pub(super) fn create_stage(&self) -> std::io::Result<File> {
-        fs_at::OpenOptions::default().mkdir_at(&self.parent, &self.leaves.stage)
+        // Read access so the stage handle's identity can be read back on
+        // Windows.
+        fs_at::OpenOptions::default()
+            .read(true)
+            .mkdir_at(&self.parent, &self.leaves.stage)
     }
 
     fn create_file(&self, leaf: &str) -> std::io::Result<File> {
@@ -91,7 +97,15 @@ impl TransactionDirectory {
     }
 
     fn rename(&self, from: &str, to: &str) -> std::io::Result<()> {
-        replacement::rename_no_replace_at(&self.parent, from, to)
+        replacement::rename_no_replace_at(&self.parent, self.parent_path(), from, to)
+    }
+
+    /// The directory every transaction artifact sits in, as a path.
+    fn parent_path(&self) -> &Utf8Path {
+        self.paths
+            .lock
+            .parent()
+            .expect("transaction artifacts have a parent directory")
     }
 
     fn remove_file(&self, leaf: &str) -> std::io::Result<()> {

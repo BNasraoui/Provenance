@@ -37,7 +37,10 @@ impl StageDirectory {
             PublishError::io("clone staging directory handle", display_path, error)
         })?;
         for segment in &relative[..relative.len() - 1] {
-            directory = match fs_at::OpenOptions::default().mkdir_at(&directory, *segment) {
+            directory = match fs_at::OpenOptions::default()
+                .read(true)
+                .mkdir_at(&directory, *segment)
+            {
                 Ok(created) => created,
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                     let mut options = fs_at::OpenOptions::default();
@@ -124,7 +127,7 @@ pub(super) fn generate_and_replace(
 
 #[cfg(test)]
 pub(super) fn write_page(stage: &Utf8Path, route: &str, html: &str) -> Result<(), PublishError> {
-    let root = File::open(stage)
+    let root = super::transaction::open_directory_no_follow(stage.as_std_path())
         .map_err(|error| PublishError::io("open staging directory", stage, error))?;
     let stage_directory = StageDirectory::from_file(root, stage)?;
     write_page_in(&stage_directory, stage, route, html)

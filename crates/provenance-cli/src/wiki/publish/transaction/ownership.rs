@@ -436,7 +436,7 @@ pub(super) fn open_child_directory_no_follow(parent: &File, leaf: &str) -> std::
 }
 
 #[cfg(unix)]
-pub(super) fn open_directory_no_follow(path: &Path) -> std::io::Result<File> {
+pub(in crate::wiki::publish) fn open_directory_no_follow(path: &Path) -> std::io::Result<File> {
     rustix::fs::openat(
         rustix::fs::CWD,
         path,
@@ -451,7 +451,7 @@ pub(super) fn open_directory_no_follow(path: &Path) -> std::io::Result<File> {
 }
 
 #[cfg(windows)]
-pub(super) fn open_directory_no_follow(path: &Path) -> std::io::Result<File> {
+pub(in crate::wiki::publish) fn open_directory_no_follow(path: &Path) -> std::io::Result<File> {
     use std::os::windows::fs::MetadataExt;
     use std::os::windows::fs::OpenOptionsExt;
     const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
@@ -472,6 +472,6 @@ pub(super) fn open_directory_no_follow(path: &Path) -> std::io::Result<File> {
 }
 
 #[cfg(not(any(unix, windows)))]
-pub(super) fn open_directory_no_follow(path: &Path) -> std::io::Result<File> {
+pub(in crate::wiki::publish) fn open_directory_no_follow(path: &Path) -> std::io::Result<File> {
     File::open(path)
 }

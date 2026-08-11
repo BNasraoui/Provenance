@@ -49,7 +49,9 @@ fn no_replace_rename_preserves_an_output_that_appeared() {
     std::fs::write(stage.join("generated"), "new").unwrap();
 
     let parent = ownership::open_directory_no_follow(temp.path()).unwrap();
-    let error = replacement::rename_no_replace_at(&parent, "stage", "wiki").unwrap_err();
+    let error =
+        replacement::rename_no_replace_at(&parent, output.parent().unwrap(), "stage", "wiki")
+            .unwrap_err();
 
     assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
     assert_eq!(
