@@ -96,6 +96,18 @@ fn scanner_and_core_agree_on_which_confidences_are_in_range() {
         } else {
             // The remedy may differ; the verdict may not. The scanner warns and
             // falls back rather than keeping a rounded-off score.
+            assert_eq!(
+                parsed.warnings.len(),
+                1,
+                "scanner must emit one warning before falling back for {written}"
+            );
+            assert_eq!(parsed.warnings[0].line, 1);
+            let expected_warning = if read_back.is_finite() {
+                format!("confidence `{written}` is outside 0.0-1.0, using default")
+            } else {
+                format!("invalid confidence `{written}`, using default")
+            };
+            assert_eq!(parsed.warnings[0].message, expected_warning);
             assert!(
                 (confidence - 1.0).abs() < f64::EPSILON,
                 "scanner kept {confidence:?} for an out-of-range {written}"

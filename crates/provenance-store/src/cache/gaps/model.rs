@@ -12,7 +12,7 @@ pub enum GapKind {
     NoResolvingDecision,
     /// A resolved requirement or approved resolution produced no rule.
     NoProducedRules,
-    /// No `produces` edge points at a rule.
+    /// A requirement or a resolution does not produce the rule.
     OrphanRule,
     /// A resolution resolves no requirement.
     OrphanResolution,

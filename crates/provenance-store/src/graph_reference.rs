@@ -113,6 +113,11 @@ impl GraphReference {
     /// present, both its system and its key filled in, since half a
     /// correlation points nowhere.
     ///
+    /// The commit shape is deliberately stricter than `rule_source_commit_pin`:
+    /// source pins are locators and may be abbreviated or uppercase, while a
+    /// graph reference commit is a durable identity in a claim its holder
+    /// cannot resolve against this repository.
+    ///
     /// The same decision is replicated as JSON Schema in
     /// `provenance-cli/src/handlers/schema/artifacts/graph_reference.rs`
     /// (`reference_schema`), which is what a holder outside this codebase
