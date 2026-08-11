@@ -1,4 +1,5 @@
 use assert_cmd::Command;
+use predicates::boolean::PredicateBooleanExt;
 use predicates::str::contains;
 use provenance_macros::verifies;
 
@@ -58,7 +59,8 @@ fn wiki_and_check_refuse_v2_rows_in_every_stored_family() {
             invocation
                 .assert()
                 .failure()
-                .stderr(contains(relative_path))
+                // Windows spells the ancestor components with backslashes.
+                .stderr(contains(relative_path).or(contains(relative_path.replace('/', "\\"))))
                 .stderr(contains(format!("record {record_id}")))
                 .stderr(contains(
                     "has schema_version 2, but this build reads schema_version 1 only",
@@ -93,7 +95,10 @@ fn coverage_rule_validation_refuses_a_v2_rule_row() {
         ])
         .assert()
         .failure()
-        .stderr(contains("scopes/default/rules/rule.jsonl line 1"))
+        .stderr(
+            contains("scopes/default/rules/rule.jsonl line 1")
+                .or(contains("scopes\\default\\rules/rule.jsonl line 1")),
+        )
         .stderr(contains("record rule_future"))
         .stderr(contains(
             "has schema_version 2, but this build reads schema_version 1 only",
