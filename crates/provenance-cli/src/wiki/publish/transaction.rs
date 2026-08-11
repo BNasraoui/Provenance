@@ -6,8 +6,8 @@ mod cleanup;
 mod ownership;
 mod replacement;
 
-pub(super) use ownership::open_directory_no_follow;
 pub(super) use ownership::{acquire_lock, preflight};
+pub(super) use ownership::{open_child_directory_no_follow, open_directory_no_follow};
 pub(super) use replacement::replace_output;
 #[cfg(test)]
 pub(super) use replacement::replace_output_with;
@@ -60,11 +60,10 @@ impl TransactionDirectory {
     }
 
     pub(super) fn create_stage(&self) -> std::io::Result<File> {
-        // Read access so the stage handle's identity can be read back on
-        // Windows.
-        fs_at::OpenOptions::default()
-            .read(true)
-            .mkdir_at(&self.parent, &self.leaves.stage)
+        // mkdir_at hardcodes its access mask (no read-attributes right on
+        // Windows), which is why the stage identity comes from a separate
+        // no-follow reopen rather than this handle.
+        fs_at::OpenOptions::default().mkdir_at(&self.parent, &self.leaves.stage)
     }
 
     fn create_file(&self, leaf: &str) -> std::io::Result<File> {

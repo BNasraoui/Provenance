@@ -398,7 +398,10 @@ pub(super) fn open_or_create_parent(
 }
 
 #[cfg(unix)]
-pub(super) fn open_child_directory_no_follow(parent: &File, leaf: &str) -> std::io::Result<File> {
+pub(in crate::wiki::publish) fn open_child_directory_no_follow(
+    parent: &File,
+    leaf: &str,
+) -> std::io::Result<File> {
     rustix::fs::openat(
         parent,
         leaf,
@@ -413,7 +416,10 @@ pub(super) fn open_child_directory_no_follow(parent: &File, leaf: &str) -> std::
 }
 
 #[cfg(windows)]
-pub(super) fn open_child_directory_no_follow(parent: &File, leaf: &str) -> std::io::Result<File> {
+pub(in crate::wiki::publish) fn open_child_directory_no_follow(
+    parent: &File,
+    leaf: &str,
+) -> std::io::Result<File> {
     use std::os::windows::fs::MetadataExt;
 
     let mut options = fs_at::OpenOptions::default();
@@ -429,7 +435,10 @@ pub(super) fn open_child_directory_no_follow(parent: &File, leaf: &str) -> std::
 }
 
 #[cfg(not(any(unix, windows)))]
-pub(super) fn open_child_directory_no_follow(parent: &File, leaf: &str) -> std::io::Result<File> {
+pub(in crate::wiki::publish) fn open_child_directory_no_follow(
+    parent: &File,
+    leaf: &str,
+) -> std::io::Result<File> {
     let mut options = fs_at::OpenOptions::default();
     options.follow(false);
     options.open_dir_at(parent, leaf)

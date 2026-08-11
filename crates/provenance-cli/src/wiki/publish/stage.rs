@@ -42,17 +42,16 @@ impl StageDirectory {
             PublishError::io("clone staging directory handle", display_path, error)
         })?;
         for segment in &relative[..relative.len() - 1] {
-            directory = match fs_at::OpenOptions::default()
-                .read(true)
-                .mkdir_at(&directory, *segment)
-            {
+            directory = match fs_at::OpenOptions::default().mkdir_at(&directory, *segment) {
                 Ok(created) => created,
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                    let mut options = fs_at::OpenOptions::default();
-                    options.read(true).follow(false);
-                    options.open_dir_at(&directory, *segment).map_err(|error| {
-                        PublishError::io("open staged directory", display_path, error)
-                    })?
+                    // The attribute-bit check inside this open refuses a
+                    // reparse point planted at the segment even when fs_at's
+                    // own probe is masked (workaround-procmon).
+                    super::transaction::open_child_directory_no_follow(&directory, segment)
+                        .map_err(|error| {
+                            PublishError::io("open staged directory", display_path, error)
+                        })?
                 }
                 Err(error) => {
                     return Err(PublishError::io(
