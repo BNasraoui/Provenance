@@ -8,6 +8,7 @@
 
 mod chrome;
 mod citations;
+mod discussion;
 mod field_notes;
 mod fragments;
 mod html;

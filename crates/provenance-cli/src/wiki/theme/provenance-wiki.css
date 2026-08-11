@@ -552,8 +552,54 @@
     .field-note .fn-meta { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.25rem; }
     .field-note .who { font-family: var(--pv-font-display); font-size: 11px; font-weight: 600; }
     .field-note time { font-size: 11px; color: var(--pv-muted); }
-    .field-note .fn-content { margin: 0; white-space: pre-wrap; line-height: 1.55; font-size: 13px; }
+    .field-note .fn-takeaway {
+      margin: 0 0 0.45rem;
+      color: var(--pv-ink);
+      font-size: 13px;
+      font-weight: 650;
+      line-height: 1.45;
+    }
+    .field-note .fn-content { line-height: 1.55; font-size: 13px; }
+    .field-note .fn-content p { margin: 0 0 0.6rem; white-space: pre-wrap; }
+    .field-note .fn-content > :last-child { margin-bottom: 0; }
     .field-note .fn-content .src { font-family: var(--pv-font-mono); font-size: 11px; color: var(--pv-thread); }
+    .field-note .fn-list-block { margin: 0.35rem 0 0.7rem; padding-left: 1.5rem; }
+    .field-note .fn-list-block li { margin: 0.2rem 0; padding-left: 0.15rem; }
+    .field-note .fn-code {
+      margin: 0.45rem 0 0.7rem;
+      padding: 0.65rem 0.75rem;
+      overflow-x: auto;
+      border: 1px solid var(--pv-card-border);
+      border-radius: 6px;
+      background: var(--pv-canvas-bg);
+      white-space: pre;
+    }
+    .field-note .fn-code code { font-size: 11px; }
+    .fn-collapsible > summary {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 1rem;
+      cursor: pointer;
+      list-style-position: outside;
+    }
+    .fn-collapsible > summary .fn-takeaway { margin-bottom: 0; }
+    .fn-collapsible > summary .fn-preview {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+    }
+    .fn-collapsible .fn-expand {
+      flex: none;
+      color: var(--pv-thread);
+      font-family: var(--pv-font-mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .fn-collapsible[open] > summary { margin-bottom: 0.6rem; }
 
     .footer-note { color: var(--pv-muted); font-size: 11px; padding: 1rem 0 2rem; opacity: 0.8; }
 

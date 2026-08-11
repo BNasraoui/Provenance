@@ -1,4 +1,6 @@
-use crate::wiki::links::{EvidenceRef, EvidenceSnippet, InlineRef};
+#[cfg(test)]
+use crate::wiki::links::InlineRef;
+use crate::wiki::links::{EvidenceRef, EvidenceSnippet};
 use crate::wiki::model::{PageId, PageLink};
 use provenance_macros::rule;
 use std::collections::HashMap;
@@ -174,6 +176,7 @@ pub(in crate::wiki::render) fn icon_svg(symbol: &str) -> String {
 
 /// Escapes a field-note body while wrapping each [`InlineRef`] span in an
 /// anchor. Spans are byte offsets into `body`, non-overlapping and sorted.
+#[cfg(test)]
 pub(in crate::wiki::render) fn linkify_body(body: &str, refs: &[InlineRef]) -> String {
     let mut html = String::new();
     let mut cursor = 0;
