@@ -99,7 +99,10 @@ fn parent_replacement_does_not_redirect_the_transaction() {
     )
     .unwrap_err();
 
-    assert!(matches!(error, PublishError::OutputChanged { .. }));
+    assert!(
+        matches!(error, PublishError::OutputChanged { .. }),
+        "got {error:?}"
+    );
     assert!(!displaced_parent.join("wiki").exists());
     assert!(!output.exists());
     assert!(std::fs::read_dir(&parent).unwrap().next().is_none());
@@ -148,7 +151,11 @@ fn staged_child_reparse_point_cannot_redirect_generated_writes() {
         Ok(_) => panic!("publication followed a staged reparse point"),
     };
 
-    assert!(matches!(error, PublishError::Io { .. }));
+    assert!(
+        matches!(error, PublishError::Io { .. }),
+        "got {error:?}; external css written: {}",
+        external.join("provenance-wiki.css").exists()
+    );
     assert!(!external.join("provenance-wiki.css").exists());
     assert!(!artifact(&output, "stage").exists());
     assert!(!output.exists());
