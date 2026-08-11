@@ -189,23 +189,6 @@ impl Assembler<'_> {
             .map(|gap| self.gap_notice(gap, Some((node_type, node_id.as_str()))))
             .collect()
     }
-
-    pub(super) fn index_gaps(&self) -> Vec<GapNotice> {
-        self.gaps
-            .iter()
-            .filter(|gap| {
-                !matches!(
-                    gap.kind,
-                    GapKind::OrphanRule
-                        | GapKind::OrphanResolution
-                        | GapKind::UnreferencedSource
-                        | GapKind::OpenQuestion
-                        | GapKind::UnexploredTopic
-                )
-            })
-            .map(|gap| self.gap_notice(gap, None))
-            .collect()
-    }
 }
 
 fn gap_detail(gap: &GapItem, subject: &str, has_related: bool, owns_subject: bool) -> String {

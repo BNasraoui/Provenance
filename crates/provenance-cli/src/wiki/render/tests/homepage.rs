@@ -1,8 +1,11 @@
 use provenance_macros::verifies;
 
 use super::super::pages::index::{homepage_entry_order_is_valid, homepage_plain_language_is_valid};
-use super::super::{pages::render_unfinished, render_corpus};
+use super::super::{pages::render_unfinished, render_corpus, render_domains, render_search};
 use super::fixtures::{corpus_fixture, link, unfinished_fixture};
+use crate::wiki::assemble::build_corpus;
+use crate::wiki::fixtures_scale::{pr_45_off_homepage_markers, pr_45_scale_state};
+use crate::wiki::links::LinkResolver;
 use crate::wiki::model::{DomainGroup, DomainState, HomepageDomain, PageKind};
 
 const RATIFIED_VIEWPORTS: [(u16, u16); 2] = [(1440, 900), (390, 844)];
@@ -42,6 +45,19 @@ fn homepage_uses_plain_reader_language() {
     }
     assert!(html.contains("Browse 1 area"));
     assert!(!html.contains("1 areas"));
+}
+
+#[test]
+fn homepage_plain_language_check_allows_an_atlas_scope_name() {
+    let corpus = corpus_fixture();
+
+    let html = super::super::render_index("Atlas", &corpus.index);
+
+    assert!(
+        html.contains("<span class=\"scope\">Atlas</span>"),
+        "{html}"
+    );
+    assert!(homepage_plain_language_is_valid(&html));
 }
 
 #[test]
@@ -157,4 +173,44 @@ fn homepage_caps_authored_domain_rows() {
 
     assert_eq!(html.matches("data-homepage-domain-row").count(), 20);
     assert!(html.contains("Browse all 25 areas"));
+}
+
+#[test]
+fn pr_45_scale_homepage_is_bounded_ordered_and_summary_only() {
+    let state = pr_45_scale_state();
+    let corpus = build_corpus(&state, &LinkResolver::new(None));
+    assert_eq!(corpus.search.entries.len(), 976);
+    assert_eq!(corpus.domains.all_requirements.len(), 228);
+    assert_eq!(corpus.domains.all_rules.len(), 576);
+    assert_eq!(corpus.unfinished.item_count(), 42);
+    let html = super::super::render_index(&corpus.scope, &corpus.index);
+
+    // The PR #45 corpus holds 12 domains, below the 20-row homepage cap, so
+    // removing the cap would not change this page; cap enforcement is
+    // exercised by homepage_caps_authored_domain_rows above.
+    assert_eq!(html.matches("data-homepage-domain-row").count(), 12);
+    assert!(html.matches("data-homepage-domain-row").count() <= 20);
+    assert!(html.len() < 50_000, "homepage grew to {} bytes", html.len());
+    assert!(homepage_entry_order_is_valid(&html, 390, 844));
+    assert!(homepage_entry_order_is_valid(&html, 1440, 900));
+    for dedicated_page_content in ["data-search-entry", "domain-records", "citation gap"] {
+        assert!(
+            !html.contains(dedicated_page_content),
+            "{dedicated_page_content}"
+        );
+    }
+    let markers = pr_45_off_homepage_markers();
+    let dedicated_pages = [
+        render_search(&corpus.scope, &corpus.search),
+        render_domains(&corpus.scope, &corpus.domains),
+        render_unfinished(&corpus.scope, &corpus.unfinished),
+    ];
+    for (marker, dedicated_page) in markers.into_iter().zip(dedicated_pages) {
+        assert!(
+            dedicated_page.contains(&marker),
+            "dedicated page lost {marker:?}"
+        );
+        assert!(!html.contains(&marker), "homepage inlined {marker:?}");
+    }
+    insta::assert_snapshot!("pr_45_scale_homepage", html);
 }

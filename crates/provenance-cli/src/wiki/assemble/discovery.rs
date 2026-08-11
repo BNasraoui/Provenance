@@ -7,6 +7,8 @@ use provenance_core::{EdgeType, NodeType};
 use provenance_macros::rule;
 use std::collections::{BTreeMap, BTreeSet};
 
+const MAX_SEARCH_EXAMPLE_CHARS: usize = 60;
+
 struct RequirementRecord<'a> {
     id: &'a str,
     domain_id: Option<&'a str>,
@@ -140,7 +142,12 @@ fn search_index(
     let example = entries
         .iter()
         .map(|entry| entry.link.title.trim())
-        .find(|title| !title.is_empty())
+        .find(|title| {
+            !title.is_empty()
+                && title.chars().count() <= MAX_SEARCH_EXAMPLE_CHARS
+                && !title.ends_with('…')
+                && !title.ends_with("...")
+        })
         .map(str::to_string);
     SearchIndexPage {
         scope: scope.to_string(),

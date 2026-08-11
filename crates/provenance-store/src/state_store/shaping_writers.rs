@@ -4,7 +4,8 @@ use super::{
 };
 use crate::shards;
 use provenance_core::{
-    Boundary, Question, QuestionStatus, SchemaVersion, ScopeId, StableId, Topic, TopicStatus,
+    Boundary, Question, QuestionStatus, ScopeId, StableId, Topic, TopicStatus,
+    SUPPORTED_SCHEMA_VERSION,
 };
 use provenance_macros::rule;
 
@@ -44,7 +45,7 @@ impl StateStore {
         let path = shards::boundaries_path(&self.layout, &scope_id);
         self.mutate_jsonl_records(&path, |records: &mut Vec<Boundary>| {
             let boundary = Boundary {
-                schema_version: SchemaVersion(1),
+                schema_version: SUPPORTED_SCHEMA_VERSION,
                 scope_id: scope_id.clone(),
                 id,
                 requirement_id,
@@ -85,7 +86,7 @@ impl StateStore {
         let path = shards::topics_path(&self.layout, &scope_id);
         self.mutate_jsonl_records(&path, |records: &mut Vec<Topic>| {
             let topic = Topic {
-                schema_version: SchemaVersion(1),
+                schema_version: SUPPORTED_SCHEMA_VERSION,
                 scope_id: scope_id.clone(),
                 id,
                 requirement_id,
@@ -139,7 +140,7 @@ impl StateStore {
         let path = shards::questions_path(&self.layout, &scope_id);
         self.mutate_jsonl_records(&path, |records: &mut Vec<Question>| {
             let question = Question {
-                schema_version: SchemaVersion(1),
+                schema_version: SUPPORTED_SCHEMA_VERSION,
                 scope_id: scope_id.clone(),
                 id,
                 topic_id,

@@ -134,6 +134,24 @@ fn homepage_and_search_use_a_real_indexed_title_as_the_search_example() {
 }
 
 #[test]
+fn search_example_skips_truncated_index_titles() {
+    let mut state = empty_state();
+    state.requirements = vec![requirement(
+        "req_verbose",
+        "This deliberately overlong requirement title keeps going until the indexed title has to be truncated at a word boundary",
+        RequirementStatus::Active,
+        vec![],
+    )];
+    state.rules = vec![rule("rule_invoice", Some("Group invoices"))];
+
+    let corpus = build_corpus(&state, &LinkResolver::new(None));
+
+    assert!(corpus.search.entries[0].link.title.ends_with('…'));
+    assert_eq!(corpus.search.example.as_deref(), Some("Group invoices"));
+    assert!(!corpus.search.example.as_deref().unwrap().ends_with('…'));
+}
+
+#[test]
 #[verifies("rule_domain_attribution", examples)]
 fn domains_group_rules_through_canonical_requirement_relationships() {
     let mut state = empty_state();
@@ -294,6 +312,10 @@ fn domains_without_authored_groups_render_flat_records_with_statements() {
     );
     assert!(!html.contains(">Unassigned</h2>"), "{html}");
     assert!(html.contains("0 groups"), "{html}");
+    assert!(
+        !html.contains("Rules inherit every Domain represented by their upstream requirements."),
+        "{html}"
+    );
 }
 
 #[test]

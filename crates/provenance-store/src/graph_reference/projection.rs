@@ -1,4 +1,4 @@
-use super::GraphReferenceError;
+use super::{ensure_graph_schema_version, GraphReferenceError};
 use crate::{layout::ProvenanceLayout, state_store::StateStore};
 use camino::Utf8Path;
 use provenance_core::{
@@ -60,12 +60,7 @@ pub(super) fn load_projection(
                 }
             }
         })?;
-    if manifest_version != SUPPORTED_SCHEMA_VERSION {
-        return Err(incomplete(format!(
-            "unsupported manifest schema_version {}",
-            manifest_version.0
-        )));
-    }
+    ensure_graph_schema_version("manifest", manifest_version)?;
     let selected_scope = selected_scope.ok_or_else(|| GraphReferenceError::Missing {
         detail: format!("scope '{scope}' is absent from the pinned manifest"),
     })?;
@@ -92,32 +87,25 @@ pub(super) fn load_projection(
 
 impl GraphExport {
     pub(super) fn validate_schema_versions(&self) -> Result<(), GraphReferenceError> {
-        macro_rules! require_v1 {
+        macro_rules! require_supported {
             ($records:expr, $kind:literal) => {
                 for record in $records {
-                    if record.schema_version != SUPPORTED_SCHEMA_VERSION {
-                        return Err(GraphReferenceError::Incomplete {
-                            detail: format!(
-                                "{} '{}' has unsupported schema_version {}; expected {}",
-                                $kind,
-                                record.id.as_str(),
-                                record.schema_version.0,
-                                SUPPORTED_SCHEMA_VERSION.0
-                            ),
-                        });
-                    }
+                    ensure_graph_schema_version(
+                        &format!("{} '{}'", $kind, record.id.as_str()),
+                        record.schema_version,
+                    )?;
                 }
             };
         }
-        require_v1!(&self.sources, "source");
-        require_v1!(&self.domains, "domain");
-        require_v1!(&self.requirements, "requirement");
-        require_v1!(&self.boundaries, "boundary");
-        require_v1!(&self.topics, "topic");
-        require_v1!(&self.questions, "question");
-        require_v1!(&self.resolutions, "resolution");
-        require_v1!(&self.rules, "rule");
-        require_v1!(&self.edges, "edge");
+        require_supported!(&self.sources, "source");
+        require_supported!(&self.domains, "domain");
+        require_supported!(&self.requirements, "requirement");
+        require_supported!(&self.boundaries, "boundary");
+        require_supported!(&self.topics, "topic");
+        require_supported!(&self.questions, "question");
+        require_supported!(&self.resolutions, "resolution");
+        require_supported!(&self.rules, "rule");
+        require_supported!(&self.edges, "edge");
         Ok(())
     }
 

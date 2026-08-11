@@ -42,7 +42,13 @@ fn validate_locked(store: &StateStore) -> anyhow::Result<()> {
 
     let mut index = CheckIndex::default();
     let mut dangling = Vec::new();
-    scope::validate(store, &manifest.scopes, &mut index, &mut dangling)?;
+    scope::validate(
+        store,
+        &manifest.scopes,
+        &manifest_scopes,
+        &mut index,
+        &mut dangling,
+    )?;
     edges::validate(store, &manifest_scopes, &index, &mut dangling)?;
 
     anyhow::ensure!(

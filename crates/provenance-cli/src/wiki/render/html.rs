@@ -136,7 +136,7 @@ fn shortest_distinct_suffix<'a>(target: &'a PageId, colliding_targets: &[PageId]
 }
 
 pub(in crate::wiki::render) fn evidence_html(evidence: &EvidenceRef) -> String {
-    let reference = evidence.href.as_ref().map_or_else(
+    let mut reference = evidence.href.as_ref().map_or_else(
         || escape_html(&evidence.label),
         |href| {
             format!(
@@ -146,6 +146,14 @@ pub(in crate::wiki::render) fn evidence_html(evidence: &EvidenceRef) -> String {
             )
         },
     );
+    if let Some(note) = &evidence.note {
+        write!(
+            reference,
+            " <span class=\"reference-note\">({})</span>",
+            escape_html(note)
+        )
+        .expect("writing to a String should not fail");
+    }
     evidence.snippet.as_ref().map_or_else(
         || reference.clone(),
         |snippet| format!("{reference}{}", snippet_html(snippet)),
@@ -189,4 +197,40 @@ pub(in crate::wiki::render) fn linkify_body(body: &str, refs: &[InlineRef]) -> S
     }
     html.push_str(&escape_html(&body[cursor..]));
     html
+}
+
+#[cfg(test)]
+mod evidence_tests {
+    use super::*;
+    use crate::wiki::links::LinkResolver;
+    use provenance_core::coverage::{CoverageReport, CoverageScan};
+
+    #[test]
+    fn unresolved_reference_renders_as_plain_text_with_an_honest_note() {
+        let scan = CoverageScan {
+            report: CoverageReport::new(Some("deadbee".into()), 0, vec![], vec![], vec![]),
+            scanned_files: vec![],
+        };
+        let evidence = LinkResolver::new(Some("https://github.com/example/repo.git"))
+            .with_coverage(&scan)
+            .resolve_at("docs/removed.md", Some("deadbee"));
+
+        let html = evidence_html(&evidence);
+
+        assert_eq!(
+            html,
+            "docs/removed.md <span class=\"reference-note\">(path not found in the pinned tree)</span>"
+        );
+        assert!(!html.contains("<a "));
+    }
+
+    #[test]
+    fn local_file_url_never_renders_as_an_anchor() {
+        let evidence = LinkResolver::new(None).resolve("file://docs/guide.md");
+
+        let html = evidence_html(&evidence);
+
+        assert!(html.starts_with("file://docs/guide.md "));
+        assert!(!html.contains("<a "));
+    }
 }

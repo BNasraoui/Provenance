@@ -3,7 +3,8 @@ export type VerificationMethod =
   | "property"
   | "examples"
   | "conformance"
-  | "construction";
+  | "construction"
+  | "proof";
 
 type AnyFunction = (...args: never[]) => unknown;
 

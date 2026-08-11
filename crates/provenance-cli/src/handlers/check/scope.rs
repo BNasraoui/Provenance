@@ -1,6 +1,7 @@
 use super::index::CheckIndex;
 use provenance_core::{Scope, ScopeId, StableId};
 use provenance_store::state_store::StateStore;
+use std::collections::BTreeSet;
 
 mod collaboration;
 mod core;
@@ -23,10 +24,14 @@ impl ScopeRecords {
         })
     }
 
-    fn validate_scope_ownership(&self, findings: &mut Vec<String>) {
+    fn validate_scope_ownership(
+        &self,
+        manifest_scopes: &BTreeSet<String>,
+        findings: &mut Vec<String>,
+    ) {
         self.core.validate_scope_ownership(&self.scope_id, findings);
         self.collaboration
-            .validate_scope_ownership(&self.scope_id, findings);
+            .validate_scope_ownership(manifest_scopes, &self.scope_id, findings);
         self.ideation
             .validate_scope_ownership(&self.scope_id, findings);
     }
@@ -52,6 +57,7 @@ fn check_scope_ownership(
 pub(super) fn validate(
     store: &StateStore,
     scopes: &[Scope],
+    manifest_scopes: &BTreeSet<String>,
     index: &mut CheckIndex,
     dangling: &mut Vec<String>,
 ) -> anyhow::Result<()> {
@@ -62,7 +68,7 @@ pub(super) fn validate(
 
     let mut ownership_findings = Vec::new();
     for scope in &records {
-        scope.validate_scope_ownership(&mut ownership_findings);
+        scope.validate_scope_ownership(manifest_scopes, &mut ownership_findings);
     }
     anyhow::ensure!(
         ownership_findings.is_empty(),
@@ -79,7 +85,7 @@ pub(super) fn validate(
         scope.core.validate(index, &scope.scope_id, dangling);
         scope
             .collaboration
-            .validate(index, &scope.scope_id, dangling);
+            .validate(index, manifest_scopes, &scope.scope_id, dangling);
         scope.ideation.validate(index, &scope.scope_id, dangling);
     }
 

@@ -1,4 +1,5 @@
 use assert_cmd::Command;
+use serde_json::Value;
 
 #[test]
 fn cli_init_check_and_materialize_empty_repo() {
@@ -21,6 +22,11 @@ fn cli_init_check_and_materialize_empty_repo() {
 
     assert!(repo.join(".provenance/state/manifest.json").exists());
     assert!(repo.join(".provenance/cache").exists());
+    let manifest: Value = serde_json::from_slice(
+        &std::fs::read(repo.join(".provenance/state/manifest.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(manifest["disposition_actor_ids"], serde_json::json!([]));
 
     Command::cargo_bin("provenance")
         .unwrap()

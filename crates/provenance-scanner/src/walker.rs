@@ -1,9 +1,10 @@
 use anyhow::Context;
 use camino::{Utf8Path, Utf8PathBuf};
+use provenance_core::coverage::EvidenceAnchor;
 
 use crate::binding_lexer::{block_comment_state, code_outside_multiline_string, MultilineStyle};
-use crate::parser::{annotation_marker_position, Verification};
-use crate::{parse_annotations, Annotation, ParseWarning};
+use crate::parser::{annotation_marker_position, parse_annotations, Verification};
+use crate::{Annotation, ParseWarning};
 
 use bindings::parse_binding_line;
 use rust_lines::{rust_annotation_marker_position, rust_line_states, RustLexicalState};
@@ -40,6 +41,7 @@ pub struct AnnotationLocation {
     pub file_path: Utf8PathBuf,
     pub line: usize,
     pub function_name: Option<String>,
+    pub anchor: EvidenceAnchor,
     pub annotation: Annotation,
 }
 
@@ -55,6 +57,7 @@ pub struct AttributeBinding {
     pub item_name: Option<String>,
     pub rule_id: String,
     pub verification: Option<Verification>,
+    pub anchor: EvidenceAnchor,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
@@ -132,16 +135,19 @@ pub fn scan_file(file_path: &Utf8Path, language: Language, content: &str) -> Fil
         };
         let started_in_block_comment = in_block_comment;
         if language != Language::Python {
-            in_block_comment = block_comment_state(line, in_block_comment);
+            in_block_comment =
+                block_comment_state(line, in_block_comment, language == Language::Rust);
         }
         let binding = (language != Language::Rust || rust_states[idx] == RustLexicalState::Code)
             .then(|| parse_binding_line(language, line, started_in_block_comment))
             .flatten();
         if let Some((rule_id, verification)) = binding {
+            let item_name = binding_item_name(language, &lines, idx, verification);
             bindings.push(AttributeBinding {
                 file_path: file_path.to_path_buf(),
                 line: idx + 1,
-                item_name: binding_item_name(language, &lines, idx, verification),
+                anchor: EvidenceAnchor::new(item_name.clone(), lines[idx]),
+                item_name,
                 rule_id,
                 verification,
             });
@@ -168,12 +174,17 @@ pub fn scan_file(file_path: &Utf8Path, language: Language, content: &str) -> Fil
                 file_path: file_path.to_path_buf(),
                 line: idx + 1,
                 function_name: function_name.clone(),
+                anchor: EvidenceAnchor::new(function_name.clone(), lines[idx]),
                 annotation,
             });
         }
         if language != Language::Python {
             for consumed_line in lines.iter().take(end_idx + 1).skip(idx + 1) {
-                in_block_comment = block_comment_state(consumed_line, in_block_comment);
+                in_block_comment = block_comment_state(
+                    consumed_line,
+                    in_block_comment,
+                    language == Language::Rust,
+                );
             }
         }
         idx = end_idx + 1;
@@ -421,6 +432,10 @@ mod tests {
                 item_name: Some("validate_edge_endpoint".to_string()),
                 rule_id: "rule_prov_edge_endpoint_table".to_string(),
                 verification: None,
+                anchor: EvidenceAnchor::new(
+                    Some("validate_edge_endpoint".to_string()),
+                    "#[rule(\"rule_prov_edge_endpoint_table\")]",
+                ),
             }]
         );
     }

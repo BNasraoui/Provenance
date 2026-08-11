@@ -253,7 +253,7 @@ fn endpoint_table_conforms_to_rule_leaf() {
 }
 ```
 
-Five methods, and the word is the claim:
+Six methods, and the word is the claim:
 
 - `exhaustion`: every input in a finite domain is tried. Over a finite domain that is
   proof, not a sample.
@@ -262,6 +262,10 @@ Five methods, and the word is the claim:
 - `conformance`: a copy of the rule living elsewhere is checked against the rule itself.
 - `construction`: a type or a constraint makes the violation unbuildable. The marker
   goes on the type, not on a test.
+- `proof`: a machine-checked proof outside the test runner backs the rule — a Lean
+  theorem, for example. The marked site is the bridge that pins the implementation to
+  the proved model, such as a golden-vector test whose expected values come from the
+  model. The proof checker runs in the adopter's CI; the scan reads the claim.
 
 The scan reads both:
 

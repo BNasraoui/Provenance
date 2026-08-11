@@ -1,6 +1,6 @@
 use super::{serde_name, PostMessageInput, PostMessageResult, StateStore};
 use crate::shards;
-use provenance_core::{Message, SchemaVersion, StableId, Thread, ThreadStatus};
+use provenance_core::{Message, StableId, Thread, ThreadStatus, SUPPORTED_SCHEMA_VERSION};
 
 impl StateStore {
     pub fn post_thread_message(
@@ -42,7 +42,7 @@ impl StateStore {
                     parent.node_id.as_str()
                 );
                 let thread = Thread {
-                    schema_version: SchemaVersion(1),
+                    schema_version: SUPPORTED_SCHEMA_VERSION,
                     scope_id: scope_id.clone(),
                     id: next_thread_id(threads, &base_id)?,
                     parent: parent.clone(),
@@ -66,7 +66,7 @@ impl StateStore {
                     .unwrap_or(0)
                     + 1;
                 let message = Message {
-                    schema_version: SchemaVersion(1),
+                    schema_version: SUPPORTED_SCHEMA_VERSION,
                     scope_id: scope_id.clone(),
                     id: StableId::new(format!("msg_{created_at:06}"))?,
                     thread_id: thread.id.clone(),

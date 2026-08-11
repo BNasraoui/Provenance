@@ -33,8 +33,8 @@ use provenance_core::{
     SchemaVersion, Scope, ScopeId, Source, SynthesisPacket, Thread, Topic,
 };
 use readers::{
-    deserialize_closed, read_edge_shards, read_jsonl, read_jsonl_closed, read_legacy_dispositions,
-    read_message_shards,
+    deserialize_closed, read_edge_shards, read_ideation_landings, read_jsonl, read_jsonl_closed,
+    read_legacy_dispositions, read_message_shards,
 };
 use serde::{Deserialize, Serialize};
 
@@ -279,7 +279,7 @@ impl StateStore {
     }
 }
 
-pub(crate) fn serde_name<T: serde::Serialize>(value: &T) -> anyhow::Result<String> {
+pub fn serde_name<T: serde::Serialize>(value: &T) -> anyhow::Result<String> {
     Ok(serde_json::to_value(value)?
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("expected string enum serialization"))?

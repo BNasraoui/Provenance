@@ -12,3 +12,6 @@ pub mod render;
 pub mod routes;
 pub mod site;
 pub mod theme;
+
+#[cfg(test)]
+mod fixtures_scale;

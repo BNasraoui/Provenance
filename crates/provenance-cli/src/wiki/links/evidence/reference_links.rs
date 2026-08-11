@@ -351,7 +351,7 @@ fn a_bare_dotted_name_links_only_once_a_line_group_is_attached() {
                 continue;
             };
             let href = resolver
-                .resolve_document(&reference.text, Some("153-156"), None)
+                .resolve_document(&reference.text, Some("153-156"), Some("deadbee"))
                 .href
                 .unwrap_or_else(|| {
                     panic!(
@@ -382,12 +382,15 @@ fn a_known_code_host_links_every_file_path_to_itself() {
             if reference.shape != Shape::CodePath {
                 continue;
             }
-            let href = resolver.resolve(&reference.text).href.unwrap_or_else(|| {
-                panic!(
-                    "remote {:?} is a known code host but left `{}` unlinked",
-                    state.url, reference.text
-                )
-            });
+            let href = resolver
+                .resolve_at(&reference.text, Some("deadbee"))
+                .href
+                .unwrap_or_else(|| {
+                    panic!(
+                        "remote {:?} is a known code host but left `{}` unlinked",
+                        state.url, reference.text
+                    )
+                });
             assert!(
                 href.starts_with(domain),
                 "`{}` linked to `{href}`, which is not on {domain}",

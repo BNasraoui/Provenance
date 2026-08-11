@@ -10,7 +10,7 @@ A statement produced by a decision, carried in code by the function that decides
 
 ## Verification
 
-Evidence that a rule holds, carried by a `#[verifies("rule_id", method)]` marker on a test or a type. The method is one of `exhaustion`, `property`, `examples`, `conformance`, or `construction`. Exhaustion over a finite domain is proof, not a sample.
+Evidence that a rule holds, carried by a `#[verifies("rule_id", method)]` marker on a test or a type. The method is one of `exhaustion`, `property`, `examples`, `conformance`, `construction`, or `proof`. Exhaustion over a finite domain is proof, not a sample; `proof` names a machine-checked proof outside the test runner, bridged by the marked site.
 
 ## Enforcement
 
@@ -19,6 +19,14 @@ The live path: the running code that rejects a violation. Verification is eviden
 ## Unverified
 
 An active rule with no verification marker anywhere in the scanned tree. It is absence, not a stored field: `provenance coverage scan --path . --validate-rules` derives it at scan time and reports it, and no shard records it.
+
+## Evidence site
+
+A source line carrying a rule binding, verification binding, or provenance annotation. Its file path and line number remain its human-readable coordinate.
+
+## Evidence anchor
+
+The enclosing symbol and content identity recorded alongside an Evidence site's coordinate. A later scan resolves the anchor before deciding whether the site is Unchanged, New, Moved, or Gone; these states are derived report findings, not canonical graph state.
 
 ## Topic
 
