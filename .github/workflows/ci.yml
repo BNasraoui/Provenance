@@ -100,7 +100,10 @@ jobs:
           PROVENANCE_SPEC_OWNER="spec://typescript/share-links" \
           PROVENANCE_VERIFICATION_OWNER="ci://typescript-example" \
           npm test --prefix examples/typescript-sdk
+          rule_id=$(target/debug/provenance rules list \
+            --repo "$fixture_repo" --scope default --format json \
+            | jq -er 'select(length == 1) | .[0].id')
           target/debug/provenance rules show \
-            --repo "$fixture_repo" --scope default --id expiry --format json
+            --repo "$fixture_repo" --scope default --id "$rule_id" --format json
           target/debug/provenance sdk verification-runs \
-            --repo "$fixture_repo" --scope default --rule expiry --format json
+            --repo "$fixture_repo" --scope default --rule "$rule_id" --format json
