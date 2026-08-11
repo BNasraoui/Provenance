@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "apply": "node dist/provenance.spec.js",
-    "test": "npm run build && node dist/share-links.test.js"
+    "apply": "node dist/apply.js",
+    "test": "npm run build && node dist/apply.js && node dist/share-links.test.js"
   },
   "dependencies": {
     "provenance": "file:../../packages/provenance"

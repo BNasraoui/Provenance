@@ -23,9 +23,9 @@ pub use inputs::{
     CreateAssertionInput, CreateBoundaryInput, CreateContributionInput, CreateDispositionInput,
     CreateDomainInput, CreateEdgeInput, CreateProposalCardInput, CreateQuestionInput,
     CreateRequirementInput, CreateResolutionInput, CreateRuleInput, CreateSourceInput,
-    CreateSynthesisPacketInput, CreateTopicInput, PostMessageInput, ReconcileState,
-    ReconciledResource, TypedRequirementInput, TypedResourceKind, TypedRuleInput, TypedSourceInput,
-    TypedSpecInput, TypedSpecResult, UpdateQuestionInput,
+    CreateSynthesisPacketInput, CreateTopicInput, DeclarationReferenceInput, PostMessageInput,
+    ReconcileState, ReconciledResource, TypedRequirementInput, TypedResourceKind, TypedRuleInput,
+    TypedSourceInput, TypedSpecInput, TypedSpecResult, UpdateQuestionInput,
 };
 pub use proposal_surfaces::{ProposalDemand, ProposalSurfaceReason, SurfacedProposal, TopicClaim};
 

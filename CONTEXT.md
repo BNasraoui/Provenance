@@ -64,6 +64,10 @@ An optional immutable association between a Disposition and one action owned by 
 
 The integration URI allowed to reconcile a Source, Requirement, or Rule definition carrying the same owner. It grants no authority over other records, the whole graph, or facts the declaration does not state.
 
+## Declaration address
+
+An owner-local hierarchical identity for one typed declaration. Equal child keys under different parents have distinct addresses. The address is not the canonical Stable ID.
+
 ## Commit-then-issue
 
 The handoff in which canonical graph changes are committed before a graph reference is issued, so issuance does not create new canonical state.

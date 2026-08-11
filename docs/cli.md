@@ -24,14 +24,15 @@ begin, and complete read one JSON document from stdin; all four write JSON:
 provenance sdk apply --repo . --scope default --format json < declarations.json
 provenance sdk begin-verification --repo . --scope default --format json < begin.json
 provenance sdk complete-verification --repo . --scope default --format json < complete.json
-provenance sdk verification-runs --repo . --scope default --rule expiry --format json
+provenance sdk verification-runs --repo . --scope default --rule <canonical-rule-id> --format json
 ```
 
 `apply` creates missing records and updates records whose `declared_by` matches
 the document. It refuses unowned and foreign-owned collisions before writing,
 does not delete omissions, and adds relationships idempotently. Verification
-runs live in the derived cache and always cite an existing Rule. The language
-callback itself runs in Node and never crosses into Rust. See
+runs live in the derived cache and always cite an existing Rule. Begin accepts
+either a canonical Rule ID or a declaration owner plus hierarchical address;
+the language callback itself runs in Node and never crosses into Rust. See
 [`typescript-sdk-poc.md`](typescript-sdk-poc.md) for the package interface,
 identity rules, limits, and experiment results.
 

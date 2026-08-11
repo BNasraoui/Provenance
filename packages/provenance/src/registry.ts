@@ -41,12 +41,13 @@ export class DeclarationRegistry {
 
   addRule(declaration: RuleDeclaration, handle: IdentityReceiver): void {
     this.rules.push(declaration);
-    this.#register("rule", declaration.key, handle);
+    this.#register("rule", declaration.key, handle, declaration.requirement);
   }
 
   document(owner: string): TypedSpecDocument {
     return {
       schema_version: 1,
+      spec: "legacy",
       declared_by: owner,
       sources: this.sources,
       requirements: this.requirements,
@@ -56,7 +57,9 @@ export class DeclarationRegistry {
 
   assign(result: ApplyResult): void {
     for (const resource of result.resources) {
-      for (const handle of this.#handles.get(key(resource.kind, resource.key)) ?? []) {
+      for (const handle of this.#handles.get(
+        key(resource.kind, resource.key, resource.parent),
+      ) ?? []) {
         handle.assignId(resource.id);
       }
     }
@@ -67,8 +70,13 @@ export class DeclarationRegistry {
     return this.#dirty;
   }
 
-  #register(kind: ResourceKind, localKey: string, handle: IdentityReceiver): void {
-    const identity = key(kind, localKey);
+  #register(
+    kind: ResourceKind,
+    localKey: string,
+    handle: IdentityReceiver,
+    parent?: string,
+  ): void {
+    const identity = key(kind, localKey, parent);
     const handles = this.#handles.get(identity) ?? [];
     handles.push(handle);
     this.#handles.set(identity, handles);
@@ -76,6 +84,6 @@ export class DeclarationRegistry {
   }
 }
 
-function key(kind: ResourceKind, localKey: string): string {
-  return `${kind}\0${localKey}`;
+function key(kind: ResourceKind, localKey: string, parent?: string): string {
+  return `${kind}\0${parent ?? ""}\0${localKey}`;
 }

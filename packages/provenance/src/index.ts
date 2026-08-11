@@ -5,6 +5,15 @@ import type {
   VerificationRun,
 } from "./protocol.js";
 import { DeclarationRegistry } from "./registry.js";
+import {
+  defineSpec as constructSpec,
+  specDocument,
+  type DeclarationRecord,
+  type FinalizedRecord,
+  type SpecAuthor,
+  type SpecHandle,
+} from "./spec.js";
+import type { DeclarationAddress } from "./protocol.js";
 
 export type VerificationMethod =
   | "exhaustion"
@@ -68,9 +77,17 @@ export interface RuleHandle {
 }
 
 export type { ApplyResult } from "./protocol.js";
+export type {
+  RequirementHandle as SpecRequirement,
+  RuleHandle as SpecRule,
+  SourceHandle as SpecSource,
+  SpecAuthor,
+  SpecHandle,
+} from "./spec.js";
 
 const registry = new DeclarationRegistry();
 const moduleFile = fileURLToPath(import.meta.url);
+const specModuleFile = fileURLToPath(new URL("./spec.js", import.meta.url));
 let settings = defaults();
 
 export function configure(options: ConfigureOptions): void {
@@ -112,13 +129,26 @@ export function requirement(
   return handle;
 }
 
-export async function apply(): Promise<ApplyResult> {
+export function defineSpec<const Declarations extends DeclarationRecord>(
+  key: string,
+  build: (author: SpecAuthor) => Declarations,
+): SpecHandle<FinalizedRecord<Declarations>> {
+  return constructSpec(key, build, verifyDeclaration);
+}
+
+export async function apply(
+  spec?: SpecHandle<Readonly<Record<string, unknown>>>,
+): Promise<ApplyResult> {
   const result = await invokeEngine<ApplyResult>(
     engineSettings(),
     "apply",
-    registry.document(settings.owner),
+    spec === undefined
+      ? registry.document(settings.owner)
+      : specDocument(spec, settings.owner),
   );
-  registry.assign(result);
+  if (spec === undefined) {
+    registry.assign(result);
+  }
   return result;
 }
 
@@ -168,28 +198,7 @@ class Rule extends DeclaredHandle implements RuleHandle {
     if (registry.dirty) {
       await apply();
     }
-    const run = await invokeEngine<VerificationRun>(
-      engineSettings(),
-      "begin-verification",
-      {
-        rule: this.id,
-        method: options.method ?? "examples",
-        declared_by: settings.verificationOwner,
-        file: options.file ?? location?.file,
-        symbol: options.symbol,
-      },
-    );
-    try {
-      await callback();
-    } catch (error) {
-      try {
-        await complete(run.id, "failed", serializeError(error));
-      } catch {
-        // The callback error is the test runner's primary failure. Preserve it.
-      }
-      throw error;
-    }
-    await complete(run.id, "passed");
+    await runVerification({ rule: this.id }, callback, options, location);
   }
 }
 
@@ -203,6 +212,54 @@ async function complete(
     status,
     error,
   });
+}
+
+async function verifyDeclaration(
+  address: DeclarationAddress,
+  callback: () => unknown | Promise<unknown>,
+  options: VerifyOptions = {},
+): Promise<void> {
+  const location = options.file === undefined ? callerLocation() : undefined;
+  await runVerification(
+    { declaration: { declared_by: settings.owner, address } },
+    callback,
+    options,
+    location,
+  );
+}
+
+type VerificationTarget =
+  | { rule: string }
+  | { declaration: { declared_by: string; address: DeclarationAddress } };
+
+async function runVerification(
+  target: VerificationTarget,
+  callback: () => unknown | Promise<unknown>,
+  options: VerifyOptions,
+  location?: { file: string },
+): Promise<void> {
+  const run = await invokeEngine<VerificationRun>(
+    engineSettings(),
+    "begin-verification",
+    {
+      ...target,
+      method: options.method ?? "examples",
+      declared_by: settings.verificationOwner,
+      file: options.file ?? location?.file,
+      symbol: options.symbol,
+    },
+  );
+  try {
+    await callback();
+  } catch (error) {
+    try {
+      await complete(run.id, "failed", serializeError(error));
+    } catch {
+      // Preserve the callback as the primary test failure.
+    }
+    throw error;
+  }
+  await complete(run.id, "passed");
 }
 
 function serializeError(error: unknown): string {
@@ -231,7 +288,7 @@ function callerLocation(): { file: string } | undefined {
       const file = match[1].startsWith("file:")
         ? fileURLToPath(match[1])
         : match[1];
-      if (file !== moduleFile) {
+      if (file !== moduleFile && file !== specModuleFile) {
         return { file };
       }
     }

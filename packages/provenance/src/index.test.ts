@@ -6,7 +6,13 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-import { apply, configure, requirement, source } from "./index.js";
+import {
+  apply,
+  configure,
+  defineSpec,
+  requirement,
+  source,
+} from "./index.js";
 
 const engine = fileURLToPath(
   new URL("../../../target/debug/provenance", import.meta.url),
@@ -63,8 +69,8 @@ test("typed declarations reconcile to canonical Provenance records", async () =>
 
   const result = await apply();
 
-  assert.equal(expiry.id, "expiry");
-  assert.equal(sharing.id, "sharing");
+  assert.match(expiry.id, /^rule_legacy_sharing_expiry_/);
+  assert.match(sharing.id, /^requirement_legacy_sharing_/);
   assert.equal(result.created, 3);
   const rule = engineJson(repo, [
     "rules",
@@ -76,6 +82,145 @@ test("typed declarations reconcile to canonical Provenance records", async () =>
   ]) as { statement: string; declared_by: string };
   assert.equal(rule.statement, "Share links expire within 30 days");
   assert.equal(rule.declared_by, "spec://typescript/share-links");
+});
+
+test("equal local rule keys under different requirements reconcile separately", async () => {
+  const repo = repository();
+  configure({
+    engine,
+    repository: repo,
+    owner: "spec://typescript/lifecycles",
+  });
+  const sharing = requirement("sharing", {
+    statement: "Users can securely share documentation",
+  });
+  const shareLinkExpiry = sharing.rule("expiry", {
+    statement: "Share links expire within 30 days",
+  });
+  const sessions = requirement("sessions", {
+    statement: "User sessions are time bounded",
+  });
+  const sessionExpiry = sessions.rule("expiry", {
+    statement: "Inactive sessions expire within 24 hours",
+  });
+
+  await apply();
+
+  assert.notEqual(shareLinkExpiry.id, sessionExpiry.id);
+});
+
+test("defineSpec finalizes pure builders into immutable hierarchical handles", () => {
+  configure({ engine: "/engine/must/not/start" });
+  let escapedRequirement: { rule(key: string, options: unknown): unknown } | undefined;
+  const spec = defineSpec("lifecycles", ({ requirement }) => {
+    const sharing = requirement("sharing", {
+      statement: "Users can securely share documentation",
+    });
+    escapedRequirement = sharing;
+    const shareLinkExpiry = sharing.rule("expiry", {
+      statement: "Share links expire within 30 days",
+    });
+    const sessions = requirement("sessions", {
+      statement: "User sessions are time bounded",
+    });
+    const sessionExpiry = sessions.rule("expiry", {
+      statement: "Inactive sessions expire within 24 hours",
+    });
+    return { sharing, shareLinkExpiry, sessions, sessionExpiry };
+  });
+
+  assert.deepEqual(spec.handles.shareLinkExpiry.address, [
+    "lifecycles",
+    "requirement",
+    "sharing",
+    "rule",
+    "expiry",
+  ]);
+  assert.deepEqual(spec.handles.sessionExpiry.address, [
+    "lifecycles",
+    "requirement",
+    "sessions",
+    "rule",
+    "expiry",
+  ]);
+  assert.equal(Object.isFrozen(spec), true);
+  assert.equal(Object.isFrozen(spec.handles), true);
+  assert.equal(Object.isFrozen(spec.handles.sharing), true);
+  assert.equal(Object.isFrozen(spec.handles.shareLinkExpiry), true);
+  assert.throws(
+    () => escapedRequirement?.rule("late", {}),
+    /finalized/i,
+  );
+});
+
+test("immutable rule handles verify through an applied declaration address", async () => {
+  const repo = repository();
+  configure({
+    engine,
+    repository: repo,
+    owner: "spec://typescript",
+    verificationOwner: "ci://node-test",
+  });
+  const spec = defineSpec("share-links", ({ requirement }) => {
+    const sharing = requirement("sharing", {
+      statement: "Users can securely share documentation",
+    });
+    const expiry = sharing.rule("expiry", {
+      statement: "Share links expire within 30 days",
+    });
+    return { sharing, expiry };
+  });
+  let called = false;
+
+  await assert.rejects(
+    spec.handles.expiry.verify(() => {
+      called = true;
+    }),
+    /has not been applied/i,
+  );
+  assert.equal(called, false);
+  assert.equal("id" in spec.handles.expiry, false);
+
+  await apply(spec);
+  await spec.handles.expiry.verify(() => {
+    called = true;
+  });
+
+  assert.equal(called, true);
+  const runs = engineJson(repo, [
+    "sdk",
+    "verification-runs",
+    "--scope",
+    "default",
+  ]) as Array<{ file?: string; rule_id: string; status: string }>;
+  assert.equal(runs.at(-1)?.status, "passed");
+  assert.match(runs.at(-1)?.rule_id ?? "", /^rule_share-links_sharing_expiry_/);
+  assert.match(runs.at(-1)?.file ?? "", /index\.test\.js$/);
+});
+
+test("reapplying an address reuses the canonical id already assigned by Rust", async () => {
+  const repo = repository();
+  configure({ engine, repository: repo, owner: "spec://typescript" });
+  const declared = (id?: string) =>
+    defineSpec("share-links", ({ requirement }) => {
+      const sharing = requirement("sharing", {
+        statement: "Users can securely share documentation",
+      });
+      const expiry = sharing.rule("expiry", {
+        id,
+        statement: "Share links expire within 30 days",
+      });
+      return { sharing, expiry };
+    });
+
+  const first = await apply(declared("rule_existing_expiry"));
+  const second = await apply(declared());
+  const firstRule = first.resources.find((resource) => resource.kind === "rule");
+  const secondRule = second.resources.find((resource) => resource.kind === "rule");
+
+  assert.equal(firstRule?.id, "rule_existing_expiry");
+  assert.equal(secondRule?.id, "rule_existing_expiry");
+  assert.equal(second.created, 0);
 });
 
 test("verify records a passed Node callback against the imported rule", async () => {

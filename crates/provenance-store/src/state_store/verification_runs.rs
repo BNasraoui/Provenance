@@ -15,14 +15,38 @@ impl StateStore {
             "declared_by must not be empty"
         );
         anyhow::ensure!(!input.method.trim().is_empty(), "method must not be empty");
-        let rule_id = StableId::new(input.rule)?;
-        anyhow::ensure!(
-            self.list_rules(&scope_id)?
+        let rules = self.list_rules(&scope_id)?;
+        let rule_id = match (input.rule, input.declaration) {
+            (Some(rule), None) => {
+                let rule_id = StableId::new(rule)?;
+                anyhow::ensure!(
+                    rules.iter().any(|rule| rule.id == rule_id),
+                    "rule `{}` does not exist",
+                    rule_id.as_str()
+                );
+                rule_id
+            }
+            (None, Some(declaration)) => rules
                 .iter()
-                .any(|rule| rule.id == rule_id),
-            "rule `{}` does not exist",
-            rule_id.as_str()
-        );
+                .find(|rule| {
+                    rule.declared_by.as_deref() == Some(declaration.declared_by.as_str())
+                        && rule.declaration_address.as_ref() == Some(&declaration.address)
+                })
+                .map(|rule| rule.id.clone())
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "declaration owned by `{}` at `{}` has not been applied",
+                        declaration.declared_by,
+                        declaration.address.segments().join("/")
+                    )
+                })?,
+            (Some(_), Some(_)) => {
+                anyhow::bail!("begin verification accepts either rule or declaration, not both")
+            }
+            (None, None) => {
+                anyhow::bail!("begin verification requires either rule or declaration")
+            }
+        };
         let started_at = now_millis()?;
         let path = self.layout.verification_runs_path(&scope_id);
         let lock_path = self.layout.verification_runs_lock_path(&scope_id);

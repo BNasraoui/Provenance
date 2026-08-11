@@ -129,6 +129,7 @@ impl StateStore {
                 scope_id: scope_id.clone(),
                 id: id.clone(),
                 declared_by: None,
+                declaration_address: None,
                 name,
                 description,
                 statement,

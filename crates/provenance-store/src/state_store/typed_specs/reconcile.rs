@@ -9,9 +9,11 @@ use super::super::{
     ReconcileState, ReconciledResource, TypedRequirementInput, TypedResourceKind, TypedRuleInput,
     TypedSourceInput,
 };
+use super::identity::{requirement_address, rule_address, source_address};
 
 pub(super) fn reconcile_sources(
     mut records: Vec<Source>,
+    spec: &str,
     scope_id: &ScopeId,
     owner: &str,
     declarations: Vec<TypedSourceInput>,
@@ -20,12 +22,14 @@ pub(super) fn reconcile_sources(
     let mut resources = Vec::new();
     for declaration in declarations {
         let id = ids[&declaration.key].clone();
+        let address = source_address(spec, &declaration.key)?;
         let source_type = source_type(&declaration.kind)?;
         let desired = Source {
             schema_version: SUPPORTED_SCHEMA_VERSION,
             scope_id: scope_id.clone(),
             id: id.clone(),
             declared_by: Some(owner.to_string()),
+            declaration_address: Some(address.clone()),
             name: declaration.name,
             source_type,
             url: declaration.url,
@@ -41,6 +45,8 @@ pub(super) fn reconcile_sources(
         resources.push(resource(
             TypedResourceKind::Source,
             declaration.key,
+            None,
+            address,
             id,
             state,
         ));
@@ -63,6 +69,7 @@ fn upsert_source(records: &mut Vec<Source>, desired: Source) -> ReconcileState {
     };
     let before = existing.clone();
     existing.declared_by = desired.declared_by;
+    existing.declaration_address = desired.declaration_address;
     existing.name = desired.name;
     existing.source_type = desired.source_type;
     existing.url = desired.url;
@@ -72,15 +79,17 @@ fn upsert_source(records: &mut Vec<Source>, desired: Source) -> ReconcileState {
 
 pub(super) fn reconcile_requirements(
     mut records: Vec<Requirement>,
+    spec: &str,
     scope_id: &ScopeId,
     owner: &str,
     declarations: Vec<TypedRequirementInput>,
     ids: &BTreeMap<String, StableId>,
     source_ids: &BTreeMap<String, StableId>,
-) -> (Vec<Requirement>, Vec<ReconciledResource>) {
+) -> anyhow::Result<(Vec<Requirement>, Vec<ReconciledResource>)> {
     let mut resources = Vec::new();
     for declaration in declarations {
         let id = ids[&declaration.key].clone();
+        let address = requirement_address(spec, &declaration.key)?;
         let source_refs = declaration
             .sources
             .iter()
@@ -94,6 +103,7 @@ pub(super) fn reconcile_requirements(
             scope_id: scope_id.clone(),
             id: id.clone(),
             declared_by: Some(owner.to_string()),
+            declaration_address: Some(address.clone()),
             statement: declaration.statement,
             description: declaration.description,
             fog: None,
@@ -107,12 +117,14 @@ pub(super) fn reconcile_requirements(
         resources.push(resource(
             TypedResourceKind::Requirement,
             declaration.key,
+            None,
+            address,
             id,
             state,
         ));
     }
     records.sort_by(|left, right| left.id.as_str().cmp(right.id.as_str()));
-    (records, resources)
+    Ok((records, resources))
 }
 
 fn upsert_requirement(records: &mut Vec<Requirement>, desired: Requirement) -> ReconcileState {
@@ -122,6 +134,7 @@ fn upsert_requirement(records: &mut Vec<Requirement>, desired: Requirement) -> R
     };
     let before = existing.clone();
     existing.declared_by = desired.declared_by;
+    existing.declaration_address = desired.declaration_address;
     existing.statement = desired.statement;
     if desired.description.is_some() {
         existing.description = desired.description;
@@ -142,19 +155,22 @@ fn upsert_requirement(records: &mut Vec<Requirement>, desired: Requirement) -> R
 
 pub(super) fn reconcile_rules(
     mut records: Vec<Rule>,
+    spec: &str,
     scope_id: &ScopeId,
     owner: &str,
     declarations: Vec<TypedRuleInput>,
-    ids: &BTreeMap<String, StableId>,
-) -> (Vec<Rule>, Vec<ReconciledResource>) {
+    ids: &BTreeMap<(String, String), StableId>,
+) -> anyhow::Result<(Vec<Rule>, Vec<ReconciledResource>)> {
     let mut resources = Vec::new();
     for declaration in declarations {
-        let id = ids[&declaration.key].clone();
+        let id = ids[&(declaration.requirement.clone(), declaration.key.clone())].clone();
+        let address = rule_address(spec, &declaration.requirement, &declaration.key)?;
         let desired = Rule {
             schema_version: SUPPORTED_SCHEMA_VERSION,
             scope_id: scope_id.clone(),
             id: id.clone(),
             declared_by: Some(owner.to_string()),
+            declaration_address: Some(address.clone()),
             name: declaration.name,
             description: declaration.description,
             statement: declaration.statement,
@@ -169,12 +185,14 @@ pub(super) fn reconcile_rules(
         resources.push(resource(
             TypedResourceKind::Rule,
             declaration.key,
+            Some(declaration.requirement),
+            address,
             id,
             state,
         ));
     }
     records.sort_by(|left, right| left.id.as_str().cmp(right.id.as_str()));
-    (records, resources)
+    Ok((records, resources))
 }
 
 fn upsert_rule(records: &mut Vec<Rule>, desired: Rule) -> ReconcileState {
@@ -184,6 +202,7 @@ fn upsert_rule(records: &mut Vec<Rule>, desired: Rule) -> ReconcileState {
     };
     let before = existing.clone();
     existing.declared_by = desired.declared_by;
+    existing.declaration_address = desired.declaration_address;
     existing.statement = desired.statement;
     if desired.name.is_some() {
         existing.name = desired.name;
@@ -205,12 +224,16 @@ fn state_after_change<T: PartialEq>(changed: &T, before: &T) -> ReconcileState {
 const fn resource(
     kind: TypedResourceKind,
     key: String,
+    parent: Option<String>,
+    address: provenance_core::DeclarationAddress,
     id: StableId,
     state: ReconcileState,
 ) -> ReconciledResource {
     ReconciledResource {
         kind,
         key,
+        parent,
+        address,
         id,
         state,
     }

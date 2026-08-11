@@ -27,6 +27,7 @@ fn init_repo() -> tempfile::TempDir {
 fn spec(statement: &str) -> Value {
     json!({
         "schema_version": 1,
+        "spec": "share-links",
         "declared_by": "spec://typescript/share-links",
         "sources": [{
             "key": "linear:ABC-123",
@@ -63,6 +64,18 @@ fn apply(repo: &str, input: &Value) -> Value {
     serde_json::from_slice(&output.stdout).unwrap()
 }
 
+fn rule_id<'a>(result: &'a Value, parent: &str, key: &str) -> &'a str {
+    result["resources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|resource| {
+            resource["kind"] == "rule" && resource["parent"] == parent && resource["key"] == key
+        })
+        .and_then(|resource| resource["id"].as_str())
+        .unwrap()
+}
+
 #[test]
 fn apply_materializes_typed_declarations_as_canonical_graph_records() {
     let directory = init_repo();
@@ -73,17 +86,21 @@ fn apply_materializes_typed_declarations_as_canonical_graph_records() {
     assert_eq!(result["created"], 3);
     assert_eq!(result["updated"], 0);
     assert_eq!(result["resources"][1]["key"], "sharing");
-    assert_eq!(result["resources"][1]["id"], "sharing");
+    assert!(result["resources"][1]["id"]
+        .as_str()
+        .unwrap()
+        .starts_with("requirement_share-links_sharing_"));
     assert_eq!(result["resources"][2]["key"], "expiry");
-    assert_eq!(result["resources"][2]["id"], "expiry");
+    let expiry_id = rule_id(&result, "sharing", "expiry");
+    assert!(expiry_id.starts_with("rule_share-links_sharing_expiry_"));
     assert!(result["resources"][0]["id"]
         .as_str()
         .unwrap()
-        .starts_with("source_linear_abc-123_"));
+        .starts_with("source_share-links_linear_abc-123_"));
 
     provenance()
         .args([
-            "rules", "show", "--repo", repo, "--scope", "default", "--id", "expiry", "--format",
+            "rules", "show", "--repo", repo, "--scope", "default", "--id", expiry_id, "--format",
             "json",
         ])
         .assert()
@@ -94,7 +111,7 @@ fn apply_materializes_typed_declarations_as_canonical_graph_records() {
     provenance()
         .args([
             "traceability",
-            "expiry",
+            expiry_id,
             "--repo",
             repo,
             "--scope",
@@ -122,7 +139,8 @@ fn apply_materializes_typed_declarations_as_canonical_graph_records() {
         ])
         .assert()
         .success();
-    let rule_page = std::fs::read_to_string(wiki.join("rules/expiry/index.html")).unwrap();
+    let rule_page =
+        std::fs::read_to_string(wiki.join(format!("rules/{expiry_id}/index.html"))).unwrap();
     assert!(rule_page.contains("Share links expire within 30 days"));
 
     provenance()
@@ -135,7 +153,8 @@ fn apply_materializes_typed_declarations_as_canonical_graph_records() {
 fn apply_updates_only_records_owned_by_the_same_spec() {
     let directory = init_repo();
     let repo = directory.path().to_str().unwrap();
-    apply(repo, &spec("Share links expire within 30 days"));
+    let initial = apply(repo, &spec("Share links expire within 30 days"));
+    let expiry_id = rule_id(&initial, "sharing", "expiry").to_string();
 
     let result = apply(repo, &spec("Share links expire within 14 days"));
 
@@ -144,12 +163,113 @@ fn apply_updates_only_records_owned_by_the_same_spec() {
     assert_eq!(result["unchanged"], 2);
     provenance()
         .args([
-            "rules", "show", "--repo", repo, "--scope", "default", "--id", "expiry", "--format",
+            "rules", "show", "--repo", repo, "--scope", "default", "--id", &expiry_id, "--format",
             "json",
         ])
         .assert()
         .success()
         .stdout(contains("Share links expire within 14 days"));
+}
+
+#[test]
+fn apply_scopes_repeated_rule_keys_to_their_parent_requirements() {
+    let directory = init_repo();
+    let repo = directory.path().to_str().unwrap();
+    let input = json!({
+        "schema_version": 1,
+        "spec": "lifecycles",
+        "declared_by": "spec://typescript/lifecycles",
+        "requirements": [
+            {
+                "key": "sharing",
+                "statement": "Users can securely share documentation"
+            },
+            {
+                "key": "sessions",
+                "statement": "User sessions are time bounded"
+            }
+        ],
+        "rules": [
+            {
+                "key": "expiry",
+                "requirement": "sharing",
+                "statement": "Share links expire within 30 days"
+            },
+            {
+                "key": "expiry",
+                "requirement": "sessions",
+                "statement": "Inactive sessions expire within 24 hours"
+            }
+        ]
+    });
+
+    let result = apply(repo, &input);
+    let rules = result["resources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|resource| resource["kind"] == "rule")
+        .collect::<Vec<_>>();
+
+    assert_eq!(rules.len(), 2);
+    assert_ne!(rules[0]["id"], rules[1]["id"]);
+    provenance()
+        .args(["check", "--repo", repo, "--format", "json"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn apply_persists_structured_declaration_addresses() {
+    let directory = init_repo();
+    let repo = directory.path().to_str().unwrap();
+    let input = json!({
+        "schema_version": 1,
+        "spec": "share-links",
+        "declared_by": "spec://typescript",
+        "requirements": [{
+            "key": "sharing",
+            "statement": "Users can securely share documentation"
+        }],
+        "rules": [{
+            "key": "expiry",
+            "requirement": "sharing",
+            "statement": "Share links expire within 30 days"
+        }]
+    });
+
+    let result = apply(repo, &input);
+    let expiry_id = rule_id(&result, "sharing", "expiry");
+    let requirement = result["resources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|resource| resource["kind"] == "requirement")
+        .unwrap();
+    let rule = result["resources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|resource| resource["kind"] == "rule")
+        .unwrap();
+
+    assert_eq!(
+        requirement["address"],
+        json!(["share-links", "requirement", "sharing"])
+    );
+    assert_eq!(
+        rule["address"],
+        json!(["share-links", "requirement", "sharing", "rule", "expiry"])
+    );
+    provenance()
+        .args([
+            "rules", "show", "--repo", repo, "--scope", "default", "--id", expiry_id, "--format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .stdout(contains("declaration_address"))
+        .stdout(contains("share-links"));
 }
 
 #[test]
@@ -172,9 +292,11 @@ fn apply_refuses_to_take_over_an_unowned_record() {
         .assert()
         .success();
 
+    let mut desired = spec("Share links expire");
+    desired["requirements"][0]["id"] = json!("sharing");
     provenance()
         .args(["sdk", "apply", "--repo", repo, "--scope", "default"])
-        .write_stdin(serde_json::to_vec(&spec("Share links expire")).unwrap())
+        .write_stdin(serde_json::to_vec(&desired).unwrap())
         .assert()
         .failure()
         .stderr(contains("sharing").and(contains("not owned")));
@@ -191,7 +313,8 @@ fn apply_refuses_to_take_over_an_unowned_record() {
 fn verification_runs_are_linked_to_the_rule_and_record_the_outcome() {
     let directory = init_repo();
     let repo = directory.path().to_str().unwrap();
-    apply(repo, &spec("Share links expire within 30 days"));
+    let applied = apply(repo, &spec("Share links expire within 30 days"));
+    let expiry_id = rule_id(&applied, "sharing", "expiry");
 
     let begun = provenance()
         .args([
@@ -206,7 +329,7 @@ fn verification_runs_are_linked_to_the_rule_and_record_the_outcome() {
         ])
         .write_stdin(
             serde_json::to_vec(&json!({
-                "rule": "expiry",
+                "rule": expiry_id,
                 "method": "examples",
                 "declared_by": "ci://node-test",
                 "file": "share-links.test.ts",
@@ -251,7 +374,7 @@ fn verification_runs_are_linked_to_the_rule_and_record_the_outcome() {
             "--scope",
             "default",
             "--rule",
-            "expiry",
+            expiry_id,
             "--format",
             "json",
         ])
@@ -260,6 +383,54 @@ fn verification_runs_are_linked_to_the_rule_and_record_the_outcome() {
         .stdout(contains("ci://node-test"))
         .stdout(contains("share-links.test.ts"))
         .stdout(contains("\"status\": \"passed\""));
+}
+
+#[test]
+fn verification_resolves_an_applied_rule_by_declaration_address() {
+    let directory = init_repo();
+    let repo = directory.path().to_str().unwrap();
+    let input = json!({
+        "schema_version": 1,
+        "spec": "share-links",
+        "declared_by": "spec://typescript",
+        "requirements": [{
+            "key": "sharing",
+            "statement": "Users can securely share documentation"
+        }],
+        "rules": [{
+            "key": "expiry",
+            "requirement": "sharing",
+            "statement": "Share links expire within 30 days"
+        }]
+    });
+    let applied = apply(repo, &input);
+    let expiry_id = rule_id(&applied, "sharing", "expiry");
+
+    provenance()
+        .args([
+            "sdk",
+            "begin-verification",
+            "--repo",
+            repo,
+            "--scope",
+            "default",
+            "--format",
+            "json",
+        ])
+        .write_stdin(
+            serde_json::to_vec(&json!({
+                "declaration": {
+                    "declared_by": "spec://typescript",
+                    "address": ["share-links", "requirement", "sharing", "rule", "expiry"]
+                },
+                "method": "examples",
+                "declared_by": "ci://node-test"
+            }))
+            .unwrap(),
+        )
+        .assert()
+        .success()
+        .stdout(contains(expiry_id));
 }
 
 #[test]

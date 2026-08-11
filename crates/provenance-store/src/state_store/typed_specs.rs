@@ -3,7 +3,10 @@ mod reconcile;
 
 use std::collections::BTreeMap;
 
-use provenance_core::{EdgeType, NodeType, ScopeId, StableId, SUPPORTED_SCHEMA_VERSION};
+use provenance_core::{
+    DeclarationAddress, EdgeType, NodeType, Requirement, Rule, ScopeId, Source, StableId,
+    SUPPORTED_SCHEMA_VERSION,
+};
 
 use super::{
     ReconcileState, ReconciledResource, StateStore, TypedRequirementInput, TypedRuleInput,
@@ -11,10 +14,19 @@ use super::{
 };
 use crate::shards;
 use identity::{
-    declaration_ids, requirement_identity, rule_identity, source_identity, validate_ownership,
-    validate_references,
+    declaration_ids, owned_declaration_ids, requirement_identity, rule_declaration_ids,
+    source_identity, validate_ownership, validate_references,
 };
 use reconcile::{reconcile_requirements, reconcile_rules, reconcile_sources};
+
+struct CurrentTypedState {
+    sources: Vec<Source>,
+    requirements: Vec<Requirement>,
+    rules: Vec<Rule>,
+    source_addresses: BTreeMap<DeclarationAddress, StableId>,
+    requirement_addresses: BTreeMap<DeclarationAddress, StableId>,
+    rule_addresses: BTreeMap<DeclarationAddress, StableId>,
+}
 
 impl StateStore {
     /// Reconciles one language-owned desired-state document with canonical state.
@@ -38,12 +50,28 @@ impl StateStore {
     ) -> anyhow::Result<TypedSpecResult> {
         self.validate_typed_spec(scope_id, &input)?;
 
-        let source_ids = declaration_ids("source", input.sources.iter().map(source_identity))?;
+        let current = self.current_typed_state(scope_id, &input.declared_by)?;
+
+        let source_ids = declaration_ids(
+            "source",
+            &input.declared_by,
+            &input.spec,
+            input.sources.iter().map(source_identity),
+            &current.source_addresses,
+        )?;
         let requirement_ids = declaration_ids(
             "requirement",
+            &input.declared_by,
+            &input.spec,
             input.requirements.iter().map(requirement_identity),
+            &current.requirement_addresses,
         )?;
-        let rule_ids = declaration_ids("rule", input.rules.iter().map(rule_identity))?;
+        let rule_ids = rule_declaration_ids(
+            &input.declared_by,
+            &input.spec,
+            &input.rules,
+            &current.rule_addresses,
+        )?;
         validate_references(
             &input.requirements,
             &input.rules,
@@ -51,52 +79,53 @@ impl StateStore {
             &requirement_ids,
         )?;
 
-        let current_sources = self.list_sources(scope_id)?;
-        let current_requirements = self.list_requirements(scope_id)?;
-        let current_rules = self.list_rules(scope_id)?;
         validate_ownership(
             &input.declared_by,
-            &current_sources,
+            &current.sources,
             source_ids.values(),
             |record| (&record.id, record.declared_by.as_deref()),
         )?;
         validate_ownership(
             &input.declared_by,
-            &current_requirements,
+            &current.requirements,
             requirement_ids.values(),
             |record| (&record.id, record.declared_by.as_deref()),
         )?;
         validate_ownership(
             &input.declared_by,
-            &current_rules,
+            &current.rules,
             rule_ids.values(),
             |record| (&record.id, record.declared_by.as_deref()),
         )?;
 
         let requirement_relationships = input.requirements.clone();
         let rule_relationships = input.rules.clone();
+        let spec = input.spec;
         let (sources, source_resources) = reconcile_sources(
-            current_sources,
+            current.sources,
+            &spec,
             scope_id,
             &input.declared_by,
             input.sources,
             &source_ids,
         )?;
         let (requirements, requirement_resources) = reconcile_requirements(
-            current_requirements,
+            current.requirements,
+            &spec,
             scope_id,
             &input.declared_by,
             input.requirements,
             &requirement_ids,
             &source_ids,
-        );
+        )?;
         let (rules, rule_resources) = reconcile_rules(
-            current_rules,
+            current.rules,
+            &spec,
             scope_id,
             &input.declared_by,
             input.rules,
             &rule_ids,
-        );
+        )?;
 
         replace_records(self, &shards::sources_path(&self.layout, scope_id), sources)?;
         replace_records(
@@ -122,6 +151,45 @@ impl StateStore {
         ))
     }
 
+    fn current_typed_state(
+        &self,
+        scope_id: &ScopeId,
+        owner: &str,
+    ) -> anyhow::Result<CurrentTypedState> {
+        let sources = self.list_sources(scope_id)?;
+        let requirements = self.list_requirements(scope_id)?;
+        let rules = self.list_rules(scope_id)?;
+        let source_addresses = owned_declaration_ids(owner, &sources, |record| {
+            (
+                &record.id,
+                record.declared_by.as_deref(),
+                record.declaration_address.as_ref(),
+            )
+        })?;
+        let requirement_addresses = owned_declaration_ids(owner, &requirements, |record| {
+            (
+                &record.id,
+                record.declared_by.as_deref(),
+                record.declaration_address.as_ref(),
+            )
+        })?;
+        let rule_addresses = owned_declaration_ids(owner, &rules, |record| {
+            (
+                &record.id,
+                record.declared_by.as_deref(),
+                record.declaration_address.as_ref(),
+            )
+        })?;
+        Ok(CurrentTypedState {
+            sources,
+            requirements,
+            rules,
+            source_addresses,
+            requirement_addresses,
+            rule_addresses,
+        })
+    }
+
     fn validate_typed_spec(
         &self,
         scope_id: &ScopeId,
@@ -136,6 +204,7 @@ impl StateStore {
             !input.declared_by.trim().is_empty(),
             "declared_by must not be empty"
         );
+        anyhow::ensure!(!input.spec.trim().is_empty(), "spec must not be empty");
         anyhow::ensure!(
             self.manifest()?
                 .scopes
@@ -154,7 +223,7 @@ impl StateStore {
         rules: &[TypedRuleInput],
         source_ids: &BTreeMap<String, StableId>,
         requirement_ids: &BTreeMap<String, StableId>,
-        rule_ids: &BTreeMap<String, StableId>,
+        rule_ids: &BTreeMap<(String, String), StableId>,
     ) -> anyhow::Result<()> {
         for declaration in requirements {
             for source in &declaration.sources {
@@ -178,7 +247,7 @@ impl StateStore {
                 NodeType::Requirement,
                 requirement_ids[&declaration.requirement].clone(),
                 NodeType::Rule,
-                rule_ids[&declaration.key].clone(),
+                rule_ids[&(declaration.requirement.clone(), declaration.key.clone())].clone(),
             )?;
         }
         Ok(())

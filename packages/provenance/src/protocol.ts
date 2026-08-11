@@ -1,3 +1,5 @@
+export type DeclarationAddress = readonly string[];
+
 export interface SourceDeclaration {
   key: string;
   id?: string;
@@ -26,6 +28,7 @@ export interface RuleDeclaration {
 
 export interface TypedSpecDocument {
   schema_version: 1;
+  spec: string;
   declared_by: string;
   sources: SourceDeclaration[];
   requirements: RequirementDeclaration[];
@@ -38,6 +41,8 @@ export type ReconcileState = "created" | "updated" | "unchanged";
 export interface ReconciledResource {
   kind: ResourceKind;
   key: string;
+  parent?: string;
+  address: string[];
   id: string;
   state: ReconcileState;
 }

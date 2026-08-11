@@ -1,11 +1,11 @@
 use provenance_core::{
     ArtifactLink, CanonicalArtifact, ClaimChallenge, ConsensusFinding, ContestedClaim,
-    ContributionStance, DispositionActor, DispositionDecision, EdgeType, EvidenceGap,
-    IdeationEvidenceReference, IdeationTarget, MaterialClaim, MessageRole, MinorityObjection,
-    NodeType, PromotionState, ProposalTraceability, ProposalType, QuestionStatus,
-    RequiredHumanDecision, RequirementStatus, ResolutionInput, ResolutionMethod, ResolutionStatus,
-    RuleSeverity, RuleStatus, ScopeId, SourceReference, SourceType, StableId, SuggestedArtifact,
-    SuggestedArtifactChange, ThreadParent, TopicStatus, UncertaintyRating,
+    ContributionStance, DeclarationAddress, DispositionActor, DispositionDecision, EdgeType,
+    EvidenceGap, IdeationEvidenceReference, IdeationTarget, MaterialClaim, MessageRole,
+    MinorityObjection, NodeType, PromotionState, ProposalTraceability, ProposalType,
+    QuestionStatus, RequiredHumanDecision, RequirementStatus, ResolutionInput, ResolutionMethod,
+    ResolutionStatus, RuleSeverity, RuleStatus, ScopeId, SourceReference, SourceType, StableId,
+    SuggestedArtifact, SuggestedArtifactChange, ThreadParent, TopicStatus, UncertaintyRating,
     UnsupportedRecommendation, UnsupportedSpeculation,
 };
 use serde::{Deserialize, Serialize};
@@ -139,6 +139,7 @@ pub struct CreateRuleInput {
 #[serde(deny_unknown_fields)]
 pub struct TypedSpecInput {
     pub schema_version: u32,
+    pub spec: String,
     pub declared_by: String,
     #[serde(default)]
     pub sources: Vec<TypedSourceInput>,
@@ -209,6 +210,9 @@ pub enum ReconcileState {
 pub struct ReconciledResource {
     pub kind: TypedResourceKind,
     pub key: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent: Option<String>,
+    pub address: provenance_core::DeclarationAddress,
     pub id: StableId,
     pub state: ReconcileState,
 }
@@ -225,13 +229,23 @@ pub struct TypedSpecResult {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BeginVerificationInput {
-    pub rule: String,
+    #[serde(default)]
+    pub rule: Option<String>,
+    #[serde(default)]
+    pub declaration: Option<DeclarationReferenceInput>,
     pub method: String,
     pub declared_by: String,
     #[serde(default)]
     pub file: Option<camino::Utf8PathBuf>,
     #[serde(default)]
     pub symbol: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DeclarationReferenceInput {
+    pub declared_by: String,
+    pub address: DeclarationAddress,
 }
 
 #[derive(Debug, Clone, Deserialize)]

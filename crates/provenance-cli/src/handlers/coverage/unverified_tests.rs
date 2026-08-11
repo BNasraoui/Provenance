@@ -16,6 +16,7 @@ fn rule(id: &str, status: RuleStatus) -> Rule {
         scope_id: ScopeId::new("default").unwrap(),
         id: StableId::new(id).unwrap(),
         declared_by: None,
+        declaration_address: None,
         name: None,
         description: None,
         statement: "Claims must be grouped by participant".to_string(),

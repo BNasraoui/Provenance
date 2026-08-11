@@ -1,7 +1,36 @@
 use camino::Utf8PathBuf;
-use serde::{Deserialize, Serialize};
+use serde::{de::Error as _, Deserialize, Deserializer, Serialize};
 
 use super::{SchemaVersion, ScopeId, StableId};
+
+/// One owner-local path to a language-authored declaration.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(transparent)]
+pub struct DeclarationAddress(Vec<String>);
+
+impl DeclarationAddress {
+    pub fn new(segments: impl IntoIterator<Item = impl Into<String>>) -> anyhow::Result<Self> {
+        let segments = segments.into_iter().map(Into::into).collect::<Vec<_>>();
+        anyhow::ensure!(
+            !segments.is_empty() && segments.iter().all(|segment| !segment.trim().is_empty()),
+            "declaration address segments must not be empty"
+        );
+        Ok(Self(segments))
+    }
+
+    pub fn segments(&self) -> &[String] {
+        &self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for DeclarationAddress {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Self::new(Vec::<String>::deserialize(deserializer)?).map_err(D::Error::custom)
+    }
+}
 
 /// The lifecycle state of one callback-backed verification run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

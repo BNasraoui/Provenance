@@ -43,7 +43,7 @@ pub use ideation::{
     UncertaintyLevel,
 };
 pub use ids::{SchemaVersion, ScopeId, StableId};
-pub use integrations::{VerificationRun, VerificationRunStatus};
+pub use integrations::{DeclarationAddress, VerificationRun, VerificationRunStatus};
 pub use manifest::{Manifest, RepoPathPrefix, Scope};
 pub use services::Domain;
 pub use shaping::{
