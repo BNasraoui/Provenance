@@ -13,6 +13,7 @@ use clap::{Parser, Subcommand};
 use serde::Serialize;
 
 #[derive(Parser)]
+#[command(name = "provenance", version)]
 pub struct Cli {
     /// Drop the advisory notes commands print alongside their output, such as
     /// the warning that this repository has no shaping skills installed.
