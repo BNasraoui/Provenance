@@ -31,9 +31,10 @@ fn impact_reports_hop_distance_and_direction() {
 }
 
 #[test]
-fn stale_report_is_empty_for_unapproved_fixture() {
+fn graph_evidence_lists_the_fixture_rule() {
     let (_dir, layout, scope) = seeded_layout();
-    assert!(find_stale(&layout, &scope).unwrap().is_empty());
+    let evidence = graph_evidence(&layout, &scope).unwrap();
+    assert!(evidence.rule_ids.contains("rule_schads_pay_001"));
 }
 
 #[test]

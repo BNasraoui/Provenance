@@ -42,6 +42,21 @@ pub fn parse_code_ref(text: &str) -> Option<CodeRef> {
     })
 }
 
+/// Finds code references inside a compound source-reference field.
+pub fn parse_code_refs(text: &str) -> Vec<CodeRef> {
+    if let Some(code_ref) = parse_code_ref(text) {
+        return vec![code_ref];
+    }
+    text.split_whitespace()
+        .filter_map(|token| {
+            let token = token.trim_matches(|character: char| {
+                matches!(character, '(' | ')' | '[' | ']' | '{' | '}' | ';')
+            });
+            parse_code_ref(token.strip_suffix('.').unwrap_or(token))
+        })
+        .collect()
+}
+
 /// The one place that decides whether text reads as a file reference rather
 /// than prose. Both the whole-field surface and the free-text surface reach
 /// it through [`parse_code_ref`], so neither can drift from the other.
@@ -191,5 +206,13 @@ mod tests {
         let code_ref = parse_code_ref("src/UseCase").unwrap();
         assert_eq!(code_ref.path, "src/UseCase");
         assert!(code_ref.lines.is_empty());
+    }
+
+    #[test]
+    fn parse_code_refs_finds_a_path_inside_compound_source_text() {
+        let refs = parse_code_refs("owner decision; docs/policy.md:2");
+        assert_eq!(refs.len(), 1);
+        assert_eq!(refs[0].path, "docs/policy.md");
+        assert_eq!(refs[0].lines, vec![LineRange::new(2, None)]);
     }
 }

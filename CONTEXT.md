@@ -28,6 +28,10 @@ A source line carrying a rule binding, verification binding, or provenance annot
 
 The enclosing symbol and content identity recorded alongside an Evidence site's coordinate. A later scan resolves the anchor before deciding whether the site is Unchanged, New, Moved, or Gone; these states are derived report findings, not canonical graph state.
 
+## Evidence path
+
+A repository path the graph makes evidentiary: an Evidence site citing a known Rule, or a code path named by a Source that a Requirement references. A diff can leave the path Untouched, Touch it so re-verification is wanted, Move its durable anchor, or leave it Gone. These are report findings; running the gate performs no review or re-extraction.
+
 ## Topic
 
 A persisted, claimable shaping work area attached to a requirement. A Topic is not a reader taxonomy classification.

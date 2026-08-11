@@ -61,6 +61,29 @@ gone; when the survivors cannot be told apart, they stay at their current coordi
 as unchanged and the scan warns that the group lost instances. Identical sites
 shuffled within one file with none lost stay silent.
 
+## Diff evidence gate
+
+`stale` is the read-only answer to “does this diff intersect evidence in the graph?” Give
+it either two commits or one `--since` commit (whose other endpoint is `HEAD`):
+
+```sh
+provenance stale main HEAD
+provenance stale --since main --format json
+provenance stale --since main --strict
+```
+
+The report includes every binding or annotation that cites a known rule, every
+verification site, and every repository path named by a Source that a Requirement
+references. Each site is `untouched`, `touched`, `moved`, or `gone`. Touched means the
+diff intersects that site's lines and re-verification is wanted. Moved and gone are
+resolved through the coverage scanner's durable symbol and content-hash anchors; a pure
+relocation is moved rather than touched. Source references carrying explicit line ranges
+are intersected at those lines; a path without lines is touched by any edit to that file.
+
+Plain mode always reports and exits zero. `--strict` prints the same report, then exits
+non-zero when any site is touched or gone. The command performs no review-trigger firing,
+agent work, requirement extraction, or state write.
+
 The scanner is line-oriented. Its native binding patterns and current limits are:
 
 | Language | Rule function binding | Verification binding | Recognition grade |
