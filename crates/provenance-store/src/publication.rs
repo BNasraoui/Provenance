@@ -375,9 +375,16 @@ pub fn sync_tree(path: &Utf8Path) -> anyhow::Result<()> {
         if entry.file_type()?.is_dir() {
             sync_tree(&child)?;
         } else {
-            std::fs::File::open(&child)
-                .map_err(|error| anyhow::anyhow!("sync publication file {child}: {error}"))?
-                .sync_all()?;
+            // Windows' FlushFileBuffers needs write access; a read-only
+            // handle is refused with ERROR_ACCESS_DENIED. Unix fsyncs a
+            // read descriptor happily.
+            let file = std::fs::OpenOptions::new()
+                .read(true)
+                .write(cfg!(windows))
+                .open(&child)
+                .map_err(|error| anyhow::anyhow!("sync publication file {child}: {error}"))?;
+            file.sync_all()
+                .map_err(|error| anyhow::anyhow!("sync publication file {child}: {error}"))?;
         }
     }
     sync_directory(path)
