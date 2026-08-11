@@ -63,3 +63,30 @@ fn no_replace_rename_preserves_an_output_that_appeared() {
         "new"
     );
 }
+
+#[cfg(windows)]
+#[test]
+fn no_replace_rename_anchors_its_destination_to_the_parent_handle() {
+    use std::os::windows::fs::symlink_dir;
+
+    let temp = tempfile::tempdir().unwrap();
+    let parent_path = Utf8PathBuf::from_path_buf(temp.path().join("site")).unwrap();
+    let displaced_parent = Utf8PathBuf::from_path_buf(temp.path().join("original-site")).unwrap();
+    let external = Utf8PathBuf::from_path_buf(temp.path().join("external")).unwrap();
+    std::fs::create_dir(&parent_path).unwrap();
+    std::fs::create_dir(parent_path.join("stage")).unwrap();
+    std::fs::write(parent_path.join("stage/generated"), "new").unwrap();
+    std::fs::create_dir(&external).unwrap();
+    let parent = ownership::open_directory_no_follow(parent_path.as_std_path()).unwrap();
+    std::fs::rename(&parent_path, &displaced_parent).unwrap();
+    symlink_dir(&external, &parent_path).unwrap();
+
+    replacement::rename_no_replace_at(&parent, &parent_path, "stage", "wiki").unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(displaced_parent.join("wiki/generated")).unwrap(),
+        "new"
+    );
+    assert!(!displaced_parent.join("stage").exists());
+    assert!(!external.join("wiki").exists());
+}

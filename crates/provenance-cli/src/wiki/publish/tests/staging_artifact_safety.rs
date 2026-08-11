@@ -128,6 +128,7 @@ fn staged_child_symlink_cannot_redirect_generated_writes() {
     let output = utf8(temp.path().join("wiki"));
     let external = utf8(temp.path().join("external"));
     std::fs::create_dir(&external).unwrap();
+    std::fs::write(external.join("caller"), "keep me").unwrap();
 
     let error = publish_with(
         &empty_corpus(),
@@ -138,6 +139,10 @@ fn staged_child_symlink_cannot_redirect_generated_writes() {
 
     assert!(matches!(error, PublishError::Io { .. }));
     assert!(!external.join("provenance-wiki.css").exists());
+    assert_eq!(
+        std::fs::read_to_string(external.join("caller")).unwrap(),
+        "keep me"
+    );
     assert!(!artifact(&output, "stage").exists());
     assert!(!output.exists());
 }
@@ -151,6 +156,7 @@ fn staged_child_reparse_point_cannot_redirect_generated_writes() {
     let output = utf8(temp.path().join("wiki"));
     let external = utf8(temp.path().join("external"));
     std::fs::create_dir(&external).unwrap();
+    std::fs::write(external.join("caller"), "keep me").unwrap();
 
     let result = publish_with(
         &empty_corpus(),
@@ -162,23 +168,13 @@ fn staged_child_reparse_point_cannot_redirect_generated_writes() {
         Ok(_) => panic!("publication followed a staged reparse point"),
     };
 
-    // The write through the reparse point is refused either way. Removing
-    // the owned tree afterwards cannot delete the hostile reparse on these
-    // runners, so the refusal surfaces wrapped in CleanupFailed with the
-    // residue reported for the operator, per the publication doctrine.
-    match &error {
-        PublishError::Io { .. } => {
-            assert!(!artifact(&output, "stage").exists());
-        }
-        PublishError::CleanupFailed { primary, .. } => {
-            assert!(
-                matches!(**primary, PublishError::Io { .. }),
-                "got {error:?}"
-            );
-        }
-        _ => panic!("got {error:?}"),
-    }
+    assert!(matches!(error, PublishError::Io { .. }), "got {error:?}");
+    assert!(!artifact(&output, "stage").exists());
     assert!(!external.join("provenance-wiki.css").exists());
+    assert_eq!(
+        std::fs::read_to_string(external.join("caller")).unwrap(),
+        "keep me"
+    );
     assert!(!output.exists());
 }
 
