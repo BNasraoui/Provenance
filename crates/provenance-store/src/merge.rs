@@ -165,6 +165,7 @@ pub fn read_jsonl_records_for_shard(
             continue;
         }
         let record = serde_json::from_str(line)?;
+        // Errors name the logical shard, but line numbers come from Git's temporary input file.
         ensure_supported_record_version(shard_path, index + 1, &record)?;
         if ShardFamily::for_shard_path(shard_path) == ShardFamily::IdeationLandings {
             ensure_supported_ideation_landing_versions(shard_path, index + 1, &record)?;

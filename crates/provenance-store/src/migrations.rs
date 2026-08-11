@@ -1,3 +1,5 @@
+use crate::layout::ProvenanceLayout;
+use anyhow::Context;
 use sqlx::{Executor, SqlitePool};
 
 pub const INITIAL_MIGRATION_ID: &str = "001";
@@ -16,6 +18,7 @@ pub const DISPOSITION_TERMINOLOGY_MIGRATION_ID: &str = "013";
 pub const DISPOSITION_EXTERNAL_ACTION_MIGRATION_ID: &str = "014";
 pub const DROP_RUNTIME_LEFTOVERS_MIGRATION_ID: &str = "015";
 pub const DROP_RULE_CODE_AND_SERVICES_MIGRATION_ID: &str = "016";
+pub const REMOVE_SERVICES_SHARDS_MIGRATION_ID: &str = "017";
 const INITIAL_SQL: &str = include_str!("../migrations/001_initial_cache.sql");
 const SOURCE_REQUIREMENT_SQL: &str =
     include_str!("../migrations/002_sources_requirements_edges.sql");
@@ -38,8 +41,13 @@ const DROP_RUNTIME_LEFTOVERS_SQL: &str =
     include_str!("../migrations/015_drop_runtime_leftovers.sql");
 const DROP_RULE_CODE_AND_SERVICES_SQL: &str =
     include_str!("../migrations/016_drop_rule_code_and_services.sql");
+const REMOVE_SERVICES_SHARDS_SQL: &str =
+    include_str!("../migrations/017_remove_services_shards.sql");
 
-pub async fn run_migrations(pool: &SqlitePool) -> anyhow::Result<Vec<String>> {
+pub async fn run_migrations(
+    pool: &SqlitePool,
+    layout: &ProvenanceLayout,
+) -> anyhow::Result<Vec<String>> {
     pool.execute("CREATE TABLE IF NOT EXISTS _schema_migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)").await?;
     let mut tx = pool.begin().await?;
     let mut applied = Vec::new();
@@ -78,6 +86,10 @@ pub async fn run_migrations(pool: &SqlitePool) -> anyhow::Result<Vec<String>> {
             DROP_RULE_CODE_AND_SERVICES_MIGRATION_ID,
             DROP_RULE_CODE_AND_SERVICES_SQL,
         ),
+        (
+            REMOVE_SERVICES_SHARDS_MIGRATION_ID,
+            REMOVE_SERVICES_SHARDS_SQL,
+        ),
     ] {
         let already_applied: Option<String> =
             sqlx::query_scalar("SELECT id FROM _schema_migrations WHERE id = ?")
@@ -85,6 +97,9 @@ pub async fn run_migrations(pool: &SqlitePool) -> anyhow::Result<Vec<String>> {
                 .fetch_optional(&mut *tx)
                 .await?;
         if already_applied.is_none() {
+            if id == REMOVE_SERVICES_SHARDS_MIGRATION_ID {
+                remove_services_shards(layout)?;
+            }
             for statement in sql.split(';').map(str::trim).filter(|s| !s.is_empty()) {
                 tx.execute(statement).await?;
             }
@@ -99,6 +114,34 @@ pub async fn run_migrations(pool: &SqlitePool) -> anyhow::Result<Vec<String>> {
     Ok(applied)
 }
 
+fn remove_services_shards(layout: &ProvenanceLayout) -> anyhow::Result<()> {
+    let scopes_dir = layout.scopes_dir();
+    if !scopes_dir.exists() {
+        return Ok(());
+    }
+    for scope in std::fs::read_dir(&scopes_dir)
+        .with_context(|| format!("failed to read scopes directory {scopes_dir}"))?
+    {
+        let scope = scope?;
+        if !scope.file_type()?.is_dir() {
+            continue;
+        }
+        let services_dir = scope.path().join("services");
+        if !services_dir.exists() {
+            continue;
+        }
+        for shard in std::fs::read_dir(&services_dir)? {
+            let shard = shard?;
+            if shard.file_type()?.is_file()
+                && shard.path().extension().is_some_and(|ext| ext == "jsonl")
+            {
+                std::fs::remove_file(shard.path())?;
+            }
+        }
+    }
+    Ok(())
+}
+
 pub async fn applied_migrations(pool: &SqlitePool) -> anyhow::Result<Vec<String>> {
     Ok(
         sqlx::query_scalar("SELECT id FROM _schema_migrations ORDER BY id")
@@ -110,30 +153,39 @@ pub async fn applied_migrations(pool: &SqlitePool) -> anyhow::Result<Vec<String>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_layout() -> (tempfile::TempDir, crate::layout::ProvenanceLayout) {
+        let directory = tempfile::tempdir().unwrap();
+        let root = camino::Utf8PathBuf::from_path_buf(directory.path().to_path_buf()).unwrap();
+        (directory, crate::layout::ProvenanceLayout::new(root))
+    }
+
     #[tokio::test]
     async fn migrations_record_initial_cache_schema_once() {
+        let (_directory, layout) = test_layout();
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
         assert_eq!(
-            run_migrations(&pool).await.unwrap(),
+            run_migrations(&pool, &layout).await.unwrap(),
             vec![
                 "001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012",
-                "013", "014", "015", "016"
+                "013", "014", "015", "016", "017"
             ]
         );
-        assert!(run_migrations(&pool).await.unwrap().is_empty());
+        assert!(run_migrations(&pool, &layout).await.unwrap().is_empty());
         assert_eq!(
             applied_migrations(&pool).await.unwrap(),
             vec![
                 "001", "002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012",
-                "013", "014", "015", "016"
+                "013", "014", "015", "016", "017"
             ]
         );
     }
 
     #[tokio::test]
     async fn lifecycle_migration_creates_assertion_cache() {
+        let (_directory, layout) = test_layout();
         let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
-        run_migrations(&pool).await.unwrap();
+        run_migrations(&pool, &layout).await.unwrap();
         let table: Option<String> = sqlx::query_scalar(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'assertion_records'",
         )
@@ -148,5 +200,55 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(dispositions.as_deref(), Some("dispositions"));
+    }
+
+    #[tokio::test]
+    async fn migration_removes_services_shards_when_present() {
+        let (_directory, layout) = test_layout();
+        let shard = layout
+            .scopes_dir()
+            .join("default/services/services-00.jsonl");
+        std::fs::create_dir_all(shard.parent().unwrap()).unwrap();
+        std::fs::write(&shard, "legacy service\n").unwrap();
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+
+        run_migrations(&pool, &layout).await.unwrap();
+
+        assert!(!shard.exists());
+    }
+
+    #[tokio::test]
+    async fn migration_no_ops_when_services_shards_are_absent() {
+        let (_directory, layout) = test_layout();
+        let pool = SqlitePool::connect("sqlite::memory:").await.unwrap();
+
+        run_migrations(&pool, &layout).await.unwrap();
+
+        assert!(!layout.scopes_dir().join("default/services").exists());
+    }
+
+    #[tokio::test]
+    async fn store_materializes_cleanly_after_services_shard_cleanup() {
+        let (_directory, layout) = test_layout();
+        std::fs::create_dir_all(layout.manifest_path().parent().unwrap()).unwrap();
+        std::fs::write(
+            layout.manifest_path(),
+            serde_json::to_string(&provenance_core::Manifest::default_with_scope(
+                provenance_core::ScopeId::new("default").unwrap(),
+                provenance_core::RepoPathPrefix::new("."),
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let shard = layout
+            .scopes_dir()
+            .join("default/services/services-00.jsonl");
+        std::fs::create_dir_all(shard.parent().unwrap()).unwrap();
+        std::fs::write(&shard, "not valid json\n").unwrap();
+
+        let report = crate::cache::materialize_state(&layout).await.unwrap();
+
+        assert_eq!(report.records_loaded, 0);
+        assert!(!shard.exists());
     }
 }
