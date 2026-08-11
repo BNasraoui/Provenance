@@ -18,7 +18,12 @@ pub(super) struct StageDirectory {
 
 impl StageDirectory {
     pub(super) fn from_file(root: File, path: &Utf8Path) -> Result<Self, PublishError> {
-        let identity = StageIdentity::from_file(&root)
+        // The mkdir handle carries no read access on Windows (fs_at hardcodes
+        // its mask), so the identity comes from a second read-capable
+        // no-follow open of the same directory.
+        let identity_handle = super::transaction::open_directory_no_follow(path.as_std_path())
+            .map_err(|error| PublishError::io("open staging directory identity", path, error))?;
+        let identity = StageIdentity::from_file(&identity_handle)
             .map_err(|error| PublishError::io("record staging directory identity", path, error))?;
         Ok(Self { root, identity })
     }

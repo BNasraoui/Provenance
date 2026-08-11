@@ -6,7 +6,6 @@ mod cleanup;
 mod ownership;
 mod replacement;
 
-#[cfg(test)]
 pub(super) use ownership::open_directory_no_follow;
 pub(super) use ownership::{acquire_lock, preflight};
 pub(super) use replacement::replace_output;
