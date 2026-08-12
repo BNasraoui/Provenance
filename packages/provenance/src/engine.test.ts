@@ -1,0 +1,97 @@
+import assert from "node:assert/strict";
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test from "node:test";
+
+import { configure, defineSpec, plan } from "./index.js";
+
+interface RecordedRequest {
+  command: string;
+  args: string[];
+}
+
+function recordingEngine(responses: Readonly<Record<string, unknown>>): {
+  engine: string;
+  requests: () => RecordedRequest[];
+} {
+  const directory = mkdtempSync(join(tmpdir(), "provenance-handshake-engine-"));
+  const executable = join(directory, "engine.mjs");
+  const log = join(directory, "requests.jsonl");
+  writeFileSync(
+    executable,
+    `#!/usr/bin/env node
+import { appendFileSync } from "node:fs";
+const command = process.argv[3];
+const args = process.argv.slice(2);
+const responses = ${JSON.stringify(responses)};
+appendFileSync(${JSON.stringify(log)}, JSON.stringify({ command, args }) + "\\n");
+process.stdout.write(JSON.stringify(responses[command]));
+`,
+  );
+  chmodSync(executable, 0o755);
+  return {
+    engine: executable,
+    requests: () => readFileSync(log, "utf8")
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as RecordedRequest),
+  };
+}
+
+function spec() {
+  return defineSpec("share-links", ({ requirement }) => ({
+    sharing: requirement("sharing", {
+      statement: "Users can securely share documentation",
+    }),
+  }));
+}
+
+// @provenance verification: examples
+// @provenance rule: rule_sdk_protocol_handshake
+async function rejectsIncompatibleEngineBeforeCommand(): Promise<void> {
+  const recorder = recordingEngine({
+    info: {
+      engine_version: "9.0.0",
+      protocol_version: 9,
+      state_schema_version: 1,
+      repository: "/project",
+    },
+    plan: { created: 0, updated: 0, unchanged: 0, resources: [], affected_rules: [] },
+  });
+  configure({ engine: recorder.engine, repository: "/project" });
+
+  await assert.rejects(plan(spec()), /protocol version 9/);
+  assert.deepEqual(recorder.requests().map(({ command }) => command), ["info"]);
+}
+
+test("an incompatible engine is rejected before the requested command", rejectsIncompatibleEngineBeforeCommand);
+
+async function leavesRepositoryDiscoveryToRust(): Promise<void> {
+  const recorder = recordingEngine({
+    info: {
+      engine_version: "0.1.0",
+      protocol_version: 1,
+      state_schema_version: 1,
+      repository: "/project",
+    },
+    plan: {
+      declared_by: "spec://typescript",
+      created: 0,
+      updated: 0,
+      unchanged: 1,
+      resources: [],
+      affected_rules: [],
+    },
+  });
+  configure({ engine: recorder.engine });
+
+  await plan(spec());
+
+  for (const request of recorder.requests()) {
+    assert.equal(request.args.includes("--repo"), false);
+  }
+}
+
+test("omitted repository configuration is left for Rust to discover", leavesRepositoryDiscoveryToRust);

@@ -32,6 +32,10 @@ A durable relationship from an owner-local test key and repository code location
 
 A volatile observation from one execution of a Verification binding. It records the outcome and execution context without changing the durable relationship.
 
+## Engine protocol
+
+The versioned, language-neutral request and response contract through which an SDK invokes the Rust engine. It carries declarations, plans, queries, and verification outcomes; it never carries host-language callbacks or a mirror of Rust objects.
+
 ## Enforcement
 
 The live path: the running code that rejects a violation. Verification is evidence about that code; enforcement is the code itself.

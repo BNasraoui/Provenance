@@ -62,11 +62,13 @@ ID. Rust resolves that address to the canonical Rule when verification begins.
 Calling `verify` before applying the spec fails before the callback runs. A
 failed callback is recorded and the original error is rethrown.
 
-The POC still invokes a `provenance` binary on `PATH`. These environment
-variables override the defaults:
+The POC still invokes a `provenance` binary on `PATH`. Before its first
+operation, the SDK checks that the engine speaks the supported protocol. Rust
+then finds the nearest enclosing Provenance or Git project for each command.
+These environment variables override the defaults:
 
 - `PROVENANCE_BIN`: engine binary; default `provenance`
-- `PROVENANCE_REPO`: repository; default current directory
+- `PROVENANCE_REPO`: explicit repository; default nearest enclosing project
 - `PROVENANCE_SCOPE`: scope; default `default`
 - `PROVENANCE_SPEC_OWNER`: declaration owner; default `spec://typescript`
 - `PROVENANCE_VERIFICATION_OWNER`: evidence producer; default `ci://typescript`

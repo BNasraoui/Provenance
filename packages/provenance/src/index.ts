@@ -95,6 +95,14 @@ const moduleFile = fileURLToPath(import.meta.url);
 const specModuleFile = fileURLToPath(new URL("./spec.js", import.meta.url));
 let settings = defaults();
 
+interface SdkSettings {
+  engine: string;
+  repository?: string;
+  scope: string;
+  owner: string;
+  verificationOwner: string;
+}
+
 export function configure(options: ConfigureOptions): void {
   settings = { ...defaults(), ...options };
   registry.reset();
@@ -316,10 +324,10 @@ function callerLocation(): { file: string } | undefined {
   return undefined;
 }
 
-function defaults(): Required<ConfigureOptions> {
+function defaults(): SdkSettings {
   return {
     engine: process.env.PROVENANCE_BIN ?? "provenance",
-    repository: process.env.PROVENANCE_REPO ?? process.cwd(),
+    repository: process.env.PROVENANCE_REPO,
     scope: process.env.PROVENANCE_SCOPE ?? "default",
     owner: process.env.PROVENANCE_SPEC_OWNER ?? "spec://typescript",
     verificationOwner: process.env.PROVENANCE_VERIFICATION_OWNER ?? "ci://typescript",

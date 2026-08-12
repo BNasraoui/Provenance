@@ -66,7 +66,7 @@ function engineJson(repo: string, args: string[]): unknown {
 
 function recordingEngine(responses: Readonly<Record<string, unknown>> = {}): {
   engine: string;
-  requests: () => Array<{ command: string; input: unknown }>;
+  requests: () => Array<{ command: string; args: string[]; input: unknown }>;
 } {
   const directory = mkdtempSync(join(tmpdir(), "provenance-recording-engine-"));
   const executable = join(directory, "engine.mjs");
@@ -76,12 +76,20 @@ function recordingEngine(responses: Readonly<Record<string, unknown>> = {}): {
     `#!/usr/bin/env node
 import { appendFileSync, readFileSync } from "node:fs";
 const command = process.argv[3];
+const args = process.argv.slice(2);
 const responses = ${JSON.stringify(responses)};
 const source = readFileSync(0, "utf8");
 const input = source === "" ? undefined : JSON.parse(source);
-appendFileSync(${JSON.stringify(log)}, JSON.stringify({ command, input }) + "\\n");
+appendFileSync(${JSON.stringify(log)}, JSON.stringify({ command, args, input }) + "\\n");
 if (Object.hasOwn(responses, command)) {
   process.stdout.write(JSON.stringify(responses[command]));
+} else if (command === "info") {
+  process.stdout.write(JSON.stringify({
+    engine_version: "0.1.0",
+    protocol_version: 1,
+    state_schema_version: 1,
+    repository: "/project",
+  }));
 } else if (command === "begin-verification") {
   process.stdout.write(JSON.stringify({
     id: "run_" + input.key,
@@ -110,7 +118,7 @@ if (Object.hasOwn(responses, command)) {
         .trim()
         .split("\n")
         .filter(Boolean)
-        .map((line) => JSON.parse(line) as { command: string; input: unknown }),
+        .map((line) => JSON.parse(line) as { command: string; args: string[]; input: unknown }),
   };
 }
 
@@ -193,6 +201,12 @@ test("verify sends distinct durable binding keys from one test file", async () =
 
 test("plan sends the finalized spec to the read-only engine command", async () => {
   const recorder = recordingEngine({
+    info: {
+      engine_version: "0.1.0",
+      protocol_version: 1,
+      state_schema_version: 1,
+      repository: "/project",
+    },
     plan: {
       declared_by: "spec://typescript",
       created: 0,
@@ -217,8 +231,8 @@ test("plan sends the finalized spec to the read-only engine command", async () =
   const result = await plan(spec);
 
   assert.equal(result.updated, 1);
-  assert.equal(recorder.requests()[0]?.command, "plan");
-  assert.deepEqual((recorder.requests()[0]?.input as { rules: unknown[] }).rules, [
+  assert.deepEqual(recorder.requests().map(({ command }) => command), ["info", "plan"]);
+  assert.deepEqual((recorder.requests()[1]?.input as { rules: unknown[] }).rules, [
     {
       key: "expiry",
       requirement: "sharing",

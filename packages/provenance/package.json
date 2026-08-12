@@ -20,7 +20,7 @@
     "build": "tsc -p tsconfig.json",
     "prepack": "npm run build",
     "test": "npm run build && npm run test:runtime && npm run test:types",
-    "test:runtime": "tsc -p tsconfig.test.json && node --test .test-dist/index.test.js",
+    "test:runtime": "tsc -p tsconfig.test.json && node --test .test-dist/*.test.js",
     "test:types": "node scripts/typecheck-fixtures.mjs"
   },
   "devDependencies": {
