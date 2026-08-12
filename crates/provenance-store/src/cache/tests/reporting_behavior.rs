@@ -122,10 +122,10 @@ fn orphan_report_wants_a_source_behind_the_producing_requirement() {
     );
 }
 
-/// A rule produced by its requirement alone is orphaned in both reports, and
-/// the orphan report names the decision as the missing end.
+/// A rule refines its requirement directly. A resolution may also produce it,
+/// but the absence of a resolution is not a traceability gap.
 #[test]
-fn orphan_report_wants_both_producers() {
+fn requirement_produced_rule_does_not_need_a_resolution() {
     let (_dir, layout, scope) = empty_layout();
     let store = StateStore::new(layout.clone());
     create_source(&store, &scope, "source_anchor");
@@ -139,7 +139,67 @@ fn orphan_report_wants_both_producers() {
             description: None,
             requirement_id: Some(sid("req_half")),
             resolution_id: None,
-            statement: "A rule with no decision behind it".into(),
+            statement: "A rule that needs no ambiguity resolved".into(),
+            status: RuleStatus::Active,
+            severity: RuleSeverity::High,
+            source_document: None,
+            source_section: None,
+            origin_thread: None,
+            origin_message: None,
+        })
+        .unwrap();
+
+    assert!(orphan_rules(&layout, &scope).unwrap().is_empty());
+    assert!(!find_gaps(&layout, &scope)
+        .unwrap()
+        .iter()
+        .any(|gap| gap.kind == GapKind::OrphanRule && gap.node_id == "rule_half"));
+    assert_eq!(
+        coverage_health(&layout, &scope)
+            .unwrap()
+            .rules
+            .with_complete_traceability,
+        1
+    );
+}
+
+#[test]
+fn rule_without_a_producing_requirement_remains_orphaned() {
+    let (_dir, layout, scope) = empty_layout();
+    let store = StateStore::new(layout.clone());
+    create_source(&store, &scope, "source_anchor");
+    create_requirement(&store, &scope, "req_decided", RequirementStatus::Active);
+    attach_source(&store, &scope, "req_decided", "source_anchor");
+    store
+        .create_resolution(CreateResolutionInput {
+            scope_id: scope.clone(),
+            id: sid("res_decided"),
+            title: "Decision that does not bind the rule to its requirement".into(),
+            requirement_id: Some(sid("req_decided")),
+            position: "Adopt".into(),
+            rationale: "Settles the requirement".into(),
+            status: ResolutionStatus::Proposed,
+            context: None,
+            enforcement: None,
+            confidence: None,
+            inputs: Vec::new(),
+            made_by: None,
+            approved_by: None,
+            approved_at: None,
+            superseded_by: None,
+            origin_thread: None,
+            origin_message: None,
+        })
+        .unwrap();
+    store
+        .create_rule(CreateRuleInput {
+            scope_id: scope.clone(),
+            id: sid("rule_unattached"),
+            name: None,
+            description: None,
+            requirement_id: None,
+            resolution_id: Some(sid("res_decided")),
+            statement: "A rule with no producing requirement".into(),
             status: RuleStatus::Active,
             severity: RuleSeverity::High,
             source_document: None,
@@ -151,12 +211,15 @@ fn orphan_report_wants_both_producers() {
 
     let orphans = orphan_rules(&layout, &scope).unwrap();
     assert_eq!(orphans.len(), 1);
-    assert_eq!(orphans[0].rule_id, "rule_half");
-    assert_eq!(orphans[0].missing, vec!["resolution".to_string()]);
+    assert_eq!(orphans[0].rule_id, "rule_unattached");
+    assert_eq!(
+        orphans[0].missing,
+        vec!["requirement".to_string(), "source".to_string()]
+    );
     assert!(find_gaps(&layout, &scope).unwrap().iter().any(|gap| {
         gap.kind == GapKind::OrphanRule
-            && gap.node_id == "rule_half"
-            && gap.reason == "no resolution produces this rule"
+            && gap.node_id == "rule_unattached"
+            && gap.reason == "no requirement produces this rule"
     }));
 }
 

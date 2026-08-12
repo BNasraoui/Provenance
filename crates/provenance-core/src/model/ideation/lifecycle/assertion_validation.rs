@@ -293,9 +293,9 @@ mod tests {
     }
 
     // Independent restatement of the decision, listed rather than matched so
-    // the oracle does not repeat the rule function's shape: these are the
+    // the oracle does not repeat the primary implementation's shape: these are the
     // evidence types that name speculation instead of backing. Must not be
-    // implemented by calling the rule function.
+    // implemented by calling the primary implementation.
     const SPECULATIVE_EVIDENCE_TYPES: [IdeationEvidenceType; 2] = [
         IdeationEvidenceType::Unsupported,
         IdeationEvidenceType::Exploratory,

@@ -278,9 +278,9 @@ pub struct ResolutionPage {
     pub threads: Vec<EvidenceThread>,
 }
 
-/// The scanned item carrying a rule's decision.
+/// The scanned production item identified as a Rule's primary implementation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct RuleFunction {
+pub struct ImplementationBinding {
     pub symbol: Option<String>,
     pub location: EvidenceRef,
 }
@@ -301,7 +301,7 @@ pub struct VerificationSite {
     pub method: String,
     pub symbol: Option<String>,
     pub location: EvidenceRef,
-    pub outside_defining_module: bool,
+    pub outside_implementation_module: bool,
 }
 
 /// A rule detail page with its backward traceability chain.
@@ -314,12 +314,12 @@ pub struct RulePage {
     pub description: Option<String>,
     pub status: RuleStatus,
     pub severity: RuleSeverity,
-    /// The scan behind `rule_function` and `verifications`. `None` means no
+    /// The scan behind `implementation` and `verifications`. `None` means no
     /// scan was supplied, so neither field says anything about the code.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub code_scan: Option<CodeScan>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub rule_function: Option<RuleFunction>,
+    pub implementation: Option<ImplementationBinding>,
     pub verifications: Vec<VerificationSite>,
     /// Resolutions or requirements with a `produces` edge into this rule.
     pub produced_by: Vec<PageLink>,

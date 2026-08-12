@@ -4,7 +4,7 @@
 
 Scopes live in `manifest.json`; shard paths derive from scope IDs. Cache files and volatile fields are forbidden in state shards.
 
-Schema version `1` includes the local graph fields plus imported/cloud review metadata. Optional fields are omitted when absent, but preserved when present: domain grouping for root requirements, requirement descriptions and source references, source references/clauses/effective/review/supersession dates/commit pins, draft/review statuses, resolution context/enforcement/confidence/input references/actor approval/supersession metadata, resolved thread status, rule name/severity/status and the source-location binding (file and function symbol), proposal confidence, and material-claim confidence.
+Schema version `1` includes the local graph fields plus imported/cloud review metadata. Optional fields are omitted when absent, but preserved when present: domain grouping for root requirements, requirement descriptions and source references, source references/clauses/effective/review/supersession dates/commit pins, draft/review statuses, resolution context/enforcement/confidence/input references/actor approval/supersession metadata, resolved thread status, rule name/severity/status and source-document citations, proposal confidence, and material-claim confidence.
 
 Sources, Requirements, and Rules may also carry `declared_by`. It names the
 integration allowed to reconcile that record; it does not grant ownership of
@@ -12,6 +12,11 @@ the scope or of unrelated graph state. The typed SDK refuses to adopt an
 existing record whose value is absent or different.
 
 No shard stores verification. Whether a rule is verified, and by which method, is read from the markers in the code by `provenance coverage scan --validate-rules`; an unverified rule is the absence of a marker, derived at scan time and never written.
+
+A Rule with no implementation binding is a valid unimplemented Rule. This
+semantic change does not alter the version `1` record shape: existing source
+fields remain citations and do not count as implementation, so existing
+records need no migration.
 
 Callback-backed SDK runs are distinct volatile evidence. They are stored in
 `.provenance/cache/scopes/<scope>/verification-runs.jsonl`, linked to a

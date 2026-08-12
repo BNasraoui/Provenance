@@ -3,7 +3,7 @@ use super::fixtures::*;
 use crate::wiki::links::LinkResolver;
 use camino::Utf8PathBuf;
 use provenance_core::coverage::{
-    AnchorState, BindingResult, CoverageReport, CoverageScan, ScannedFile,
+    AnchorState, AnnotationResult, BindingResult, CoverageReport, CoverageScan, ScannedFile,
 };
 use std::fmt::Write as _;
 
@@ -26,8 +26,58 @@ fn binding(
     }
 }
 
+fn annotation(
+    file_path: &str,
+    line: usize,
+    function_name: &str,
+    verification: Option<&str>,
+) -> AnnotationResult {
+    AnnotationResult {
+        rule_id: "rule_001".to_string(),
+        file_path: Utf8PathBuf::from(file_path),
+        line,
+        function_name: Some(function_name.to_string()),
+        coverage: "full".to_string(),
+        confidence: 1.0,
+        verification: verification.map(str::to_string),
+        anchor: None,
+        anchor_state: AnchorState::Unchanged,
+        original_line: None,
+        original_file_path: None,
+    }
+}
+
 #[test]
-fn coverage_bindings_become_commit_pinned_rule_function_and_verification_sites() {
+fn comment_annotations_become_implementation_and_verification_sites() {
+    let report = CoverageScan {
+        report: CoverageReport::new(
+            Some("abc1234".to_string()),
+            2,
+            vec![
+                annotation("src/rules.py", 7, "implement_rule", None),
+                annotation("tests/test_rules.py", 12, "verify_rule", Some("examples")),
+            ],
+            Vec::new(),
+            Vec::new(),
+        ),
+        scanned_files: Vec::new(),
+    };
+    let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
+
+    let corpus = build_corpus_with_coverage(&fixture_state(), &resolver, Some(&report));
+    let page = rule_page(&corpus, "rule_001");
+
+    assert_eq!(
+        page.implementation.as_ref().unwrap().symbol.as_deref(),
+        Some("implement_rule")
+    );
+    assert_eq!(page.verifications.len(), 1);
+    assert_eq!(page.verifications[0].symbol.as_deref(), Some("verify_rule"));
+    assert!(page.verifications[0].outside_implementation_module);
+}
+
+#[test]
+fn coverage_bindings_become_commit_pinned_implementation_and_verification_sites() {
     let report = CoverageScan {
         report: CoverageReport::new(
             Some("abc1234".to_string()),
@@ -63,16 +113,16 @@ fn coverage_bindings_become_commit_pinned_rule_function_and_verification_sites()
     let corpus = build_corpus_with_coverage(&fixture_state(), &resolver, Some(&report));
     let page = rule_page(&corpus, "rule_001");
 
-    let function = page.rule_function.as_ref().unwrap();
-    assert_eq!(function.symbol.as_deref(), Some("decide_rule"));
-    assert_eq!(function.location.label, "src/rules.rs:7");
+    let implementation = page.implementation.as_ref().unwrap();
+    assert_eq!(implementation.symbol.as_deref(), Some("decide_rule"));
+    assert_eq!(implementation.location.label, "src/rules.rs:7");
     assert_eq!(
-        function.location.href.as_deref(),
+        implementation.location.href.as_deref(),
         Some("https://github.com/exampleorg/ex-api/blob/abc1234/src/rules.rs#L7")
     );
     assert_eq!(page.verifications.len(), 2);
-    assert!(!page.verifications[0].outside_defining_module);
-    assert!(page.verifications[1].outside_defining_module);
+    assert!(!page.verifications[0].outside_implementation_module);
+    assert!(page.verifications[1].outside_implementation_module);
     assert_eq!(
         page.code_scan.as_ref().unwrap().commit.as_deref(),
         Some("abc1234")
@@ -105,7 +155,7 @@ fn a_corpus_built_without_a_report_records_no_code_scan() {
     let page = rule_page(&corpus, "rule_001");
 
     assert!(page.code_scan.is_none());
-    assert!(page.rule_function.is_none());
+    assert!(page.implementation.is_none());
     assert!(page.verifications.is_empty());
 }
 
@@ -135,7 +185,7 @@ fn gone_bindings_are_not_presented_as_current_code_sites() {
     let corpus = build_corpus_with_coverage(&fixture_state(), &resolver, Some(&report));
     let page = rule_page(&corpus, "rule_001");
 
-    assert!(page.rule_function.is_none());
+    assert!(page.implementation.is_none());
     assert!(page.verifications.is_empty());
 }
 
@@ -161,10 +211,10 @@ fn an_uncommitted_scan_is_recorded_without_a_commit() {
 
     let scan = page.code_scan.as_ref().unwrap();
     assert!(scan.commit.is_none());
-    let function = page.rule_function.as_ref().unwrap();
-    assert!(function.location.href.is_none());
+    let implementation = page.implementation.as_ref().unwrap();
+    assert!(implementation.location.href.is_none());
     assert_eq!(
-        function.location.snippet.as_ref().unwrap().content,
+        implementation.location.snippet.as_ref().unwrap().content,
         "fn decide_rule() {}"
     );
 }

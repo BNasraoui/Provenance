@@ -274,7 +274,7 @@ impl ConfidenceRejection {
     }
 }
 
-/// The scanner's copy of `rule_confidence_range`, whose deciding function is
+/// The scanner's copy of `rule_confidence_range`, whose primary implementation is
 /// `validate_confidence_score` in `provenance-core/src/model/validation.rs`.
 /// The scanner needs the range before any record exists, so it holds the range
 /// itself; it must agree with core on the verdict and may differ only in what

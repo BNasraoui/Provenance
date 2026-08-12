@@ -221,14 +221,13 @@ The promotion gate, with a clock. This is a grill-shaped turn against the artifa
    spawned, fog graduated, rules only where a rule is real. Then continue the turn loop or
    hand off.
 
-   A tournament settles **direction**, and direction rarely has a function. The winning
-   artifact is a sketch the human reacted to, not code that decides anything — so the
-   normal fan-out here is spawned requirements, not rules. A rule is a function bound by
-   `#[rule("<id>")]`; if no function exists yet, there is nothing to bind and no rule to
-   write. **Do not mint a rule to make the decision look landed.** The resolution is the
-   landing. An unbound rule id buys a tidier graph and pays with a lie the scanner will
-   report later. When the direction does get built and one function ends up deciding it,
-   that turn lands the pair — see the `provenance-shaping` skill.
+   A tournament settles **direction**, which is often broader than one atomic behavioural
+   obligation. The winning artifact is a sketch the human reacted to, so the normal
+   fan-out is spawned Requirements. Create a Rule only when the Resolution establishes a
+   precise atomic obligation. The Rule may be Unimplemented; bind its primary production
+   implementation with `#[rule("<id>")]` when one exists. **Do not mint a vague Rule only
+   to make the decision look landed.** The Resolution is already the landing. See the
+   `provenance-shaping` skill for Rule and binding guidance.
 
 ## Caveats (empirical — from the Statesman provenance scoping record)
 

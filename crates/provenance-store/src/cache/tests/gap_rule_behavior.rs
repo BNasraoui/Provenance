@@ -106,36 +106,21 @@ fn minimal_graph_for(kind: GapKind) -> HandBuiltGraph {
             }],
             ..HandBuiltGraph::default()
         },
-        // Resolved, and a rule of its own, but nothing recorded as having
-        // decided it. The rule still needs a decision behind it or it would
-        // be orphaned as well, and that decision has to settle some other
-        // requirement or it would be orphaned in turn, which is why the
-        // smallest graph for this one kind runs to a second chain.
+        // Resolved, and with a downstream rule of its own, but nothing
+        // recorded as having decided it.
         GapKind::NoResolvingDecision => HandBuiltGraph {
             sources: vec![records::source(ANCHOR_SOURCE)],
-            requirements: vec![
-                settled_requirement("req_resolved", ANCHOR_SOURCE, RequirementStatus::Resolved),
-                settled_requirement("req_decided", ANCHOR_SOURCE, RequirementStatus::Active),
-            ],
-            resolutions: vec![records::resolution("res_decided")],
+            requirements: vec![settled_requirement(
+                "req_resolved",
+                ANCHOR_SOURCE,
+                RequirementStatus::Resolved,
+            )],
             rules: vec![records::rule("rule_direct")],
-            edges: vec![
-                records::edge(
-                    EdgeType::Produces,
-                    (NodeType::Requirement, "req_resolved"),
-                    (NodeType::Rule, "rule_direct"),
-                ),
-                records::edge(
-                    EdgeType::Produces,
-                    (NodeType::Resolution, "res_decided"),
-                    (NodeType::Rule, "rule_direct"),
-                ),
-                records::edge(
-                    EdgeType::Resolves,
-                    (NodeType::Resolution, "res_decided"),
-                    (NodeType::Requirement, "req_decided"),
-                ),
-            ],
+            edges: vec![records::edge(
+                EdgeType::Produces,
+                (NodeType::Requirement, "req_resolved"),
+                (NodeType::Rule, "rule_direct"),
+            )],
             ..HandBuiltGraph::default()
         },
         // Decided, but the decision produced nothing. The decision itself is
@@ -155,11 +140,9 @@ fn minimal_graph_for(kind: GapKind) -> HandBuiltGraph {
             )],
             ..HandBuiltGraph::default()
         },
-        // A chain written only halfway: the requirement is recorded as
-        // producing the rule, but the decision that settled it is not, so
-        // the rule is not traced back to the decision behind it. The
-        // decision is still a draft, so it is not separately on the hook
-        // for a rule.
+        // The resolution produces the rule, but no requirement records the
+        // behavioural obligation it refines. The resolution is still a
+        // draft, so it is not separately on the hook for another rule.
         GapKind::OrphanRule => HandBuiltGraph {
             sources: vec![records::source(ANCHOR_SOURCE)],
             requirements: vec![settled_requirement(
@@ -177,7 +160,7 @@ fn minimal_graph_for(kind: GapKind) -> HandBuiltGraph {
                 ),
                 records::edge(
                     EdgeType::Produces,
-                    (NodeType::Requirement, "req_half_traced"),
+                    (NodeType::Resolution, "res_half_traced"),
                     (NodeType::Rule, "rule_half_traced"),
                 ),
             ],
@@ -250,15 +233,10 @@ fn minimal_graph_for(kind: GapKind) -> HandBuiltGraph {
     }
 }
 
-/// A graph with nothing left unfinished: every requirement has a domain, a
-/// live source, a decision that resolves it, and a rule that both the
-/// requirement and the decision are recorded as producing; every topic is
-/// explored and every question answered.
-///
-/// The two `produces` spellings used to be alternatives, and the properties
-/// below ran once per spelling. A rule now counts as traced only when both
-/// edges are there, so a complete chain carries both and the alternatives
-/// are gone.
+/// A graph with nothing left unfinished: every requirement has a domain and
+/// live source, its approved decision resolves it and produces a rule, and
+/// the requirement records the rule it refines. Every topic is explored and
+/// every question answered.
 fn complete_graph(chains: usize) -> HandBuiltGraph {
     let mut graph = HandBuiltGraph::default();
     for index in 0..chains {
@@ -346,12 +324,21 @@ fn a_complete_graph_has_no_gaps() {
 
 #[test]
 #[verifies("rule_graph_gaps", property)]
-fn removing_any_single_link_from_a_complete_graph_opens_a_gap() {
+fn removing_any_single_required_link_from_a_complete_graph_opens_a_gap() {
     for chains in 1..=4 {
         let complete = complete_graph(chains);
         for dropped in 0..complete.edges.len() {
             let mut graph = complete_graph(chains);
             let removed = graph.edges.remove(dropped);
+            if removed.edge_type == EdgeType::Produces && removed.from_type == NodeType::Resolution
+            {
+                assert!(
+                    graph.gaps().is_empty(),
+                    "dropping optional resolution-to-rule edge {} opened a gap",
+                    removed.id.as_str()
+                );
+                continue;
+            }
             let gaps = graph.gaps();
             assert!(
                 !gaps.is_empty(),
@@ -373,21 +360,16 @@ fn removing_any_single_link_from_a_complete_graph_opens_a_gap() {
     }
 }
 
-/// The owner's ruling on two definitions that shipped at once: a rule is
-/// traced only when both ends produce it. Either `produces` edge alone
-/// leaves the gap open, and the gap says which end is missing so a reader
-/// knows what to add.
+/// A requirement is the required parent of a rule. A resolution is an
+/// optional second producer when a decision removed ambiguity.
 #[test]
 #[verifies("rule_graph_gaps", examples)]
-fn a_rule_produced_from_one_end_only_stays_orphaned_and_the_gap_names_the_missing_end() {
+fn a_rule_requires_a_requirement_but_not_a_resolution() {
     let mut requirement_only = complete_graph(1);
     requirement_only.edges.retain(|edge| {
         !(edge.edge_type == EdgeType::Produces && edge.from_type == NodeType::Resolution)
     });
-    assert_eq!(
-        orphan_rule_reason(&requirement_only, "rule_0").as_deref(),
-        Some("no resolution produces this rule")
-    );
+    assert_eq!(orphan_rule_reason(&requirement_only, "rule_0"), None);
 
     let mut resolution_only = complete_graph(1);
     resolution_only.edges.retain(|edge| {
@@ -404,7 +386,7 @@ fn a_rule_produced_from_one_end_only_stays_orphaned_and_the_gap_names_the_missin
     };
     assert_eq!(
         orphan_rule_reason(&unattached, "rule_unattached").as_deref(),
-        Some("no requirement or resolution produces this rule")
+        Some("no requirement produces this rule")
     );
 
     assert_eq!(orphan_rule_reason(&complete_graph(1), "rule_0"), None);

@@ -15,10 +15,10 @@ pub(in crate::cache) use state_adapter::GraphRecords;
 /// Computes gaps in stable policy order. This is also the seam for callers
 /// that already hold graph records rather than a state store.
 ///
-/// A rule counts as fully traced only when both the requirement it serves
-/// and the resolution that decided it are recorded as producing it; either
-/// one alone opens an `OrphanRule` gap naming the missing end. The health
-/// report reads the same joins, so the two never disagree.
+/// A rule counts as traced when its requirement is recorded as producing it.
+/// A resolution may also produce it when a decision removed ambiguity, but
+/// is not required. The health report reads the same join, so the two never
+/// disagree.
 #[rule("rule_graph_gaps")]
 pub fn compute_gaps(graph: &GapGraph<'_>) -> Vec<GapItem> {
     let query = GraphQuery::new(graph);

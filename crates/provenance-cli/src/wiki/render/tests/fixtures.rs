@@ -1,9 +1,9 @@
 use crate::wiki::links::LinkResolver;
 use crate::wiki::model::{
     CodeScan, CorpusCounts, DecisionSection, DomainGroup, DomainIndexPage, DomainState,
-    EvidenceThread, FieldNote, GapKind, GapNotice, HomepageDomain, InputCitation, LineageEntry,
-    PageId, PageKind, PageLink, RecordKind, RequirementPage, ResolutionPage, RuleCard,
-    RuleFunction, RulePage, ScopeIndexPage, SearchEntry, SourceCitation, SourcePage,
+    EvidenceThread, FieldNote, GapKind, GapNotice, HomepageDomain, ImplementationBinding,
+    InputCitation, LineageEntry, PageId, PageKind, PageLink, RecordKind, RequirementPage,
+    ResolutionPage, RuleCard, RulePage, ScopeIndexPage, SearchEntry, SourceCitation, SourcePage,
     VerificationSite, WikiCorpus,
 };
 use provenance_core::coverage::{CoverageReport, CoverageScan, ScannedFile};
@@ -307,7 +307,7 @@ pub(super) fn rule_fixture() -> RulePage {
         code_scan: Some(CodeScan {
             commit: Some(SCAN_COMMIT.to_string()),
         }),
-        rule_function: Some(RuleFunction {
+        implementation: Some(ImplementationBinding {
             symbol: Some("suppress_zero_claim_items".to_string()),
             location: resolver.resolve_at("src/UseCase.php:153", Some(SCAN_COMMIT)),
         }),
@@ -315,7 +315,7 @@ pub(super) fn rule_fixture() -> RulePage {
             method: "examples".to_string(),
             symbol: Some("zero_claim_items_emit_no_lines".to_string()),
             location: resolver.resolve_at("tests/UseCaseTest.php:84", Some(SCAN_COMMIT)),
-            outside_defining_module: true,
+            outside_implementation_module: true,
         }],
         produced_by: vec![link(
             PageKind::Resolution,

@@ -138,13 +138,14 @@ and comment directives are unchanged. Typed declarations create the same
 canonical Rule records those bindings cite. A codebase may therefore keep a
 scanner-recognized implementation binding while tests use imported handles.
 
-The experiment exposed a semantic question rather than silently resolving
-it. The current domain glossary says a Rule is carried by its deciding
-function. A typed declaration can materialize a Rule record before any
-function binding exists. The wiki and coverage scan report that state
-honestly as unbound. Making typed claims first-class would require deciding
-whether this is a valid Rule, a draft Rule, or a requirement whose Rule is
-still unwritten. This POC does not change the glossary.
+The experiment resolved the semantic question it exposed. A Rule is an
+independent behavioural obligation, so a typed declaration may materialize a
+valid Rule before any production function realizes it. `#[rule]` and the
+equivalent language helpers bind a primary implementation; they do not define
+the Rule. A missing implementation is reported as Unimplemented. Existing
+Rule records, source-citation fields, decorators, attributes, and scanner
+patterns keep their shape, so retrofit and typed authoring target the same
+canonical model without a data migration.
 
 ## Answers from the POC
 
@@ -167,6 +168,6 @@ still unwritten. This POC does not change the glossary.
    desired state; begin a verification; run a language callback; complete the
    verification. No operation depends on a TypeScript-only runtime concept.
 
-The next decision is whether the authoring and navigation gain justifies
-resolving the Rule semantic question and integrating runtime evidence into
-coverage/wiki views. More languages are not the next task.
+The next decision is how durable verification relationships and runtime
+evidence should join coverage, stale detection, and wiki views. More languages
+are not the next task.

@@ -115,7 +115,7 @@ Worked example — anchor: *"Provenance docs shareable via short-lived link"*; q
 
 - a **Resolution**: "7-day default, configurable ceiling" — position + rationale;
 - which **produces** a **Rule**: "share links MUST expire ≤ 30 days" (severity: high),
-  carried in code by the function that decides a link's expiry, marked
+  later bound to its primary production implementation with
   `#[rule("rule_share_link_expiry")]`;
 - and **spawns** a **Requirement**: "expiry configuration";
 - and **graduates fog**: "access auditing" is now statable as a question
@@ -220,10 +220,14 @@ material claims may carry `0.0`-`1.0` confidence scores. Its output becomes cons
 context and surfaces for disposition only when later work enters its explicit territory,
 apart from small contested or conflicting sets that already block a decision.
 
-## Rules are code
+## Rules and their implementations
 
-A rule is not a note filed next to the code. It is the code: the function that decides
-the thing the rule states, marked with the rule's id.
+A Rule is an identified atomic behavioural obligation that refines a Requirement. A
+Resolution may produce it, but is not required. The Rule can exist before production
+code realizes it or evidence verifies it.
+
+`#[rule]` binds the Rule's primary production implementation. It keeps the relationship
+next to the code without making the function the Rule itself:
 
 ```rust
 #[rule("rule_prov_edge_endpoint_table")]
@@ -232,18 +236,18 @@ pub fn validate_edge_endpoint(
     from: NodeType,
     to: NodeType,
 ) -> Result<(), EdgeValidationError> {
-    // the decision, in one place
+    // the primary implementation, in one place
 }
 ```
 
-Sometimes there is no function to mark, because a type already does the work: a value
-that cannot be built wrong needs no check at the call sites. Then the type carries the
-rule and its construction is the proof.
+Sometimes a type is the primary implementation: a value that cannot be built wrong
+needs no check at the call sites. Construction can also be the evidence method.
 
-The marker is a compiled symbol, not a comment. It moves when the function moves, it
-dies when the function is deleted, and the id it cites can be checked against the graph.
+The marker is a compiled symbol, not a comment. It moves when the implementation moves,
+it dies when the implementation is deleted, and the id it cites can be checked against
+the graph. One Rule may have at most one such primary implementation for now.
 
-Tests say that a rule holds and how it was shown:
+Tests bind evidence to a Rule and say how it was shown:
 
 ```rust
 #[test]
@@ -273,9 +277,11 @@ The scan reads both:
 provenance coverage scan --path . --scope default --validate-rules
 ```
 
-`--validate-rules` loads the scope's rules, so a marker citing an id no rule has is
-reported, and so is every active rule with no verification anywhere. Unverified is not a
-field anyone writes. It is absence, worked out at scan time and thrown away after.
+`--validate-rules` loads the scope's Rules, so a binding citing an id no Rule has is
+reported, and so are active Rules with no implementation or no verification anywhere.
+Unimplemented and Unverified are not fields anyone writes. They are absence, worked out
+at scan time and thrown away after. A verification binding needs a known Rule, not an
+implementation binding.
 
 How hard that lands is a per-repo dial. Plain, the scan reports and succeeds. With
 `--strict` it exits non-zero on any warning, so a repo that wants every active rule
@@ -289,13 +295,15 @@ exact matrix. `@provenance` comments remain the universal floor. Comments can dr
 the function they sit above, so they are the weaker tier and scan alongside native
 bindings.
 
-Rules follow decisions, not code shape. A rule exists because a human decided something,
-and the marked function is where that decision runs. Do not mint one rule per function,
-and do not split one decision across five rules because the match has five arms.
+Rules follow behavioural obligations, not code shape. Do not mint one Rule per function,
+and do not split one obligation across five Rules because the match has five arms. An
+unimplemented Rule remains useful: it says precisely what production code still needs to
+realize.
 
 ## Beyond "shaped"
 
 Shape Up ends at the bet; wayfinder ends at "the way is clear." This loop continues:
-resolutions produce rules, each rule is a marked function, the tests that verify it say
-how, and the scan names every active rule still without one. Fog to working code, one
-graph.
+requirements are refined into Rules, resolutions record decisions that produce Rules,
+implementation bindings name where production code realizes them, tests say how they
+were verified, and the scan names each active Rule still missing either relationship.
+Fog to working code, one graph.

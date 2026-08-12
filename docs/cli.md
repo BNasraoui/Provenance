@@ -38,9 +38,10 @@ identity rules, limits, and experiment results.
 
 ## Rule coverage
 
-A rule's record names it; the code that carries the rule names it back. In Rust that is
-`#[rule("rule_id")]` on the function that decides the thing the rule states, and
-`#[verifies("rule_id", method)]` on each test that verifies it. The methods are
+A Rule's record states the behavioural obligation; code bindings name the Rule back. In
+Rust, `#[rule("rule_id")]` marks its primary production implementation, and
+`#[verifies("rule_id", method)]` marks evidence. A Rule may exist before either binding.
+The methods are
 `exhaustion`, `property`, `examples`, `conformance`, `construction`, and `proof`. A
 marked type uses `construction`, because building the value is the proof. A test whose
 expected values come from a machine-checked model (a Lean theorem, for example) uses
@@ -55,9 +56,16 @@ provenance coverage scan --path . --baseline coverage.json --validate-rules --fo
 ```
 
 Without `--validate-rules` the scan only reports what it found in the tree. With it, the
-scan loads the scope's rules and warns twice over: a marker citing an id no rule has, and
-an active rule with no verification site anywhere. That second state is derived at scan
-time and never stored, so no shard can disagree with the code.
+scan loads the scope's Rules and warns about a binding that cites an unknown Rule, a
+second primary implementation for one Rule, and an active Rule with no implementation
+or verification site anywhere. Verification needs a known Rule, not an implementation
+binding. Unimplemented and Unverified are derived at scan time and never stored, so no
+shard can disagree with the code.
+
+The scan derives those absence findings only when `--path` names the repository root.
+A narrower scan still validates every binding it encounters, including unknown Rule ids
+and duplicate primary implementations, but it cannot claim that a binding is absent from
+the rest of the repository.
 
 `--strict` exits non-zero when the report holds any warning; the report still prints
 first. That is the dial each repository sets for itself: strict in CI once a repository
@@ -107,7 +115,7 @@ agent work, requirement extraction, or state write.
 
 The scanner is line-oriented. Its native binding patterns and current limits are:
 
-| Language | Rule function binding | Verification binding | Recognition grade |
+| Language | Primary implementation binding | Verification binding | Recognition grade |
 | --- | --- | --- | --- |
 | Rust | `#[rule("id")]` | `#[verifies("id", method)]` | Binding-grade for both |
 | TypeScript | `const name = rule("id", fn)` | `verifies("id", "method")` inside a named function or function-valued `const` | Binding-grade for both |
@@ -123,8 +131,9 @@ identity-helper implementations and their exact constraints are in
 `packages/provenance-rules-js/`.
 
 The scanner matches by shape, not by what the name resolves to: a call to anything named
-`rule` with a quoted string id can bind, even when it is not the identity helper. Ids that
-match no rule then show up as warnings under `--validate-rules`.
+`rule` with a quoted string id can bind a primary implementation, even when it is not the
+identity helper. Ids that match no Rule then show up as warnings under
+`--validate-rules`.
 
 The universal floor in every language remains the comment channel:
 `@provenance rule: <rule-id>` immediately above the function. Add
@@ -327,4 +336,4 @@ returns only the edges it crossed, not the whole scope.
 
 Shaping turn-state commands: `questions create` requires `--method` (grill, prototype, research, verify, or task); `topics claim/release/close` and `questions claim/release/answer` manage claim state (claiming an already-claimed item fails and reports the holder; closing a topic or answering a question clears its claim); `requirements fog set/show/clear` manages the deliberately unstructured fog text on an anchor requirement.
 
-Creation commands accept enriched v1 metadata for cloud-imported projects. Examples: `sources create --source-type legislation --reference "Department guidance" --commit-pin 5e1f2a9c4b6d8e0f1234567890abcdef12345678 --effective-date 1714521600000 --review-date 1717200000000 --superseded-by source_2025`, `requirements create --status discovery --description "Research note" --domain-id domain_policy`, `resolutions create --status draft --confidence 0.9 --context "Code scan" --input-type regulatory --input-reference "Program manual" --input-summary "Reviewed rules" --made-by "Analyst" --approved-by "Approver" --approved-at 1714780800000 --superseded-by res_2025`, `rules create --status draft --source-document crates/provenance-core/src/edge_validation.rs --source-section validate_edge_endpoint` (the source section is the bare name of the marked function or type, not a line range), and `proposals create --confidence 0.83`. Confidence values must be between `0.0` and `1.0`; source commit pins must be 7-64 hexadecimal characters.
+Creation commands accept enriched v1 metadata for cloud-imported projects. Examples: `sources create --source-type legislation --reference "Department guidance" --commit-pin 5e1f2a9c4b6d8e0f1234567890abcdef12345678 --effective-date 1714521600000 --review-date 1717200000000 --superseded-by source_2025`, `requirements create --status discovery --description "Research note" --domain-id domain_policy`, `resolutions create --status draft --confidence 0.9 --context "Code scan" --input-type regulatory --input-reference "Program manual" --input-summary "Reviewed rules" --made-by "Analyst" --approved-by "Approver" --approved-at 1714780800000 --superseded-by res_2025`, `rules create --status draft --source-document docs/policy.md --source-section "Expiry limits"` (these fields are citations, not implementation bindings), and `proposals create --confidence 0.83`. Confidence values must be between `0.0` and `1.0`; source commit pins must be 7-64 hexadecimal characters.

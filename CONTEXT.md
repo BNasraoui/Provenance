@@ -4,21 +4,37 @@
 
 A reader-facing taxonomy classification for requirements. A derived rule belongs to each Domain of its upstream requirements through the canonical graph relationships.
 
+## Requirement
+
+A higher-level obligation the system must satisfy. Requirements are refined into Rules.
+
+## Resolution
+
+A recorded decision that removes ambiguity. A Resolution may produce a Rule when the decision establishes a precise behavioural obligation.
+
 ## Rule
 
-A statement produced by a decision, carried in code by the function that decides it. The function is bound to the rule's graph record by a `#[rule("rule_id")]` marker. Where a type makes the violating value unbuildable, the type carries the rule instead and its construction is the proof.
+An identified atomic behavioural obligation that refines a Requirement and may also be produced by a Resolution. A Rule can exist before any Implementation binding or Verification.
+
+## Implementation binding
+
+A relationship from a Rule to production code that realizes it. A Rule without an Implementation binding is unimplemented, but remains a Rule.
 
 ## Verification
 
-Evidence that a rule holds, carried by a `#[verifies("rule_id", method)]` marker on a test or a type. The method is one of `exhaustion`, `property`, `examples`, `conformance`, `construction`, or `proof`. Exhaustion over a finite domain is proof, not a sample; `proof` names a machine-checked proof outside the test runner, bridged by the marked site.
+Evidence supporting belief that a Rule holds. A Rule can have no Verification; this absence is Unverified rather than a different kind of Rule.
 
 ## Enforcement
 
 The live path: the running code that rejects a violation. Verification is evidence about that code; enforcement is the code itself.
 
+## Unimplemented
+
+An active Rule with no Implementation binding. It is absence, not canonical graph state.
+
 ## Unverified
 
-An active rule with no verification marker anywhere in the scanned tree. It is absence, not a stored field: `provenance coverage scan --path . --validate-rules` derives it at scan time and reports it, and no shard records it.
+An active Rule with no Verification in a complete repository scan. It is absence, not canonical graph state.
 
 ## Evidence site
 

@@ -155,15 +155,14 @@ shaping-focused subset of the computed graph frontier includes:
 - requirements with neither a valid source reference nor a valid `references` edge;
 - unresolved `contradicts` pairs;
 - resolved requirements (including those with a resolving resolution) with no downstream
-  rule, and approved resolutions with no produced rule;
+  Rule;
 - open or `blocked_on_human` questions and open topics.
 
-A no-downstream-rule gap is a **question about the code**, not an instruction to write a
-record. A rule is a function; the gap is asking *what function decides this?* If one
-exists, land the pair (record plus binding, below). If none does, the decision is a
-requirement whose rule is unwritten — an ordinary state, not a defect. Leave it, or raise
-a question about who writes the function. Closing the gap with a rule record no function
-carries makes the frontier lie: the gap disappears and nothing decides anything.
+A no-downstream-Rule gap is a question about the obligation, not an instruction to write
+a record. Ask what atomic behavioural obligation refines the Requirement. Land a Rule
+only when that obligation is precise; whether production code implements it is a
+separate question. An unimplemented Rule is an ordinary state and should remain visible
+as such rather than being replaced by a vague Rule merely to close the gap.
 
 Proposals are not part of the computed graph frontier and are not a batch-review inbox.
 Claiming a topic atomically consults and returns undisposed `proposed` and `asserted`
@@ -246,39 +245,37 @@ provenance questions answer --scope <scope> \
 
 Only create the artifacts the answer actually implies. If it only answers the question,
 `questions answer` is enough. If it implies a requirement, boundary, contradiction, or
-source gap, land that too before continuing. If it implies a rule, land it as a pair —
-next.
+source gap, land that too before continuing. If it implies a Rule, land the Rule and any
+known bindings—next.
 
-##### Landing a rule: land the pair
+##### Landing a Rule and its bindings
 
-A rule is a function — or a type whose construction is the proof. The record and the
-function are one artifact in two places, so land both in the same turn or land neither.
-**Do not mint an unbound rule.** A rule id no function carries is a promise nothing keeps:
-the scanner cannot check it, the next agent cannot find it, and the graph reads as decided
-when the code decides nothing. If the answer decides something no function decides yet, it
-is a requirement whose rule is unwritten. Say so and move on.
+A Rule is an identified atomic behavioural obligation refining a Requirement. A
+Resolution may produce it. The Rule may exist before production code implements it or
+evidence verifies it; those absences are Unimplemented and Unverified, not reasons to
+change the artifact's kind.
 
-1. **The record.** The statement names what the function decides, in one clause. The
-   locator is the binding: `--source-document` is the file, `--source-section` is the bare
-   symbol — never a line range, which is stale by the next commit.
+1. **The record.** The statement names the precise behavioural obligation in one clause.
+   `--source-document` and `--source-section` may cite the source behind the Rule; they
+   never count as an implementation binding. Bind known implementation through a
+   scanner-recognized attribute, helper, decorator, or comment.
 
    ```sh
    provenance rules create --scope <scope> \
      --id rule_<stable_slug> \
      --requirement-id <anchor_requirement_id> \
      --resolution-id res_<stable_slug> \
-     --statement "<what the function decides, in one clause>" \
+     --statement "<atomic behavioural obligation, in one clause>" \
      --severity high \
-     --source-document <path/to/file.rs> \
-     --source-section <bare_symbol> \
      --format json
    ```
 
-2. **The binding, in the code.** `#[rule("<id>")]` sits on the one function that decides;
-   exactly one function may carry an id. `#[verifies("<id>", <method>)]` sits on whatever
-   proves it — `exhaustion`, `property`, `examples`, `conformance`, `construction`, or
-   `proof`. `construction` goes on the type whose construction is the proof, not on a
-   test.
+2. **The bindings, when they exist.** `#[rule("<id>")]` sits on the primary production
+   implementation; at most one function or type may carry an id for now.
+   `#[verifies("<id>", <method>)]` sits on the evidence—`exhaustion`, `property`,
+   `examples`, `conformance`, `construction`, or `proof`. `construction` goes on the type
+   whose construction is the evidence, not on a test. Verification binds to the known
+   Rule and does not require an implementation binding.
 
    ```rust
    #[rule("rule_<stable_slug>")]
@@ -289,18 +286,18 @@ is a requirement whose rule is unwritten. Say so and move on.
    fn <bare_symbol>_holds_over_every_input() { ... }
    ```
 
-3. **The check.** The scan is what tells you the pair landed. It reports an unknown rule
-   id, a second function claiming one id, a `#[verifies]` with no `#[rule]` to verify, and
-   an active rule with no verification anywhere.
+3. **The check.** The scan reports a binding that cites an unknown Rule, a second primary
+   implementation claiming one id, and active Rules with no implementation or no
+   verification anywhere.
 
    ```sh
    provenance coverage scan --path . --scope <scope> --validate-rules --format json
    ```
 
-Unverified is **absence**, derived by that scan and never written into the record. How
-loudly a repo treats absence is its own dial: `--strict` makes any warning fail the
-command, and a repo that runs the scan without it is reporting, not gating. Neither
-setting is a reason to write a test that asserts nothing.
+Unimplemented and Unverified are **absence**, derived by that scan and never written into
+the record. How loudly a repo treats absence is its own dial: `--strict` makes any warning
+fail the command, and a repo that runs the scan without it is reporting, not gating.
+Neither setting is a reason to write a test that asserts nothing.
 
 #### `prototype`
 
@@ -309,9 +306,9 @@ Use the `provenance-fork-tournament` skill. This is two-phase work:
 1. Phase 1 spawns stance-based agents and lands proposals/contributions/synthesis.
 2. Mark the question `blocked-on-human` and stop the session.
 3. Phase 2 presents proposals, extracts reactions, lands the resolution, disposes of
-   proposals with dispositions, spawns the requirements the direction implies, then
-   continues or hands off. A tournament settles direction, and direction rarely has a
-   function yet — expect no rule out of it.
+   proposals with dispositions, spawns the requirements and Rules the direction actually
+   implies, then continues or hands off. A tournament often settles direction above the
+   atomic behavioural level, so do not assume it yields a Rule.
 
 Do not present the artifacts in the same session that created them.
 
@@ -404,9 +401,9 @@ Before moving to the next question, verify the current answer has been handled:
 
 - thread message records the relevant dialogue;
 - resolution records the accepted decision, if there is one;
-- a decision some function already decides is landed as a pair — rule record plus
-  `#[rule]`/`#[verifies]` binding — and `coverage scan --validate-rules` is clean for it; a
-  decision no function decides stays a requirement, with no rule record minted;
+- each precise atomic behavioural obligation is landed as a Rule; any known primary
+  implementation and evidence carry `#[rule]` and `#[verifies]` bindings, and
+  `coverage scan --validate-rules` reports any remaining absence honestly;
 - spawned requirements are created and linked with `spawns` or `refines_into` edges;
 - boundaries/out-of-scope rejections are explicit;
 - source references and evidence are attached where they exist;

@@ -2,7 +2,9 @@
 
 The scanner remains line-oriented rather than parsing each language's syntax
 tree. These helpers are intentionally inert: they keep a rule id next to the
-deciding function without introducing a registry or changing the function.
+Rule's primary production implementation without introducing a registry or
+changing the function. The binding does not define the Rule; a Rule may exist
+before any implementation is bound to it.
 JavaScript and TypeScript can use the source package in
 `packages/provenance-rules-js/`. The snippets below are small enough to keep in
 an application's own support module.
@@ -85,5 +87,5 @@ def test_overtime_examples() -> None:
 ```
 
 Comments are portable but can drift away from the symbol. Prefer a recognized
-native binding for the rule function, and use comments only for the gaps named
-above.
+native binding for the primary implementation, and use comments only for the
+gaps named above.

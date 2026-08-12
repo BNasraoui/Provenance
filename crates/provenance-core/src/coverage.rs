@@ -117,6 +117,8 @@ pub struct AnnotationResult {
     pub coverage: String,
     pub confidence: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub anchor: Option<EvidenceAnchor>,
     #[serde(default)]
     pub anchor_state: AnchorState,
@@ -127,8 +129,8 @@ pub struct AnnotationResult {
 }
 
 /// A `#[rule]` or `#[verifies]` attribute site. `verification` is `None` for
-/// a `#[rule]` site (the item is the rule) and the method word for a
-/// `#[verifies]` site.
+/// a primary implementation binding and the method word for a verification
+/// binding.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct BindingResult {
     pub rule_id: String,
@@ -216,6 +218,7 @@ mod tests {
                 function_name: Some("pays_overtime".into()),
                 coverage: "full".into(),
                 confidence: 1.0,
+                verification: None,
                 anchor: None,
                 anchor_state: AnchorState::Unchanged,
                 original_line: None,
@@ -226,5 +229,22 @@ mod tests {
         );
 
         assert_eq!(report.total_annotations, 1);
+    }
+
+    #[test]
+    fn old_annotation_results_default_to_implementation_role() {
+        let annotation: AnnotationResult = serde_json::from_str(
+            r#"{
+                "rule_id": "rule_overtime",
+                "file_path": "src/payroll.rs",
+                "line": 4,
+                "function_name": "pays_overtime",
+                "coverage": "full",
+                "confidence": 1.0
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(annotation.verification, None);
     }
 }

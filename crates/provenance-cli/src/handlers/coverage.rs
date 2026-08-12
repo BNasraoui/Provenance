@@ -53,7 +53,7 @@ fn coverage_scan_against(
         ));
     }
     // Scanner warnings all come from a line the scan read, so each keeps its
-    // location. Unverified rules are joined on after, without one.
+    // location. Derived Rule findings are joined on after, without one.
     let mut warnings = parse_warnings(&scans);
     warnings.extend(scanner_warnings.into_iter().map(|warning| {
         provenance_core::coverage::ValidationWarning {
@@ -63,7 +63,8 @@ fn coverage_scan_against(
             message: warning.message,
         }
     }));
-    if validate_rules {
+    if validate_rules && scan_covers_repository(repo, path) {
+        warnings.extend(unimplemented_rule_warnings(&rules, &scans));
         warnings.extend(unverified_rule_warnings(&rules, &scans));
     }
     let annotations = scans
@@ -76,6 +77,10 @@ fn coverage_scan_against(
             function_name: location.function_name.clone(),
             coverage: location.annotation.coverage.to_string(),
             confidence: location.annotation.confidence,
+            verification: location
+                .annotation
+                .verification
+                .map(|method| method.to_string()),
             anchor: Some(location.anchor.clone()),
             anchor_state: provenance_core::coverage::AnchorState::New,
             original_line: None,
@@ -124,6 +129,11 @@ fn coverage_scan_against(
     Ok(report)
 }
 
+/// Partial scans validate encountered bindings but cannot claim that a Rule
+/// has no implementation or verification elsewhere in the repository.
+fn scan_covers_repository(repo: &camino::Utf8Path, path: &camino::Utf8Path) -> bool {
+    same_file::is_same_file(repo, path).unwrap_or(false)
+}
 /// What the parser complained about while reading the files: the legacy
 /// Statesman marker, a directive with no `key: value`, a confidence
 /// outside the range, an unknown field.
@@ -194,6 +204,30 @@ fn unverified_rule_warnings(
         .collect()
 }
 
+/// An active Rule with no scanned primary implementation site is
+/// unimplemented. A verification site and a persisted source citation do not
+/// count: evidence, source material, and implementation are distinct.
+fn unimplemented_rule_warnings(
+    rules: &[provenance_core::Rule],
+    scans: &[provenance_scanner::FileScan],
+) -> Vec<provenance_core::coverage::ValidationWarning> {
+    let scanned_implementations = provenance_scanner::source_sites(scans)
+        .filter(|site| site.role() == provenance_scanner::SourceSiteRole::Implementation)
+        .map(|site| site.rule_id().to_string())
+        .collect::<BTreeSet<_>>();
+    rules
+        .iter()
+        .filter(|rule| rule.status == provenance_core::RuleStatus::Active)
+        .filter(|rule| !scanned_implementations.contains(rule.id.as_str()))
+        .map(|rule| provenance_core::coverage::ValidationWarning {
+            rule_id: rule.id.as_str().to_string(),
+            file_path: None,
+            line: None,
+            message: format!("active rule `{}` has no implementation", rule.id.as_str()),
+        })
+        .collect()
+}
+
 pub(super) fn current_git_commit(repo: &camino::Utf8Path) -> anyhow::Result<String> {
     let output = std::process::Command::new("git")
         .args(["rev-parse", "HEAD"])
@@ -236,16 +270,16 @@ fn scan_commit(repo: &camino::Utf8Path, scans: &[provenance_scanner::FileScan]) 
 }
 
 /// Said of a verification site that lives in a different file from the
-/// `#[rule]` attribute it checks.
-const OUTSIDE_DEFINING_MODULE: &str = " (outside defining module)";
+/// primary implementation binding it checks.
+const OUTSIDE_IMPLEMENTATION_MODULE: &str = " (outside implementation module)";
 
-/// Where each rule is defined: the file holding its `#[rule]` site, which the
-/// scanner reports as a binding with no verification method.
+/// Where each rule is implemented: the file holding its native or portable
+/// binding with no verification method.
 ///
 /// A rule with no `#[rule]` site in the scanned tree is absent from the map,
 /// and its verification sites are then left unannotated. Nothing is known
 /// about where it belongs, so nothing is claimed.
-fn defining_modules(
+fn implementation_modules(
     report: &provenance_core::coverage::CoverageReport,
 ) -> BTreeMap<&str, &camino::Utf8Path> {
     report
@@ -256,22 +290,34 @@ fn defining_modules(
                 && binding.anchor_state != provenance_core::coverage::AnchorState::Gone
         })
         .map(|binding| (binding.rule_id.as_str(), binding.file_path.as_path()))
+        .chain(
+            report
+                .annotations
+                .iter()
+                .filter(|site| {
+                    site.verification.is_none()
+                        && site.anchor_state != provenance_core::coverage::AnchorState::Gone
+                })
+                .map(|site| (site.rule_id.as_str(), site.file_path.as_path())),
+        )
         .collect()
 }
 
-/// Whether this site checks a rule defined somewhere else.
+/// Whether this site checks a rule implemented somewhere else.
 ///
 /// This is what a change author wants out of the report: the sites that lean
-/// on the rule from outside the module that owns it, which is where a change
-/// to the rule breaks somebody else's tests.
-fn is_outside_defining_module(
-    binding: &provenance_core::coverage::BindingResult,
-    defining_modules: &BTreeMap<&str, &camino::Utf8Path>,
+/// on the implementation from another module, which is where a change to the
+/// implementation breaks somebody else's tests.
+fn is_outside_implementation_module(
+    rule_id: &str,
+    file_path: &camino::Utf8Path,
+    is_verification: bool,
+    implementation_modules: &BTreeMap<&str, &camino::Utf8Path>,
 ) -> bool {
-    binding.verification.is_some()
-        && defining_modules
-            .get(binding.rule_id.as_str())
-            .is_some_and(|defining| *defining != binding.file_path.as_path())
+    is_verification
+        && implementation_modules
+            .get(rule_id)
+            .is_some_and(|implementation| *implementation != file_path)
 }
 
 /// The rule a warning is about, ready to sit after the word `Warning`.
@@ -314,25 +360,45 @@ pub(super) fn render_coverage(
         writeln!(out, "- Files scanned: {}", report.files_scanned)?;
         writeln!(out, "- Total annotations: {}", report.total_annotations)?;
         writeln!(out, "- Warnings: {}\n", report.warnings.len())?;
+        let implementation_modules = implementation_modules(report);
         for annotation in &report.annotations {
+            let relation = annotation.verification.as_ref().map_or_else(
+                || "is implemented".to_string(),
+                |method| format!("verified by {method}"),
+            );
             writeln!(
                 out,
-                "- `{}` in `{}`:{} ({}){}",
+                "- `{}` {} at `{}`:{}{} ({}){}{}",
                 annotation.rule_id,
+                relation,
                 annotation.file_path,
                 annotation.line,
+                annotation
+                    .function_name
+                    .as_deref()
+                    .map(|name| format!(" ({name})"))
+                    .unwrap_or_default(),
                 annotation.coverage,
                 anchor_state(
                     annotation.anchor_state,
                     annotation.original_line,
                     annotation.original_file_path.as_deref()
-                )
+                ),
+                if is_outside_implementation_module(
+                    &annotation.rule_id,
+                    &annotation.file_path,
+                    annotation.verification.is_some(),
+                    &implementation_modules,
+                ) {
+                    OUTSIDE_IMPLEMENTATION_MODULE
+                } else {
+                    ""
+                }
             )?;
         }
-        let defining_modules = defining_modules(report);
         for binding in &report.bindings {
             let relation = binding.verification.as_ref().map_or_else(
-                || "is the rule".to_string(),
+                || "is implemented".to_string(),
                 |method| format!("verified by {method}"),
             );
             writeln!(
@@ -352,8 +418,13 @@ pub(super) fn render_coverage(
                     binding.original_line,
                     binding.original_file_path.as_deref()
                 ),
-                if is_outside_defining_module(binding, &defining_modules) {
-                    OUTSIDE_DEFINING_MODULE
+                if is_outside_implementation_module(
+                    &binding.rule_id,
+                    &binding.file_path,
+                    binding.verification.is_some(),
+                    &implementation_modules,
+                ) {
+                    OUTSIDE_IMPLEMENTATION_MODULE
                 } else {
                     ""
                 }
@@ -414,6 +485,9 @@ pub(super) fn handle(command: CoverageCommand) -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod git_tests;
+
+#[cfg(test)]
+mod implementation_tests;
 
 #[cfg(test)]
 mod parse_warning_tests;

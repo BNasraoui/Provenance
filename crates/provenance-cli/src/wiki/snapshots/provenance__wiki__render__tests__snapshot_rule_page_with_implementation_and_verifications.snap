@@ -67,13 +67,13 @@ expression: "render_rule(\"default\", &rule_fixture())"
 <p class="prose">No invoice lines shall be emitted for fully zero claim items.</p>
 </section>
 <section>
-<h2 class="section-head sh-rule">Rule Function</h2>
+<h2 class="section-head sh-rule">Implementation</h2>
 <p class="code-site"><code>suppress_zero_claim_items</code><span class="site-separator"> — </span><a href="https://github.com/exampleorg/ex-api/blob/9f2c1ab4e5f6/src/UseCase.php#L153">src/UseCase.php:153</a><span class="local-snippet"><br><span class="snippet-label">Local snippet · src/UseCase.php:153</span><br><code>source line 153</code></span></p>
 </section>
 <section>
 <h2 class="section-head sh-rule"><svg class="icon"><use href="#i-check-circle"/></svg>Verification</h2>
 <ul class="verification-list">
-<li><span class="verification-method">examples</span> <code>zero_claim_items_emit_no_lines</code><span class="site-separator"> — </span><a href="https://github.com/exampleorg/ex-api/blob/9f2c1ab4e5f6/tests/UseCaseTest.php#L84">tests/UseCaseTest.php:84</a> <span class="site-note">outside defining module</span></li>
+<li><span class="verification-method">examples</span> <code>zero_claim_items_emit_no_lines</code><span class="site-separator"> — </span><a href="https://github.com/exampleorg/ex-api/blob/9f2c1ab4e5f6/tests/UseCaseTest.php#L84">tests/UseCaseTest.php:84</a> <span class="site-note">outside implementation module</span></li>
 </ul>
 <p class="scan-note">Code scan at commit <code>9f2c1ab</code></p>
 </section>
