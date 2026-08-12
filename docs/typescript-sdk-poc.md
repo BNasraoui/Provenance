@@ -36,7 +36,9 @@ export const { expiry, sharing } = spec.handles;
 
 An explicit entry point calls `apply(spec)`. Importing the declaration module
 only constructs and freezes values in memory. Tests import `expiry` and call
-`expiry.verify(callback)`. The callback never crosses the process seam. Node
+`expiry.verify("share-link-expiry", callback)`. The local key gives the durable
+Verification binding a stable identity; the Rule itself remains a real typed
+reference. The callback never crosses the process seam. Node
 runs it between Rust-backed begin and complete commands. On failure, the SDK
 sends a serialized error and rethrows the exact value caught from the callback.
 
@@ -151,7 +153,9 @@ canonical model without a data migration.
 
 ## Answers from the POC
 
-1. `expiry.verify()` is more natural than a repeated string marker for tests.
+1. `expiry.verify("local-key", callback)` is more natural than a repeated Rule
+   ID marker for tests. The string identifies the test relationship, not the
+   Rule. The imported Rule handle provides that referential integrity.
    Imports, rename, autocomplete, navigation, and find-references all work in
    the TypeScript toolchain. The explicit `defineSpec` / `apply(spec)` split is
    also easier to reason about than persistence triggered by module import or

@@ -54,7 +54,6 @@ export interface RuleOptions {
 }
 
 export interface VerifyOptions {
-  key: string;
   method?: VerificationMethod;
   file?: string;
   symbol?: string;
@@ -74,7 +73,11 @@ export interface RequirementHandle {
 export interface RuleHandle {
   readonly key: string;
   readonly id: string;
-  verify(callback: () => unknown | Promise<unknown>, options: VerifyOptions): Promise<void>;
+  verify(
+    key: string,
+    callback: () => unknown | Promise<unknown>,
+    options?: VerifyOptions,
+  ): Promise<void>;
 }
 
 export type { ApplyResult } from "./protocol.js";
@@ -192,14 +195,15 @@ class Requirement extends DeclaredHandle implements RequirementHandle {
 
 class Rule extends DeclaredHandle implements RuleHandle {
   async verify(
+    key: string,
     callback: () => unknown | Promise<unknown>,
-    options: VerifyOptions,
+    options: VerifyOptions = {},
   ): Promise<void> {
     const location = options.file === undefined ? callerLocation() : undefined;
     if (registry.dirty) {
       await apply();
     }
-    await runVerification({ rule: this.id }, callback, options, location);
+    await runVerification({ rule: this.id }, key, callback, options, location);
   }
 }
 
@@ -217,12 +221,14 @@ async function complete(
 
 async function verifyDeclaration(
   address: DeclarationAddress,
+  key: string,
   callback: () => unknown | Promise<unknown>,
-  options: VerifyOptions,
+  options: VerifyOptions = {},
 ): Promise<void> {
   const location = options.file === undefined ? callerLocation() : undefined;
   await runVerification(
     { declaration: { declared_by: settings.owner, address } },
+    key,
     callback,
     options,
     location,
@@ -235,6 +241,7 @@ type VerificationTarget =
 
 async function runVerification(
   target: VerificationTarget,
+  key: string,
   callback: () => unknown | Promise<unknown>,
   options: VerifyOptions,
   location?: { file: string },
@@ -244,7 +251,7 @@ async function runVerification(
     "begin-verification",
     {
       ...target,
-      key: options.key,
+      key,
       method: options.method ?? "examples",
       declared_by: settings.verificationOwner,
       file: options.file ?? location?.file,

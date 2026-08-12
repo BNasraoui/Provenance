@@ -124,14 +124,13 @@ test("verify sends the same durable binding key on repeated runs", async () => {
     };
   });
   const options = {
-    key: "share-link-expiry",
     method: "examples",
     file: "src/share-links.test.ts",
     symbol: "checkExpiry",
   } as const;
 
-  await spec.handles.expiry.verify(() => undefined, options);
-  await spec.handles.expiry.verify(() => undefined, options);
+  await spec.handles.expiry.verify("share-link-expiry", () => undefined, options);
+  await spec.handles.expiry.verify("share-link-expiry", () => undefined, options);
 
   const begins = recorder.requests().filter(({ command }) => command === "begin-verification");
   assert.equal(begins.length, 2);
@@ -175,12 +174,10 @@ test("verify sends distinct durable binding keys from one test file", async () =
     };
   });
 
-  await spec.handles.expiry.verify(() => undefined, {
-    key: "maximum-expiry",
+  await spec.handles.expiry.verify("maximum-expiry", () => undefined, {
     file: "src/share-links.test.ts",
   });
-  await spec.handles.expiry.verify(() => undefined, {
-    key: "expired-link",
+  await spec.handles.expiry.verify("expired-link", () => undefined, {
     file: "src/share-links.test.ts",
   });
 
@@ -301,10 +298,11 @@ test("immutable rule handles verify through an applied declaration address", asy
 
   await assert.rejects(
     spec.handles.expiry.verify(
+      "share-link-expiry",
       () => {
         called = true;
       },
-      { key: "share-link-expiry", file: "tests/share-links.test.ts" },
+      { file: "tests/share-links.test.ts" },
     ),
     /has not been applied/i,
   );
@@ -313,10 +311,11 @@ test("immutable rule handles verify through an applied declaration address", asy
 
   await apply(spec);
   await spec.handles.expiry.verify(
+    "share-link-expiry",
     () => {
       called = true;
     },
-    { key: "share-link-expiry", file: "tests/share-links.test.ts" },
+    { file: "tests/share-links.test.ts" },
   );
 
   assert.equal(called, true);
@@ -362,10 +361,11 @@ test("verify records a passed Node callback against the imported rule", async ()
 
   let called = false;
   await expiry.verify(
+    "share-link-expiry",
     () => {
       called = true;
     },
-    { key: "share-link-expiry", file: "tests/share-links.test.ts" },
+    { file: "tests/share-links.test.ts" },
   );
 
   assert.equal(called, true);
@@ -390,10 +390,11 @@ test("verify records a failed callback and rethrows the original error", async (
 
   await assert.rejects(
     expiry.verify(
+      "share-link-expiry",
       async () => {
         throw failure;
       },
-      { key: "share-link-expiry", file: "tests/share-links.test.ts" },
+      { file: "tests/share-links.test.ts" },
     ),
     (error) => error === failure,
   );
