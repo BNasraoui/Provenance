@@ -283,7 +283,9 @@ function document(session: ConstructionSession): DesiredSpecDocument {
     id: requirement.options.id,
     statement: requirement.options.statement,
     description: requirement.options.description,
-    sources: (requirement.options.sources ?? []).map((source) => source.key),
+    sources: (requirement.options.sources ?? [])
+      .map((source) => source.key)
+      .sort((left, right) => left.localeCompare(right)),
   }));
   const rules = session.rules.map<RuleDeclaration>((rule) => ({
     key: rule.key,

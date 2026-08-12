@@ -262,6 +262,38 @@ test("typed declarations reconcile to canonical Provenance records", async () =>
   assert.equal(rule.declared_by, "spec://typescript/share-links");
 });
 
+test("requirement source order stays unchanged after apply", async () => {
+  const repo = repository();
+  configure({ engine, repository: repo, owner: "spec://typescript/source-order" });
+  const spec = defineSpec("source-order", ({ source, requirement }) => {
+    const policy = source("z-policy", {
+      kind: "document",
+      name: "Policy",
+      reference: "docs/policy.md",
+    });
+    const design = source("a-design", {
+      kind: "document",
+      name: "Design",
+      reference: "docs/design.md",
+    });
+    const behavior = requirement("behavior", {
+      statement: "The behavior follows its accepted sources",
+      sources: [policy, design],
+    });
+    return {
+      behavior: behavior.rule("observable", {
+        statement: "The accepted behavior remains observable",
+      }),
+    };
+  });
+
+  await apply(spec);
+  const result = await plan(spec);
+
+  assert.equal(result.updated, 0);
+  assert.equal(result.unchanged, 4);
+});
+
 test("equal local rule keys under different requirements reconcile separately", async () => {
   const repo = repository();
   configure({
