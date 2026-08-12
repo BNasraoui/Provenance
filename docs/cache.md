@@ -7,3 +7,8 @@ Materialization runs the same lifecycle aggregate validator used by direct write
 landing, import, and `check` before clearing or loading cache tables. It copies canonical state
 under the repository publication lock, then loads that coherent snapshot without holding a
 synchronous filesystem lock across asynchronous SQLite work.
+
+Typed SDK verification runs are also derived cache data, stored as JSONL under
+`.provenance/cache/scopes/<scope>/verification-runs.jsonl`. They record local
+or CI callback outcomes without changing Git-tracked canonical state. They may
+be deleted with the rest of the cache; declarations in canonical state remain.

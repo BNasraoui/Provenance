@@ -369,3 +369,40 @@ fn verification_sites_are_reported_separately_from_rule_bindings() {
     assert_eq!(touched.len(), 1);
     assert_eq!(touched[0]["kind"], "verification");
 }
+
+#[test]
+fn comment_sites_use_implementation_and_verification_roles() {
+    let dir = init_repo();
+    create_rule(dir.path(), "rule_impl");
+    create_rule(dir.path(), "rule_verified");
+    write(
+        dir.path(),
+        "src/guards.rs",
+        "// @provenance rule: rule_impl\nfn guard() { reject(); }\n\n\
+         // @provenance rule: rule_verified\n\
+         // @provenance verification: examples\nfn rejects_examples() { assert_rejected(); }\n",
+    );
+    let base = commit(dir.path(), "base");
+    write(
+        dir.path(),
+        "src/guards.rs",
+        "// @provenance rule: rule_impl\nfn guard() { reject_loudly(); }\n\n\
+         // @provenance rule: rule_verified\n\
+         // @provenance verification: examples\nfn rejects_examples() { assert_all_rejected(); }\n",
+    );
+    let head = commit(dir.path(), "change comment-bound sites");
+
+    let report = stale_json(dir.path(), &[&base, &head]);
+    let sites = report["sites"].as_array().unwrap();
+    let implementation = sites
+        .iter()
+        .find(|site| site["subject_id"] == "rule_impl")
+        .unwrap();
+    let verification = sites
+        .iter()
+        .find(|site| site["subject_id"] == "rule_verified")
+        .unwrap();
+
+    assert_eq!(implementation["kind"], "rule_binding");
+    assert_eq!(verification["kind"], "verification");
+}

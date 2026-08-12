@@ -67,8 +67,8 @@ expression: "render_rule(\"default\", &page)"
 <p class="prose">No invoice lines shall be emitted for fully zero claim items.</p>
 </section>
 <section>
-<h2 class="section-head sh-rule">Rule Function</h2>
-<p class="empty-state">No function bound</p>
+<h2 class="section-head sh-rule">Implementation</h2>
+<p class="empty-state">No implementation bound</p>
 </section>
 <section>
 <h2 class="section-head sh-rule"><svg class="icon"><use href="#i-check-circle"/></svg>Verification</h2>

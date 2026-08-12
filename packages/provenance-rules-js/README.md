@@ -1,11 +1,13 @@
 # `@provenance/rules`
 
-Tiny identity helpers for binding Provenance rule records to JavaScript and
-TypeScript code. The declaration shape follows the same idea as Vercel Flags:
-wrap the deciding function where it is declared, keep its inferred callable
-type, and use the returned callable normally. `rule` returns the exact function
-object. `verifies` only marks the containing test and returns nothing. Neither
-helper registers global state or changes application behavior.
+Tiny identity helpers for binding Provenance Rule records to JavaScript and
+TypeScript code. A Rule is an independent behavioural obligation; `rule` marks
+its primary production implementation without defining the Rule. The
+declaration shape follows the same idea as Vercel Flags: wrap the function
+where it is declared, keep its inferred callable type, and use the returned
+callable normally. `rule` returns the exact function object. `verifies` binds
+evidence from the containing test and returns nothing. Neither helper registers
+global state or changes application behavior.
 
 ```ts
 import { rule, verifies } from "@provenance/rules";

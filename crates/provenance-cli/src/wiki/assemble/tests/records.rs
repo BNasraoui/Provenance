@@ -17,13 +17,10 @@ fn resolution_page_links_requirements_rules_and_spawned_work() {
 }
 
 #[test]
-fn resolution_page_flags_orphaned_and_ruleless_decisions() {
+fn resolution_page_flags_orphaned_decisions() {
     let corpus = fixture_corpus();
     let page = resolution_page(&corpus, "res_orphan");
-    assert_eq!(
-        gap_kinds(&page.gaps),
-        vec![GapKind::OrphanResolution, GapKind::NoProducedRules]
-    );
+    assert_eq!(gap_kinds(&page.gaps), vec![GapKind::OrphanResolution]);
 }
 
 #[test]
@@ -41,7 +38,7 @@ fn rule_page_traces_back_to_requirements_and_sources() {
     assert_eq!(page.requirements[0].target.record_id, "req_child");
     assert_eq!(page.sources.len(), 1);
     assert_eq!(page.sources[0].target.record_id, "source_schads");
-    assert!(page.rule_function.is_none());
+    assert!(page.implementation.is_none());
     assert!(page.verifications.is_empty());
     assert!(page.gaps.is_empty());
 }

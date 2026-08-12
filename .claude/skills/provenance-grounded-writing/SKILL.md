@@ -2,11 +2,11 @@
 name: provenance-grounded-writing
 description: Write specific, evidence-grounded statements for requirements, rules, sources, resolutions, and boundaries — not generic capability language. Use before calling `requirements create`, `rules create`, `sources create`, `resolutions create`, or `boundaries create`, especially for a root or mid-level requirement, a statement merging several candidates, or a resolution's position and rationale.
 ---
-<!-- Installed by provenance 0.1.0; content hash fnv1a64:45c0bc5753d498a6 -->
+<!-- Installed by provenance 0.1.0; content hash fnv1a64:a123bc878ef09e2d -->
 
 # Grounded writing
 
-Leaf rules with `file:line` evidence read sharp. Requirements above them read like a
+Atomic Rule statements read sharp. Requirements above them read like a
 capability list — "provides identity, reporting, comms, integrations" — vague enough to fit
 any product. The cause is usually altitude, not wording.
 
@@ -23,20 +23,39 @@ Ask: did someone make a decision here, or does this just name a module that exis
 If it's the former, don't create it. Put the fact on the node the real decision lives under,
 or leave it as fog.
 
+## Does this need a rule, or is it still a requirement?
+
+A Rule is an identified atomic behavioural obligation that refines a Requirement. A
+Resolution may produce it, and it may exist before implementation or verification. So the
+question is: **is this a precise, testable behavioural obligation rather than a broad
+contract or capability?**
+
+- The obligation is atomic and testable: write the Rule. Bind and verify it when those
+  relationships exist.
+- The statement still combines several obligations or only names a capability: keep
+  sharpening the Requirement instead of minting a vague Rule.
+
+Rules follow behavioural obligations, not code shape. Prose intent lives in the
+Requirement, the Rule, and any Resolution that produced it. A Rule without a primary
+implementation is Unimplemented—an ordinary state that `coverage scan --validate-rules`
+reports rather than hiding.
+
 ## Four tests for a drafted statement
 
 - **Swap.** Drop in an unrelated company or product name. Still reads true? It's a capability
   label, not a decision — name the actual mechanism or threshold instead.
 - **Name.** Does it name a mechanism, threshold, actor, or error condition — or a category
   ("identity," "reporting," "comms")? Categories aren't requirements.
-- **Evidence.** Is there a real locator for the claim — a source clause or a `file:line` —
-  or is it explicitly provisional? For graph grounding, attach a requirement source with
+- **Evidence.** Is there a real locator for the claim — a source clause or a place in the
+  code — or is it explicitly provisional? For graph grounding, attach a requirement source with
   `requirements source-ref add` (which also creates a `references` edge), or create a valid
-  `references` edge directly; otherwise gap reporting emits `missing_source_refs`. For rules,
-  put code locators in `--source-document` and `--source-section`. `fog` is unstructured text
-  attached to a requirement, while `unsupported` / `exploratory` mark ideation evidence or
-  speculation. The CLI reports grounding gaps; it does not prevent an ungrounded requirement
-  or rule from being active.
+  `references` edge directly; otherwise gap reporting emits `missing_source_refs`. `fog`
+  is unstructured text attached to a Requirement, while `unsupported` / `exploratory`
+  mark ideation evidence or speculation. The CLI reports grounding gaps; it does not
+  prevent an ungrounded Requirement or Rule from being active. A Rule's
+  `--source-document` and `--source-section` cite source material; they do not count as
+  an implementation binding. Implementation bindings come from scanner-recognized
+  attributes, helpers, decorators, or comments.
 - **Climb.** Summarizing several children? Name the one decision they share, not a noun list
   joined by "and." No shared decision — narrow the parent, don't fake a summary.
 
@@ -82,20 +101,32 @@ Requirement, mid — bad: "ExpenseFlow shall enable end-to-end expense operation
 "Expenses that exceed an employee's delegated authority limit require second-approver
 sign-off before entering the payment run."
 
-Rule — bad: "EXP-APR-003: The system shall enforce approval validation" — restates the
-classification, names nothing testable. Good:
+Rule — bad: "The system shall enforce approval validation" — restates a classification
+and names no atomic, testable behaviour.
+
+Rule — good: "An expense strictly above the submitting employee's delegated authority
+limit needs a second approver; an expense at the limit does not." In this codebase,
+`ApprovalService.php`'s `requires_second_approver($expense, $employee)` is its primary
+implementation. Its code location may also serve as a source citation on the record,
+but that citation does not bind the implementation:
 
 ```sh
 provenance rules create --scope <scope> \
   --id rule_exp_apr_003 \
-  --rule-code "EXP-APR-003" \
   --requirement-id <requirement_id> \
-  --statement "SubmitExpense shall throw ApprovalRequired when amount exceeds employee.delegated_authority_limit and approver_id is null" \
+  --statement "An expense strictly above the submitting employee's delegated authority limit needs a second approver; an expense at the limit does not" \
   --severity high \
   --source-document ApprovalService.php \
-  --source-section "44-51" \
+  --source-section requires_second_approver \
   --format json
 ```
+
+Then bind the implementation in the code so the scanner can see the relationship, and
+bind the test that runs the threshold cases with the same id and its method—in Rust,
+`#[rule("rule_exp_apr_003")]` and `#[verifies("rule_exp_apr_003", examples)]`. If no
+primary implementation exists—the limit is re-checked inline in three controllers—the
+Rule remains valid but Unimplemented. The `provenance-shaping` skill has the full Rule
+and binding flow.
 
 Resolution — bad: position "Require a second approver above a threshold," rationale "Team
 decided this was the right approach" — no number, no alternative, no reason one lost. Good:

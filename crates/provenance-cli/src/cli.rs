@@ -2,6 +2,7 @@ pub mod graph;
 pub mod ideation;
 pub mod knowledge;
 pub mod policy;
+pub mod sdk;
 pub mod shaping;
 pub mod workspace;
 
@@ -208,6 +209,11 @@ pub enum Command {
     Coverage {
         #[command(subcommand)]
         command: workspace::CoverageCommand,
+    },
+    /// Typed language façade protocol.
+    Sdk {
+        #[command(subcommand)]
+        command: sdk::SdkCommand,
     },
     SwarmBacktrace {
         #[command(subcommand)]

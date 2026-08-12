@@ -176,7 +176,7 @@ fn post(store: &StateStore, scope: &ScopeId, parent: &ThreadParent) -> Thread {
 }
 
 /// Independent statement of the decision, checked against the shard the write
-/// path left behind rather than against the rule function: the posted record
+/// path left behind rather than against the primary implementation: the posted record
 /// keeps exactly one active thread, it is the one `rule_canonical_thread`
 /// picks out of what was there, every other thread of that record that was
 /// active is now archived, and nothing else in the shard moved.

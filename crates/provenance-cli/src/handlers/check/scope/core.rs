@@ -4,6 +4,7 @@ use crate::handlers::check::references::{
 };
 use provenance_core::{
     Boundary, Domain, Question, Requirement, Resolution, Rule, ScopeId, Source, Topic,
+    VerificationBinding,
 };
 use provenance_store::state_store::StateStore;
 
@@ -16,6 +17,7 @@ pub(super) struct Records {
     questions: Vec<Question>,
     resolutions: Vec<Resolution>,
     rules: Vec<Rule>,
+    verification_bindings: Vec<VerificationBinding>,
 }
 
 impl Records {
@@ -29,6 +31,7 @@ impl Records {
             questions: store.list_questions(scope_id)?,
             resolutions: store.list_resolutions(scope_id)?,
             rules: store.list_rules(scope_id)?,
+            verification_bindings: store.list_verification_bindings(scope_id)?,
         })
     }
 
@@ -59,6 +62,7 @@ impl Records {
         check_records!(&self.questions, "question");
         check_records!(&self.resolutions, "resolution");
         check_records!(&self.rules, "rule");
+        check_records!(&self.verification_bindings, "verification binding");
     }
 
     pub(super) fn add_to(&self, index: &mut CheckIndex) {
@@ -97,6 +101,33 @@ impl Records {
         validate_sources_and_requirements(self, index, scope_id, dangling);
         validate_shaping(self, index, scope_id, dangling);
         validate_decisions(self, index, scope_id, dangling);
+        validate_verification_bindings(self, index, scope_id, dangling);
+    }
+}
+
+fn validate_verification_bindings(
+    records: &Records,
+    index: &CheckIndex,
+    scope_id: &ScopeId,
+    dangling: &mut Vec<String>,
+) {
+    let mut ids = std::collections::BTreeSet::new();
+    for binding in &records.verification_bindings {
+        if !ids.insert(binding.id.as_str()) {
+            dangling.push(format!(
+                "duplicate verification binding id {}",
+                binding.id.as_str()
+            ));
+        }
+        check_scoped_reference(
+            index,
+            dangling,
+            scope_id,
+            &format!("verification binding {}", binding.id.as_str()),
+            "rule_id",
+            "rule",
+            &binding.rule_id,
+        );
     }
 }
 

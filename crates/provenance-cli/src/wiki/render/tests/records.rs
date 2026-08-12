@@ -56,51 +56,54 @@ fn attribution_title_cases_single_tokens_but_preserves_emails_and_names() {
 }
 
 #[test]
-fn rule_page_links_the_function_and_lists_verification_sites() {
+fn rule_page_links_the_implementation_and_lists_verification_sites() {
     let html = render_rule("default", &rule_fixture());
     assert!(html.contains("class=\"accent-bar rule\""));
     assert!(html.contains("Suppress line emission for fully zero claim items"));
     assert!(html
         .contains("https://github.com/exampleorg/ex-api/blob/9f2c1ab4e5f6/src/UseCase.php#L153"));
-    assert!(html.contains("Rule Function"));
+    assert!(html.contains("Implementation"));
+    assert!(!html.contains("Rule Function"));
     assert!(html.contains("suppress_zero_claim_items"));
     assert!(html.contains("Verification"));
     assert!(html.contains("zero_claim_items_emit_no_lines"));
-    assert!(html.contains("outside defining module"));
+    assert!(html.contains("outside implementation module"));
     assert!(html.contains("Code scan at commit <code>9f2c1ab</code>"));
     assert!(!html.contains(">Evidence</h2>"));
     assert!(!html.contains("href=\"\""));
     assert!(html.contains("sev high"));
 }
 
-/// A page built with a scan that bound nothing still says which scan looked,
-/// which is what makes "No function bound" a claim rather than a blank.
+/// A page built with a scan that bound nothing still says which scan looked.
+/// An unimplemented Rule is an ordinary state, not an orphan.
 #[test]
-fn rule_page_names_the_scan_behind_its_empty_binding_sections() {
+fn rule_page_presents_absent_implementation_as_an_ordinary_state() {
     let mut page = rule_fixture();
-    page.rule_function = None;
+    page.implementation = None;
     page.verifications.clear();
 
     let html = render_rule("default", &page);
 
-    assert!(html.contains("No function bound"));
+    assert!(html.contains(">Implementation</h2>"));
+    assert!(html.contains("No implementation bound"));
     assert!(html.contains("Not verified"));
     assert_eq!(html.matches("Code scan at commit").count(), 1);
+    assert!(!html.contains("class=\"data-note\""));
 }
 
 #[test]
 fn rule_page_built_without_a_scan_claims_nothing_about_bindings() {
     let mut page = rule_fixture();
     page.code_scan = None;
-    page.rule_function = None;
+    page.implementation = None;
     page.verifications.clear();
 
     let html = render_rule("default", &page);
 
     assert!(html.contains("No code scan was supplied to this build"));
-    assert!(!html.contains("No function bound"));
+    assert!(!html.contains("No implementation bound"));
     assert!(!html.contains("Not verified"));
-    assert!(!html.contains(">Rule Function</h2>"));
+    assert!(!html.contains(">Implementation</h2>"));
     assert!(!html.contains(">Verification</h2>"));
 }
 
@@ -157,17 +160,17 @@ fn rule_pages_use_shields_and_explain_orphaned_provenance_without_raw_ids() {
         kind: GapKind::OrphanRule,
         subject: None,
         related: None,
-        detail: "No requirement or decision is recorded as producing this rule.".to_string(),
+        detail: "No requirement is recorded as producing this rule.".to_string(),
     }];
     let html = render_rule("default", &page);
 
     assert!(html.contains("href=\"#i-shield\""), "{html}");
     assert!(
-        html.contains("No requirement or decision is recorded as producing this rule."),
+        html.contains("No requirement is recorded as producing this rule."),
         "{html}"
     );
     assert_eq!(
-        html.matches("No requirement or decision is recorded as producing this rule.")
+        html.matches("No requirement is recorded as producing this rule.")
             .count(),
         1,
         "{html}"

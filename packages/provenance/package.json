@@ -1,0 +1,30 @@
+{
+  "name": "provenance",
+  "version": "0.1.0-poc.0",
+  "description": "Typed traceability declarations backed by the Provenance Rust engine",
+  "license": "BUSL-1.1",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build",
+    "test": "npm run build && npm run test:runtime && npm run test:types",
+    "test:runtime": "tsc -p tsconfig.test.json && node --test .test-dist/index.test.js",
+    "test:types": "node scripts/typecheck-fixtures.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3"
+  }
+}

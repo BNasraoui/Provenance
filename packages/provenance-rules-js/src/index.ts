@@ -8,7 +8,7 @@ export type VerificationMethod =
 
 type AnyFunction = (...args: never[]) => unknown;
 
-/** Bind a rule id without changing the function. */
+/** Bind a Rule's primary implementation without changing the function. */
 export function rule<FunctionType extends AnyFunction>(
   _ruleId: string,
   implementation: FunctionType,

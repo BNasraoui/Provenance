@@ -2,7 +2,7 @@ use super::{
     graph_query::GraphQuery,
     model::{GapItem, GapKind},
 };
-use provenance_core::{NodeType, QuestionStatus, RequirementStatus, ResolutionStatus, TopicStatus};
+use provenance_core::{NodeType, QuestionStatus, RequirementStatus, TopicStatus};
 
 pub(super) fn add_requirement_gaps(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapItem>) {
     for requirement in query.graph.requirements {
@@ -41,7 +41,7 @@ pub(super) fn add_requirement_gaps(query: &GraphQuery<'_, '_>, gaps: &mut Vec<Ga
                 GapKind::NoProducedRules,
                 NodeType::Requirement,
                 &requirement.id,
-                "resolved requirement has no downstream rule",
+                "requirement has no downstream rule",
             ));
         }
     }
@@ -57,35 +57,18 @@ pub(super) fn add_resolution_gaps(query: &GraphQuery<'_, '_>, gaps: &mut Vec<Gap
                 "resolution does not resolve any requirement",
             ));
         }
-        if resolution.status == ResolutionStatus::Approved
-            && query
-                .produced_rules_for_resolution(&resolution.id)
-                .is_empty()
-        {
-            gaps.push(GapItem::new(
-                GapKind::NoProducedRules,
-                NodeType::Resolution,
-                &resolution.id,
-                "approved resolution produced no rules",
-            ));
-        }
     }
 }
 
-/// A rule is fully traced only when both the requirement it serves and the
-/// resolution that decided it are recorded as producing it. One producer
-/// alone leaves the chain half-written, so the gap fires and names the end
-/// that is missing.
+/// A rule is traced when its requirement is recorded as producing it. A
+/// resolution may also produce the rule, but only when a decision was needed.
 pub(super) fn add_rule_gaps(query: &GraphQuery<'_, '_>, gaps: &mut Vec<GapItem>) {
     for rule in query.graph.rules {
         let missing = query.missing_rule_producers(&rule.id);
         if missing.is_empty() {
             continue;
         }
-        let reason = match missing.as_slice() {
-            [producer] => format!("no {} produces this rule", producer.word()),
-            _ => "no requirement or resolution produces this rule".to_string(),
-        };
+        let reason = format!("no {} produces this rule", missing[0].word());
         gaps.push(GapItem::new(
             GapKind::OrphanRule,
             NodeType::Rule,

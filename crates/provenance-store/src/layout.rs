@@ -35,6 +35,18 @@ impl ProvenanceLayout {
     pub fn cache_db_path(&self) -> Utf8PathBuf {
         self.cache_dir().join("provenance.db")
     }
+    pub fn verification_runs_path(&self, scope: &provenance_core::ScopeId) -> Utf8PathBuf {
+        self.cache_dir()
+            .join("scopes")
+            .join(scope.as_str())
+            .join("verification-runs.jsonl")
+    }
+    pub fn verification_runs_lock_path(&self, scope: &provenance_core::ScopeId) -> Utf8PathBuf {
+        self.cache_dir()
+            .join("locks/scopes")
+            .join(scope.as_str())
+            .join("verification-runs.jsonl.lock")
+    }
     pub fn state_shard_lock_path(&self, shard_path: &Utf8Path) -> anyhow::Result<Utf8PathBuf> {
         let relative = shard_path.strip_prefix(self.state_dir()).map_err(|_| {
             anyhow::anyhow!("state shard path {shard_path} is outside the state directory")

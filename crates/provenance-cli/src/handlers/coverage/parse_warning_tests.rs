@@ -16,7 +16,7 @@ fn tree(source: &str) -> tempfile::TempDir {
 fn scan(source: &str) -> provenance_core::coverage::CoverageScan {
     let dir = tree(source);
     let path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
-    coverage_scan(&path, &path, "default".to_string(), false).unwrap()
+    coverage_scan(&path, &path, "default", false).unwrap()
 }
 
 #[test]
