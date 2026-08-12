@@ -43,7 +43,7 @@ fn rust_doc_marker_inside_a_paired_code_span_stays_hidden() {
     // A doc-comment code span quoting a directive is quotation, not
     // declaration: `@provenance rule: quoted_only` must not bind.
     let source =
-        "/// Write `@provenance rule: quoted_only` on the deciding line\nfn real_rule() {}";
+        "/// Write `@provenance rule: quoted_only` on the implementation line\nfn real_rule() {}";
     let scan = scan_file(Utf8Path::new("fixture.rs"), Language::Rust, source);
 
     assert!(scan.annotations.is_empty());

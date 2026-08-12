@@ -5,7 +5,7 @@ use std::process::Command as StdCommand;
 use std::time::{Duration, Instant};
 
 #[test]
-fn wiki_build_uses_coverage_report_for_rule_functions_and_verifications() {
+fn wiki_build_uses_coverage_report_for_implementations_and_verifications() {
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path().join("repo");
     let out = dir.path().join("site");
@@ -30,7 +30,8 @@ fn wiki_build_uses_coverage_report_for_rule_functions_and_verifications() {
         .success();
 
     let bound = std::fs::read_to_string(out.join("rules/rule_bound/index.html")).unwrap();
-    assert!(bound.contains("Rule Function"), "{bound}");
+    assert!(bound.contains("Implementation"), "{bound}");
+    assert!(!bound.contains("Rule Function"), "{bound}");
     assert!(bound.contains("decide_bound_rule"), "{bound}");
     assert!(bound.contains("src/rules.rs:7"), "{bound}");
     assert!(
@@ -47,7 +48,7 @@ fn wiki_build_uses_coverage_report_for_rule_functions_and_verifications() {
     assert!(bound.contains("fn decide_bound_rule() {}"), "{bound}");
     assert!(!bound.contains("/blob/HEAD/"), "{bound}");
     assert_eq!(
-        bound.matches("outside defining module").count(),
+        bound.matches("outside implementation module").count(),
         1,
         "{bound}"
     );
@@ -60,7 +61,7 @@ fn wiki_build_uses_coverage_report_for_rule_functions_and_verifications() {
     );
 
     let unbound = std::fs::read_to_string(out.join("rules/rule_unbound/index.html")).unwrap();
-    assert!(unbound.contains("No function bound"), "{unbound}");
+    assert!(unbound.contains("No implementation bound"), "{unbound}");
     assert!(unbound.contains("Not verified"), "{unbound}");
     assert!(
         unbound.contains("Code scan at commit <code>abc1234</code>"),
@@ -114,13 +115,13 @@ fn wiki_serve_without_coverage_omits_scan_sections_and_unpinned_links() {
 
     assert!(rule.contains("200 OK"), "{rule}");
     assert!(rule.contains("No code scan was supplied"), "{rule}");
-    assert!(!rule.contains("Rule Function"), "{rule}");
+    assert!(!rule.contains("Implementation"), "{rule}");
     assert!(source.contains("src/rules.rs:7"), "{source}");
     assert!(!source.contains("/blob/HEAD/"), "{source}");
 }
 
 #[test]
-fn wiki_serve_with_coverage_renders_pins_snippets_and_bound_functions() {
+fn wiki_serve_with_coverage_renders_pins_snippets_and_implementations() {
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path().join("repo");
     let report = dir.path().join("coverage.json");
@@ -139,7 +140,8 @@ fn wiki_serve_with_coverage_renders_pins_snippets_and_bound_functions() {
         rule.contains("Code scan at commit <code>abc1234</code>"),
         "{rule}"
     );
-    assert!(rule.contains("Rule Function"), "{rule}");
+    assert!(rule.contains("Implementation"), "{rule}");
+    assert!(!rule.contains("Rule Function"), "{rule}");
     assert!(rule.contains("decide_bound_rule"), "{rule}");
     assert!(rule.contains("Verification"), "{rule}");
     assert!(rule.contains("exhaustion"), "{rule}");

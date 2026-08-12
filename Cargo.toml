@@ -17,6 +17,10 @@ missing_panics_doc = "allow"
 must_use_candidate = "allow"
 module_name_repetitions = "allow"
 
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
 [workspace.dependencies]
 anyhow = "1.0"
 assert_cmd = "2.0"

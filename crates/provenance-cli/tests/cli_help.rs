@@ -12,7 +12,8 @@ fn top_level_help_keeps_commands_from_each_cli_domain() {
         contains("requirements")
             .and(contains("questions"))
             .and(contains("proposals"))
-            .and(contains("docs")),
+            .and(contains("docs"))
+            .and(contains("sdk")),
     );
 }
 
@@ -23,6 +24,7 @@ fn nested_help_parses_commands_from_each_cli_domain() {
         &["questions", "--help"][..],
         &["proposals", "--help"][..],
         &["docs", "--help"][..],
+        &["sdk", "--help"][..],
     ] {
         provenance().args(command).assert().success();
     }

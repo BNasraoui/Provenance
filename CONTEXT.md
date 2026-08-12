@@ -4,21 +4,45 @@
 
 A reader-facing taxonomy classification for requirements. A derived rule belongs to each Domain of its upstream requirements through the canonical graph relationships.
 
+## Requirement
+
+A higher-level obligation the system must satisfy. Requirements are refined into Rules.
+
+## Resolution
+
+A recorded decision that removes ambiguity. A Resolution may produce a Rule when the decision establishes a precise behavioural obligation.
+
 ## Rule
 
-A statement produced by a decision, carried in code by the function that decides it. The function is bound to the rule's graph record by a `#[rule("rule_id")]` marker. Where a type makes the violating value unbuildable, the type carries the rule instead and its construction is the proof.
+An identified atomic behavioural obligation that refines a Requirement and may also be produced by a Resolution. A Rule can exist before any Implementation binding or Verification.
+
+## Implementation binding
+
+A relationship from a Rule to production code that realizes it. A Rule without an Implementation binding is unimplemented, but remains a Rule.
 
 ## Verification
 
-Evidence that a rule holds, carried by a `#[verifies("rule_id", method)]` marker on a test or a type. The method is one of `exhaustion`, `property`, `examples`, `conformance`, `construction`, or `proof`. Exhaustion over a finite domain is proof, not a sample; `proof` names a machine-checked proof outside the test runner, bridged by the marked site.
+Evidence supporting belief that a Rule holds. A Rule can have no Verification; this absence is Unverified rather than a different kind of Rule.
+
+## Verification binding
+
+A durable relationship from an owner-local test key and repository code location to a canonical Rule. It records what is intended to verify the Rule, not whether an execution passed.
+
+## Verification run
+
+A volatile observation from one execution of a Verification binding. It records the outcome and execution context without changing the durable relationship.
 
 ## Enforcement
 
 The live path: the running code that rejects a violation. Verification is evidence about that code; enforcement is the code itself.
 
+## Unimplemented
+
+An active Rule with no Implementation binding. It is absence, not canonical graph state.
+
 ## Unverified
 
-An active rule with no verification marker anywhere in the scanned tree. It is absence, not a stored field: `provenance coverage scan --path . --validate-rules` derives it at scan time and reports it, and no shard records it.
+An active Rule with neither a live scanned verification site nor a canonical Verification binding. It is derived absence, not a stored status.
 
 ## Evidence site
 
@@ -59,6 +83,14 @@ An optional association between a graph reference and an identifier owned by ano
 ## External action correlation
 
 An optional immutable association between a Disposition and one action owned by another system. Its identity is the exact system, external scope, action kind, and stable key tuple; equal keys in different systems, scopes, or kinds are distinct. It is audit context, not Disposition identity or workflow state.
+
+## Declaration owner
+
+The integration URI allowed to reconcile a Source, Requirement, or Rule definition carrying the same owner. It grants no authority over other records, the whole graph, or facts the declaration does not state.
+
+## Declaration address
+
+An owner-local hierarchical identity for one typed declaration. Equal child keys under different parents have distinct addresses. The address is not the canonical Stable ID.
 
 ## Commit-then-issue
 

@@ -34,3 +34,12 @@ cargo build --release -p provenance-cli --all-features
 A release scans clean: `provenance coverage scan --path . --scope default --validate-rules --strict` exits zero, so every marker cites a real rule and every active rule has a verification site.
 
 The binary lands at `target/release/provenance`. Users should commit `.provenance/state/` and ignore `.provenance/cache/`.
+
+## Versions
+
+Every crate shares one version, set once in the workspace `[workspace.package]`
+and inherited with `version.workspace = true`. Bump that single field, commit,
+then tag. The tag is the version with a `v` prefix: `v0.1.0`.
+
+A tag carrying a hyphen is published as a prerelease, so `v0.1.0-rc.1` is the
+way to rehearse a release without announcing one.

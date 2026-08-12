@@ -10,9 +10,9 @@ pub enum GapKind {
     MissingSourceRefs,
     /// A resolved requirement has no `resolves` edge pointing at it.
     NoResolvingDecision,
-    /// A resolved requirement or approved resolution produced no rule.
+    /// A resolved or decision-backed requirement has no downstream rule.
     NoProducedRules,
-    /// A requirement or a resolution does not produce the rule.
+    /// No requirement records the rule it refines.
     OrphanRule,
     /// A resolution resolves no requirement.
     OrphanResolution,

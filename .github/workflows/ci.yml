@@ -73,3 +73,41 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:dom
+
+  typescript-sdk:
+    name: TypeScript SDK POC
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: cargo build -p provenance-cli
+      - run: npm ci --prefix packages/provenance
+      - run: npm test --prefix packages/provenance
+      - run: npm ci --prefix packages/provenance-rules-js
+      - run: npm test --prefix packages/provenance-rules-js
+      - run: npm ci --prefix examples/typescript-sdk
+      - name: Run packaged fixture
+        shell: bash
+        run: |
+          fixture_repo="$PWD/examples/typescript-sdk"
+          target/debug/provenance init --path "$fixture_repo" --scope default --path-prefix .
+          PROVENANCE_BIN="$PWD/target/debug/provenance" \
+          PROVENANCE_REPO="$fixture_repo" \
+          PROVENANCE_SPEC_OWNER="spec://typescript/share-links" \
+          PROVENANCE_VERIFICATION_OWNER="ci://typescript-example" \
+          npm test --prefix examples/typescript-sdk
+          rule_id=$(target/debug/provenance rules list \
+            --repo "$fixture_repo" --scope default --format json \
+            | jq -er 'select(length == 1) | .[0].id')
+          target/debug/provenance rules show \
+            --repo "$fixture_repo" --scope default --id "$rule_id" --format json
+          target/debug/provenance sdk verification-runs \
+            --repo "$fixture_repo" --scope default --rule "$rule_id" --format json \
+            | jq -e 'length == 1 and .[0].status == "passed"'
+          target/debug/provenance sdk verification-bindings \
+            --repo "$fixture_repo" --scope default --rule "$rule_id" --format json \
+            | jq -e 'length == 1 and .[0].file == "dist/share-links.test.js"'

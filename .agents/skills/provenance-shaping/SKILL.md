@@ -2,7 +2,7 @@
 name: provenance-shaping
 description: Guide turn-based requirement shaping in Provenance. Use when a user brings a loose idea, asks to refine requirements, work through open shaping questions, graduate fog, or run the Chart/Work loop against an anchor requirement. Land every resolved decision immediately into the graph.
 ---
-<!-- Installed by provenance 0.1.0; content hash fnv1a64:05009babbd3c5e7f -->
+<!-- Installed by provenance 0.1.0; content hash fnv1a64:f98c594b70caa237 -->
 
 # Shaping
 
@@ -43,7 +43,6 @@ by question; expensive methods claim one question and often stop at a phase boun
    provenance topics list --scope <scope> --format json
    provenance questions list --scope <scope> --format json
    provenance boundaries list --scope <scope> --format json
-   provenance proposals list --scope <scope> --format json
    ```
 
 3. Treat the map as an index, not a store. Keep only gists in your working context and
@@ -151,17 +150,29 @@ frontier.
 
 Load the map low-res with the commands from **Start every session**. `provenance prime`
 supplies rules and computed gaps (plus active threads only with `--include-threads`); load
-the anchor graph, fog, boundaries, topics, questions, and proposals with their separate
-commands. The shaping-focused subset of the computed graph frontier includes:
+the anchor graph, fog, boundaries, topics, and questions with their separate commands. The
+shaping-focused subset of the computed graph frontier includes:
 
 - requirements with neither a valid source reference nor a valid `references` edge;
 - unresolved `contradicts` pairs;
 - resolved requirements (including those with a resolving resolution) with no downstream
-  rule, and approved resolutions with no produced rule;
+  Rule;
 - open or `blocked_on_human` questions and open topics.
 
-Proposals are not part of the computed graph frontier. List them separately and treat cards
-whose `promotion_state` is `proposed` as awaiting human disposal.
+A no-downstream-Rule gap is a question about the obligation, not an instruction to write
+a record. Ask what atomic behavioural obligation refines the Requirement. Land a Rule
+only when that obligation is precise; whether production code implements it is a
+separate question. An unimplemented Rule is an ordinary state and should remain visible
+as such rather than being replaced by a vague Rule merely to close the gap.
+
+Proposals are not part of the computed graph frontier and are not a batch-review inbox.
+Claiming a topic atomically consults and returns undisposed `proposed` and `asserted`
+proposals targeting the topic, its anchor requirement, or its explicit artifact links;
+each result includes its derived state and deterministic reasons. For diff-driven work,
+run `provenance proposals surface
+--scope <scope> --changed-path <repo-relative-path> --format json` (repeat the path flag).
+Review only those surfaced proposals. Use a complete list only for a deliberately bounded
+set of competing, contested, or conflicting proposals that jointly blocks the turn.
 
 Do not hand-wire a private frontier in chat. If the graph says a different thing than your
 notes, fix the graph or trust the graph.
@@ -180,6 +191,11 @@ Claim before work so concurrent sessions skip what you are touching.
 
 If claim fails, do not work that item. Pick another frontier item or hand off that it is
 already held.
+
+On a successful topic claim, inspect `surfaced_proposals` before resolving the first
+question. They are context that has become decision-relevant because the turn entered its
+explicit territory; do not infer further territory from titles or graph proximity. If
+lifecycle consultation fails, the topic claim is not persisted.
 
 ### 3. Resolve and land as you go
 
@@ -209,15 +225,6 @@ provenance resolutions create --scope <scope> \
   --made-by "<human or actor>" \
   --format json
 
-provenance rules create --scope <scope> \
-  --id rule_<stable_slug> \
-  --rule-code "<STABLE-CODE>" \
-  --requirement-id <anchor_requirement_id> \
-  --resolution-id res_<stable_slug> \
-  --statement "<testable MUST/SHOULD rule>" \
-  --severity high \
-  --format json
-
 provenance requirements create --scope <scope> \
   --id req_<spawned_slug> \
   --statement "<spawned requirement>" \
@@ -238,8 +245,60 @@ provenance questions answer --scope <scope> \
 ```
 
 Only create the artifacts the answer actually implies. If it only answers the question,
-`questions answer` is enough. If it implies a rule, requirement, boundary, contradiction,
-or source gap, land that too before continuing.
+`questions answer` is enough. If it implies a requirement, boundary, contradiction, or
+source gap, land that too before continuing. If it implies a Rule, land the Rule and any
+known bindings—next.
+
+##### Landing a Rule and its bindings
+
+A Rule is an identified atomic behavioural obligation refining a Requirement. A
+Resolution may produce it. The Rule may exist before production code implements it or
+evidence verifies it; those absences are Unimplemented and Unverified, not reasons to
+change the artifact's kind.
+
+1. **The record.** The statement names the precise behavioural obligation in one clause.
+   `--source-document` and `--source-section` may cite the source behind the Rule; they
+   never count as an implementation binding. Bind known implementation through a
+   scanner-recognized attribute, helper, decorator, or comment.
+
+   ```sh
+   provenance rules create --scope <scope> \
+     --id rule_<stable_slug> \
+     --requirement-id <anchor_requirement_id> \
+     --resolution-id res_<stable_slug> \
+     --statement "<atomic behavioural obligation, in one clause>" \
+     --severity high \
+     --format json
+   ```
+
+2. **The bindings, when they exist.** `#[rule("<id>")]` sits on the primary production
+   implementation; at most one function or type may carry an id for now.
+   `#[verifies("<id>", <method>)]` sits on the evidence—`exhaustion`, `property`,
+   `examples`, `conformance`, `construction`, or `proof`. `construction` goes on the type
+   whose construction is the evidence, not on a test. Verification binds to the known
+   Rule and does not require an implementation binding.
+
+   ```rust
+   #[rule("rule_<stable_slug>")]
+   pub fn <bare_symbol>(...) -> ... { ... }
+
+   #[test]
+   #[verifies("rule_<stable_slug>", exhaustion)]
+   fn <bare_symbol>_holds_over_every_input() { ... }
+   ```
+
+3. **The check.** The scan reports a binding that cites an unknown Rule, a second primary
+   implementation claiming one id, and active Rules with no implementation or no
+   verification anywhere.
+
+   ```sh
+   provenance coverage scan --path . --scope <scope> --validate-rules --format json
+   ```
+
+Unimplemented and Unverified are **absence**, derived by that scan and never written into
+the record. How loudly a repo treats absence is its own dial: `--strict` makes any warning
+fail the command, and a repo that runs the scan without it is reporting, not gating.
+Neither setting is a reason to write a test that asserts nothing.
 
 #### `prototype`
 
@@ -248,8 +307,9 @@ Use the `provenance-fork-tournament` skill. This is two-phase work:
 1. Phase 1 spawns stance-based agents and lands proposals/contributions/synthesis.
 2. Mark the question `blocked-on-human` and stop the session.
 3. Phase 2 presents proposals, extracts reactions, lands the resolution, disposes of
-   proposals with promotion decisions, fans out rules/requirements, then continues or
-   hands off.
+   proposals with dispositions, spawns the requirements and Rules the direction actually
+   implies, then continues or hands off. A tournament often settles direction above the
+   atomic behavioural level, so do not assume it yields a Rule.
 
 Do not present the artifacts in the same session that created them.
 
@@ -342,10 +402,18 @@ Before moving to the next question, verify the current answer has been handled:
 
 - thread message records the relevant dialogue;
 - resolution records the accepted decision, if there is one;
-- rules record enforceable MUST/SHOULD constraints implied by the answer;
+- each precise atomic behavioural obligation is landed as a Rule; any known primary
+  implementation and evidence carry `#[rule]` and `#[verifies]` bindings, and
+  `coverage scan --validate-rules` reports any remaining absence honestly;
 - spawned requirements are created and linked with `spawns` or `refines_into` edges;
 - boundaries/out-of-scope rejections are explicit;
 - source references and evidence are attached where they exist;
+- proposal definitions remain immutable `proposed` records; assertion lineage uses assertion
+  IDs, and only positive owned evidence with unblocked adjudication can create an assertion;
+- accepted, rejected, or deferred outcomes are disposition records by a manifest-allowlisted
+  actor ID. The ID is a repository-local audit attestation, not cryptographic identity. A
+  canonical artifact must already exist under the exact scope and kind; correlate any external
+  action with the generic system/scope/kind/key fields rather than workflow-specific metadata;
 - fog is updated;
 - invalidated questions are answered or updated; a thread note can document the change but
   does not change question status;

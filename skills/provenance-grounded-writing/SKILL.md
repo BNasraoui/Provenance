@@ -5,7 +5,7 @@ description: Write specific, evidence-grounded statements for requirements, rule
 
 # Grounded writing
 
-Leaf rules bound to a named function read sharp. Requirements above them read like a
+Atomic Rule statements read sharp. Requirements above them read like a
 capability list — "provides identity, reporting, comms, integrations" — vague enough to fit
 any product. The cause is usually altitude, not wording.
 
@@ -24,19 +24,20 @@ or leave it as fog.
 
 ## Does this need a rule, or is it still a requirement?
 
-A rule is a function — or a type whose construction is the proof. `#[rule("<id>")]` binds
-one function to one rule record, and that function *is* the decision; it doesn't describe
-one or claim to satisfy one. So the question isn't "is this normative enough to be a rule?"
-It's: **what function decides this?**
+A Rule is an identified atomic behavioural obligation that refines a Requirement. A
+Resolution may produce it, and it may exist before implementation or verification. So the
+question is: **is this a precise, testable behavioural obligation rather than a broad
+contract or capability?**
 
-- A function decides it (or a type makes the wrong state unconstructible): write the rule,
-  bind it, verify it.
-- Nothing decides it yet: it's a requirement whose rule is unwritten. That's an ordinary
-  state — most decisions sit there for a while. Leave it as a requirement.
+- The obligation is atomic and testable: write the Rule. Bind and verify it when those
+  relationships exist.
+- The statement still combines several obligations or only names a capability: keep
+  sharpening the Requirement instead of minting a vague Rule.
 
-Rules follow human decisions; they never stand in for one. Prose intent lives in the
-requirement and the resolution, and a rule record with no function behind it is neither —
-it just makes the graph look finished. `coverage scan --validate-rules` will call it out.
+Rules follow behavioural obligations, not code shape. Prose intent lives in the
+Requirement, the Rule, and any Resolution that produced it. A Rule without a primary
+implementation is Unimplemented—an ordinary state that `coverage scan --validate-rules`
+reports rather than hiding.
 
 ## Four tests for a drafted statement
 
@@ -47,13 +48,13 @@ it just makes the graph look finished. `coverage scan --validate-rules` will cal
 - **Evidence.** Is there a real locator for the claim — a source clause or a place in the
   code — or is it explicitly provisional? For graph grounding, attach a requirement source with
   `requirements source-ref add` (which also creates a `references` edge), or create a valid
-  `references` edge directly; otherwise gap reporting emits `missing_source_refs`. For a rule
-  the locator is a binding, not a citation: `--source-document` is the file and
-  `--source-section` is the bare symbol carrying `#[rule("<id>")]` — never a line range,
-  which is wrong by the next commit while the symbol survives the refactor. `fog` is unstructured text
-  attached to a requirement, while `unsupported` / `exploratory` mark ideation evidence or
-  speculation. The CLI reports grounding gaps; it does not prevent an ungrounded requirement
-  or rule from being active.
+  `references` edge directly; otherwise gap reporting emits `missing_source_refs`. `fog`
+  is unstructured text attached to a Requirement, while `unsupported` / `exploratory`
+  mark ideation evidence or speculation. The CLI reports grounding gaps; it does not
+  prevent an ungrounded Requirement or Rule from being active. A Rule's
+  `--source-document` and `--source-section` cite source material; they do not count as
+  an implementation binding. Implementation bindings come from scanner-recognized
+  attributes, helpers, decorators, or comments.
 - **Climb.** Summarizing several children? Name the one decision they share, not a noun list
   joined by "and." No shared decision — narrow the parent, don't fake a summary.
 
@@ -99,12 +100,14 @@ Requirement, mid — bad: "ExpenseFlow shall enable end-to-end expense operation
 "Expenses that exceed an employee's delegated authority limit require second-approver
 sign-off before entering the payment run."
 
-Rule — bad: "The system shall enforce approval validation" — restates the classification,
-names nothing testable, and no function decides it, so it is not a rule at all yet.
+Rule — bad: "The system shall enforce approval validation" — restates a classification
+and names no atomic, testable behaviour.
 
-Start from the function. In `ApprovalService.php`, `requires_second_approver($expense,
-$employee)` is where the limit is applied — that function is the rule, and the record
-points at it by file and bare symbol:
+Rule — good: "An expense strictly above the submitting employee's delegated authority
+limit needs a second approver; an expense at the limit does not." In this codebase,
+`ApprovalService.php`'s `requires_second_approver($expense, $employee)` is its primary
+implementation. Its code location may also serve as a source citation on the record,
+but that citation does not bind the implementation:
 
 ```sh
 provenance rules create --scope <scope> \
@@ -117,13 +120,12 @@ provenance rules create --scope <scope> \
   --format json
 ```
 
-Then bind it in the code, so the scanner can see the pair: the deciding function carries
-the rule's id, and the test that runs the threshold cases carries the same id with the
-method it used — in Rust, `#[rule("rule_exp_apr_003")]` and
-`#[verifies("rule_exp_apr_003", examples)]`. If no such function exists — the limit is
-re-checked inline in three controllers — there is nothing to bind. Keep the requirement,
-don't write the rule, and let the code catch up. The `provenance-shaping` skill has the
-full pair-landing flow.
+Then bind the implementation in the code so the scanner can see the relationship, and
+bind the test that runs the threshold cases with the same id and its method—in Rust,
+`#[rule("rule_exp_apr_003")]` and `#[verifies("rule_exp_apr_003", examples)]`. If no
+primary implementation exists—the limit is re-checked inline in three controllers—the
+Rule remains valid but Unimplemented. The `provenance-shaping` skill has the full Rule
+and binding flow.
 
 Resolution — bad: position "Require a second approver above a threshold," rationale "Team
 decided this was the right approach" — no number, no alternative, no reason one lost. Good:

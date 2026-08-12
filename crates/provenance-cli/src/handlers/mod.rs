@@ -27,6 +27,7 @@ mod requirements;
 mod resolutions;
 mod rules;
 mod schema;
+mod sdk;
 mod skills;
 mod sources;
 mod stale;
@@ -194,6 +195,9 @@ pub(super) async fn dispatch(command: Command, quiet: bool) -> anyhow::Result<()
         }
         Command::Coverage { command } => {
             coverage::handle(command)?;
+        }
+        Command::Sdk { command } => {
+            sdk::handle(command)?;
         }
         Command::SwarmBacktrace { command } => {
             swarm_backtrace::handle(command)?;

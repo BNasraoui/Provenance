@@ -1,6 +1,9 @@
 use super::super::GapKind;
 use super::fixtures::*;
-use provenance_core::{EdgeType, NodeType, QuestionStatus, SourceReference, TopicStatus};
+use provenance_core::{
+    EdgeType, NodeType, QuestionStatus, RequirementStatus, ResolutionStatus, SourceReference,
+    TopicStatus,
+};
 use provenance_macros::verifies;
 
 #[test]
@@ -27,6 +30,36 @@ fn shared_resolving_resolution_suppresses_unresolved_contradiction_gap() {
     ];
     let gaps = compute_for(&[], &requirements, &resolutions, &[], &[], &[], &edges);
     assert_eq!(count_kind(&gaps, GapKind::UnresolvedContradictsPair), 0);
+}
+
+#[test]
+#[verifies("rule_graph_gaps", examples)]
+fn approved_resolution_need_not_produce_a_rule_but_resolved_requirement_still_does() {
+    let requirements = vec![provenance_core::Requirement {
+        status: RequirementStatus::Resolved,
+        ..requirement("req_resolved")
+    }];
+    let resolutions = vec![provenance_core::Resolution {
+        status: ResolutionStatus::Approved,
+        ..resolution("res_approved")
+    }];
+    let edges = vec![edge(
+        EdgeType::Resolves,
+        (NodeType::Resolution, "res_approved"),
+        (NodeType::Requirement, "req_resolved"),
+    )];
+
+    let gaps = compute_for(&[], &requirements, &resolutions, &[], &[], &[], &edges);
+    assert!(gaps.iter().any(|gap| {
+        gap.kind == GapKind::NoProducedRules
+            && gap.node_type == NodeType::Requirement
+            && gap.node_id == "req_resolved"
+    }));
+    assert!(!gaps.iter().any(|gap| {
+        gap.kind == GapKind::NoProducedRules
+            && gap.node_type == NodeType::Resolution
+            && gap.node_id == "res_approved"
+    }));
 }
 
 #[test]

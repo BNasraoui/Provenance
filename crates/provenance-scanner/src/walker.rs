@@ -47,9 +47,9 @@ pub struct AnnotationLocation {
 
 /// A rule or verification binding found in source.
 ///
-/// `verification` is `None` for a `#[rule]` site (the item is the rule) and
-/// `Some` for a `#[verifies]` site (the item checks the rule, the method
-/// says how).
+/// `verification` is `None` for a `#[rule]` implementation binding and
+/// `Some` for a `#[verifies]` site (the item checks the rule, the method says
+/// how).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct AttributeBinding {
     pub file_path: Utf8PathBuf,
@@ -438,6 +438,15 @@ mod tests {
                 ),
             }]
         );
+    }
+
+    #[test]
+    fn scans_rule_attribute_on_a_type_as_an_implementation() {
+        let source = "#[rule(\"rule_valid_token\")]\npub struct ValidToken(String);";
+        let scan = scan_file(Utf8Path::new("tokens.rs"), Language::Rust, source);
+        let binding = &scan.bindings[0];
+        assert_eq!(binding.verification, None);
+        assert_eq!(binding.item_name.as_deref(), Some("ValidToken"));
     }
 
     #[test]
