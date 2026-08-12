@@ -1,4 +1,4 @@
-import { defineSpec } from "provenance";
+import { defineSpec } from "@quality-sh/provenance";
 
 const spec = defineSpec("share-links", ({ requirement, source }) => {
   const linear = source("linear:ABC-123", {

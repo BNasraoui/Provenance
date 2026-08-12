@@ -66,7 +66,7 @@ function engineJson(repo: string, args: string[]): unknown {
 
 function recordingEngine(responses: Readonly<Record<string, unknown>> = {}): {
   engine: string;
-  requests: () => Array<{ command: string; input: unknown }>;
+  requests: () => Array<{ command: string; args: string[]; input: unknown }>;
 } {
   const directory = mkdtempSync(join(tmpdir(), "provenance-recording-engine-"));
   const executable = join(directory, "engine.mjs");
@@ -76,12 +76,20 @@ function recordingEngine(responses: Readonly<Record<string, unknown>> = {}): {
     `#!/usr/bin/env node
 import { appendFileSync, readFileSync } from "node:fs";
 const command = process.argv[3];
+const args = process.argv.slice(2);
 const responses = ${JSON.stringify(responses)};
 const source = readFileSync(0, "utf8");
 const input = source === "" ? undefined : JSON.parse(source);
-appendFileSync(${JSON.stringify(log)}, JSON.stringify({ command, input }) + "\\n");
+appendFileSync(${JSON.stringify(log)}, JSON.stringify({ command, args, input }) + "\\n");
 if (Object.hasOwn(responses, command)) {
   process.stdout.write(JSON.stringify(responses[command]));
+} else if (command === "info") {
+  process.stdout.write(JSON.stringify({
+    engine_version: "0.1.0",
+    protocol_version: 1,
+    state_schema_version: 1,
+    repository: "/project",
+  }));
 } else if (command === "begin-verification") {
   process.stdout.write(JSON.stringify({
     id: "run_" + input.key,
@@ -110,7 +118,7 @@ if (Object.hasOwn(responses, command)) {
         .trim()
         .split("\n")
         .filter(Boolean)
-        .map((line) => JSON.parse(line) as { command: string; input: unknown }),
+        .map((line) => JSON.parse(line) as { command: string; args: string[]; input: unknown }),
   };
 }
 
@@ -193,6 +201,12 @@ test("verify sends distinct durable binding keys from one test file", async () =
 
 test("plan sends the finalized spec to the read-only engine command", async () => {
   const recorder = recordingEngine({
+    info: {
+      engine_version: "0.1.0",
+      protocol_version: 1,
+      state_schema_version: 1,
+      repository: "/project",
+    },
     plan: {
       declared_by: "spec://typescript",
       created: 0,
@@ -217,8 +231,8 @@ test("plan sends the finalized spec to the read-only engine command", async () =
   const result = await plan(spec);
 
   assert.equal(result.updated, 1);
-  assert.equal(recorder.requests()[0]?.command, "plan");
-  assert.deepEqual((recorder.requests()[0]?.input as { rules: unknown[] }).rules, [
+  assert.deepEqual(recorder.requests().map(({ command }) => command), ["info", "plan"]);
+  assert.deepEqual((recorder.requests()[1]?.input as { rules: unknown[] }).rules, [
     {
       key: "expiry",
       requirement: "sharing",
@@ -246,6 +260,38 @@ test("typed declarations reconcile to canonical Provenance records", async () =>
   ]) as { statement: string; declared_by: string };
   assert.equal(rule.statement, "Share links expire within 30 days");
   assert.equal(rule.declared_by, "spec://typescript/share-links");
+});
+
+test("requirement source order stays unchanged after apply", async () => {
+  const repo = repository();
+  configure({ engine, repository: repo, owner: "spec://typescript/source-order" });
+  const spec = defineSpec("source-order", ({ source, requirement }) => {
+    const policy = source("z-policy", {
+      kind: "document",
+      name: "Policy",
+      reference: "docs/policy.md",
+    });
+    const design = source("a-design", {
+      kind: "document",
+      name: "Design",
+      reference: "docs/design.md",
+    });
+    const behavior = requirement("behavior", {
+      statement: "The behavior follows its accepted sources",
+      sources: [policy, design],
+    });
+    return {
+      behavior: behavior.rule("observable", {
+        statement: "The accepted behavior remains observable",
+      }),
+    };
+  });
+
+  await apply(spec);
+  const result = await plan(spec);
+
+  assert.equal(result.updated, 0);
+  assert.equal(result.unchanged, 4);
 });
 
 test("equal local rule keys under different requirements reconcile separately", async () => {

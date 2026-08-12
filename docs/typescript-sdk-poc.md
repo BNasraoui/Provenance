@@ -11,7 +11,7 @@ stores verification outcomes.
 The package interface is:
 
 ```ts
-import { defineSpec } from "provenance";
+import { defineSpec } from "@quality-sh/provenance";
 
 const spec = defineSpec("share-links", ({ requirement, source }) => {
   const authority = source("linear:ABC-123", {
@@ -47,6 +47,9 @@ sends a serialized error and rethrows the exact value caught from the callback.
 The SDK launches the CLI for each operation and exchanges one JSON document on
 stdin/stdout:
 
+- `provenance sdk info` reports the engine, protocol, state schema, and resolved
+  project root. The SDK uses it to reject an incompatible engine before sending
+  declarations or evidence.
 - `provenance sdk apply` reconciles one complete declaration document.
 - `provenance sdk plan` previews the same reconciliation without publishing it.
 - `provenance sdk begin-verification` checks the rule and creates a running
@@ -55,10 +58,15 @@ stdin/stdout:
 - `provenance sdk verification-runs` queries that evidence, optionally by rule.
 
 No daemon, socket, native addon, FFI object graph, or callback bridge is used
-in this POC. Each verification uses two short-lived Rust processes. The package
-still needs a `provenance` binary on `PATH` or in `PROVENANCE_BIN`; bundling and
-supervising a platform binary remains required before the intended
-`npm install` experience is complete.
+in this POC. Each verification uses two short-lived Rust processes. Published
+SDK packages resolve a platform-specific optional dependency containing the
+Rust engine. Installation runs no binary download or Rust compilation.
+`PROVENANCE_BIN` remains an explicit development override.
+
+An explicit `--repo` / `PROVENANCE_REPO` setting wins. Otherwise the engine
+walks upward from the working directory and selects the nearest initialized
+Provenance project or Git root. This keeps project discovery in Rust so later
+language SDKs share the same behaviour.
 
 ## Identity and ownership
 

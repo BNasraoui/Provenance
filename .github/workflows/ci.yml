@@ -111,3 +111,25 @@ jobs:
           target/debug/provenance sdk verification-bindings \
             --repo "$fixture_repo" --scope default --rule "$rule_id" --format json \
             | jq -e 'length == 1 and .[0].file == "dist/share-links.test.js"'
+
+  typescript-sdk-packed-install:
+    name: Packaged SDK install (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: cargo build -p provenance-cli
+      - run: npm ci --prefix packages/provenance
+      - run: npm run build --prefix packages/provenance
+      - run: npm run test:packed --prefix packages/provenance

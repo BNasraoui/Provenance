@@ -1,6 +1,6 @@
 {
-  "name": "provenance",
-  "version": "0.1.0-poc.0",
+  "name": "@quality-sh/provenance",
+  "version": "0.1.0",
   "description": "Typed traceability declarations backed by the Provenance Rust engine",
   "license": "BUSL-1.1",
   "type": "module",
@@ -16,12 +16,22 @@
       "default": "./dist/index.js"
     }
   },
+  "engines": {
+    "node": ">=20"
+  },
+  "optionalDependencies": {
+    "@quality-sh/provenance-darwin-arm64": "0.1.0",
+    "@quality-sh/provenance-darwin-x64": "0.1.0",
+    "@quality-sh/provenance-linux-x64-gnu": "0.1.0",
+    "@quality-sh/provenance-win32-x64-msvc": "0.1.0"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepack": "npm run build",
-    "test": "npm run build && npm run test:runtime && npm run test:types",
-    "test:runtime": "tsc -p tsconfig.test.json && node --test .test-dist/index.test.js",
-    "test:types": "node scripts/typecheck-fixtures.mjs"
+    "test": "npm run build && npm run test:runtime && npm run test:types && npm run test:packed",
+    "test:runtime": "tsc -p tsconfig.test.json && node --test .test-dist/*.test.js scripts/*.test.js",
+    "test:types": "node scripts/typecheck-fixtures.mjs",
+    "test:packed": "node scripts/test-packed-install.js"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

@@ -1,6 +1,7 @@
 pub mod coverage;
 pub mod edge_validation;
 pub mod model;
+pub mod protocol;
 pub mod scope;
 pub mod threads;
 
@@ -27,3 +28,4 @@ pub use model::{
     UnsupportedRecommendation, UnsupportedSpeculation, VerificationBinding, VerificationMethod,
     VerificationRun, VerificationRunStatus, SUPPORTED_SCHEMA_VERSION,
 };
+pub use protocol::{EngineInfo, SDK_PROTOCOL_VERSION};

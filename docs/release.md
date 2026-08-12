@@ -12,6 +12,10 @@ The release workflow builds and uploads:
 - `provenance-<tag>-aarch64-apple-darwin.tar.gz`
 - `SHA256SUMS`
 
+It also stages and publishes matching npm engine packages plus
+`@quality-sh/provenance`. npm trusted publishing must be configured for the
+repository's `npm` GitHub environment before cutting the first package release.
+
 ## Cut A Release
 
 Update crate versions, then tag and push:
@@ -38,8 +42,10 @@ The binary lands at `target/release/provenance`. Users should commit `.provenanc
 ## Versions
 
 Every crate shares one version, set once in the workspace `[workspace.package]`
-and inherited with `version.workspace = true`. Bump that single field, commit,
-then tag. The tag is the version with a `v` prefix: `v0.1.0`.
+and inherited with `version.workspace = true`. The TypeScript SDK version in
+`packages/provenance/package.json` must match it. The release job rejects a tag
+unless both versions equal the tag without its `v` prefix.
 
 A tag carrying a hyphen is published as a prerelease, so `v0.1.0-rc.1` is the
-way to rehearse a release without announcing one.
+way to rehearse a release without announcing one. npm publishes that version
+under the `next` tag; stable versions use `latest`.
