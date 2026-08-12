@@ -95,3 +95,13 @@ async function leavesRepositoryDiscoveryToRust(): Promise<void> {
 }
 
 test("omitted repository configuration is left for Rust to discover", leavesRepositoryDiscoveryToRust);
+
+test("an engine that cannot start reports the override and reinstall paths", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "provenance-missing-engine-"));
+  configure({ engine: join(directory, "missing-provenance") });
+
+  await assert.rejects(
+    plan(spec()),
+    /could not start.*PROVENANCE_BIN.*npm install/s,
+  );
+});

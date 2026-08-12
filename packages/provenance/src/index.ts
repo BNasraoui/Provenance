@@ -96,7 +96,7 @@ const specModuleFile = fileURLToPath(new URL("./spec.js", import.meta.url));
 let settings = defaults();
 
 interface SdkSettings {
-  engine: string;
+  engine?: string;
   repository?: string;
   scope: string;
   owner: string;
@@ -326,7 +326,7 @@ function callerLocation(): { file: string } | undefined {
 
 function defaults(): SdkSettings {
   return {
-    engine: process.env.PROVENANCE_BIN ?? "provenance",
+    engine: process.env.PROVENANCE_BIN,
     repository: process.env.PROVENANCE_REPO,
     scope: process.env.PROVENANCE_SCOPE ?? "default",
     owner: process.env.PROVENANCE_SPEC_OWNER ?? "spec://typescript",

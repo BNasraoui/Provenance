@@ -1,4 +1,4 @@
-import { apply } from "provenance";
+import { apply } from "@quality-sh/provenance";
 
 import spec from "./provenance.spec.js";
 

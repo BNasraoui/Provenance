@@ -8,7 +8,7 @@
     "test": "npm run build && node dist/apply.js && node dist/share-links.test.js"
   },
   "dependencies": {
-    "provenance": "file:../../packages/provenance"
+    "@quality-sh/provenance": "file:../../packages/provenance"
   },
   "devDependencies": {
     "typescript": "^5.9.3"

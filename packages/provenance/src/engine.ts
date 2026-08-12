@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
+import { resolveEnginePath } from "./engine-path.js";
 
 export interface EngineSettings {
-  engine: string;
+  engine?: string;
   repository?: string;
   scope: string;
 }
@@ -21,15 +22,16 @@ export async function invokeEngine<Result>(
   command: string,
   input?: unknown,
 ): Promise<Result> {
-  await compatibleEngine(settings);
-  return invoke<Result>(settings, command, input);
+  const engine = resolveEnginePath(settings.engine);
+  await compatibleEngine(settings, engine);
+  return invoke<Result>(settings, engine, command, input);
 }
 
 // @provenance rule: rule_sdk_protocol_handshake
-async function compatibleEngine(settings: EngineSettings): Promise<void> {
-  let handshake = handshakes.get(settings.engine);
+async function compatibleEngine(settings: EngineSettings, engine: string): Promise<void> {
+  let handshake = handshakes.get(engine);
   if (handshake === undefined) {
-    handshake = invoke<EngineInfo>(settings, "info").then((info) => {
+    handshake = invoke<EngineInfo>(settings, engine, "info").then((info) => {
       if (info.protocol_version !== SUPPORTED_PROTOCOL_VERSION) {
         throw new Error(
           `Provenance engine ${info.engine_version} uses protocol version ${info.protocol_version}; ` +
@@ -37,13 +39,14 @@ async function compatibleEngine(settings: EngineSettings): Promise<void> {
         );
       }
     });
-    handshakes.set(settings.engine, handshake);
+    handshakes.set(engine, handshake);
   }
   await handshake;
 }
 
 async function invoke<Result>(
   settings: EngineSettings,
+  engine: string,
   command: string,
   input?: unknown,
 ): Promise<Result> {
@@ -56,7 +59,7 @@ async function invoke<Result>(
   }
   args.push("--format", "json");
   const child = spawn(
-    settings.engine,
+    engine,
     args,
     { stdio: ["pipe", "pipe", "pipe"] },
   );
@@ -69,7 +72,13 @@ async function invoke<Result>(
     child.once("close", (code) => resolve(code ?? 1));
   });
   child.stdin.end(input === undefined ? undefined : JSON.stringify(input));
-  const code = await completed;
+  const code = await completed.catch((cause: unknown) => {
+    throw new Error(
+      `Provenance engine could not start at ${engine}. Check PROVENANCE_BIN if it is set, ` +
+      "or run npm install @quality-sh/provenance without --omit=optional.",
+      { cause },
+    );
+  });
   const output = Buffer.concat(stdout).toString("utf8");
   const diagnostics = Buffer.concat(stderr).toString("utf8").trim();
   if (code !== 0) {

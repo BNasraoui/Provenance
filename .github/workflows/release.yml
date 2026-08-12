@@ -33,6 +33,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
@@ -58,10 +61,28 @@ jobs:
           Copy-Item README.md, LICENSE "dist/$package/"
           Compress-Archive -Path "dist/$package/*" -DestinationPath "dist/$package.zip" -Force
 
+      - name: Package npm engine
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          binary="target/${{ matrix.target }}/release/provenance"
+          if [[ "${{ matrix.target }}" == *windows* ]]; then
+            binary="${binary}.exe"
+          fi
+          package="dist/npm-${{ matrix.target }}"
+          node packages/provenance/scripts/package-engine.js \
+            --target "${{ matrix.target }}" \
+            --binary "$binary" \
+            --out "$package" \
+            --version "$version"
+          npm pack "$package" --pack-destination dist
+
       - uses: actions/upload-artifact@v4
         with:
           name: provenance-${{ github.ref_name }}-${{ matrix.target }}
-          path: dist/provenance-${{ github.ref_name }}-${{ matrix.target }}.${{ matrix.archive }}
+          path: |
+            dist/provenance-${{ github.ref_name }}-${{ matrix.target }}.${{ matrix.archive }}
+            dist/quality-sh-provenance-*.tgz
           if-no-files-found: error
 
   publish:
@@ -76,11 +97,56 @@ jobs:
       - name: Generate checksums
         run: |
           cd dist
-          sha256sum provenance-* > SHA256SUMS
+          sha256sum provenance-* quality-sh-* > SHA256SUMS
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/provenance-*
+            dist/quality-sh-provenance-*.tgz
             dist/SHA256SUMS
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
+
+  publish-npm:
+    name: Publish npm packages
+    runs-on: ubuntu-latest
+    needs: build
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Verify release versions
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          cargo_version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          npm_version=$(node -p "require('./packages/provenance/package.json').version")
+          test "$version" = "$cargo_version"
+          test "$version" = "$npm_version"
+      - name: Publish platform engines
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          npm_tag=latest
+          if [[ "$version" == *-* ]]; then npm_tag=next; fi
+          for package in dist/quality-sh-provenance-*.tgz; do
+            npm publish "$package" --access public --provenance --tag "$npm_tag"
+          done
+      - name: Publish TypeScript SDK
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          npm_tag=latest
+          if [[ "$version" == *-* ]]; then npm_tag=next; fi
+          npm ci --prefix packages/provenance
+          npm pack packages/provenance --pack-destination dist
+          npm publish "dist/quality-sh-provenance-${version}.tgz" \
+            --access public --provenance --tag "$npm_tag"
