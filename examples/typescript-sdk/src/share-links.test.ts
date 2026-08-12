@@ -3,7 +3,7 @@ import { createShareLink } from "./share-links.js";
 
 const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
 
-await expiry.verify(() => {
+await expiry.verify("share-link-expiry", () => {
   const now = new Date();
   const link = createShareLink(now);
 

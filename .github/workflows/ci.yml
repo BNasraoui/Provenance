@@ -93,7 +93,7 @@ jobs:
       - name: Run packaged fixture
         shell: bash
         run: |
-          fixture_repo=$(mktemp -d)
+          fixture_repo="$PWD/examples/typescript-sdk"
           target/debug/provenance init --path "$fixture_repo" --scope default --path-prefix .
           PROVENANCE_BIN="$PWD/target/debug/provenance" \
           PROVENANCE_REPO="$fixture_repo" \
@@ -106,4 +106,8 @@ jobs:
           target/debug/provenance rules show \
             --repo "$fixture_repo" --scope default --id "$rule_id" --format json
           target/debug/provenance sdk verification-runs \
-            --repo "$fixture_repo" --scope default --rule "$rule_id" --format json
+            --repo "$fixture_repo" --scope default --rule "$rule_id" --format json \
+            | jq -e 'length == 1 and .[0].status == "passed"'
+          target/debug/provenance sdk verification-bindings \
+            --repo "$fixture_repo" --scope default --rule "$rule_id" --format json \
+            | jq -e 'length == 1 and .[0].file == "dist/share-links.test.js"'
