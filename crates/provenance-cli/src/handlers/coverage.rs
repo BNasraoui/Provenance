@@ -5,6 +5,7 @@ use camino::Utf8PathBuf;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
+mod retired;
 mod verification_state;
 use verification_state::{load_validation_state, unverified_rule_warnings};
 
@@ -37,13 +38,19 @@ fn coverage_scan_against(
     // location. Derived Rule findings are joined on after, without one.
     let mut warnings = parse_warnings(&scans);
     warnings.extend(validation.warnings);
-    if validate_rules && scan_covers_repository(repo, path) {
-        warnings.extend(unimplemented_rule_warnings(&validation.rules, &scans));
-        warnings.extend(unverified_rule_warnings(
-            &validation.rules,
-            &scans,
-            &validation.bindings,
-        ));
+    if validate_rules {
+        // A marker citing a retired Rule is a fact about a line the scan
+        // read, so it stands even when the scan covers part of the tree.
+        // Derived absence needs the whole repository to be honest.
+        warnings.extend(retired::stale_rule_warnings(&validation.rules, &scans));
+        if scan_covers_repository(repo, path) {
+            warnings.extend(unimplemented_rule_warnings(&validation.rules, &scans));
+            warnings.extend(unverified_rule_warnings(
+                &validation.rules,
+                &scans,
+                &validation.bindings,
+            ));
+        }
     }
     let annotations = scans
         .iter()

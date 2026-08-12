@@ -51,13 +51,13 @@ where
 /// person actually has to hand from `git log`, a review comment, or a pasted
 /// permalink, short forms and shouted uppercase included.
 ///
-/// This is deliberately looser than the commit on a graph reference, which
-/// must be a full 40- or 64-character lowercase id. A source pin locates: it
-/// tells a reader where to go and look, and an abbreviation does that. A
-/// reference commit identifies: it is part of a claim about a repository the
-/// holder cannot read, so an abbreviation that later grows ambiguous would
-/// name two different commits. The gap between the two is a decision, not a
-/// divergence to be tidied away.
+/// This is deliberately looser than `rule_reference_wellformed`'s commit on a
+/// graph reference, which must be a full 40- or 64-character lowercase id. A
+/// source pin locates: it tells a reader where to go and look, and an
+/// abbreviation does that. A reference commit identifies: it is part of a
+/// claim about a repository the holder cannot read, so an abbreviation that
+/// later grows ambiguous would name two different commits. The gap between the
+/// two is a decision, not a divergence to be tidied away.
 #[rule("rule_source_commit_pin")]
 pub fn validate_commit_pin(commit_pin: &str) -> anyhow::Result<()> {
     anyhow::ensure!(
@@ -210,6 +210,27 @@ mod tests {
             accepted >= 512 && refused >= 512,
             "{accepted} accepted and {refused} refused; the property proves too little"
         );
+    }
+
+    #[test]
+    #[verifies("rule_source_commit_pin", conformance)]
+    fn source_commit_pin_contract_keeps_abbreviations_and_uppercase() {
+        for (name, pin, accepted) in [
+            ("six lowercase digits", "a".repeat(6), false),
+            ("seven lowercase digits", "a".repeat(7), true),
+            ("seven uppercase digits", "A".repeat(7), true),
+            ("mixed case abbreviation", "aBcD012".to_string(), true),
+            ("forty uppercase digits", "F".repeat(40), true),
+            ("sixty-four lowercase digits", "0".repeat(64), true),
+            ("sixty-five lowercase digits", "0".repeat(65), false),
+            ("non-hexadecimal text", "commit0".to_string(), false),
+        ] {
+            assert_eq!(
+                validate_commit_pin(&pin).is_ok(),
+                accepted,
+                "source pin contract got the wrong verdict for {name}: {pin:?}"
+            );
+        }
     }
 
     /// The score range restated on its own terms: a NaN compares to nothing,

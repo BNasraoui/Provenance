@@ -11,6 +11,7 @@ use provenance_core::{
     ArtifactChangeType, ContributionStance, EvidenceQuality, IdeationEvidenceType,
     IdeationTargetType, PromotionState, ProposalType, SpeculationMarker, UncertaintyLevel,
 };
+use provenance_macros::verifies;
 use provenance_store::graph_reference::{graph_digest, GraphExport};
 use serde_json::{json, Value};
 
@@ -70,6 +71,32 @@ fn assert_speculation_marker_array_is_exhaustive(value: SpeculationMarker) {
     match value {
         SpeculationMarker::Unsupported | SpeculationMarker::Exploratory => {}
     }
+}
+
+fn all_ideation_evidence_types() -> Vec<IdeationEvidenceType> {
+    let mut all = vec![IdeationEvidenceType::Source];
+    while let Some(next) = match all.last().unwrap() {
+        IdeationEvidenceType::Source => Some(IdeationEvidenceType::Artifact),
+        IdeationEvidenceType::Artifact => Some(IdeationEvidenceType::ThreadMessage),
+        IdeationEvidenceType::ThreadMessage => Some(IdeationEvidenceType::DomainKnowledge),
+        IdeationEvidenceType::DomainKnowledge => Some(IdeationEvidenceType::Unsupported),
+        IdeationEvidenceType::Unsupported => Some(IdeationEvidenceType::Exploratory),
+        IdeationEvidenceType::Exploratory => None,
+    } {
+        all.push(next);
+    }
+    all
+}
+
+fn all_speculation_markers() -> Vec<SpeculationMarker> {
+    let mut all = vec![SpeculationMarker::Unsupported];
+    while let Some(next) = match all.last().unwrap() {
+        SpeculationMarker::Unsupported => Some(SpeculationMarker::Exploratory),
+        SpeculationMarker::Exploratory => None,
+    } {
+        all.push(next);
+    }
+    all
 }
 
 fn assert_uncertainty_level_array_is_exhaustive(value: UncertaintyLevel) {
@@ -233,6 +260,33 @@ fn schema_show_enum_values_match_model_serialization() {
     assert_eq!(
         proposal.pointer("/schema/properties/promotion_state/const"),
         Some(&json!("proposed"))
+    );
+}
+
+#[test]
+#[verifies("rule_positive_evidence", conformance)]
+fn schema_evidence_vocabularies_match_the_positive_evidence_domain() {
+    let core_evidence_types = enum_names(&all_ideation_evidence_types());
+    let schema_evidence_types = enum_names(&IDEATION_EVIDENCE_TYPES);
+    assert_eq!(
+        schema_evidence_types, core_evidence_types,
+        "schema evidence types drifted from the core domain"
+    );
+
+    let core_speculation_markers = enum_names(&all_speculation_markers());
+    let schema_speculation_markers = enum_names(&SPECULATION_MARKERS);
+    assert_eq!(
+        schema_speculation_markers, core_speculation_markers,
+        "schema speculation markers drifted from the core domain"
+    );
+
+    let non_positive_evidence = enum_names(&[
+        IdeationEvidenceType::Unsupported,
+        IdeationEvidenceType::Exploratory,
+    ]);
+    assert_eq!(
+        schema_speculation_markers, non_positive_evidence,
+        "schema speculation markers must name exactly the non-positive evidence types"
     );
 }
 

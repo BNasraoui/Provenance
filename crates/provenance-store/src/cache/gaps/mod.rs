@@ -1,7 +1,7 @@
 mod contradiction;
 mod dangling;
 mod frontier;
-mod graph_query;
+pub mod graph_query;
 mod model;
 mod state_adapter;
 

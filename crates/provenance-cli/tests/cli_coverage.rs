@@ -1,5 +1,7 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
+use serde_json::Value;
+use std::path::Path;
 
 fn strict_validating_scan(repo: &std::path::Path, source_dir: &std::path::Path) -> Command {
     let mut command = Command::cargo_bin("provenance").unwrap();
@@ -301,4 +303,141 @@ fn partial_scan_does_not_claim_scope_wide_binding_absence() {
         .success()
         .stdout(predicate::str::contains("has no implementation").not())
         .stdout(predicate::str::contains("has no verification").not());
+}
+
+#[test]
+fn coverage_scan_warns_for_deprecated_marker_but_not_active_marker() {
+    let tmp = tempfile::tempdir().unwrap();
+    let repo = tmp.path();
+    let source_dir = repo.join("src");
+    std::fs::create_dir_all(&source_dir).unwrap();
+    init_repo(repo);
+    create_rule(repo, "rule_deprecated", "deprecated");
+    create_rule(repo, "rule_archived", "archived");
+    create_rule(repo, "rule_active", "active");
+    std::fs::write(
+        source_dir.join("payroll.rs"),
+        "// @provenance rule: rule_deprecated\nfn old_payroll() {}\n\
+         // @provenance rule: rule_archived\nfn archived_payroll() {}\n\
+         // @provenance rule: rule_active\n// @provenance verification: examples\nfn current_payroll() {}\n\
+         // @provenance rule: rule_missing\nfn missing_rule() {}\n",
+    )
+    .unwrap();
+
+    let output = Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "coverage",
+            "scan",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--path",
+            source_dir.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--validate-rules",
+            "--format",
+            "json",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let warnings = report["warnings"].as_array().unwrap();
+    assert_eq!(warnings.len(), 3, "unexpected warnings: {warnings:#?}");
+    assert!(warnings.iter().any(|warning| {
+        warning["rule_id"] == "rule_deprecated"
+            && warning["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("deprecated"))
+    }));
+    assert!(warnings.iter().any(|warning| {
+        warning["rule_id"] == "rule_archived"
+            && warning["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("archived"))
+    }));
+    assert!(warnings.iter().any(|warning| {
+        warning["rule_id"] == "rule_missing"
+            && warning["message"] == "unknown rule id `rule_missing`"
+    }));
+    assert!(!warnings
+        .iter()
+        .any(|warning| warning["rule_id"] == "rule_active"));
+}
+
+#[test]
+fn coverage_scan_strict_exits_non_zero_for_deprecated_marker() {
+    let tmp = tempfile::tempdir().unwrap();
+    let repo = tmp.path();
+    let source_dir = repo.join("src");
+    std::fs::create_dir_all(&source_dir).unwrap();
+    init_repo(repo);
+    create_rule(repo, "rule_deprecated", "deprecated");
+    std::fs::write(
+        source_dir.join("payroll.rs"),
+        "// @provenance rule: rule_deprecated\nfn old_payroll() {}\n",
+    )
+    .unwrap();
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "coverage",
+            "scan",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--path",
+            source_dir.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--validate-rules",
+            "--strict",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("rule_deprecated"))
+        .stdout(predicate::str::contains("deprecated"));
+}
+
+fn init_repo(repo: &Path) {
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "init",
+            "--path",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--path-prefix",
+            ".",
+        ])
+        .assert()
+        .success();
+}
+
+fn create_rule(repo: &Path, id: &str, status: &str) {
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "rules",
+            "create",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--id",
+            id,
+            "--statement",
+            "Payroll follows the current policy",
+            "--status",
+            status,
+            "--severity",
+            "high",
+        ])
+        .assert()
+        .success();
 }

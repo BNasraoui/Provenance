@@ -6,6 +6,7 @@ use crate::state_store::{
 use provenance_core::{
     NodeType, RequirementStatus, ResolutionStatus, RuleSeverity, RuleStatus, ScopeId,
 };
+use provenance_macros::verifies;
 
 #[test]
 fn impact_reports_hop_distance_and_direction() {
@@ -221,6 +222,116 @@ fn rule_without_a_producing_requirement_remains_orphaned() {
             && gap.node_id == "rule_unattached"
             && gap.reason == "no requirement produces this rule"
     }));
+}
+
+fn seed_rule_with_producers(
+    layout: &ProvenanceLayout,
+    scope: &ScopeId,
+    has_requirement: bool,
+    has_resolution: bool,
+) {
+    let store = StateStore::new(layout.clone());
+    if has_requirement {
+        create_source(&store, scope, "source_anchor");
+        create_requirement(&store, scope, "req_rule", RequirementStatus::Active);
+        attach_source(&store, scope, "req_rule", "source_anchor");
+    }
+    if has_resolution {
+        store
+            .create_resolution(CreateResolutionInput {
+                scope_id: scope.clone(),
+                id: sid("res_rule"),
+                title: "Rule decision".into(),
+                requirement_id: has_requirement.then(|| sid("req_rule")),
+                position: "Adopt".into(),
+                rationale: "Decides the rule".into(),
+                status: ResolutionStatus::Proposed,
+                context: None,
+                enforcement: None,
+                confidence: None,
+                inputs: Vec::new(),
+                made_by: None,
+                approved_by: None,
+                approved_at: None,
+                superseded_by: None,
+                origin_thread: None,
+                origin_message: None,
+            })
+            .unwrap();
+    }
+    store
+        .create_rule(CreateRuleInput {
+            scope_id: scope.clone(),
+            id: sid("rule_under_test"),
+            name: None,
+            description: None,
+            requirement_id: has_requirement.then(|| sid("req_rule")),
+            resolution_id: has_resolution.then(|| sid("res_rule")),
+            statement: "A rule under producer conformance test".into(),
+            status: RuleStatus::Active,
+            severity: RuleSeverity::High,
+            source_document: None,
+            source_section: None,
+            origin_thread: None,
+            origin_message: None,
+        })
+        .unwrap();
+}
+
+/// `orphans` and `gaps` are two consumers of one producer test, so they must
+/// name the same rules for every shape of producer edge. The expectation is
+/// derived from `RuleProducer::REQUIRED` rather than restated here: which
+/// producers a rule owes is the graph's ruling to change, and this test holds
+/// the two consumers together through any such change.
+#[test]
+#[verifies("rule_graph_gaps", conformance)]
+fn orphan_health_and_gaps_name_the_same_rules() {
+    use crate::cache::gaps::graph_query::RuleProducer;
+
+    for has_requirement in [false, true] {
+        for has_resolution in [false, true] {
+            let (_dir, layout, scope) = empty_layout();
+            seed_rule_with_producers(&layout, &scope, has_requirement, has_resolution);
+
+            let expected_missing = RuleProducer::REQUIRED
+                .into_iter()
+                .filter(|producer| match producer {
+                    RuleProducer::Requirement => !has_requirement,
+                    RuleProducer::Resolution => !has_resolution,
+                })
+                .map(|producer: RuleProducer| producer.word().to_string())
+                .collect::<Vec<_>>();
+
+            let health_missing = orphan_rules(&layout, &scope)
+                .unwrap()
+                .into_iter()
+                .find(|orphan| orphan.rule_id == "rule_under_test")
+                .map(|orphan| {
+                    orphan
+                        .missing
+                        .into_iter()
+                        .filter(|missing| missing != "source")
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let gap = find_gaps(&layout, &scope)
+                .unwrap()
+                .into_iter()
+                .find(|gap| gap.kind == GapKind::OrphanRule && gap.node_id == "rule_under_test");
+
+            assert_eq!(
+                health_missing, expected_missing,
+                "health disagreed with the required-producer list for \
+                 requirement={has_requirement}, resolution={has_resolution}"
+            );
+            assert_eq!(
+                gap.is_some(),
+                !expected_missing.is_empty(),
+                "gaps disagreed with health for requirement={has_requirement}, \
+                 resolution={has_resolution}"
+            );
+        }
+    }
 }
 
 #[test]
