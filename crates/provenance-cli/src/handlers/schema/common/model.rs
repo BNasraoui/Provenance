@@ -16,6 +16,9 @@ pub(in crate::handlers::schema) const IDEATION_TARGET_TYPES: [IdeationTargetType
     IdeationTargetType::Domain,
 ];
 
+// Schema generation needs this concrete replica of the evidence domain that
+// `rule_positive_evidence` decides in provenance-core. The conformance test in
+// `schema/tests.rs` holds it to the core enum in both directions.
 pub(in crate::handlers::schema) const IDEATION_EVIDENCE_TYPES: [IdeationEvidenceType; 6] = [
     IdeationEvidenceType::Source,
     IdeationEvidenceType::Artifact,
@@ -39,6 +42,9 @@ pub(in crate::handlers::schema) const CONTRIBUTION_STANCES: [ContributionStance;
     ContributionStance::NeedsMoreEvidence,
 ];
 
+// This replica must name exactly the evidence types that
+// `rule_positive_evidence` counts as speculation. The schema conformance test
+// holds it to that domain in both directions.
 pub(in crate::handlers::schema) const SPECULATION_MARKERS: [SpeculationMarker; 2] = [
     SpeculationMarker::Unsupported,
     SpeculationMarker::Exploratory,
