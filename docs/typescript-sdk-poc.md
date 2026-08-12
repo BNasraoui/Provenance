@@ -48,6 +48,7 @@ The SDK launches the CLI for each operation and exchanges one JSON document on
 stdin/stdout:
 
 - `provenance sdk apply` reconciles one complete declaration document.
+- `provenance sdk plan` previews the same reconciliation without publishing it.
 - `provenance sdk begin-verification` checks the rule and creates a running
   evidence record.
 - `provenance sdk complete-verification` records passed or failed.
@@ -175,5 +176,6 @@ canonical model without a data migration.
    verification. No operation depends on a TypeScript-only runtime concept.
 
 The next decision is how durable verification relationships and runtime
-evidence should join coverage, stale detection, and wiki views. More languages
-are not the next task.
+evidence should shape CI policy. Typed bindings already join coverage, stale
+detection, wiki views, and semantic change plans. More languages are not the
+next task.

@@ -4,6 +4,15 @@ use clap::Subcommand;
 
 #[derive(Subcommand)]
 pub enum SdkCommand {
+    /// Preview one desired-state reconciliation without writing it.
+    Plan {
+        #[arg(long, default_value = ".")]
+        repo: Utf8PathBuf,
+        #[arg(long, default_value = "default")]
+        scope: String,
+        #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
+        format: OutputFormat,
+    },
     /// Reconcile one desired-state document read from stdin.
     Apply {
         #[arg(long, default_value = ".")]

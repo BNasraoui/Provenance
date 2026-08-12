@@ -2,6 +2,7 @@ import { invokeEngine, type EngineSettings } from "./engine.js";
 import { fileURLToPath } from "node:url";
 import type {
   ApplyResult,
+  PlanResult,
   VerificationRun,
 } from "./protocol.js";
 import { DeclarationRegistry } from "./registry.js";
@@ -80,7 +81,7 @@ export interface RuleHandle {
   ): Promise<void>;
 }
 
-export type { ApplyResult } from "./protocol.js";
+export type { ApplyResult, PlanResult } from "./protocol.js";
 export type {
   RequirementHandle as SpecRequirement,
   RuleHandle as SpecRule,
@@ -154,6 +155,16 @@ export async function apply(
     registry.assign(result);
   }
   return result;
+}
+
+export async function plan(
+  spec: SpecHandle<Readonly<Record<string, unknown>>>,
+): Promise<PlanResult> {
+  return invokeEngine<PlanResult>(
+    engineSettings(),
+    "plan",
+    specDocument(spec, settings.owner),
+  );
 }
 
 class DeclaredHandle implements SourceHandle {

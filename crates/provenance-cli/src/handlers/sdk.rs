@@ -9,8 +9,19 @@ use provenance_store::{
     state_store::{BeginVerificationInput, CompleteVerificationInput, StateStore, TypedSpecInput},
 };
 
+mod plan;
+
 pub(super) fn handle(command: SdkCommand) -> anyhow::Result<()> {
     match command {
+        SdkCommand::Plan {
+            repo,
+            scope,
+            format,
+        } => {
+            let input = read_stdin_json::<TypedSpecInput>()?;
+            let result = plan::typed_spec(&repo, &ScopeId::new(scope)?, input)?;
+            output::print(format, &result)?;
+        }
         SdkCommand::Apply {
             repo,
             scope,

@@ -26,8 +26,8 @@ pub use inputs::{
     CreateRequirementInput, CreateResolutionInput, CreateRuleInput, CreateSourceInput,
     CreateSynthesisPacketInput, CreateTopicInput, DeclarationReferenceInput,
     MaterializeVerificationBindingInput, PostMessageInput, ReconcileState, ReconciledResource,
-    TypedRequirementInput, TypedResourceKind, TypedRuleInput, TypedSourceInput, TypedSpecInput,
-    TypedSpecResult, UpdateQuestionInput,
+    TypedFieldChange, TypedRequirementInput, TypedResourceKind, TypedRuleInput, TypedSourceInput,
+    TypedSpecInput, TypedSpecResult, UpdateQuestionInput,
 };
 pub use proposal_surfaces::{ProposalDemand, ProposalSurfaceReason, SurfacedProposal, TopicClaim};
 

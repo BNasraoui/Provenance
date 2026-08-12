@@ -6,8 +6,8 @@ use provenance_core::{
 };
 
 use super::super::{
-    ReconcileState, ReconciledResource, TypedRequirementInput, TypedResourceKind, TypedRuleInput,
-    TypedSourceInput,
+    ReconcileState, ReconciledResource, TypedFieldChange, TypedRequirementInput, TypedResourceKind,
+    TypedRuleInput, TypedSourceInput,
 };
 use super::identity::{requirement_address, rule_address, source_address};
 
@@ -41,7 +41,7 @@ pub(super) fn reconcile_sources(
             origin_thread: None,
             origin_message: None,
         };
-        let state = upsert_source(&mut records, desired);
+        let (state, changes) = upsert_source(&mut records, desired);
         resources.push(resource(
             TypedResourceKind::Source,
             declaration.key,
@@ -49,6 +49,7 @@ pub(super) fn reconcile_sources(
             address,
             id,
             state,
+            changes,
         ));
     }
     records.sort_by(|left, right| left.id.as_str().cmp(right.id.as_str()));
@@ -62,10 +63,13 @@ fn source_type(kind: &str) -> anyhow::Result<SourceType> {
     })
 }
 
-fn upsert_source(records: &mut Vec<Source>, desired: Source) -> ReconcileState {
+fn upsert_source(
+    records: &mut Vec<Source>,
+    desired: Source,
+) -> (ReconcileState, Vec<TypedFieldChange>) {
     let Some(existing) = records.iter_mut().find(|record| record.id == desired.id) else {
         records.push(desired);
-        return ReconcileState::Created;
+        return (ReconcileState::Created, Vec::new());
     };
     let before = existing.clone();
     existing.declared_by = desired.declared_by;
@@ -74,7 +78,8 @@ fn upsert_source(records: &mut Vec<Source>, desired: Source) -> ReconcileState {
     existing.source_type = desired.source_type;
     existing.url = desired.url;
     existing.reference = desired.reference;
-    state_after_change(existing, &before)
+    let changes = source_changes(&before, existing);
+    (state_after_change(existing, &before), changes)
 }
 
 pub(super) fn reconcile_requirements(
@@ -113,7 +118,7 @@ pub(super) fn reconcile_requirements(
             origin_thread: None,
             origin_message: None,
         };
-        let state = upsert_requirement(&mut records, desired);
+        let (state, changes) = upsert_requirement(&mut records, desired);
         resources.push(resource(
             TypedResourceKind::Requirement,
             declaration.key,
@@ -121,16 +126,20 @@ pub(super) fn reconcile_requirements(
             address,
             id,
             state,
+            changes,
         ));
     }
     records.sort_by(|left, right| left.id.as_str().cmp(right.id.as_str()));
     Ok((records, resources))
 }
 
-fn upsert_requirement(records: &mut Vec<Requirement>, desired: Requirement) -> ReconcileState {
+fn upsert_requirement(
+    records: &mut Vec<Requirement>,
+    desired: Requirement,
+) -> (ReconcileState, Vec<TypedFieldChange>) {
     let Some(existing) = records.iter_mut().find(|record| record.id == desired.id) else {
         records.push(desired);
-        return ReconcileState::Created;
+        return (ReconcileState::Created, Vec::new());
     };
     let before = existing.clone();
     existing.declared_by = desired.declared_by;
@@ -150,7 +159,8 @@ fn upsert_requirement(records: &mut Vec<Requirement>, desired: Requirement) -> R
             .cmp(right.source_id.as_str())
             .then(left.clause.cmp(&right.clause))
     });
-    state_after_change(existing, &before)
+    let changes = requirement_changes(&before, existing);
+    (state_after_change(existing, &before), changes)
 }
 
 pub(super) fn reconcile_rules(
@@ -181,7 +191,7 @@ pub(super) fn reconcile_rules(
             origin_thread: None,
             origin_message: None,
         };
-        let state = upsert_rule(&mut records, desired);
+        let (state, changes) = upsert_rule(&mut records, desired);
         resources.push(resource(
             TypedResourceKind::Rule,
             declaration.key,
@@ -189,16 +199,17 @@ pub(super) fn reconcile_rules(
             address,
             id,
             state,
+            changes,
         ));
     }
     records.sort_by(|left, right| left.id.as_str().cmp(right.id.as_str()));
     Ok((records, resources))
 }
 
-fn upsert_rule(records: &mut Vec<Rule>, desired: Rule) -> ReconcileState {
+fn upsert_rule(records: &mut Vec<Rule>, desired: Rule) -> (ReconcileState, Vec<TypedFieldChange>) {
     let Some(existing) = records.iter_mut().find(|record| record.id == desired.id) else {
         records.push(desired);
-        return ReconcileState::Created;
+        return (ReconcileState::Created, Vec::new());
     };
     let before = existing.clone();
     existing.declared_by = desired.declared_by;
@@ -210,7 +221,83 @@ fn upsert_rule(records: &mut Vec<Rule>, desired: Rule) -> ReconcileState {
     if desired.description.is_some() {
         existing.description = desired.description;
     }
-    state_after_change(existing, &before)
+    let changes = rule_changes(&before, existing);
+    (state_after_change(existing, &before), changes)
+}
+
+fn source_changes(before: &Source, after: &Source) -> Vec<TypedFieldChange> {
+    let mut changes = Vec::new();
+    changed(&mut changes, "name", &before.name, &after.name);
+    changed(
+        &mut changes,
+        "kind",
+        &before.source_type,
+        &after.source_type,
+    );
+    changed(&mut changes, "url", &before.url, &after.url);
+    changed(
+        &mut changes,
+        "reference",
+        &before.reference,
+        &after.reference,
+    );
+    changes
+}
+
+fn requirement_changes(before: &Requirement, after: &Requirement) -> Vec<TypedFieldChange> {
+    let mut changes = Vec::new();
+    changed(
+        &mut changes,
+        "statement",
+        &before.statement,
+        &after.statement,
+    );
+    changed(
+        &mut changes,
+        "description",
+        &before.description,
+        &after.description,
+    );
+    changed(
+        &mut changes,
+        "sources",
+        &before.source_refs,
+        &after.source_refs,
+    );
+    changes
+}
+
+fn rule_changes(before: &Rule, after: &Rule) -> Vec<TypedFieldChange> {
+    let mut changes = Vec::new();
+    changed(
+        &mut changes,
+        "statement",
+        &before.statement,
+        &after.statement,
+    );
+    changed(&mut changes, "name", &before.name, &after.name);
+    changed(
+        &mut changes,
+        "description",
+        &before.description,
+        &after.description,
+    );
+    changes
+}
+
+fn changed<T: PartialEq + serde::Serialize>(
+    changes: &mut Vec<TypedFieldChange>,
+    field: &str,
+    before: &T,
+    after: &T,
+) {
+    if before != after {
+        changes.push(TypedFieldChange {
+            field: field.to_string(),
+            before: serde_json::to_value(before).expect("canonical field serializes"),
+            after: serde_json::to_value(after).expect("canonical field serializes"),
+        });
+    }
 }
 
 fn state_after_change<T: PartialEq>(changed: &T, before: &T) -> ReconcileState {
@@ -228,6 +315,7 @@ const fn resource(
     address: provenance_core::DeclarationAddress,
     id: StableId,
     state: ReconcileState,
+    changes: Vec<TypedFieldChange>,
 ) -> ReconciledResource {
     ReconciledResource {
         kind,
@@ -236,5 +324,6 @@ const fn resource(
         address,
         id,
         state,
+        changes,
     }
 }

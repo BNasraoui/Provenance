@@ -45,6 +45,13 @@ export interface ReconciledResource {
   address: string[];
   id: string;
   state: ReconcileState;
+  changes?: FieldChange[];
+}
+
+export interface FieldChange {
+  field: string;
+  before: unknown;
+  after: unknown;
 }
 
 export interface ApplyResult {
@@ -53,6 +60,30 @@ export interface ApplyResult {
   updated: number;
   unchanged: number;
   resources: ReconciledResource[];
+}
+
+export interface ImplementationSite {
+  file: string;
+  line: number;
+}
+
+export interface VerificationSite {
+  key?: string;
+  method: string;
+  declared_by?: string;
+  file: string;
+  line?: number;
+  symbol?: string;
+}
+
+export interface AffectedRule {
+  id: string;
+  implementations: ImplementationSite[];
+  verifications: VerificationSite[];
+}
+
+export interface PlanResult extends ApplyResult {
+  affected_rules: AffectedRule[];
 }
 
 export interface VerificationRun {

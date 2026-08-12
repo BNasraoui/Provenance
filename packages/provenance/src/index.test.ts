@@ -10,6 +10,7 @@ import {
   apply,
   configure,
   defineSpec,
+  plan,
   requirement,
   source,
 } from "./index.js";
@@ -63,7 +64,7 @@ function engineJson(repo: string, args: string[]): unknown {
   );
 }
 
-function recordingEngine(): {
+function recordingEngine(responses: Readonly<Record<string, unknown>> = {}): {
   engine: string;
   requests: () => Array<{ command: string; input: unknown }>;
 } {
@@ -75,10 +76,13 @@ function recordingEngine(): {
     `#!/usr/bin/env node
 import { appendFileSync, readFileSync } from "node:fs";
 const command = process.argv[3];
+const responses = ${JSON.stringify(responses)};
 const source = readFileSync(0, "utf8");
 const input = source === "" ? undefined : JSON.parse(source);
 appendFileSync(${JSON.stringify(log)}, JSON.stringify({ command, input }) + "\\n");
-if (command === "begin-verification") {
+if (Object.hasOwn(responses, command)) {
+  process.stdout.write(JSON.stringify(responses[command]));
+} else if (command === "begin-verification") {
   process.stdout.write(JSON.stringify({
     id: "run_" + input.key,
     binding_id: "verification_binding_" + input.key,
@@ -185,6 +189,42 @@ test("verify sends distinct durable binding keys from one test file", async () =
     .filter(({ command }) => command === "begin-verification")
     .map(({ input }) => (input as { key?: string }).key);
   assert.deepEqual(keys, ["maximum-expiry", "expired-link"]);
+});
+
+test("plan sends the finalized spec to the read-only engine command", async () => {
+  const recorder = recordingEngine({
+    plan: {
+      declared_by: "spec://typescript",
+      created: 0,
+      updated: 1,
+      unchanged: 1,
+      resources: [],
+      affected_rules: [],
+    },
+  });
+  configure({ engine: recorder.engine, repository: repository() });
+  const spec = defineSpec("share-links", ({ requirement }) => {
+    const sharing = requirement("sharing", {
+      statement: "Users can securely share documentation",
+    });
+    return {
+      expiry: sharing.rule("expiry", {
+        statement: "Share links expire within 14 days",
+      }),
+    };
+  });
+
+  const result = await plan(spec);
+
+  assert.equal(result.updated, 1);
+  assert.equal(recorder.requests()[0]?.command, "plan");
+  assert.deepEqual((recorder.requests()[0]?.input as { rules: unknown[] }).rules, [
+    {
+      key: "expiry",
+      requirement: "sharing",
+      statement: "Share links expire within 14 days",
+    },
+  ]);
 });
 
 test("typed declarations reconcile to canonical Provenance records", async () => {

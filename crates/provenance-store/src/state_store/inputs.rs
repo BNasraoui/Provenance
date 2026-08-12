@@ -215,6 +215,15 @@ pub struct ReconciledResource {
     pub address: provenance_core::DeclarationAddress,
     pub id: StableId,
     pub state: ReconcileState,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub changes: Vec<TypedFieldChange>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct TypedFieldChange {
+    pub field: String,
+    pub before: serde_json::Value,
+    pub after: serde_json::Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

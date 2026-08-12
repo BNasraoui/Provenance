@@ -30,11 +30,22 @@ write state or start a process.
 Materialize only this spec at a deliberate entry point:
 
 ```ts
-import { apply } from "provenance";
+import { apply, plan } from "provenance";
 import spec from "./provenance.spec.js";
 
 await apply(spec);
 ```
+
+Preview the same reconciliation without writing canonical state:
+
+```ts
+const proposed = await plan(spec);
+```
+
+Updated resources include field-level `before` and `after` values. Affected
+Rules also list the implementation and verification sites that may need
+review. Provenance computes both `plan` and `apply` through the same Rust
+reconciliation path.
 
 A test imports the actual rule handle and runs its callback in Node:
 

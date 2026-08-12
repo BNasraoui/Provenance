@@ -28,6 +28,12 @@ struct CurrentTypedState {
     rule_addresses: BTreeMap<DeclarationAddress, StableId>,
 }
 
+#[derive(Clone, Copy)]
+enum ReconcileMode {
+    Plan,
+    Apply,
+}
+
 impl StateStore {
     /// Reconciles one language-owned desired-state document with canonical state.
     ///
@@ -40,13 +46,27 @@ impl StateStore {
         scope_id: &ScopeId,
         input: TypedSpecInput,
     ) -> anyhow::Result<TypedSpecResult> {
-        self.with_repository_publication(|| self.reconcile_typed_spec(scope_id, input))
+        self.with_repository_publication(|| {
+            self.reconcile_typed_spec(scope_id, input, ReconcileMode::Apply)
+        })
+    }
+
+    /// Calculates the exact typed-spec reconciliation without publishing it.
+    pub fn plan_typed_spec(
+        &self,
+        scope_id: &ScopeId,
+        input: TypedSpecInput,
+    ) -> anyhow::Result<TypedSpecResult> {
+        self.with_repository_publication(|| {
+            self.reconcile_typed_spec(scope_id, input, ReconcileMode::Plan)
+        })
     }
 
     fn reconcile_typed_spec(
         &self,
         scope_id: &ScopeId,
         input: TypedSpecInput,
+        mode: ReconcileMode,
     ) -> anyhow::Result<TypedSpecResult> {
         self.validate_typed_spec(scope_id, &input)?;
 
@@ -127,21 +147,23 @@ impl StateStore {
             &rule_ids,
         )?;
 
-        replace_records(self, &shards::sources_path(&self.layout, scope_id), sources)?;
-        replace_records(
-            self,
-            &shards::requirements_path(&self.layout, scope_id),
-            requirements,
-        )?;
-        replace_records(self, &shards::rules_path(&self.layout, scope_id), rules)?;
-        self.write_typed_spec_edges(
-            scope_id,
-            &requirement_relationships,
-            &rule_relationships,
-            &source_ids,
-            &requirement_ids,
-            &rule_ids,
-        )?;
+        if matches!(mode, ReconcileMode::Apply) {
+            replace_records(self, &shards::sources_path(&self.layout, scope_id), sources)?;
+            replace_records(
+                self,
+                &shards::requirements_path(&self.layout, scope_id),
+                requirements,
+            )?;
+            replace_records(self, &shards::rules_path(&self.layout, scope_id), rules)?;
+            self.write_typed_spec_edges(
+                scope_id,
+                &requirement_relationships,
+                &rule_relationships,
+                &source_ids,
+                &requirement_ids,
+                &rule_ids,
+            )?;
+        }
 
         Ok(spec_result(
             input.declared_by,
