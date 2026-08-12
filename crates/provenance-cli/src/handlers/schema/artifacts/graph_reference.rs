@@ -59,6 +59,7 @@ pub(in crate::handlers::schema) fn export_schema() -> Value {
                     "questions": record_array("question"),
                     "resolutions": record_array("resolution"),
                     "rules": record_array("rule"),
+                    "verification_bindings": record_array("verificationBinding"),
                     "edges": record_array("edge")
                 }
             }
@@ -204,6 +205,15 @@ fn export_definitions() -> Value {
                 "statement": string.clone(), "status": {"enum": ["draft", "review", "active", "deprecated", "archived"]},
                 "severity": {"enum": ["low", "medium", "high", "critical"]},
                 "source_document": string.clone(), "source_section": string.clone()
+            })
+        ),
+        "verificationBinding": closed_record(
+            &["schema_version", "scope_id", "id", "rule_id", "key", "method", "declared_by", "file"],
+            json!({
+                "schema_version": version.clone(), "scope_id": id.clone(), "id": id.clone(),
+                "rule_id": id.clone(), "key": string.clone(),
+                "method": {"enum": ["exhaustion", "property", "examples", "conformance", "construction", "proof"]},
+                "declared_by": string.clone(), "file": string.clone(), "symbol": string.clone()
             })
         ),
         "edge": closed_record(

@@ -6,7 +6,7 @@ use provenance_core::{
     QuestionStatus, RequiredHumanDecision, RequirementStatus, ResolutionInput, ResolutionMethod,
     ResolutionStatus, RuleSeverity, RuleStatus, ScopeId, SourceReference, SourceType, StableId,
     SuggestedArtifact, SuggestedArtifactChange, ThreadParent, TopicStatus, UncertaintyRating,
-    UnsupportedRecommendation, UnsupportedSpeculation,
+    UnsupportedRecommendation, UnsupportedSpeculation, VerificationMethod,
 };
 use serde::{Deserialize, Serialize};
 
@@ -233,11 +233,24 @@ pub struct BeginVerificationInput {
     pub rule: Option<String>,
     #[serde(default)]
     pub declaration: Option<DeclarationReferenceInput>,
+    pub key: String,
     pub method: String,
     pub declared_by: String,
     #[serde(default)]
     pub file: Option<camino::Utf8PathBuf>,
     #[serde(default)]
+    pub symbol: Option<String>,
+    #[serde(default)]
+    pub commit: Option<String>,
+}
+
+pub struct MaterializeVerificationBindingInput {
+    pub scope_id: ScopeId,
+    pub rule_id: StableId,
+    pub key: String,
+    pub method: VerificationMethod,
+    pub declared_by: String,
+    pub file: camino::Utf8PathBuf,
     pub symbol: Option<String>,
 }
 

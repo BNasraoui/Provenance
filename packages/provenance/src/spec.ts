@@ -29,6 +29,7 @@ export interface RuleOptions {
 }
 
 export interface VerifyOptions {
+  key: string;
   method?: "exhaustion" | "property" | "examples" | "conformance" | "construction" | "proof";
   file?: string;
   symbol?: string;
@@ -51,13 +52,13 @@ export interface RuleHandle {
   readonly kind: "rule";
   readonly key: string;
   readonly address: DeclarationAddress;
-  verify(callback: () => unknown | Promise<unknown>, options?: VerifyOptions): Promise<void>;
+  verify(callback: () => unknown | Promise<unknown>, options: VerifyOptions): Promise<void>;
 }
 
 type RuleVerifier = (
   address: DeclarationAddress,
   callback: () => unknown | Promise<unknown>,
-  options?: VerifyOptions,
+  options: VerifyOptions,
 ) => Promise<void>;
 
 class ConstructionSession {
@@ -230,7 +231,7 @@ function finalizeDeclarations<Declarations extends DeclarationRecord>(
         kind: "rule",
         key: rule.key,
         address,
-        verify: (callback: () => unknown | Promise<unknown>, options?: VerifyOptions) =>
+        verify: (callback: () => unknown | Promise<unknown>, options: VerifyOptions) =>
           verify(address, callback, options),
       }),
     );

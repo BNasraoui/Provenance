@@ -35,14 +35,19 @@ fn provenance_links(page: &RulePage) -> Vec<PageLink> {
 /// on a page nobody scanned would read as a scan that found nothing.
 fn push_code_scan(main: &mut String, page: &RulePage) {
     let Some(scan) = &page.code_scan else {
-        main.push_str(
-            "<section>\n<p class=\"scan-note\">No code scan was supplied to this build; \
-             bindings and verification are not shown.</p>\n</section>\n",
-        );
+        if page.verifications.is_empty() {
+            main.push_str(
+                "<section>\n<p class=\"scan-note\">No code scan was supplied to this build; \
+                 bindings and verification are not shown.</p>\n</section>\n",
+            );
+        } else {
+            main.push_str("<section>\n<p class=\"scan-note\">No code scan was supplied to this build; implementation bindings are not shown.</p>\n</section>\n");
+            push_verifications(main, page, None);
+        }
         return;
     };
     push_implementation(main, page);
-    push_verifications(main, page, scan);
+    push_verifications(main, page, Some(scan));
 }
 
 /// Which code the sections above describe, so a reader can tell a scan of
@@ -76,7 +81,7 @@ fn push_implementation(main: &mut String, page: &RulePage) {
     main.push_str("</section>\n");
 }
 
-fn push_verifications(main: &mut String, page: &RulePage, scan: &CodeScan) {
+fn push_verifications(main: &mut String, page: &RulePage, scan: Option<&CodeScan>) {
     push_section_open(main, "sh-rule", Some("i-check-circle"), "Verification");
     if page.verifications.is_empty() {
         main.push_str("<p class=\"empty-state\">Not verified</p>\n");
@@ -99,7 +104,9 @@ fn push_verifications(main: &mut String, page: &RulePage, scan: &CodeScan) {
         }
         main.push_str("</ul>\n");
     }
-    push_scan_note(main, scan);
+    if let Some(scan) = scan {
+        push_scan_note(main, scan);
+    }
     main.push_str("</section>\n");
 }
 

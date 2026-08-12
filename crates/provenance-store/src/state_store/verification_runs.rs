@@ -1,8 +1,13 @@
 use provenance_core::{
-    ScopeId, StableId, VerificationRun, VerificationRunStatus, SUPPORTED_SCHEMA_VERSION,
+    validate_optional_commit_pin, ScopeId, StableId, VerificationMethod, VerificationRun,
+    VerificationRunStatus, SUPPORTED_SCHEMA_VERSION,
 };
+use std::str::FromStr as _;
 
-use super::{BeginVerificationInput, CompleteVerificationInput, StateStore};
+use super::{
+    BeginVerificationInput, CompleteVerificationInput, MaterializeVerificationBindingInput,
+    StateStore,
+};
 
 impl StateStore {
     pub fn begin_verification(
@@ -15,6 +20,11 @@ impl StateStore {
             "declared_by must not be empty"
         );
         anyhow::ensure!(!input.method.trim().is_empty(), "method must not be empty");
+        let method = VerificationMethod::from_str(&input.method)?;
+        let file = input.file.ok_or_else(|| {
+            anyhow::anyhow!("file is required for a durable verification binding")
+        })?;
+        let commit = validate_optional_commit_pin(input.commit)?;
         let rules = self.list_rules(&scope_id)?;
         let rule_id = match (input.rule, input.declaration) {
             (Some(rule), None) => {
@@ -47,6 +57,16 @@ impl StateStore {
                 anyhow::bail!("begin verification requires either rule or declaration")
             }
         };
+        let binding =
+            self.materialize_verification_binding(MaterializeVerificationBindingInput {
+                scope_id: scope_id.clone(),
+                rule_id: rule_id.clone(),
+                key: input.key,
+                method,
+                declared_by: input.declared_by.clone(),
+                file: file.clone(),
+                symbol: input.symbol.clone(),
+            })?;
         let started_at = now_millis()?;
         let path = self.layout.verification_runs_path(&scope_id);
         let lock_path = self.layout.verification_runs_lock_path(&scope_id);
@@ -59,11 +79,13 @@ impl StateStore {
                     schema_version: SUPPORTED_SCHEMA_VERSION,
                     scope_id,
                     id,
+                    binding_id: Some(binding.id),
                     rule_id,
-                    method: input.method,
+                    method: method.to_string(),
                     declared_by: input.declared_by,
-                    file: input.file,
+                    file: Some(file),
                     symbol: input.symbol,
+                    commit,
                     status: VerificationRunStatus::Running,
                     started_at,
                     completed_at: None,

@@ -5,6 +5,7 @@ use camino::Utf8PathBuf;
 use provenance_core::coverage::{
     AnchorState, AnnotationResult, BindingResult, CoverageReport, CoverageScan, ScannedFile,
 };
+use provenance_core::{SchemaVersion, ScopeId, StableId, VerificationBinding, VerificationMethod};
 use std::fmt::Write as _;
 
 fn binding(
@@ -45,6 +46,42 @@ fn annotation(
         original_line: None,
         original_file_path: None,
     }
+}
+
+fn typed_binding() -> VerificationBinding {
+    VerificationBinding {
+        schema_version: SchemaVersion(1),
+        scope_id: ScopeId::new("default").unwrap(),
+        id: StableId::new("verification_binding_expiry_examples").unwrap(),
+        rule_id: StableId::new("rule_001").unwrap(),
+        key: "share-link-expiry".to_string(),
+        method: VerificationMethod::Examples,
+        declared_by: "ci://typescript".to_string(),
+        file: Utf8PathBuf::from("tests/share-links.test.ts"),
+        symbol: Some("share links expire".to_string()),
+    }
+}
+
+#[test]
+fn typed_verification_binding_is_visible_without_a_code_scan() {
+    let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
+    let mut state = fixture_state();
+    state.verification_bindings.push(typed_binding());
+
+    let corpus = build_corpus_with_coverage(&state, &resolver, None);
+    let page = rule_page(&corpus, "rule_001");
+
+    assert!(page.code_scan.is_none());
+    assert_eq!(page.verifications.len(), 1);
+    assert_eq!(page.verifications[0].method, "examples");
+    assert_eq!(
+        page.verifications[0].symbol.as_deref(),
+        Some("share links expire")
+    );
+    assert_eq!(
+        page.verifications[0].location.label,
+        "tests/share-links.test.ts"
+    );
 }
 
 #[test]

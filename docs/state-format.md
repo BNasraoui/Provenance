@@ -11,7 +11,12 @@ integration allowed to reconcile that record; it does not grant ownership of
 the scope or of unrelated graph state. The typed SDK refuses to adopt an
 existing record whose value is absent or different.
 
-No shard stores verification. Whether a rule is verified, and by which method, is read from the markers in the code by `provenance coverage scan --validate-rules`; an unverified rule is the absence of a marker, derived at scan time and never written.
+Typed verification relationships live in
+`scopes/<scope>/verifications/binding.jsonl`. Each row joins an owner-local
+binding key and repository code location to a canonical Rule. Scanner markers
+remain an equal source of verification relationships. No shard stores a
+`verified` boolean: Unverified is derived only when neither source supplies a
+live binding.
 
 A Rule with no implementation binding is a valid unimplemented Rule. This
 semantic change does not alter the version `1` record shape: existing source
@@ -20,8 +25,8 @@ records need no migration.
 
 Callback-backed SDK runs are distinct volatile evidence. They are stored in
 `.provenance/cache/scopes/<scope>/verification-runs.jsonl`, linked to a
-canonical Rule by ID, and never enter canonical shards or graph-reference
-digests.
+canonical Verification binding and Rule by ID, and never enter canonical
+shards. The durable binding does enter canonical exports; run outcomes do not.
 
 Modern proposal definitions are immutable `proposed` rows. Assertions live in
 `ideation/assertions.jsonl`; dispositions use `ideation/dispositions.jsonl`. Readers accept

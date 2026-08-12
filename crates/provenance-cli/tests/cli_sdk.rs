@@ -330,6 +330,7 @@ fn verification_runs_are_linked_to_the_rule_and_record_the_outcome() {
         .write_stdin(
             serde_json::to_vec(&json!({
                 "rule": expiry_id,
+                "key": "share-link-expiry",
                 "method": "examples",
                 "declared_by": "ci://node-test",
                 "file": "share-links.test.ts",
@@ -342,6 +343,7 @@ fn verification_runs_are_linked_to_the_rule_and_record_the_outcome() {
     assert!(begun.status.success());
     let begun: Value = serde_json::from_slice(&begun.stdout).unwrap();
     let run = begun["id"].as_str().unwrap();
+    let binding = begun["binding_id"].as_str().unwrap();
 
     provenance()
         .args([
@@ -381,6 +383,7 @@ fn verification_runs_are_linked_to_the_rule_and_record_the_outcome() {
         .assert()
         .success()
         .stdout(contains("ci://node-test"))
+        .stdout(contains(binding))
         .stdout(contains("share-links.test.ts"))
         .stdout(contains("\"status\": \"passed\""));
 }
@@ -423,8 +426,10 @@ fn verification_resolves_an_applied_rule_by_declaration_address() {
                     "declared_by": "spec://typescript",
                     "address": ["share-links", "requirement", "sharing", "rule", "expiry"]
                 },
+                "key": "share-link-expiry",
                 "method": "examples",
-                "declared_by": "ci://node-test"
+                "declared_by": "ci://node-test",
+                "file": "tests/share-links.test.ts"
             }))
             .unwrap(),
         )
@@ -450,8 +455,10 @@ fn verification_cannot_begin_for_an_unknown_rule() {
         .write_stdin(
             serde_json::to_vec(&json!({
                 "rule": "missing",
+                "key": "missing-rule-check",
                 "method": "examples",
-                "declared_by": "ci://node-test"
+                "declared_by": "ci://node-test",
+                "file": "tests/missing.test.ts"
             }))
             .unwrap(),
         )

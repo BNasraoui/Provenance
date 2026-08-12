@@ -107,9 +107,11 @@ Callback results are volatile run evidence, so they live under:
 .provenance/cache/scopes/<scope>/verification-runs.jsonl
 ```
 
-Each run carries a validated canonical rule ID, method, producer, optional
-call-site path and symbol, status, timestamps, and an optional serialized
-error. A typed handle starts the run with its declaration address; Rust resolves
+Each `verify` call names a stable owner-local binding key. Rust materializes one
+canonical Verification binding for that key and Rule, while method, repository
+path, and symbol remain updateable facts. Each run cites that binding and
+carries the canonical Rule ID, execution context, status, timestamps, and an
+optional serialized error. A typed handle starts the run with its declaration address; Rust resolves
 that address to the canonical ID and rejects an unapplied declaration before
 Node executes the callback. Keeping runs in the existing derived cache prevents
 every local test from dirtying Git-tracked canonical state. Declarations
@@ -117,11 +119,11 @@ themselves remain in `.provenance/state` and therefore appear in exports,
 traceability queries, checks, graph references, and generated wiki pages like
 records created by the existing CLI.
 
-The current wiki Verification section still reads static coverage reports;
-it does not render cached callback outcomes in this POC. Runtime results are
-queried with `sdk verification-runs`. A durable Test-to-Rule binding and its
-integration with existing stale, coverage, and wiki semantics remain separate
-work from transient test runs.
+The wiki and validating coverage scan consume canonical typed bindings alongside
+scanner-discovered bindings. Runtime results remain separate and are queried
+with `sdk verification-runs`; durable relationships are queried with
+`sdk verification-bindings`. Stale analysis treats a changed typed verification
+path as disturbed evidence without executing the callback.
 
 ## Compile-time result
 

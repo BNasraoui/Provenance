@@ -2,17 +2,18 @@ use crate::cli::workspace::CoverageCommand;
 use crate::output::{self, OutputFormat};
 use anyhow::Context;
 use camino::Utf8PathBuf;
-use provenance_core::ScopeId;
-use provenance_store::{layout::ProvenanceLayout, state_store::StateStore};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
+
+mod verification_state;
+use verification_state::{load_validation_state, unverified_rule_warnings};
 
 pub(super) mod anchors;
 
 pub(super) fn coverage_scan(
     repo: &camino::Utf8Path,
     path: &Utf8PathBuf,
-    scope: String,
+    scope: &str,
     validate_rules: bool,
 ) -> anyhow::Result<provenance_core::coverage::CoverageScan> {
     coverage_scan_against(repo, path, scope, validate_rules, None)
@@ -21,7 +22,7 @@ pub(super) fn coverage_scan(
 fn coverage_scan_against(
     repo: &camino::Utf8Path,
     path: &Utf8PathBuf,
-    scope: String,
+    scope: &str,
     validate_rules: bool,
     baseline: Option<&camino::Utf8Path>,
 ) -> anyhow::Result<provenance_core::coverage::CoverageScan> {
@@ -31,41 +32,18 @@ fn coverage_scan_against(
         .map(|file| file.scan.clone())
         .collect::<Vec<_>>();
     let commit = scan_commit(repo, &scans);
-    let rules = if validate_rules {
-        StateStore::new(ProvenanceLayout::new(repo)).list_rules(&ScopeId::new(scope)?)?
-    } else {
-        Vec::new()
-    };
-    // Both channels — comment annotations and attributes — cite rule ids.
-    let known_rules = rules
-        .iter()
-        .map(|rule| rule.id.as_str().to_string())
-        .collect::<BTreeSet<_>>();
-    let mut scanner_warnings = if validate_rules {
-        provenance_scanner::validate_annotations(&scans, known_rules.iter().cloned())
-    } else {
-        Vec::new()
-    };
-    if validate_rules {
-        scanner_warnings.extend(provenance_scanner::validate_bindings(
-            &scans,
-            known_rules.iter().cloned(),
-        ));
-    }
+    let validation = load_validation_state(repo, scope, &scans, validate_rules)?;
     // Scanner warnings all come from a line the scan read, so each keeps its
     // location. Derived Rule findings are joined on after, without one.
     let mut warnings = parse_warnings(&scans);
-    warnings.extend(scanner_warnings.into_iter().map(|warning| {
-        provenance_core::coverage::ValidationWarning {
-            rule_id: warning.rule_id,
-            file_path: Some(warning.file_path),
-            line: Some(warning.line),
-            message: warning.message,
-        }
-    }));
+    warnings.extend(validation.warnings);
     if validate_rules && scan_covers_repository(repo, path) {
-        warnings.extend(unimplemented_rule_warnings(&rules, &scans));
-        warnings.extend(unverified_rule_warnings(&rules, &scans));
+        warnings.extend(unimplemented_rule_warnings(&validation.rules, &scans));
+        warnings.extend(unverified_rule_warnings(
+            &validation.rules,
+            &scans,
+            &validation.bindings,
+        ));
     }
     let annotations = scans
         .iter()
@@ -119,6 +97,7 @@ fn coverage_scan_against(
         ),
         scanned_files,
     };
+    report.report.verification_bindings = validation.bindings;
     if let Some(baseline) = baseline {
         let bytes = std::fs::read(baseline)
             .with_context(|| format!("read coverage baseline {baseline}"))?;
@@ -160,46 +139,6 @@ fn parse_warnings(
                     line: Some(warning.line),
                     message: warning.message.clone(),
                 })
-        })
-        .collect()
-}
-
-/// An active rule with no verification site anywhere — no `#[verifies]`
-/// attribute and no comment annotation carrying a `verification:` key — is
-/// unverified. That state is reported, never stored.
-///
-/// These warnings carry no file or line. There is no site to point at: that
-/// is the whole finding. The earlier version named the rule's
-/// `source_document` at line 0, which sent a reader to a policy document that
-/// has nothing to say about the missing test.
-fn unverified_rule_warnings(
-    rules: &[provenance_core::Rule],
-    scans: &[provenance_scanner::FileScan],
-) -> Vec<provenance_core::coverage::ValidationWarning> {
-    let verified = scans
-        .iter()
-        .flat_map(|scan| {
-            scan.bindings
-                .iter()
-                .filter(|binding| binding.verification.is_some())
-                .map(|binding| binding.rule_id.clone())
-                .chain(
-                    scan.annotations
-                        .iter()
-                        .filter(|location| location.annotation.verification.is_some())
-                        .map(|location| location.annotation.rule.clone()),
-                )
-        })
-        .collect::<BTreeSet<_>>();
-    rules
-        .iter()
-        .filter(|rule| rule.status == provenance_core::RuleStatus::Active)
-        .filter(|rule| !verified.contains(rule.id.as_str()))
-        .map(|rule| provenance_core::coverage::ValidationWarning {
-            rule_id: rule.id.as_str().to_string(),
-            file_path: None,
-            line: None,
-            message: format!("active rule `{}` has no verification", rule.id.as_str()),
         })
         .collect()
 }
@@ -460,9 +399,9 @@ pub(super) fn handle(command: CoverageCommand) -> anyhow::Result<()> {
             output,
         } => {
             let report = if let Some(baseline) = baseline.as_deref() {
-                coverage_scan_against(&repo, &path, scope, validate_rules, Some(baseline))?
+                coverage_scan_against(&repo, &path, &scope, validate_rules, Some(baseline))?
             } else {
-                coverage_scan(&repo, &path, scope, validate_rules)?
+                coverage_scan(&repo, &path, &scope, validate_rules)?
             };
             if let Some(output_path) = output {
                 let rendered = render_coverage(format, &report)?;

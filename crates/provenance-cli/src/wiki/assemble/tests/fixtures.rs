@@ -192,6 +192,7 @@ pub(super) fn empty_state() -> ScopeExport {
         questions: vec![],
         resolutions: vec![],
         rules: vec![],
+        verification_bindings: vec![],
         edges: vec![],
         threads: vec![],
         messages: vec![],

@@ -164,6 +164,8 @@ pub struct CoverageReport {
     pub warnings: Vec<ValidationWarning>,
     pub annotations: Vec<AnnotationResult>,
     pub bindings: Vec<BindingResult>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub verification_bindings: Vec<crate::VerificationBinding>,
 }
 
 /// A report plus the exact source text read by this scan.
@@ -198,6 +200,7 @@ impl CoverageReport {
             warnings,
             annotations,
             bindings,
+            verification_bindings: Vec::new(),
         }
     }
 }

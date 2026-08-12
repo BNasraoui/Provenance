@@ -36,12 +36,10 @@ impl Assembler<'_> {
     }
 
     pub(super) fn verification_sites(&self, rule_id: &str) -> Vec<VerificationSite> {
-        let Some(report) = self.coverage else {
-            return Vec::new();
-        };
-        let implementation_file = report
-            .bindings
-            .iter()
+        let implementation_file = self
+            .coverage
+            .into_iter()
+            .flat_map(|report| &report.bindings)
             .find(|binding| {
                 binding.rule_id == rule_id
                     && binding.verification.is_none()
@@ -49,19 +47,22 @@ impl Assembler<'_> {
             })
             .map(|binding| &binding.file_path)
             .or_else(|| {
-                report
-                    .annotations
-                    .iter()
-                    .find(|annotation| {
-                        annotation.rule_id == rule_id
-                            && annotation.verification.is_none()
-                            && annotation.anchor_state != AnchorState::Gone
-                    })
-                    .map(|annotation| &annotation.file_path)
+                self.coverage.and_then(|report| {
+                    report
+                        .annotations
+                        .iter()
+                        .find(|annotation| {
+                            annotation.rule_id == rule_id
+                                && annotation.verification.is_none()
+                                && annotation.anchor_state != AnchorState::Gone
+                        })
+                        .map(|annotation| &annotation.file_path)
+                })
             });
-        let mut sites = report
-            .bindings
-            .iter()
+        let mut sites = self
+            .coverage
+            .into_iter()
+            .flat_map(|report| &report.bindings)
             .filter(|binding| binding.rule_id == rule_id)
             .filter(|binding| binding.anchor_state != AnchorState::Gone)
             .filter_map(|binding| {
@@ -78,9 +79,9 @@ impl Assembler<'_> {
             })
             .collect::<Vec<_>>();
         sites.extend(
-            report
-                .annotations
-                .iter()
+            self.coverage
+                .into_iter()
+                .flat_map(|report| &report.annotations)
                 .filter(|annotation| annotation.rule_id == rule_id)
                 .filter(|annotation| annotation.anchor_state != AnchorState::Gone)
                 .filter_map(|annotation| {
@@ -96,6 +97,27 @@ impl Assembler<'_> {
                         })
                 }),
         );
+        for binding in self
+            .state
+            .verification_bindings
+            .iter()
+            .filter(|binding| binding.rule_id.as_str() == rule_id)
+        {
+            let typed = VerificationSite {
+                method: binding.method.to_string(),
+                symbol: binding.symbol.clone(),
+                location: self.resolver.resolve_at(binding.file.as_str(), None),
+                outside_implementation_module: implementation_file
+                    .is_some_and(|file| file != &binding.file),
+            };
+            if !sites.iter().any(|site| {
+                site.method == typed.method
+                    && site.symbol == typed.symbol
+                    && site.location.label == typed.location.label
+            }) {
+                sites.push(typed);
+            }
+        }
         sites
     }
 

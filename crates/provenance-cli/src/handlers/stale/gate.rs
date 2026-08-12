@@ -34,6 +34,16 @@ pub(super) fn report(
         false,
     );
     let mut sites = marker_sites(&base_scan, &head_scan, changes, &graph.rule_ids);
+    for binding in &graph.verification_bindings {
+        if !sites.iter().any(|site| {
+            site.kind == EvidenceSiteKind::Verification
+                && site.subject_id == binding.rule_id.as_str()
+                && (site.file_path == binding.file
+                    || site.original_file_path.as_ref() == Some(&binding.file))
+        }) {
+            sites.push(typed_verification_site(binding, changes));
+        }
+    }
     sites.extend(graph.references.iter().flat_map(|reference| {
         source_refs::sites(reference, &head_scan.coverage.bindings, changes)
     }));
@@ -58,6 +68,37 @@ pub(super) fn report(
         files_changed: changes.len(),
         summary,
         sites,
+    }
+}
+
+fn typed_verification_site(
+    binding: &provenance_core::VerificationBinding,
+    changes: &[ChangedFile],
+) -> EvidenceDiffSite {
+    let change = changes
+        .iter()
+        .find(|change| change.old_path == binding.file || change.new_path == binding.file);
+    let (file_path, state, original_file_path) = match change {
+        Some(change) if change.kind == super::git::ChangeKind::Deleted => {
+            (binding.file.clone(), EvidenceDiffState::Gone, None)
+        }
+        Some(change) if change.kind == super::git::ChangeKind::Renamed => (
+            change.new_path.clone(),
+            EvidenceDiffState::Moved,
+            Some(change.old_path.clone()),
+        ),
+        Some(_) => (binding.file.clone(), EvidenceDiffState::Touched, None),
+        None => (binding.file.clone(), EvidenceDiffState::Untouched, None),
+    };
+    EvidenceDiffSite {
+        kind: EvidenceSiteKind::Verification,
+        subject_id: binding.rule_id.as_str().to_string(),
+        file_path,
+        line: None,
+        end_line: None,
+        state,
+        original_file_path,
+        original_line: None,
     }
 }
 

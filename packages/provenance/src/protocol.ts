@@ -57,6 +57,10 @@ export interface ApplyResult {
 
 export interface VerificationRun {
   id: string;
+  binding_id: string;
   rule_id: string;
+  commit?: string;
+  file?: string;
+  symbol?: string;
   status: "running" | "passed" | "failed";
 }

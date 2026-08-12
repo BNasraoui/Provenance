@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -62,6 +62,133 @@ function engineJson(repo: string, args: string[]): unknown {
     }),
   );
 }
+
+function recordingEngine(): {
+  engine: string;
+  requests: () => Array<{ command: string; input: unknown }>;
+} {
+  const directory = mkdtempSync(join(tmpdir(), "provenance-recording-engine-"));
+  const executable = join(directory, "engine.mjs");
+  const log = join(directory, "requests.jsonl");
+  writeFileSync(
+    executable,
+    `#!/usr/bin/env node
+import { appendFileSync, readFileSync } from "node:fs";
+const command = process.argv[3];
+const source = readFileSync(0, "utf8");
+const input = source === "" ? undefined : JSON.parse(source);
+appendFileSync(${JSON.stringify(log)}, JSON.stringify({ command, input }) + "\\n");
+if (command === "begin-verification") {
+  process.stdout.write(JSON.stringify({
+    id: "run_" + input.key,
+    binding_id: "verification_binding_" + input.key,
+    rule_id: "rule_expiry",
+    status: "running",
+    commit: "0123456789abcdef",
+    file: input.file,
+    symbol: input.symbol,
+  }));
+} else {
+  process.stdout.write(JSON.stringify({
+    id: input.run,
+    binding_id: "verification_binding_completed",
+    rule_id: "rule_expiry",
+    status: input.status,
+  }));
+}
+`,
+  );
+  chmodSync(executable, 0o755);
+  return {
+    engine: executable,
+    requests: () =>
+      readFileSync(log, "utf8")
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as { command: string; input: unknown }),
+  };
+}
+
+test("verify sends the same durable binding key on repeated runs", async () => {
+  const recorder = recordingEngine();
+  configure({ engine: recorder.engine, repository: repository() });
+  const spec = defineSpec("share-links", ({ requirement }) => {
+    const sharing = requirement("sharing", {
+      statement: "Users can securely share documentation",
+    });
+    return {
+      expiry: sharing.rule("expiry", {
+        statement: "Share links expire within 30 days",
+      }),
+    };
+  });
+  const options = {
+    key: "share-link-expiry",
+    method: "examples",
+    file: "src/share-links.test.ts",
+    symbol: "checkExpiry",
+  } as const;
+
+  await spec.handles.expiry.verify(() => undefined, options);
+  await spec.handles.expiry.verify(() => undefined, options);
+
+  const begins = recorder.requests().filter(({ command }) => command === "begin-verification");
+  assert.equal(begins.length, 2);
+  assert.deepEqual(begins.map(({ input }) => input), [
+    {
+      declaration: {
+        declared_by: "spec://typescript",
+        address: ["share-links", "requirement", "sharing", "rule", "expiry"],
+      },
+      key: "share-link-expiry",
+      method: "examples",
+      declared_by: "ci://typescript",
+      file: "src/share-links.test.ts",
+      symbol: "checkExpiry",
+    },
+    {
+      declaration: {
+        declared_by: "spec://typescript",
+        address: ["share-links", "requirement", "sharing", "rule", "expiry"],
+      },
+      key: "share-link-expiry",
+      method: "examples",
+      declared_by: "ci://typescript",
+      file: "src/share-links.test.ts",
+      symbol: "checkExpiry",
+    },
+  ]);
+});
+
+test("verify sends distinct durable binding keys from one test file", async () => {
+  const recorder = recordingEngine();
+  configure({ engine: recorder.engine, repository: repository() });
+  const spec = defineSpec("share-links", ({ requirement }) => {
+    const sharing = requirement("sharing", {
+      statement: "Users can securely share documentation",
+    });
+    return {
+      expiry: sharing.rule("expiry", {
+        statement: "Share links expire within 30 days",
+      }),
+    };
+  });
+
+  await spec.handles.expiry.verify(() => undefined, {
+    key: "maximum-expiry",
+    file: "src/share-links.test.ts",
+  });
+  await spec.handles.expiry.verify(() => undefined, {
+    key: "expired-link",
+    file: "src/share-links.test.ts",
+  });
+
+  const keys = recorder.requests()
+    .filter(({ command }) => command === "begin-verification")
+    .map(({ input }) => (input as { key?: string }).key);
+  assert.deepEqual(keys, ["maximum-expiry", "expired-link"]);
+});
 
 test("typed declarations reconcile to canonical Provenance records", async () => {
   const repo = repository();
@@ -173,18 +300,24 @@ test("immutable rule handles verify through an applied declaration address", asy
   let called = false;
 
   await assert.rejects(
-    spec.handles.expiry.verify(() => {
-      called = true;
-    }),
+    spec.handles.expiry.verify(
+      () => {
+        called = true;
+      },
+      { key: "share-link-expiry", file: "tests/share-links.test.ts" },
+    ),
     /has not been applied/i,
   );
   assert.equal(called, false);
   assert.equal("id" in spec.handles.expiry, false);
 
   await apply(spec);
-  await spec.handles.expiry.verify(() => {
-    called = true;
-  });
+  await spec.handles.expiry.verify(
+    () => {
+      called = true;
+    },
+    { key: "share-link-expiry", file: "tests/share-links.test.ts" },
+  );
 
   assert.equal(called, true);
   const runs = engineJson(repo, [
@@ -195,7 +328,7 @@ test("immutable rule handles verify through an applied declaration address", asy
   ]) as Array<{ file?: string; rule_id: string; status: string }>;
   assert.equal(runs.at(-1)?.status, "passed");
   assert.match(runs.at(-1)?.rule_id ?? "", /^rule_share-links_sharing_expiry_/);
-  assert.match(runs.at(-1)?.file ?? "", /index\.test\.js$/);
+  assert.equal(runs.at(-1)?.file, "tests/share-links.test.ts");
 });
 
 test("reapplying an address reuses the canonical id already assigned by Rust", async () => {
@@ -228,9 +361,12 @@ test("verify records a passed Node callback against the imported rule", async ()
   const { expiry } = declareFixture(repo);
 
   let called = false;
-  await expiry.verify(() => {
-    called = true;
-  });
+  await expiry.verify(
+    () => {
+      called = true;
+    },
+    { key: "share-link-expiry", file: "tests/share-links.test.ts" },
+  );
 
   assert.equal(called, true);
   const runs = engineJson(repo, [
@@ -243,7 +379,7 @@ test("verify records a passed Node callback against the imported rule", async ()
   ]) as Array<{ status: string; rule_id: string; file?: string }>;
   assert.equal(runs.at(-1)?.status, "passed");
   assert.equal(runs.at(-1)?.rule_id, expiry.id);
-  assert.match(runs.at(-1)?.file ?? "", /index\.test\.js$/);
+  assert.equal(runs.at(-1)?.file, "tests/share-links.test.ts");
 });
 
 test("verify records a failed callback and rethrows the original error", async () => {
@@ -253,9 +389,12 @@ test("verify records a failed callback and rethrows the original error", async (
   const failure = new Error("expiry assertion failed");
 
   await assert.rejects(
-    expiry.verify(async () => {
-      throw failure;
-    }),
+    expiry.verify(
+      async () => {
+        throw failure;
+      },
+      { key: "share-link-expiry", file: "tests/share-links.test.ts" },
+    ),
     (error) => error === failure,
   );
 

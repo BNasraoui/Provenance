@@ -24,6 +24,14 @@ A relationship from a Rule to production code that realizes it. A Rule without a
 
 Evidence supporting belief that a Rule holds. A Rule can have no Verification; this absence is Unverified rather than a different kind of Rule.
 
+## Verification binding
+
+A durable relationship from an owner-local test key and repository code location to a canonical Rule. It records what is intended to verify the Rule, not whether an execution passed.
+
+## Verification run
+
+A volatile observation from one execution of a Verification binding. It records the outcome and execution context without changing the durable relationship.
+
 ## Enforcement
 
 The live path: the running code that rejects a violation. Verification is evidence about that code; enforcement is the code itself.
@@ -34,7 +42,7 @@ An active Rule with no Implementation binding. It is absence, not canonical grap
 
 ## Unverified
 
-An active Rule with no Verification in a complete repository scan. It is absence, not canonical graph state.
+An active Rule with neither a live scanned verification site nor a canonical Verification binding. It is derived absence, not a stored status.
 
 ## Evidence site
 

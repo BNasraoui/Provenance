@@ -3,7 +3,7 @@ use crate::{layout::ProvenanceLayout, state_store::StateStore};
 use camino::Utf8Path;
 use provenance_core::{
     Boundary, Domain, Edge, Question, Requirement, Resolution, Rule, Scope, ScopeId, Source, Topic,
-    SUPPORTED_SCHEMA_VERSION,
+    VerificationBinding, SUPPORTED_SCHEMA_VERSION,
 };
 use provenance_macros::rule;
 use serde::{Deserialize, Serialize};
@@ -40,6 +40,8 @@ pub struct GraphExport {
     pub questions: Vec<Question>,
     pub resolutions: Vec<Resolution>,
     pub rules: Vec<Rule>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub verification_bindings: Vec<VerificationBinding>,
     pub edges: Vec<Edge>,
 }
 
@@ -76,6 +78,9 @@ pub(super) fn load_projection(
         questions: store.closed_questions(&scope_id).map_err(incomplete)?,
         resolutions: store.closed_resolutions(&scope_id).map_err(incomplete)?,
         rules: store.closed_rules(&scope_id).map_err(incomplete)?,
+        verification_bindings: store
+            .closed_verification_bindings(&scope_id)
+            .map_err(incomplete)?,
         edges: store.closed_edges(&scope_id).map_err(incomplete)?,
     };
     graph.validate_schema_versions()?;
@@ -105,6 +110,7 @@ impl GraphExport {
         require_supported!(&self.questions, "question");
         require_supported!(&self.resolutions, "resolution");
         require_supported!(&self.rules, "rule");
+        require_supported!(&self.verification_bindings, "verification binding");
         require_supported!(&self.edges, "edge");
         Ok(())
     }
@@ -220,6 +226,9 @@ fn sort_records(graph: &mut GraphExport) {
         .resolutions
         .sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
     graph.rules.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+    graph
+        .verification_bindings
+        .sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
     graph.edges.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
 }
 
@@ -262,6 +271,7 @@ pub(super) fn validate_scope_ownership(
     require_scope!(&graph.questions, "question");
     require_scope!(&graph.resolutions, "resolution");
     require_scope!(&graph.rules, "rule");
+    require_scope!(&graph.verification_bindings, "verification binding");
     require_scope!(&graph.edges, "edge");
     Ok(())
 }

@@ -16,6 +16,7 @@ pub struct GraphEvidenceReference {
 pub struct GraphEvidence {
     pub rule_ids: BTreeSet<String>,
     pub references: Vec<GraphEvidenceReference>,
+    pub verification_bindings: Vec<provenance_core::VerificationBinding>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -117,6 +118,7 @@ fn graph_evidence_locked(
     Ok(GraphEvidence {
         rule_ids,
         references,
+        verification_bindings: store.list_verification_bindings(scope)?,
     })
 }
 

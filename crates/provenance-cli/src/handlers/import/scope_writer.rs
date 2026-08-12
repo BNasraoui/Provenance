@@ -41,6 +41,10 @@ pub(super) fn write_scope(
         &provenance_store::shards::rules_path(layout, scope_id),
         &exported.rules,
     )?;
+    provenance_store::jsonl::write_jsonl_atomic(
+        &provenance_store::shards::verification_bindings_path(layout, scope_id),
+        &exported.verification_bindings,
+    )?;
     write_edges(layout, scope_id, exported)?;
     provenance_store::jsonl::write_jsonl_atomic(
         &provenance_store::shards::threads_path(layout, scope_id),

@@ -54,6 +54,7 @@ export interface RuleOptions {
 }
 
 export interface VerifyOptions {
+  key: string;
   method?: VerificationMethod;
   file?: string;
   symbol?: string;
@@ -73,7 +74,7 @@ export interface RequirementHandle {
 export interface RuleHandle {
   readonly key: string;
   readonly id: string;
-  verify(callback: () => unknown | Promise<unknown>, options?: VerifyOptions): Promise<void>;
+  verify(callback: () => unknown | Promise<unknown>, options: VerifyOptions): Promise<void>;
 }
 
 export type { ApplyResult } from "./protocol.js";
@@ -192,7 +193,7 @@ class Requirement extends DeclaredHandle implements RequirementHandle {
 class Rule extends DeclaredHandle implements RuleHandle {
   async verify(
     callback: () => unknown | Promise<unknown>,
-    options: VerifyOptions = {},
+    options: VerifyOptions,
   ): Promise<void> {
     const location = options.file === undefined ? callerLocation() : undefined;
     if (registry.dirty) {
@@ -217,7 +218,7 @@ async function complete(
 async function verifyDeclaration(
   address: DeclarationAddress,
   callback: () => unknown | Promise<unknown>,
-  options: VerifyOptions = {},
+  options: VerifyOptions,
 ): Promise<void> {
   const location = options.file === undefined ? callerLocation() : undefined;
   await runVerification(
@@ -243,6 +244,7 @@ async function runVerification(
     "begin-verification",
     {
       ...target,
+      key: options.key,
       method: options.method ?? "examples",
       declared_by: settings.verificationOwner,
       file: options.file ?? location?.file,

@@ -10,6 +10,7 @@ mod rule_writers;
 mod shaping_writers;
 mod thread_writers;
 mod typed_specs;
+mod verification_bindings;
 mod verification_runs;
 mod writers;
 
@@ -23,9 +24,10 @@ pub use inputs::{
     CreateAssertionInput, CreateBoundaryInput, CreateContributionInput, CreateDispositionInput,
     CreateDomainInput, CreateEdgeInput, CreateProposalCardInput, CreateQuestionInput,
     CreateRequirementInput, CreateResolutionInput, CreateRuleInput, CreateSourceInput,
-    CreateSynthesisPacketInput, CreateTopicInput, DeclarationReferenceInput, PostMessageInput,
-    ReconcileState, ReconciledResource, TypedRequirementInput, TypedResourceKind, TypedRuleInput,
-    TypedSourceInput, TypedSpecInput, TypedSpecResult, UpdateQuestionInput,
+    CreateSynthesisPacketInput, CreateTopicInput, DeclarationReferenceInput,
+    MaterializeVerificationBindingInput, PostMessageInput, ReconcileState, ReconciledResource,
+    TypedRequirementInput, TypedResourceKind, TypedRuleInput, TypedSourceInput, TypedSpecInput,
+    TypedSpecResult, UpdateQuestionInput,
 };
 pub use proposal_surfaces::{ProposalDemand, ProposalSurfaceReason, SurfacedProposal, TopicClaim};
 
@@ -34,7 +36,7 @@ use ideation_batches::overlay_records;
 use provenance_core::{
     ensure_supported_schema_version, AssertionRecord, Boundary, Contribution, DispositionRecord,
     Domain, Edge, Manifest, Message, ProposalCard, Question, Requirement, Resolution, Rule,
-    SchemaVersion, Scope, ScopeId, Source, SynthesisPacket, Thread, Topic,
+    SchemaVersion, Scope, ScopeId, Source, SynthesisPacket, Thread, Topic, VerificationBinding,
 };
 use readers::{
     deserialize_closed, read_edge_shards, read_ideation_landings, read_jsonl, read_jsonl_closed,
@@ -159,6 +161,12 @@ impl StateStore {
     pub fn list_rules(&self, scope: &ScopeId) -> anyhow::Result<Vec<Rule>> {
         read_jsonl(&shards::rules_path(&self.layout, scope))
     }
+    pub fn list_verification_bindings(
+        &self,
+        scope: &ScopeId,
+    ) -> anyhow::Result<Vec<VerificationBinding>> {
+        read_jsonl(&shards::verification_bindings_path(&self.layout, scope))
+    }
     pub(crate) fn closed_sources(&self, scope: &ScopeId) -> anyhow::Result<Vec<Source>> {
         read_jsonl_closed(&shards::sources_path(&self.layout, scope))
     }
@@ -182,6 +190,12 @@ impl StateStore {
     }
     pub(crate) fn closed_rules(&self, scope: &ScopeId) -> anyhow::Result<Vec<Rule>> {
         read_jsonl_closed(&shards::rules_path(&self.layout, scope))
+    }
+    pub(crate) fn closed_verification_bindings(
+        &self,
+        scope: &ScopeId,
+    ) -> anyhow::Result<Vec<VerificationBinding>> {
+        read_jsonl_closed(&shards::verification_bindings_path(&self.layout, scope))
     }
     pub(crate) fn closed_edges(&self, scope: &ScopeId) -> anyhow::Result<Vec<Edge>> {
         read_edge_shards(&self.layout, Some(scope))

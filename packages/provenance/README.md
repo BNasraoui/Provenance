@@ -43,7 +43,7 @@ import { expiry } from "./provenance.spec.js";
 
 await expiry.verify(async () => {
   // Exercise ordinary production code with the test runner of your choice.
-});
+}, { key: "share-link-expiry" });
 ```
 
 The handle keeps an owner-local declaration address, not a mutable database

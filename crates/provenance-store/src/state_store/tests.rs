@@ -72,3 +72,4 @@ mod proposals;
 mod shaping;
 mod source_requirements;
 mod threads;
+mod verification_bindings;
