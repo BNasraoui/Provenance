@@ -2,6 +2,7 @@ pub mod graph;
 pub mod ideation;
 pub mod knowledge;
 pub mod policy;
+pub mod sdk;
 pub mod shaping;
 pub mod workspace;
 
@@ -13,6 +14,7 @@ use clap::{Parser, Subcommand};
 use serde::Serialize;
 
 #[derive(Parser)]
+#[command(name = "provenance", version)]
 pub struct Cli {
     /// Drop the advisory notes commands print alongside their output, such as
     /// the warning that this repository has no shaping skills installed.
@@ -207,6 +209,11 @@ pub enum Command {
     Coverage {
         #[command(subcommand)]
         command: workspace::CoverageCommand,
+    },
+    /// Typed language façade protocol.
+    Sdk {
+        #[command(subcommand)]
+        command: sdk::SdkCommand,
     },
     SwarmBacktrace {
         #[command(subcommand)]

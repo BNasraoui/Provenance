@@ -4,7 +4,10 @@
 use super::unverified_rule_warnings;
 use camino::Utf8PathBuf;
 use provenance_core::coverage::EvidenceAnchor;
-use provenance_core::{Rule, RuleSeverity, RuleStatus, SchemaVersion, ScopeId, StableId};
+use provenance_core::{
+    Rule, RuleSeverity, RuleStatus, SchemaVersion, ScopeId, StableId, VerificationBinding,
+    VerificationMethod,
+};
 use provenance_scanner::{
     Annotation, AnnotationLocation, AttributeBinding, CoverageLevel, FileScan, Language,
     Verification,
@@ -15,6 +18,8 @@ fn rule(id: &str, status: RuleStatus) -> Rule {
         schema_version: SchemaVersion(1),
         scope_id: ScopeId::new("default").unwrap(),
         id: StableId::new(id).unwrap(),
+        declared_by: None,
+        declaration_address: None,
         name: None,
         description: None,
         statement: "Claims must be grouped by participant".to_string(),
@@ -73,11 +78,25 @@ fn scan_with_annotation(rule_id: &str, verification: Option<Verification>) -> Fi
     }
 }
 
+fn typed_binding(rule_id: &str) -> VerificationBinding {
+    VerificationBinding {
+        schema_version: SchemaVersion(1),
+        scope_id: ScopeId::new("default").unwrap(),
+        id: StableId::new("verification_binding_typed").unwrap(),
+        rule_id: StableId::new(rule_id).unwrap(),
+        key: "typed-check".to_string(),
+        method: VerificationMethod::Examples,
+        declared_by: "ci://typescript".to_string(),
+        file: "tests/rule.test.ts".into(),
+        symbol: Some("rule holds".to_string()),
+    }
+}
+
 #[test]
 fn active_rule_with_no_verification_warns() {
     let active = rule("rule_foo", RuleStatus::Active);
 
-    let warnings = unverified_rule_warnings(&[active], &[]);
+    let warnings = unverified_rule_warnings(&[active], &[], &[]);
 
     assert_eq!(warnings.len(), 1);
     assert_eq!(warnings[0].rule_id, "rule_foo");
@@ -94,7 +113,7 @@ fn unverified_warning_names_no_file_or_line_even_when_the_rule_cites_a_document(
         ..rule("rule_foo", RuleStatus::Active)
     };
 
-    let warnings = unverified_rule_warnings(&[active], &[]);
+    let warnings = unverified_rule_warnings(&[active], &[], &[]);
 
     assert_eq!(warnings[0].file_path, None);
     assert_eq!(warnings[0].line, None);
@@ -105,7 +124,7 @@ fn active_rule_verified_via_attribute_binding_does_not_warn() {
     let active = rule("rule_foo", RuleStatus::Active);
     let scan = scan_with_binding("rule_foo", Some(Verification::Examples));
 
-    let warnings = unverified_rule_warnings(&[active], std::slice::from_ref(&scan));
+    let warnings = unverified_rule_warnings(&[active], std::slice::from_ref(&scan), &[]);
 
     assert!(warnings.is_empty());
 }
@@ -115,7 +134,7 @@ fn active_rule_verified_via_comment_annotation_does_not_warn() {
     let active = rule("rule_foo", RuleStatus::Active);
     let scan = scan_with_annotation("rule_foo", Some(Verification::Conformance));
 
-    let warnings = unverified_rule_warnings(&[active], std::slice::from_ref(&scan));
+    let warnings = unverified_rule_warnings(&[active], std::slice::from_ref(&scan), &[]);
 
     assert!(warnings.is_empty());
 }
@@ -125,7 +144,7 @@ fn comment_annotation_without_a_verification_key_does_not_count() {
     let active = rule("rule_foo", RuleStatus::Active);
     let scan = scan_with_annotation("rule_foo", None);
 
-    let warnings = unverified_rule_warnings(&[active], std::slice::from_ref(&scan));
+    let warnings = unverified_rule_warnings(&[active], std::slice::from_ref(&scan), &[]);
 
     assert_eq!(warnings.len(), 1);
 }
@@ -135,7 +154,7 @@ fn draft_and_deprecated_rules_never_warn() {
     let draft = rule("rule_draft", RuleStatus::Draft);
     let deprecated = rule("rule_deprecated", RuleStatus::Deprecated);
 
-    let warnings = unverified_rule_warnings(&[draft, deprecated], &[]);
+    let warnings = unverified_rule_warnings(&[draft, deprecated], &[], &[]);
 
     assert!(warnings.is_empty());
 }
@@ -152,6 +171,7 @@ fn verification_matches_from_either_channel() {
     let warnings = unverified_rule_warnings(
         &[verified_by_comment, verified_by_attribute],
         &[binding_scan, annotation_scan],
+        &[],
     );
 
     assert!(warnings.is_empty());
@@ -163,8 +183,18 @@ fn active_rule_unverified_alongside_verified_rules_only_warns_once() {
     let unverified = rule("rule_unverified", RuleStatus::Active);
     let scan = scan_with_binding("rule_verified", Some(Verification::Exhaustion));
 
-    let warnings = unverified_rule_warnings(&[verified, unverified], std::slice::from_ref(&scan));
+    let warnings =
+        unverified_rule_warnings(&[verified, unverified], std::slice::from_ref(&scan), &[]);
 
     assert_eq!(warnings.len(), 1);
     assert_eq!(warnings[0].rule_id, "rule_unverified");
+}
+
+#[test]
+fn active_rule_with_a_typed_verification_binding_does_not_warn() {
+    let active = rule("rule_foo", RuleStatus::Active);
+
+    let warnings = unverified_rule_warnings(&[active], &[], &[typed_binding("rule_foo")]);
+
+    assert!(warnings.is_empty());
 }

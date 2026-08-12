@@ -2,7 +2,7 @@
 
 Never lose the *why* behind your decisions.
 
-Provenance is a tool for building requirements traceability, from source to requirement to rule. A rule is a function, bound to its record in the graph by `#[rule("rule_id")]`; the tests that verify it carry `#[verifies("rule_id", method)]`.
+Provenance is a tool for building requirements traceability, from source to requirement to rule. A Rule is an atomic behavioural obligation that can exist before its implementation; `#[rule("rule_id")]` binds production code to it, and `#[verifies("rule_id", method)]` binds evidence.
 
 ### Installation
 
@@ -35,10 +35,11 @@ provenance prime
 | `provenance materialize` | Rebuild the SQLite query cache |
 | `provenance graph <requirement>` | Show the neighbourhood of a requirement |
 | `provenance graph-reference issue\|show\|verify\|exact-export` | Hand off an immutable pinned graph |
-| `provenance traceability <rule>` | Walk a rule back to the decision and requirement behind it |
+| `provenance traceability <rule>` | Walk a Rule back to its Requirement and any producing Resolution |
 | `provenance proposals surface --scope default --changed-path <path>` | Surface undisposed proposals when current work touches their evidence or explicit territory |
 | `provenance wiki build` / `provenance wiki serve` | Build or serve the generated wiki with domain browsing and offline search |
-| `provenance coverage scan --path . --validate-rules` | Check every marker against the graph and name each active rule with no verification |
+| `provenance coverage scan --path . --validate-rules` | Check bindings and report active Rules with no implementation or verification |
+| `provenance sdk apply` / `provenance sdk verification-runs` | Experimental typed-language desired state and callback evidence protocol |
 | `provenance stale --since main` | Report whether a diff touched, moved, or removed any graph evidence path |
 | `provenance skills install` | Install the bundled agent skills (`provenance-shaping`, `provenance-fork-tournament`, `provenance-swarm-backtrace`, `provenance-grounded-writing`) |
 
@@ -50,5 +51,6 @@ be installed through the skills.sh ecosystem with `npx skills add <owner/repo>`.
 - [Shaping](docs/shaping.md), the refinement method and how agent sessions run it
 - [CLI](docs/cli.md), the full command surface
 - [State format](docs/state-format.md) and [cache](docs/cache.md), how storage works
+- [TypeScript SDK POC](docs/typescript-sdk-poc.md), typed declarations, Node verification, and findings
 
 Licensed under BUSL-1.1.

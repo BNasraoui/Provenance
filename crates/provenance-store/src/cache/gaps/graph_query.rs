@@ -5,11 +5,7 @@ use provenance_core::{
 };
 use std::collections::BTreeSet;
 
-/// One of the two ends a fully traced rule is produced by.
-///
-/// The requirement it serves and the resolution that decided it: one alone
-/// is a half-written chain, so gap reporting and the health report both hold
-/// out for both.
+/// A record type that may produce a rule.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuleProducer {
     Requirement,
@@ -17,7 +13,11 @@ pub enum RuleProducer {
 }
 
 impl RuleProducer {
-    pub const ALL: [Self; 2] = [Self::Requirement, Self::Resolution];
+    /// Producers required for a rule to have complete traceability.
+    ///
+    /// A resolution may produce a rule when a decision removed ambiguity,
+    /// but a rule always refines a requirement directly.
+    pub const REQUIRED: [Self; 1] = [Self::Requirement];
 
     pub const fn node_type(self) -> NodeType {
         match self {
@@ -223,11 +223,10 @@ impl<'a, 'graph> GraphQuery<'a, 'graph> {
             .collect()
     }
 
-    /// Which producers this rule is missing, in [`RuleProducer::ALL`] order.
-    /// Empty means the rule is produced from both ends and so is fully
-    /// traced; anything else names what a reader has to add.
+    /// Which required producers this rule is missing, in
+    /// [`RuleProducer::REQUIRED`] order.
     pub fn missing_rule_producers(&self, rule_id: &StableId) -> Vec<RuleProducer> {
-        RuleProducer::ALL
+        RuleProducer::REQUIRED
             .into_iter()
             .filter(|producer| match producer {
                 RuleProducer::Requirement => self.producing_requirements(rule_id).is_empty(),

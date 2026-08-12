@@ -329,9 +329,9 @@ mod schema_version_tests {
     const VERSION_RANGE: [u32; 4] = [0, 1, 2, u32::MAX];
 
     // Independent restatement of the decision, listed rather than compared so
-    // the oracle does not repeat the rule function's shape: these are the
+    // the oracle does not repeat the primary implementation's shape: these are the
     // record layouts this codebase knows how to read. Must not be implemented
-    // by calling the rule function.
+    // by calling the primary implementation.
     const READABLE_LAYOUT_VERSIONS: [u32; 1] = [1];
 
     fn layout_is_readable_by_oracle(version: SchemaVersion) -> bool {

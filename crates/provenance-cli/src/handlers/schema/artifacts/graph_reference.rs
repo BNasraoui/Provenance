@@ -59,6 +59,7 @@ pub(in crate::handlers::schema) fn export_schema() -> Value {
                     "questions": record_array("question"),
                     "resolutions": record_array("resolution"),
                     "rules": record_array("rule"),
+                    "verification_bindings": record_array("verificationBinding"),
                     "edges": record_array("edge")
                 }
             }
@@ -84,6 +85,14 @@ fn schema_version() -> Value {
 
 fn record_array(name: &str) -> Value {
     json!({"type": "array", "items": {"$ref": format!("#/$defs/{name}")}})
+}
+
+fn declaration_address() -> Value {
+    json!({
+        "type": "array",
+        "minItems": 1,
+        "items": {"type": "string", "minLength": 1}
+    })
 }
 
 #[allow(clippy::needless_pass_by_value)]
@@ -121,7 +130,7 @@ fn export_definitions() -> Value {
             &["schema_version", "scope_id", "id", "name", "source_type", "url"],
             json!({
                 "schema_version": version.clone(), "scope_id": id.clone(), "id": id.clone(),
-                "name": string.clone(),
+                "declared_by": string.clone(), "declaration_address": declaration_address(), "name": string.clone(),
                 "source_type": {"enum": ["policy", "document", "legislation", "company_agreement", "system_state", "external_integration", "domain_knowledge", "project_artifact", "incident", "api_spec"]},
                 "url": {"type": ["string", "null"]}, "reference": string.clone(),
                 "commit_pin": {
@@ -140,7 +149,8 @@ fn export_definitions() -> Value {
             &["schema_version", "scope_id", "id", "statement", "status"],
             json!({
                 "schema_version": version.clone(), "scope_id": id.clone(), "id": id.clone(),
-                "statement": string.clone(), "description": string.clone(), "fog": string.clone(),
+                "declared_by": string.clone(), "declaration_address": declaration_address(), "statement": string.clone(),
+                "description": string.clone(), "fog": string.clone(),
                 "status": {"enum": ["active", "discovery", "refinement", "resolved"]},
                 "domain_id": id.clone(),
                 "source_refs": {"type": "array", "items": {"$ref": "#/$defs/sourceReference"}}
@@ -190,10 +200,20 @@ fn export_definitions() -> Value {
             &["schema_version", "scope_id", "id", "statement", "status", "severity"],
             json!({
                 "schema_version": version.clone(), "scope_id": id.clone(), "id": id.clone(),
-                "name": string.clone(), "description": string.clone(),
+                "declared_by": string.clone(), "declaration_address": declaration_address(), "name": string.clone(),
+                "description": string.clone(),
                 "statement": string.clone(), "status": {"enum": ["draft", "review", "active", "deprecated", "archived"]},
                 "severity": {"enum": ["low", "medium", "high", "critical"]},
                 "source_document": string.clone(), "source_section": string.clone()
+            })
+        ),
+        "verificationBinding": closed_record(
+            &["schema_version", "scope_id", "id", "rule_id", "key", "method", "declared_by", "file"],
+            json!({
+                "schema_version": version.clone(), "scope_id": id.clone(), "id": id.clone(),
+                "rule_id": id.clone(), "key": string.clone(),
+                "method": {"enum": ["exhaustion", "property", "examples", "conformance", "construction", "proof"]},
+                "declared_by": string.clone(), "file": string.clone(), "symbol": string.clone()
             })
         ),
         "edge": closed_record(

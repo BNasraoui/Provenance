@@ -202,6 +202,10 @@ pub struct Source {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,
     pub id: StableId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declared_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declaration_address: Option<super::DeclarationAddress>,
     pub name: String,
     #[serde(alias = "sourceType")]
     pub source_type: SourceType,
@@ -256,6 +260,10 @@ pub struct Requirement {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,
     pub id: StableId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declared_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declaration_address: Option<super::DeclarationAddress>,
     pub statement: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -370,6 +378,10 @@ pub struct Rule {
     pub schema_version: SchemaVersion,
     pub scope_id: ScopeId,
     pub id: StableId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declared_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declaration_address: Option<super::DeclarationAddress>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

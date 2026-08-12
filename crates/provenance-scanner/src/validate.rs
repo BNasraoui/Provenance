@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use camino::Utf8PathBuf;
 
 use crate::walker::FileScan;
+use crate::{source_sites, SourceSiteRole};
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct ValidationWarning {
@@ -38,45 +39,27 @@ pub fn validate_bindings(
     known_rule_ids: impl IntoIterator<Item = String>,
 ) -> Vec<ValidationWarning> {
     let known = known_rule_ids.into_iter().collect::<BTreeSet<_>>();
-    let bindings = scans
-        .iter()
-        .flat_map(|scan| &scan.bindings)
-        .collect::<Vec<_>>();
-    let rule_sites = bindings
-        .iter()
-        .filter(|binding| binding.verification.is_none())
-        .map(|binding| binding.rule_id.clone())
-        .collect::<BTreeSet<_>>();
     let mut warnings = Vec::new();
     let mut seen_rule_sites = BTreeSet::new();
-    for binding in bindings {
-        if !known.contains(&binding.rule_id) {
+    for site in source_sites(scans) {
+        if !known.contains(site.rule_id()) && matches!(site, crate::SourceSite::Attribute(_)) {
             warnings.push(ValidationWarning {
-                rule_id: binding.rule_id.clone(),
-                file_path: binding.file_path.clone(),
-                line: binding.line,
-                message: format!("unknown rule id `{}`", binding.rule_id),
+                rule_id: site.rule_id().to_string(),
+                file_path: site.file_path().to_path_buf(),
+                line: site.line(),
+                message: format!("unknown rule id `{}`", site.rule_id()),
             });
         }
-        if binding.verification.is_none() && !seen_rule_sites.insert(binding.rule_id.clone()) {
+        if site.role() == SourceSiteRole::Implementation
+            && !seen_rule_sites.insert(site.rule_id().to_string())
+        {
             warnings.push(ValidationWarning {
-                rule_id: binding.rule_id.clone(),
-                file_path: binding.file_path.clone(),
-                line: binding.line,
+                rule_id: site.rule_id().to_string(),
+                file_path: site.file_path().to_path_buf(),
+                line: site.line(),
                 message: format!(
-                    "more than one function carries #[rule(\"{}\")]; a rule is one function",
-                    binding.rule_id
-                ),
-            });
-        }
-        if binding.verification.is_some() && !rule_sites.contains(&binding.rule_id) {
-            warnings.push(ValidationWarning {
-                rule_id: binding.rule_id.clone(),
-                file_path: binding.file_path.clone(),
-                line: binding.line,
-                message: format!(
-                    "#[verifies(\"{}\")] has no #[rule] function to verify",
-                    binding.rule_id
+                    "more than one primary implementation binding was found for #[rule(\"{}\")]",
+                    site.rule_id()
                 ),
             });
         }
@@ -93,18 +76,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn binding_validation_warns_for_dangling_verifies_and_duplicate_rule() {
+    fn a_known_rule_can_be_verified_without_an_implementation_binding() {
+        let scan = scan_file(
+            Utf8Path::new("verification.rs"),
+            Language::Rust,
+            "#[verifies(\"rule_unimplemented\", examples)]\nfn verifies_declared_rule() {}",
+        );
+
+        let warnings = validate_bindings(&[scan], ["rule_unimplemented".to_string()]);
+
+        assert!(warnings.is_empty(), "{warnings:#?}");
+    }
+
+    #[test]
+    fn binding_validation_warns_for_duplicate_implementation_bindings() {
         let scan = scan_file(
             Utf8Path::new("rules.rs"),
             Language::Rust,
-            "#[verifies(\"rule_orphaned\", examples)]\nfn checks_nothing() {}\n\
-             #[rule(\"rule_twice\")]\nfn first() {}\n#[rule(\"rule_twice\")]\nfn second() {}",
+            "#[rule(\"rule_twice\")]\nfn first() {}\n#[rule(\"rule_twice\")]\nfn second() {}",
         );
 
-        let warnings = validate_bindings(
-            &[scan],
-            ["rule_orphaned".to_string(), "rule_twice".to_string()],
-        );
+        let warnings = validate_bindings(&[scan], ["rule_twice".to_string()]);
 
         let messages = warnings
             .iter()
@@ -112,10 +104,73 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(messages
             .iter()
-            .any(|m| m.contains("no #[rule] function to verify")));
-        assert!(messages
+            .any(|m| m.contains("more than one primary implementation binding")));
+    }
+
+    #[test]
+    fn native_and_comment_implementation_bindings_are_duplicates() {
+        let scan = scan_file(
+            Utf8Path::new("rules.rs"),
+            Language::Rust,
+            "#[rule(\"rule_twice\")]\nfn native() {}\n\n\
+             // @provenance rule: rule_twice\nfn portable() {}",
+        );
+
+        let warnings = validate_bindings(&[scan], ["rule_twice".to_string()]);
+
+        assert_eq!(warnings.len(), 1, "{warnings:#?}");
+        assert_eq!(warnings[0].line, 4);
+        assert!(warnings[0]
+            .message
+            .contains("more than one primary implementation binding"));
+    }
+
+    #[test]
+    fn two_comment_implementation_bindings_are_duplicates() {
+        let scan = scan_file(
+            Utf8Path::new("rules.rs"),
+            Language::Rust,
+            "// @provenance rule: rule_twice\nfn first() {}\n\n\
+             // @provenance rule: rule_twice\nfn second() {}",
+        );
+
+        let warnings = validate_bindings(&[scan], ["rule_twice".to_string()]);
+
+        assert_eq!(warnings.len(), 1, "{warnings:#?}");
+        assert!(warnings[0]
+            .message
+            .contains("more than one primary implementation binding"));
+    }
+
+    #[test]
+    fn comment_verification_does_not_duplicate_a_native_implementation() {
+        let scan = scan_file(
+            Utf8Path::new("rules.rs"),
+            Language::Rust,
+            "#[rule(\"rule_once\")]\nfn implementation() {}\n\n\
+             // @provenance rule: rule_once\n\
+             // @provenance verification: examples\nfn verifies_it() {}",
+        );
+
+        let warnings = validate_bindings(&[scan], ["rule_once".to_string()]);
+
+        assert!(warnings.is_empty(), "{warnings:#?}");
+    }
+
+    #[test]
+    fn binding_validation_still_warns_for_an_unknown_verification_target() {
+        let scan = scan_file(
+            Utf8Path::new("verification.rs"),
+            Language::Rust,
+            "#[verifies(\"rule_unknown\", examples)]\nfn verifies_unknown_rule() {}",
+        );
+
+        let warnings = validate_bindings(&[scan], ["rule_known".to_string()]);
+
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings
             .iter()
-            .any(|m| m.contains("a rule is one function")));
+            .any(|warning| warning.message == "unknown rule id `rule_unknown`"));
     }
 
     #[test]

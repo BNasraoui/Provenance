@@ -1,0 +1,302 @@
+use std::collections::{BTreeMap, BTreeSet};
+
+use provenance_core::{DeclarationAddress, StableId};
+use sha2::{Digest, Sha256};
+
+use super::super::{TypedRequirementInput, TypedRuleInput, TypedSourceInput};
+
+pub(super) fn source_address(spec: &str, key: &str) -> anyhow::Result<DeclarationAddress> {
+    DeclarationAddress::new([spec, "source", key])
+}
+
+pub(super) fn requirement_address(spec: &str, key: &str) -> anyhow::Result<DeclarationAddress> {
+    DeclarationAddress::new([spec, "requirement", key])
+}
+
+pub(super) fn rule_address(
+    spec: &str,
+    requirement: &str,
+    key: &str,
+) -> anyhow::Result<DeclarationAddress> {
+    DeclarationAddress::new([spec, "requirement", requirement, "rule", key])
+}
+
+pub(super) fn source_identity(input: &TypedSourceInput) -> (&str, Option<&str>) {
+    (&input.key, input.id.as_deref())
+}
+
+pub(super) fn requirement_identity(input: &TypedRequirementInput) -> (&str, Option<&str>) {
+    (&input.key, input.id.as_deref())
+}
+
+pub(super) fn rule_declaration_ids(
+    owner: &str,
+    spec: &str,
+    declarations: &[TypedRuleInput],
+    existing: &BTreeMap<DeclarationAddress, StableId>,
+) -> anyhow::Result<BTreeMap<(String, String), StableId>> {
+    let mut ids = BTreeMap::new();
+    let mut canonical = BTreeSet::new();
+    for declaration in declarations {
+        anyhow::ensure!(
+            !declaration.key.trim().is_empty(),
+            "rule key must not be empty"
+        );
+        let address = (declaration.requirement.clone(), declaration.key.clone());
+        anyhow::ensure!(
+            !ids.contains_key(&address),
+            "duplicate rule key `{}` under requirement `{}`",
+            declaration.key,
+            declaration.requirement
+        );
+        let declaration_address = rule_address(spec, &declaration.requirement, &declaration.key)?;
+        let id = resolve_id(
+            "rule",
+            owner,
+            &declaration_address,
+            &format!("{spec}/{}/{}", declaration.requirement, declaration.key),
+            declaration.id.as_deref(),
+            existing,
+        )?;
+        anyhow::ensure!(
+            canonical.insert(id.as_str().to_string()),
+            "two rule declarations resolve to id `{}`",
+            id.as_str()
+        );
+        ids.insert(address, id);
+    }
+    Ok(ids)
+}
+
+pub(super) fn declaration_ids<'a>(
+    kind: &str,
+    owner: &str,
+    spec: &str,
+    declarations: impl Iterator<Item = (&'a str, Option<&'a str>)>,
+    existing: &BTreeMap<DeclarationAddress, StableId>,
+) -> anyhow::Result<BTreeMap<String, StableId>> {
+    let mut ids = BTreeMap::new();
+    let mut canonical = BTreeSet::new();
+    for (key, explicit_id) in declarations {
+        anyhow::ensure!(!key.trim().is_empty(), "{kind} key must not be empty");
+        anyhow::ensure!(!ids.contains_key(key), "duplicate {kind} key `{key}`");
+        let address = DeclarationAddress::new([spec, kind, key])?;
+        let id = resolve_id(
+            kind,
+            owner,
+            &address,
+            &format!("{spec}/{key}"),
+            explicit_id,
+            existing,
+        )?;
+        anyhow::ensure!(
+            canonical.insert(id.as_str().to_string()),
+            "two {kind} declarations resolve to id `{}`",
+            id.as_str()
+        );
+        ids.insert(key.to_string(), id);
+    }
+    Ok(ids)
+}
+
+fn resolve_id(
+    kind: &str,
+    owner: &str,
+    address: &DeclarationAddress,
+    canonical_key: &str,
+    explicit_id: Option<&str>,
+    existing: &BTreeMap<DeclarationAddress, StableId>,
+) -> anyhow::Result<StableId> {
+    let explicit_id = explicit_id.map(StableId::new).transpose()?;
+    if let Some(existing_id) = existing.get(address) {
+        anyhow::ensure!(
+            explicit_id.as_ref().is_none_or(|id| id == existing_id),
+            "declaration `{}` already resolves to canonical id `{}`",
+            address.segments().join("/"),
+            existing_id.as_str()
+        );
+        return Ok(existing_id.clone());
+    }
+    if let Some(id) = explicit_id {
+        return Ok(id);
+    }
+
+    if let Ok(id) = StableId::new(canonical_key) {
+        return Ok(id);
+    }
+    let slug = canonical_key
+        .chars()
+        .map(|character| match character {
+            character if character.is_ascii_alphanumeric() => character.to_ascii_lowercase(),
+            '-' | '_' => character,
+            _ => '_',
+        })
+        .collect::<String>();
+    let identity = format!("{owner}\0{}", address.segments().join("/"));
+    let digest = format!("{:x}", Sha256::digest(identity.as_bytes()));
+    StableId::new(format!("{kind}_{slug}_{}", &digest[..10]))
+}
+
+pub(super) fn owned_declaration_ids<'a, T: 'a>(
+    owner: &str,
+    records: &'a [T],
+    fields: impl Fn(
+        &'a T,
+    ) -> (
+        &'a StableId,
+        Option<&'a str>,
+        Option<&'a DeclarationAddress>,
+    ),
+) -> anyhow::Result<BTreeMap<DeclarationAddress, StableId>> {
+    let mut ids = BTreeMap::new();
+    for record in records {
+        let (id, declared_by, address) = fields(record);
+        if declared_by != Some(owner) {
+            continue;
+        }
+        let Some(address) = address else {
+            continue;
+        };
+        anyhow::ensure!(
+            ids.insert(address.clone(), id.clone()).is_none(),
+            "declaration `{}` resolves to more than one canonical id",
+            address.segments().join("/")
+        );
+    }
+    Ok(ids)
+}
+
+pub(super) fn validate_references(
+    requirements: &[TypedRequirementInput],
+    rules: &[TypedRuleInput],
+    source_ids: &BTreeMap<String, StableId>,
+    requirement_ids: &BTreeMap<String, StableId>,
+) -> anyhow::Result<()> {
+    for requirement in requirements {
+        for source in &requirement.sources {
+            anyhow::ensure!(
+                source_ids.contains_key(source),
+                "requirement `{}` references undeclared source `{source}`",
+                requirement.key
+            );
+        }
+    }
+    for rule in rules {
+        anyhow::ensure!(
+            requirement_ids.contains_key(&rule.requirement),
+            "rule `{}` references undeclared requirement `{}`",
+            rule.key,
+            rule.requirement
+        );
+    }
+    Ok(())
+}
+
+pub(super) fn validate_ownership<'a, T: 'a>(
+    owner: &str,
+    records: &'a [T],
+    desired_ids: impl Iterator<Item = &'a StableId>,
+    fields: impl Fn(&'a T) -> (&'a StableId, Option<&'a str>),
+) -> anyhow::Result<()> {
+    for desired_id in desired_ids {
+        let Some(record) = records.iter().find(|record| fields(record).0 == desired_id) else {
+            continue;
+        };
+        let (_, declared_by) = fields(record);
+        anyhow::ensure!(
+            declared_by == Some(owner),
+            "record `{}` is not owned by `{owner}` (declared_by: {})",
+            desired_id.as_str(),
+            declared_by.unwrap_or("unowned")
+        );
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use super::{declaration_ids, requirement_address, rule_declaration_ids};
+    use crate::state_store::TypedRuleInput;
+    use provenance_core::StableId;
+
+    #[test]
+    fn implicit_ids_are_scoped_to_the_spec_address() {
+        let existing = BTreeMap::new();
+        let first = declaration_ids(
+            "requirement",
+            "spec://typescript",
+            "sharing",
+            std::iter::once(("sharing", None)),
+            &existing,
+        )
+        .unwrap();
+        let second = declaration_ids(
+            "requirement",
+            "spec://typescript",
+            "sessions",
+            std::iter::once(("sharing", None)),
+            &existing,
+        )
+        .unwrap();
+        assert_ne!(first["sharing"], second["sharing"]);
+
+        let declaration = TypedRuleInput {
+            key: "expiry".to_string(),
+            id: None,
+            requirement: "sharing".to_string(),
+            statement: "Share links expire".to_string(),
+            name: None,
+            description: None,
+        };
+        let first = rule_declaration_ids(
+            "spec://typescript",
+            "sharing",
+            std::slice::from_ref(&declaration),
+            &existing,
+        )
+        .unwrap();
+        let second =
+            rule_declaration_ids("spec://typescript", "sessions", &[declaration], &existing)
+                .unwrap();
+        let address = &("sharing".into(), "expiry".into());
+        assert_ne!(first[address], second[address]);
+    }
+
+    #[test]
+    fn an_existing_address_keeps_its_canonical_id() {
+        let address = requirement_address("share-links", "sharing").unwrap();
+        let mut existing = BTreeMap::new();
+        existing.insert(address, StableId::new("req_existing").unwrap());
+
+        let ids = declaration_ids(
+            "requirement",
+            "spec://typescript",
+            "share-links",
+            std::iter::once(("sharing", None)),
+            &existing,
+        )
+        .unwrap();
+
+        assert_eq!(ids["sharing"].as_str(), "req_existing");
+    }
+
+    #[test]
+    fn an_existing_address_cannot_be_remapped_to_another_explicit_id() {
+        let address = requirement_address("share-links", "sharing").unwrap();
+        let mut existing = BTreeMap::new();
+        existing.insert(address, StableId::new("req_existing").unwrap());
+
+        let error = declaration_ids(
+            "requirement",
+            "spec://typescript",
+            "share-links",
+            std::iter::once(("sharing", Some("req_other"))),
+            &existing,
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("already resolves"));
+    }
+}

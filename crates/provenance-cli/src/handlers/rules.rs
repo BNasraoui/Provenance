@@ -145,6 +145,8 @@ mod tests {
             schema_version: SchemaVersion(1),
             scope_id: ScopeId::new("default").unwrap(),
             id: StableId::new("rule_overtime").unwrap(),
+            declared_by: None,
+            declaration_address: None,
             name: None,
             description: None,
             statement: statement.to_string(),

@@ -1,0 +1,16 @@
+{
+  "name": "provenance-typescript-sdk-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "apply": "node dist/apply.js",
+    "test": "npm run build && node dist/apply.js && node dist/share-links.test.js"
+  },
+  "dependencies": {
+    "provenance": "file:../../packages/provenance"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

@@ -140,14 +140,14 @@ mod tests {
     }
 
     #[test]
-    fn snapshot_rule_page_with_function_and_verifications() {
+    fn snapshot_rule_page_with_implementation_and_verifications() {
         insta::assert_snapshot!(render_rule("default", &rule_fixture()));
     }
 
     #[test]
     fn snapshot_rule_page_without_scanned_binding() {
         let mut page = rule_fixture();
-        page.rule_function = None;
+        page.implementation = None;
         page.verifications.clear();
         insta::assert_snapshot!(render_rule("default", &page));
     }
@@ -156,7 +156,7 @@ mod tests {
     fn snapshot_rule_page_without_a_code_scan() {
         let mut page = rule_fixture();
         page.code_scan = None;
-        page.rule_function = None;
+        page.implementation = None;
         page.verifications.clear();
         insta::assert_snapshot!(render_rule("default", &page));
     }

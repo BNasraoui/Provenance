@@ -1,12 +1,13 @@
 //! The markdown render: which verification sites get marked as outside
-//! the module that defines the rule, and how a warning with no location
+//! the module that implements the rule, and how a warning with no location
 //! is written.
 
-use super::{render_coverage, OUTSIDE_DEFINING_MODULE};
+use super::{render_coverage, OUTSIDE_IMPLEMENTATION_MODULE};
 use crate::output::OutputFormat;
 use camino::Utf8PathBuf;
 use provenance_core::coverage::{
-    AnchorState, BindingResult, CoverageReport, CoverageScan, ScannedFile, ValidationWarning,
+    AnchorState, AnnotationResult, BindingResult, CoverageReport, CoverageScan, ScannedFile,
+    ValidationWarning,
 };
 
 fn binding(rule_id: &str, file_path: &str, verification: Option<&str>) -> BindingResult {
@@ -27,6 +28,22 @@ fn report(bindings: Vec<BindingResult>, warnings: Vec<ValidationWarning>) -> Cov
     CoverageScan {
         report: CoverageReport::new(None, 1, Vec::new(), bindings, warnings),
         scanned_files: Vec::new(),
+    }
+}
+
+fn comment(rule_id: &str, file_path: &str, verification: Option<&str>) -> AnnotationResult {
+    AnnotationResult {
+        rule_id: rule_id.to_string(),
+        file_path: file_path.into(),
+        line: 4,
+        function_name: Some("portable_site".to_string()),
+        coverage: "full".to_string(),
+        confidence: 1.0,
+        verification: verification.map(ToOwned::to_owned),
+        anchor: None,
+        anchor_state: AnchorState::Unchanged,
+        original_line: None,
+        original_file_path: None,
     }
 }
 
@@ -86,7 +103,7 @@ fn markdown_reports_first_seen_sites_as_new() {
 }
 
 #[test]
-fn verification_site_in_another_file_is_marked_outside_the_defining_module() {
+fn verification_site_in_another_file_is_marked_outside_the_implementation_module() {
     let report = report(
         vec![
             binding("rule_overtime", "src/payroll.rs", None),
@@ -98,8 +115,23 @@ fn verification_site_in_another_file_is_marked_outside_the_defining_module() {
     let markdown = render_coverage(OutputFormat::Markdown, &report).unwrap();
 
     assert!(markdown.contains(
-        "`rule_overtime` verified by examples at `tests/billing.rs`:12 (outside defining module)"
+        "`rule_overtime` verified by examples at `tests/billing.rs`:12 (outside implementation module)"
     ));
+}
+
+#[test]
+fn comment_sites_render_with_their_roles_and_implementation_module() {
+    let mut report = report(Vec::new(), Vec::new());
+    report.report.annotations = vec![
+        comment("rule_overtime", "src/payroll.rs", None),
+        comment("rule_overtime", "tests/billing.rs", Some("examples")),
+    ];
+
+    let markdown = render_coverage(OutputFormat::Markdown, &report).unwrap();
+
+    assert!(markdown.contains("`rule_overtime` is implemented at `src/payroll.rs`:4"));
+    assert!(markdown.contains("`rule_overtime` verified by examples at `tests/billing.rs`:4"));
+    assert!(markdown.contains(OUTSIDE_IMPLEMENTATION_MODULE));
 }
 
 #[test]
@@ -114,12 +146,12 @@ fn verification_site_beside_the_rule_is_not_marked() {
 
     let markdown = render_coverage(OutputFormat::Markdown, &report).unwrap();
 
-    assert!(!markdown.contains(OUTSIDE_DEFINING_MODULE));
+    assert!(!markdown.contains(OUTSIDE_IMPLEMENTATION_MODULE));
 }
 
-/// The `#[rule]` line itself is a definition, not a site leaning on one.
+/// The `#[rule]` line itself is an implementation, not a site leaning on one.
 #[test]
-fn the_defining_site_is_never_marked() {
+fn the_implementation_site_is_never_marked() {
     let report = report(
         vec![binding("rule_overtime", "src/payroll.rs", None)],
         Vec::new(),
@@ -127,14 +159,14 @@ fn the_defining_site_is_never_marked() {
 
     let markdown = render_coverage(OutputFormat::Markdown, &report).unwrap();
 
-    assert!(markdown.contains("`rule_overtime` is the rule at `src/payroll.rs`:12"));
-    assert!(!markdown.contains(OUTSIDE_DEFINING_MODULE));
+    assert!(markdown.contains("`rule_overtime` is implemented at `src/payroll.rs`:12"));
+    assert!(!markdown.contains(OUTSIDE_IMPLEMENTATION_MODULE));
 }
 
-/// Without a `#[rule]` site in the scanned tree there is no defining
+/// Without a `#[rule]` site in the scanned tree there is no implementation
 /// module to be outside of, so the report claims nothing either way.
 #[test]
-fn a_rule_with_no_scanned_definition_leaves_its_sites_unmarked() {
+fn a_rule_with_no_scanned_implementation_leaves_its_sites_unmarked() {
     let report = report(
         vec![binding(
             "rule_overtime",
@@ -146,7 +178,7 @@ fn a_rule_with_no_scanned_definition_leaves_its_sites_unmarked() {
 
     let markdown = render_coverage(OutputFormat::Markdown, &report).unwrap();
 
-    assert!(!markdown.contains(OUTSIDE_DEFINING_MODULE));
+    assert!(!markdown.contains(OUTSIDE_IMPLEMENTATION_MODULE));
 }
 
 #[test]

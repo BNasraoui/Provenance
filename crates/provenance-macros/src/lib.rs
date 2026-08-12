@@ -2,7 +2,7 @@
 
 use proc_macro::{TokenStream, TokenTree};
 
-/// Marks a function as a provenance rule.
+/// Marks a function or type as a Provenance Rule's primary implementation.
 ///
 /// Takes the rule's id as a single string literal:
 ///
@@ -11,11 +11,10 @@ use proc_macro::{TokenStream, TokenTree};
 /// pub fn validate_edge_endpoint(...) { ... }
 /// ```
 ///
-/// The function is the rule; the attribute binds it to the rule's graph
-/// record. It does not change the item it is attached to. Because it is a
-/// compiled symbol rather than a comment, it moves with refactors, dies with
-/// deleted code, and the scanner can check the cited rule id against the
-/// graph.
+/// The attribute binds the item to an independent Rule record. It does
+/// not change the item it is attached to. Because it is a compiled symbol
+/// rather than a comment, it moves with refactors, dies with deleted code,
+/// and the scanner can check the cited Rule id against the graph.
 #[proc_macro_attribute]
 pub fn rule(attr: TokenStream, item: TokenStream) -> TokenStream {
     validate_rule_id(&attr);
@@ -43,9 +42,9 @@ const VERIFICATION_METHODS: [&str; 6] = [
 ///
 /// Methods: `exhaustion` (every input in a finite domain is tried),
 /// `property` (generated inputs checked against a stated property),
-/// `examples` (hand-picked cases), `conformance` (a copy of the rule
-/// elsewhere is checked against the rule function), `construction` (a type
-/// or constraint makes violation impossible; goes on the type, not a test),
+/// `examples` (hand-picked cases), `conformance` (an independent expression
+/// of the Rule is checked against its primary implementation), `construction`
+/// (a type or constraint makes violation impossible; goes on the type, not a test),
 /// `proof` (a machine-checked proof outside this test runner backs the rule;
 /// the marked site is the bridge that pins the implementation to the proved
 /// model, such as a golden-vector test shared with a Lean theorem).

@@ -16,6 +16,7 @@ pub struct GraphEvidenceReference {
 pub struct GraphEvidence {
     pub rule_ids: BTreeSet<String>,
     pub references: Vec<GraphEvidenceReference>,
+    pub verification_bindings: Vec<provenance_core::VerificationBinding>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -117,6 +118,7 @@ fn graph_evidence_locked(
     Ok(GraphEvidence {
         rule_ids,
         references,
+        verification_bindings: store.list_verification_bindings(scope)?,
     })
 }
 
@@ -187,12 +189,12 @@ fn coverage_health_locked(
 
 /// Rules whose trace back to a source is incomplete.
 ///
-/// A rule is complete only when a requirement produces it, the resolution
-/// that decided it produces it too, and a source reaches the producing
-/// requirement. The producer half of that test is the same join the
-/// `OrphanRule` gap runs, so `orphans` and `gaps` name the same rules;
-/// `orphans` additionally reports the rules whose producing requirement has
-/// no live source behind it.
+/// A rule is complete only when a requirement produces it and a source
+/// reaches that requirement. A resolution may also produce the rule, but is
+/// not required. The producer test is the same join the `OrphanRule` gap
+/// runs, so `orphans` and `gaps` name the same rules; `orphans` additionally
+/// reports the rules whose producing requirement has no live source behind
+/// it.
 pub fn orphan_rules(
     layout: &ProvenanceLayout,
     scope: &provenance_core::ScopeId,

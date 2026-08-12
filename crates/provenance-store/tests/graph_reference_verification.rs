@@ -3,7 +3,7 @@
 //! graph out of the repository.
 //!
 //! The last group of tests is about the exact-export document rather than the
-//! rule function. A document has no repository behind it, so only one of the
+//! primary implementation. A document has no repository behind it, so only one of the
 //! four checks can travel with it: the digest. Those tests are unmarked,
 //! because they never run the rule; what they hold in place is that the
 //! document a verified reference produces carries the digest the rule

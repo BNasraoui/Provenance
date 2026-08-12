@@ -62,16 +62,19 @@ cp -rf source dest          # NOT: cp -r source dest
 
 ## Rules
 
-A rule is a function — or a type whose construction is the proof. `#[rule("rule_id")]`
-binds one function to one rule record in the graph: the function *is* the decision, not a
-description of it and not a claim to satisfy it. Exactly one function may carry an id.
+A Rule is an identified atomic behavioural obligation that refines a Requirement and may
+also be produced by a Resolution. It may exist before any implementation or verification.
+`#[rule("rule_id")]` binds the primary production implementation to that Rule; it does
+not define the Rule. For now, at most one function or type may be the primary
+implementation for an id.
 
-`#[verifies("rule_id", method)]` marks whatever proves the rule, with one method word:
+`#[verifies("rule_id", method)]` binds evidence to the Rule, with one method word:
 
 - `exhaustion` — every input in a finite domain is tried
 - `property` — generated inputs checked against a stated property
 - `examples` — hand-picked cases
-- `conformance` — a copy of the rule elsewhere checked against the rule function
+- `conformance` — an independent expression of the Rule checked against its primary
+  implementation
 - `construction` — a type or constraint makes violation impossible; the attribute goes on
   the type, never on a test
 - `proof` — a machine-checked proof outside the test runner backs the rule; the marked
@@ -81,26 +84,28 @@ Both attributes come from `provenance-macros` (`use provenance_macros::rule;`,
 `use provenance_macros::verifies;`). They expand to nothing and cost one argument check at
 compile time; what they buy is a symbol the scanner finds and refactors carry along.
 
-Unverified is **absence**, derived and never stored. `provenance coverage scan --path .
---scope default --validate-rules` reports it, along with unknown rule ids, a second
-function claiming one id, and a `#[verifies]` with no `#[rule]` to verify. Adding
-`--strict` makes any warning a non-zero exit; how strictly CI runs the scan is a per-repo
-dial, not a property of a rule.
+Unimplemented and Unverified are **absence**, derived and never stored.
+`provenance coverage scan --path . --scope default --validate-rules` reports them,
+along with bindings that cite unknown Rule ids and a second primary implementation
+claiming one id. Verification requires a known Rule, not an implementation binding.
+Adding `--strict` makes any warning a non-zero exit; how strictly CI runs the scan is a
+per-repo dial, not a property of a Rule.
 
-The rule record carries the binding in `--source-document` (the file) and
-`--source-section` (the bare symbol) — never a line range.
+The Rule record's `--source-document` and `--source-section` fields cite source
+material. They do not count as an implementation binding; code bindings come from
+scanner-recognized attributes, helpers, decorators, or comments.
 
-Rules follow human decisions, not code shape. Do not mint one rule per function, and do
-not split one decision across five rules because the match has five arms. Prose intent
-lives in the requirement and the resolution. **A decision with no function is a
-requirement whose rule is unwritten** — an ordinary state, not a defect. Leave it a
-requirement; never create a rule record with no function behind it, and never write a
-`#[verifies]` test that asserts nothing to clear a warning.
+Rules follow behavioural obligations, not code shape. Do not mint one Rule per function,
+and do not split one obligation across five Rules because the match has five arms. Prose
+intent lives in the Requirement, Rule, and any Resolution that produced it. A Rule with
+no function or type behind it is unimplemented—an ordinary state, not a different graph
+artifact. Never write a `#[verifies]` test that asserts nothing to clear a warning.
 
 ## Rule Doc Headers
 
-The doc comment above a `#[rule("...")]` item is one short paragraph saying what
-the rule decides, followed only by constraints the code cannot show for itself.
+The doc comment above a `#[rule("...")]` item is one short paragraph saying which
+obligation the implementation realizes, followed only by constraints the code cannot
+show for itself.
 Amendment history, proof inventories, and cross-references belong in the rule's
 graph record, not in the source header. `crates/provenance-cli/tests/cli_structure.rs`
 enforces this mechanically: it caps how many `///` lines may sit above a

@@ -36,7 +36,7 @@ impl Fixture {
             "--id",
             "rule_anchor",
             "--statement",
-            "Anchor the deciding function",
+            "Anchor the primary implementation",
             "--severity",
             "high",
         ]);

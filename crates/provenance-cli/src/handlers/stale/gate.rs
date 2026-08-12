@@ -13,7 +13,6 @@ mod source_refs;
 struct RevisionScan {
     coverage: CoverageScan,
     spans: BTreeMap<(Utf8PathBuf, usize), usize>,
-    annotation_verifications: BTreeSet<(Utf8PathBuf, usize, String)>,
 }
 
 pub(super) fn report(
@@ -35,6 +34,16 @@ pub(super) fn report(
         false,
     );
     let mut sites = marker_sites(&base_scan, &head_scan, changes, &graph.rule_ids);
+    for binding in &graph.verification_bindings {
+        if !sites.iter().any(|site| {
+            site.kind == EvidenceSiteKind::Verification
+                && site.subject_id == binding.rule_id.as_str()
+                && (site.file_path == binding.file
+                    || site.original_file_path.as_ref() == Some(&binding.file))
+        }) {
+            sites.push(typed_verification_site(binding, changes));
+        }
+    }
     sites.extend(graph.references.iter().flat_map(|reference| {
         source_refs::sites(reference, &head_scan.coverage.bindings, changes)
     }));
@@ -62,6 +71,37 @@ pub(super) fn report(
     }
 }
 
+fn typed_verification_site(
+    binding: &provenance_core::VerificationBinding,
+    changes: &[ChangedFile],
+) -> EvidenceDiffSite {
+    let change = changes
+        .iter()
+        .find(|change| change.old_path == binding.file || change.new_path == binding.file);
+    let (file_path, state, original_file_path) = match change {
+        Some(change) if change.kind == super::git::ChangeKind::Deleted => {
+            (binding.file.clone(), EvidenceDiffState::Gone, None)
+        }
+        Some(change) if change.kind == super::git::ChangeKind::Renamed => (
+            change.new_path.clone(),
+            EvidenceDiffState::Moved,
+            Some(change.old_path.clone()),
+        ),
+        Some(_) => (binding.file.clone(), EvidenceDiffState::Touched, None),
+        None => (binding.file.clone(), EvidenceDiffState::Untouched, None),
+    };
+    EvidenceDiffSite {
+        kind: EvidenceSiteKind::Verification,
+        subject_id: binding.rule_id.as_str().to_string(),
+        file_path,
+        line: None,
+        end_line: None,
+        state,
+        original_file_path,
+        original_line: None,
+    }
+}
+
 fn scan_revision(commit: &str, files: Vec<RevisionFile>) -> RevisionScan {
     let scans = files
         .iter()
@@ -84,6 +124,10 @@ fn scan_revision(commit: &str, files: Vec<RevisionFile>) -> RevisionScan {
             function_name: site.function_name.clone(),
             coverage: site.annotation.coverage.to_string(),
             confidence: site.annotation.confidence,
+            verification: site
+                .annotation
+                .verification
+                .map(|method| method.to_string()),
             anchor: Some(site.anchor.clone()),
             anchor_state: AnchorState::New,
             original_line: None,
@@ -106,18 +150,6 @@ fn scan_revision(commit: &str, files: Vec<RevisionFile>) -> RevisionScan {
         })
         .collect();
     let extents = site_spans(&files, &scans);
-    let annotation_verifications = scans
-        .iter()
-        .flat_map(|scan| &scan.annotations)
-        .filter(|site| site.annotation.verification.is_some())
-        .map(|site| {
-            (
-                site.file_path.clone(),
-                site.line,
-                site.annotation.rule.clone(),
-            )
-        })
-        .collect();
     let scanned_files = files
         .into_iter()
         .map(|file| ScannedFile {
@@ -137,7 +169,6 @@ fn scan_revision(commit: &str, files: Vec<RevisionFile>) -> RevisionScan {
             scanned_files,
         },
         spans: extents,
-        annotation_verifications,
     }
 }
 
@@ -254,16 +285,10 @@ fn marker_sites(
         .iter()
         .filter(|site| known_rules.contains(&site.rule_id))
         .map(|site| {
-            let current = site.anchor_state != AnchorState::Gone;
-            let scan = if current { head } else { base };
-            let kind = if scan.annotation_verifications.contains(&(
-                site.file_path.clone(),
-                site.line,
-                site.rule_id.clone(),
-            )) {
+            let kind = if site.verification.is_some() {
                 EvidenceSiteKind::Verification
             } else {
-                EvidenceSiteKind::Annotation
+                EvidenceSiteKind::RuleBinding
             };
             marker_site(
                 kind,

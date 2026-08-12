@@ -211,10 +211,10 @@ mod tests {
     }
 
     // Independent restatement of the decision, grouped the way it is argued
-    // rather than the way the rule function evaluates it: a packet qualifies a
+    // rather than the way the primary implementation evaluates it: a packet qualifies a
     // proposal when the packet is about that proposal, when its adjudication
     // has settled, and when the proposal's claims stand. Must not be
-    // implemented by calling the rule function.
+    // implemented by calling the primary implementation.
     fn packet_is_about_proposal(facts: QualificationFacts) -> bool {
         facts.packet_owns_proposal_target
             && facts.packet_adjudicates_proposal
