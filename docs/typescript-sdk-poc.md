@@ -11,32 +11,28 @@ stores verification outcomes.
 The package interface is:
 
 ```ts
-import { defineSpec } from "@quality-sh/provenance";
+import { defineSpec, requirement, rule, source } from "@quality-sh/provenance";
 
-const spec = defineSpec("share-links", ({ requirement, source }) => {
-  const authority = source("linear:ABC-123", {
-    kind: "linear",
-    name: "Linear ABC-123",
-    url: "https://linear.app/example/issue/ABC-123",
-  });
-  const sharing = requirement("sharing", {
-    statement: "Users can securely share documentation",
-    sources: [authority],
-  });
-  const expiry = sharing.rule("expiry", {
-    statement: "Share links must expire within 30 days",
-  });
-
-  return { sharing, expiry };
-});
+const authority = source("sharing-policy").document("docs/sharing-policy.md");
+const expiry = rule("expiry")
+  .statement("Share links must expire within 30 days");
+const sharing = requirement("sharing")
+  .statement("Users can securely share documentation")
+  .from(authority)
+  .rules(expiry);
+const spec = defineSpec("share-links")
+  .sources(authority)
+  .requirements(sharing)
+  .build();
 
 export default spec;
-export const { expiry, sharing } = spec.handles;
+export const sharingHandle = spec.handles.requirements.sharing;
+export const expiryHandle = sharingHandle.rules.expiry;
 ```
 
 An explicit entry point calls `apply(spec)`. Importing the declaration module
-only constructs and freezes values in memory. Tests import `expiry` and call
-`expiry.verify("share-link-expiry", callback)`. The local key gives the durable
+only constructs and freezes values in memory. Tests import `expiryHandle` and call
+`expiryHandle.verify("share-link-expiry", callback)`. The local key gives the durable
 Verification binding a stable identity; the Rule itself remains a real typed
 reference. The callback never crosses the process seam. Node
 runs it between Rust-backed begin and complete commands. On failure, the SDK
@@ -75,25 +71,30 @@ Each declaration has two identities:
 - a structured, owner-local declaration address used by typed handles;
 - a canonical Provenance Stable ID assigned or accepted by Rust.
 
-The address includes the spec and hierarchy. `sharing/expiry` and
-`sessions/expiry` are distinct, as are equal top-level keys in different specs.
+The address includes the spec and hierarchy. Distinct local declarations at
+`sharing/expiry` and `sessions/expiry` remain separate, as do equal top-level
+keys in different specs. Reusing the same Rule declaration under both
+Requirements creates one shared address and two graph relationships.
 Declaration keys are not TypeScript variable names. Renaming:
 
 ```ts
-export const expiry = sharing.rule("expiry", ...);
+const expiry = rule("expiry").statement(...);
 ```
 
 to:
 
 ```ts
-export const shareLinkExpiry = sharing.rule("expiry", ...);
+const shareLinkExpiry = rule("expiry").statement(...);
 ```
 
 leaves both the declaration address and canonical ID unchanged. On reapply,
 Rust first resolves the owner and address to the persisted Stable ID. A new
-address receives a deterministic implicit ID; an explicit `id` can reuse an
-existing Stable ID and is the current escape hatch when a declaration must move
-without changing canonical identity. Immutable handles do not cache IDs;
+address receives a deterministic implicit ID. Moving one owned local Rule to a
+shared address, or one shared Rule to a local address, keeps its Stable ID when
+there is exactly one matching candidate. If several local Rules could be
+merged, Rust rejects the guess; `rule(key).id(existingId)` selects which
+canonical Rule receives the new address. It does not retire the other Rule.
+Immutable handles do not cache IDs;
 `apply` returns them and Rust resolves later verification by owner and address.
 
 Sources, requirements, and rules carry optional `declared_by` metadata.
@@ -106,9 +107,8 @@ external references.
 
 This is deliberately not a full lifecycle engine. The POC has no adoption,
 pruning, automatic rename/move inference, deletion, or ownership-transfer
-operation. Changing a rule's parent without an explicit ID creates a distinct
-declaration. Reusing an explicit ID preserves the record, but relationships
-remain additive and the old edge is not deleted.
+operation. Relationships remain additive, so changing a Rule's Requirement set
+does not yet remove old edges.
 
 ## Verification evidence
 
@@ -173,9 +173,9 @@ canonical model without a data migration.
    handles, invokes four commands, wraps callbacks, and serializes errors.
    Reconciliation, canonical IDs, source-kind mapping, ownership checks, graph
    writes, and evidence validation remain in Rust.
-3. One-shot child processes are sufficient for the protocol POC. They do not
-   deliver the promised install-and-forget UX; package-supplied binary discovery
-   and lifecycle management are still needed. Nothing here justifies gRPC.
+3. One-shot child processes are sufficient. Platform packages now supply the
+   matching engine without a global CLI, install script download, Rust toolchain,
+   daemon, or gRPC.
 4. Typed declarations coexist with external state by refusing takeover,
    retaining omissions and edges, and preserving fields outside the façade.
    Full lifecycle semantics remain unsolved by design.

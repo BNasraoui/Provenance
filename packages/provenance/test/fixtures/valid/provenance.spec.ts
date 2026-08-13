@@ -1,14 +1,13 @@
-import { defineSpec } from "@quality-sh/provenance";
+import { defineSpec, requirement, rule } from "@quality-sh/provenance";
 
-const spec = defineSpec("share-links", ({ requirement }) => {
-  const sharing = requirement("sharing", {
-    statement: "Users can securely share documentation",
-  });
-  const expiry = sharing.rule("expiry", {
-    statement: "Share links expire within 30 days",
-  });
+const expiryDeclaration = rule("expiry").statement("Share links expire within 30 days");
+const sharingDeclaration = requirement("sharing")
+  .statement("Users can securely share documentation")
+  .rules(expiryDeclaration);
+const spec = defineSpec("share-links").requirements(sharingDeclaration).build();
 
-  return { sharing, expiry };
-});
+export const sharing = spec.handles.requirements.sharing;
+export const expiry = sharing.rules.expiry;
 
-export const { expiry, sharing } = spec.handles;
+// @ts-expect-error only declared handles are available
+void sharing.rules.revocation;

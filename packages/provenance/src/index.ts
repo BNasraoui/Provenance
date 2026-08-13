@@ -7,6 +7,16 @@ import type {
 } from "./protocol.js";
 import { DeclarationRegistry } from "./registry.js";
 import {
+  fluentRequirement,
+  fluentRule,
+  fluentSource,
+  fluentSpec,
+  type FluentRequirement,
+  type FluentRule,
+  type FluentSource,
+  type FluentSpec,
+} from "./fluent-spec.js";
+import {
   defineSpec as constructSpec,
   specDocument,
   type DeclarationRecord,
@@ -89,6 +99,7 @@ export type {
   SpecAuthor,
   SpecHandle,
 } from "./spec.js";
+export type { FluentRequirement, FluentRule, FluentSource, FluentSpec } from "./fluent-spec.js";
 
 const registry = new DeclarationRegistry();
 const moduleFile = fileURLToPath(import.meta.url);
@@ -108,7 +119,10 @@ export function configure(options: ConfigureOptions): void {
   registry.reset();
 }
 
-export function source(key: string, options: SourceOptions): SourceHandle {
+export function source<const Key extends string>(key: Key): FluentSource<Key>;
+export function source(key: string, options: SourceOptions): SourceHandle;
+export function source(key: string, options?: SourceOptions): SourceHandle | FluentSource {
+  if (options === undefined) return fluentSource(key);
   const handle = new DeclaredHandle(key);
   registry.addSource(
     {
@@ -124,10 +138,13 @@ export function source(key: string, options: SourceOptions): SourceHandle {
   return handle;
 }
 
+export function requirement<const Key extends string>(key: Key): FluentRequirement<Key>;
+export function requirement(key: string, options: RequirementOptions): RequirementHandle;
 export function requirement(
   key: string,
-  options: RequirementOptions,
-): RequirementHandle {
+  options?: RequirementOptions,
+): RequirementHandle | FluentRequirement {
+  if (options === undefined) return fluentRequirement(key);
   const handle = new Requirement(key);
   registry.addRequirement(
     {
@@ -142,10 +159,20 @@ export function requirement(
   return handle;
 }
 
+export function rule<const Key extends string>(key: Key): FluentRule<Key> {
+  return fluentRule(key);
+}
+
+export function defineSpec(key: string): FluentSpec;
 export function defineSpec<const Declarations extends DeclarationRecord>(
   key: string,
   build: (author: SpecAuthor) => Declarations,
-): SpecHandle<FinalizedRecord<Declarations>> {
+): SpecHandle<FinalizedRecord<Declarations>>;
+export function defineSpec<const Declarations extends DeclarationRecord>(
+  key: string,
+  build?: (author: SpecAuthor) => Declarations,
+): SpecHandle<FinalizedRecord<Declarations>> | FluentSpec {
+  if (build === undefined) return fluentSpec(key, verifyDeclaration);
   return constructSpec(key, build, verifyDeclaration);
 }
 

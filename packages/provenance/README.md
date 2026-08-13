@@ -11,26 +11,34 @@ npx provenance init --path . --scope default --path-prefix .
 Define a spec without touching the engine:
 
 ```ts
-import { defineSpec } from "@quality-sh/provenance";
+import { defineSpec, requirement, rule } from "@quality-sh/provenance";
 
-const spec = defineSpec("share-links", ({ requirement }) => {
-  const sharing = requirement("sharing", {
-    statement: "Users can securely share documentation",
-  });
-  const expiry = sharing.rule("expiry", {
-    statement: "Share links must expire within 30 days",
-  });
-
-  return { sharing, expiry };
-});
+const expiry = rule("expiry")
+  .statement("Share links must expire within 30 days");
+const sharing = requirement("sharing")
+  .statement("Users can securely share documentation")
+  .rules(expiry);
+const spec = defineSpec("share-links")
+  .requirements(sharing)
+  .build();
 
 export default spec;
-export const { expiry, sharing } = spec.handles;
+export const { sharing: sharingRequirement } = spec.handles.requirements;
+export const { expiry: expiryRule } = sharingRequirement.rules;
 ```
 
-Construction is synchronous, deterministic, and in-memory. `defineSpec`
-finalizes mutable builders into frozen handles. Importing this module does not
-write state or start a process.
+Each fluent call returns a new immutable declaration. `build()` validates and
+finalizes the declarations into frozen handles. Construction is synchronous,
+deterministic, and in-memory: importing this module does not write state or
+start a process. Reusing one Rule declaration under several Requirements emits
+one Rule with several relationships. Equal local Rule keys remain distinct when
+their declaration objects and parent Requirements differ.
+
+Moving a local Rule to a shared declaration, or back, preserves its canonical
+ID when Rust finds exactly one owned candidate. If several local Rules could
+become the shared Rule, apply fails instead of guessing. An immutable
+`.id(existingId)` call can choose the canonical record, but this lifecycle slice
+is additive: it does not retire the other Rule or remove old graph edges.
 
 Materialize only this spec at a deliberate entry point:
 
@@ -55,9 +63,9 @@ reconciliation path.
 A test imports the actual rule handle and runs its callback in Node:
 
 ```ts
-import { expiry } from "./provenance.spec.js";
+import { expiryRule } from "./provenance.spec.js";
 
-await expiry.verify("share-link-expiry", async () => {
+await expiryRule.verify("share-link-expiry", async () => {
   // Exercise ordinary production code with the test runner of your choice.
 });
 ```
@@ -86,10 +94,11 @@ variables override the defaults:
 `configure()` provides the same settings in code. The SDK still uses one short
 process per command; it does not start a daemon.
 
-The original top-level `source()` / `requirement()` functions remain for POC
-compatibility. They use a process-local registry and `verify()` applies pending
-declarations automatically. New code should prefer `defineSpec()` plus explicit
-`apply(spec)` so imports stay free of hidden persistence.
+The original object-options declarations and callback form of `defineSpec()`
+remain compatible. The older top-level API uses a process-local registry and
+`verify()` applies pending declarations automatically. New code should prefer
+fluent declarations plus explicit `apply(spec)` so imports stay free of hidden
+persistence.
 
 See `examples/typescript-sdk/` for package-name consumption through a local npm
 dependency.

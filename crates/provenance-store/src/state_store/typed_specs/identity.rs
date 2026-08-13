@@ -15,6 +15,18 @@ pub(super) fn requirement_address(spec: &str, key: &str) -> anyhow::Result<Decla
 
 pub(super) fn rule_address(
     spec: &str,
+    requirements: &[String],
+    key: &str,
+) -> anyhow::Result<DeclarationAddress> {
+    match requirements {
+        [requirement] => local_rule_address(spec, requirement, key),
+        [] => anyhow::bail!("rule `{key}` must refine at least one requirement"),
+        _ => DeclarationAddress::new([spec, "rule", key]),
+    }
+}
+
+fn local_rule_address(
+    spec: &str,
     requirement: &str,
     key: &str,
 ) -> anyhow::Result<DeclarationAddress> {
@@ -34,29 +46,41 @@ pub(super) fn rule_declaration_ids(
     spec: &str,
     declarations: &[TypedRuleInput],
     existing: &BTreeMap<DeclarationAddress, StableId>,
-) -> anyhow::Result<BTreeMap<(String, String), StableId>> {
+) -> anyhow::Result<BTreeMap<DeclarationAddress, StableId>> {
     let mut ids = BTreeMap::new();
     let mut canonical = BTreeSet::new();
+    let mut relationships = BTreeSet::new();
     for declaration in declarations {
         anyhow::ensure!(
             !declaration.key.trim().is_empty(),
             "rule key must not be empty"
         );
-        let address = (declaration.requirement.clone(), declaration.key.clone());
+        let address = rule_address(spec, &declaration.requirements, &declaration.key)?;
         anyhow::ensure!(
             !ids.contains_key(&address),
-            "duplicate rule key `{}` under requirement `{}`",
-            declaration.key,
-            declaration.requirement
+            "distinct rule declarations resolve to address `{}`",
+            address.segments().join("/")
         );
-        let declaration_address = rule_address(spec, &declaration.requirement, &declaration.key)?;
-        let id = resolve_id(
-            "rule",
+        for requirement in &declaration.requirements {
+            anyhow::ensure!(
+                relationships.insert((requirement.clone(), declaration.key.clone())),
+                "distinct rule declarations with key `{}` collide under requirement `{requirement}`",
+                declaration.key
+            );
+        }
+        let candidates =
+            migration_candidates(spec, &declaration.requirements, &declaration.key, existing)?;
+        let canonical_key = match declaration.requirements.as_slice() {
+            [requirement] => format!("{spec}/{requirement}/{}", declaration.key),
+            _ => format!("{spec}/{}", declaration.key),
+        };
+        let id = resolve_rule_id(
             owner,
-            &declaration_address,
-            &format!("{spec}/{}/{}", declaration.requirement, declaration.key),
+            &address,
+            &canonical_key,
             declaration.id.as_deref(),
             existing,
+            &candidates,
         )?;
         anyhow::ensure!(
             canonical.insert(id.as_str().to_string()),
@@ -66,6 +90,100 @@ pub(super) fn rule_declaration_ids(
         ids.insert(address, id);
     }
     Ok(ids)
+}
+
+fn migration_candidates(
+    spec: &str,
+    requirements: &[String],
+    key: &str,
+    existing: &BTreeMap<DeclarationAddress, StableId>,
+) -> anyhow::Result<Vec<StableId>> {
+    let addresses = if requirements.len() == 1 {
+        vec![DeclarationAddress::new([spec, "rule", key])?]
+    } else {
+        requirements
+            .iter()
+            .map(|requirement| local_rule_address(spec, requirement, key))
+            .collect::<anyhow::Result<Vec<_>>>()?
+    };
+    let candidates = addresses
+        .iter()
+        .filter_map(|address| existing.get(address))
+        .map(|id| (id.as_str(), id))
+        .collect::<BTreeMap<_, _>>();
+    Ok(candidates.into_values().cloned().collect())
+}
+
+fn resolve_rule_id(
+    owner: &str,
+    address: &DeclarationAddress,
+    canonical_key: &str,
+    explicit_id: Option<&str>,
+    existing: &BTreeMap<DeclarationAddress, StableId>,
+    candidates: &[StableId],
+) -> anyhow::Result<StableId> {
+    let explicit_id = explicit_id.map(StableId::new).transpose()?;
+    if let Some(existing_id) = existing.get(address) {
+        anyhow::ensure!(
+            explicit_id.as_ref().is_none_or(|id| id == existing_id),
+            "declaration `{}` already resolves to canonical id `{}`",
+            address.segments().join("/"),
+            existing_id.as_str()
+        );
+        return Ok(existing_id.clone());
+    }
+    if let Some(id) = explicit_id {
+        anyhow::ensure!(
+            candidates.is_empty() || candidates.contains(&id),
+            "rule declaration `{}` can only select an existing migration candidate by explicit id",
+            address.segments().join("/")
+        );
+        return Ok(id);
+    }
+    match candidates {
+        [id] => return Ok(id.clone()),
+        [_, _, ..] => anyhow::bail!(
+            "rule declaration `{}` has ambiguous existing identities; provide an explicit existing id",
+            address.segments().join("/")
+        ),
+        [] => {}
+    }
+    resolve_id("rule", owner, address, canonical_key, None, existing)
+}
+
+pub(super) fn normalize_rule_relationships(
+    declarations: &mut [TypedRuleInput],
+) -> anyhow::Result<()> {
+    for declaration in declarations {
+        anyhow::ensure!(
+            declaration.requirement.is_none() || declaration.requirements.is_empty(),
+            "rule `{}` cannot set both `requirement` and `requirements`",
+            declaration.key
+        );
+        if let Some(requirement) = declaration.requirement.take() {
+            declaration.requirements.push(requirement);
+        }
+        anyhow::ensure!(
+            !declaration.requirements.is_empty(),
+            "rule `{}` must refine at least one requirement",
+            declaration.key
+        );
+        let mut unique = BTreeSet::new();
+        for requirement in &declaration.requirements {
+            anyhow::ensure!(
+                !requirement.trim().is_empty(),
+                "rule `{}` has an empty requirement key",
+                declaration.key
+            );
+            anyhow::ensure!(
+                unique.insert(requirement.clone()),
+                "rule `{}` repeats requirement `{requirement}`",
+                declaration.key
+            );
+        }
+        declaration.requirements = unique.into_iter().collect();
+    }
+    Ok(())
 }
 
 pub(super) fn declaration_ids<'a>(
@@ -182,12 +300,13 @@ pub(super) fn validate_references(
         }
     }
     for rule in rules {
-        anyhow::ensure!(
-            requirement_ids.contains_key(&rule.requirement),
-            "rule `{}` references undeclared requirement `{}`",
-            rule.key,
-            rule.requirement
-        );
+        for requirement in &rule.requirements {
+            anyhow::ensure!(
+                requirement_ids.contains_key(requirement),
+                "rule `{}` references undeclared requirement `{requirement}`",
+                rule.key
+            );
+        }
     }
     Ok(())
 }
@@ -217,7 +336,7 @@ pub(super) fn validate_ownership<'a, T: 'a>(
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{declaration_ids, requirement_address, rule_declaration_ids};
+    use super::{declaration_ids, requirement_address, rule_address, rule_declaration_ids};
     use crate::state_store::TypedRuleInput;
     use provenance_core::StableId;
 
@@ -245,7 +364,8 @@ mod tests {
         let declaration = TypedRuleInput {
             key: "expiry".to_string(),
             id: None,
-            requirement: "sharing".to_string(),
+            requirement: None,
+            requirements: vec!["sharing".to_string()],
             statement: "Share links expire".to_string(),
             name: None,
             description: None,
@@ -257,11 +377,16 @@ mod tests {
             &existing,
         )
         .unwrap();
-        let second =
-            rule_declaration_ids("spec://typescript", "sessions", &[declaration], &existing)
-                .unwrap();
-        let address = &("sharing".into(), "expiry".into());
-        assert_ne!(first[address], second[address]);
+        let second = rule_declaration_ids(
+            "spec://typescript",
+            "sessions",
+            std::slice::from_ref(&declaration),
+            &existing,
+        )
+        .unwrap();
+        let first_address = rule_address("sharing", &declaration.requirements, "expiry").unwrap();
+        let second_address = rule_address("sessions", &declaration.requirements, "expiry").unwrap();
+        assert_ne!(first[&first_address], second[&second_address]);
     }
 
     #[test]

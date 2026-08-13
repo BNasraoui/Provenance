@@ -182,7 +182,10 @@ pub struct TypedRuleInput {
     pub key: String,
     #[serde(default)]
     pub id: Option<String>,
-    pub requirement: String,
+    #[serde(default)]
+    pub requirement: Option<String>,
+    #[serde(default)]
+    pub requirements: Vec<String>,
     pub statement: String,
     #[serde(default)]
     pub name: Option<String>,

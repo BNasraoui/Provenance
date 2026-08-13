@@ -14,8 +14,8 @@ use super::{
 };
 use crate::shards;
 use identity::{
-    declaration_ids, owned_declaration_ids, requirement_identity, rule_declaration_ids,
-    source_identity, validate_ownership, validate_references,
+    declaration_ids, normalize_rule_relationships, owned_declaration_ids, requirement_identity,
+    rule_address, rule_declaration_ids, source_identity, validate_ownership, validate_references,
 };
 use reconcile::{reconcile_requirements, reconcile_rules, reconcile_sources};
 
@@ -26,6 +26,16 @@ struct CurrentTypedState {
     source_addresses: BTreeMap<DeclarationAddress, StableId>,
     requirement_addresses: BTreeMap<DeclarationAddress, StableId>,
     rule_addresses: BTreeMap<DeclarationAddress, StableId>,
+}
+
+#[derive(Clone, Copy)]
+struct DesiredTypedGraph<'a> {
+    spec: &'a str,
+    requirements: &'a [TypedRequirementInput],
+    rules: &'a [TypedRuleInput],
+    source_ids: &'a BTreeMap<String, StableId>,
+    requirement_ids: &'a BTreeMap<String, StableId>,
+    rule_ids: &'a BTreeMap<DeclarationAddress, StableId>,
 }
 
 #[derive(Clone, Copy)]
@@ -68,9 +78,7 @@ impl StateStore {
         input: TypedSpecInput,
         mode: ReconcileMode,
     ) -> anyhow::Result<TypedSpecResult> {
-        self.validate_typed_spec(scope_id, &input)?;
-
-        let current = self.current_typed_state(scope_id, &input.declared_by)?;
+        let (input, current) = self.prepare_typed_spec(scope_id, input)?;
 
         let source_ids = declaration_ids(
             "source",
@@ -157,11 +165,14 @@ impl StateStore {
             replace_records(self, &shards::rules_path(&self.layout, scope_id), rules)?;
             self.write_typed_spec_edges(
                 scope_id,
-                &requirement_relationships,
-                &rule_relationships,
-                &source_ids,
-                &requirement_ids,
-                &rule_ids,
+                DesiredTypedGraph {
+                    spec: &spec,
+                    requirements: &requirement_relationships,
+                    rules: &rule_relationships,
+                    source_ids: &source_ids,
+                    requirement_ids: &requirement_ids,
+                    rule_ids: &rule_ids,
+                },
             )?;
         }
 
@@ -212,6 +223,17 @@ impl StateStore {
         })
     }
 
+    fn prepare_typed_spec(
+        &self,
+        scope_id: &ScopeId,
+        mut input: TypedSpecInput,
+    ) -> anyhow::Result<(TypedSpecInput, CurrentTypedState)> {
+        self.validate_typed_spec(scope_id, &input)?;
+        normalize_rule_relationships(&mut input.rules)?;
+        let current = self.current_typed_state(scope_id, &input.declared_by)?;
+        Ok((input, current))
+    }
+
     fn validate_typed_spec(
         &self,
         scope_id: &ScopeId,
@@ -241,36 +263,35 @@ impl StateStore {
     fn write_typed_spec_edges(
         &self,
         scope_id: &ScopeId,
-        requirements: &[TypedRequirementInput],
-        rules: &[TypedRuleInput],
-        source_ids: &BTreeMap<String, StableId>,
-        requirement_ids: &BTreeMap<String, StableId>,
-        rule_ids: &BTreeMap<(String, String), StableId>,
+        graph: DesiredTypedGraph<'_>,
     ) -> anyhow::Result<()> {
-        for declaration in requirements {
+        for declaration in graph.requirements {
             for source in &declaration.sources {
                 self.add_edge(
                     scope_id.clone(),
                     EdgeType::References,
                     NodeType::Source,
-                    source_ids[source].clone(),
+                    graph.source_ids[source].clone(),
                     NodeType::Requirement,
-                    requirement_ids[&declaration.key].clone(),
+                    graph.requirement_ids[&declaration.key].clone(),
                 )?;
             }
         }
 
         // Relationships are additive in this POC. Reapplying is idempotent,
         // while omission never erases a relationship another owner may use.
-        for declaration in rules {
-            self.add_edge(
-                scope_id.clone(),
-                EdgeType::Produces,
-                NodeType::Requirement,
-                requirement_ids[&declaration.requirement].clone(),
-                NodeType::Rule,
-                rule_ids[&(declaration.requirement.clone(), declaration.key.clone())].clone(),
-            )?;
+        for declaration in graph.rules {
+            let address = rule_address(graph.spec, &declaration.requirements, &declaration.key)?;
+            for requirement in &declaration.requirements {
+                self.add_edge(
+                    scope_id.clone(),
+                    EdgeType::Produces,
+                    NodeType::Requirement,
+                    graph.requirement_ids[requirement].clone(),
+                    NodeType::Rule,
+                    graph.rule_ids[&address].clone(),
+                )?;
+            }
         }
         Ok(())
     }
