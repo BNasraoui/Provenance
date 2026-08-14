@@ -147,7 +147,7 @@ mod tests {
     #[test]
     fn snapshot_rule_page_without_scanned_binding() {
         let mut page = rule_fixture();
-        page.implementation = None;
+        page.implementations.clear();
         page.verifications.clear();
         insta::assert_snapshot!(render_rule("default", &page));
     }
@@ -156,7 +156,18 @@ mod tests {
     fn snapshot_rule_page_without_a_code_scan() {
         let mut page = rule_fixture();
         page.code_scan = None;
-        page.implementation = None;
+        page.implementations.clear();
+        page.verifications.clear();
+        insta::assert_snapshot!(render_rule("default", &page));
+    }
+
+    #[test]
+    fn snapshot_rule_page_with_typed_implementation_without_a_code_scan() {
+        let mut page = rule_fixture();
+        page.code_scan = None;
+        page.implementations[0].location =
+            crate::wiki::links::LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"))
+                .resolve_at("src/UseCase.php", None);
         page.verifications.clear();
         insta::assert_snapshot!(render_rule("default", &page));
     }
