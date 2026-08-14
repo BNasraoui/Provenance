@@ -2,8 +2,8 @@
 
 **Beads:** `provenance-0ss`, `provenance-l3m`<br>
 **Date:** 2026-08-15<br>
-**Status:** The technical spike is complete. Work on the first checks has started.<br>
-**Baseline:** `002d6bf`
+**Status:** The technical spike, first exact check, direct write gate, and typed SDK gate are complete.<br>
+**Baseline:** `5d1eae4`
 
 ## Writing note
 
@@ -277,7 +277,7 @@ Check only created or statement-changed Requirement and Rule resources.
 Make Plan and Apply use one diagnostic result.
 Reject Apply before records, edges, or bindings change.
 
-Status: in progress under `provenance-l3m.4`.
+Status: complete in PR 98.
 
 ### Step 4: Live author feedback
 
