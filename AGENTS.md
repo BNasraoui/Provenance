@@ -26,6 +26,22 @@ use Git's standard `git commit --no-verify` option.
 
 Before designing or restructuring modules, use the `codebase-design` and `domain-modeling` skills (`.claude/skills/`).
 
+## Technical writing
+
+Use ASD-STE100 Simplified Technical English, Issue 9, for technical prose in
+this repository. This rule applies especially to Requirement, Rule, Resolution,
+Source, and Boundary records, and to documentation, code comments, bead text,
+pull requests, commit messages, and agent handoffs.
+
+- Treat ASD-STE100 Issue 9 as the authority. Do not invent a substitute writing
+  standard or add project-specific language rules in its name.
+- Use descriptive writing for Requirement and Rule statements unless the text
+  is an instruction that requires procedural writing.
+- Run the shared Provenance statement checker before writing Requirement or Rule
+  statements when that checker is available in the workflow.
+- Do not claim full ASD-STE100 conformance from a clean automated report. The
+  report covers only the standard rules that the checker currently implements.
+
 ## Quick Reference
 
 ```bash
