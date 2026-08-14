@@ -7,3 +7,4 @@ pub mod migrations;
 pub mod publication;
 pub mod shards;
 pub mod state_store;
+pub mod statement_analysis;
