@@ -1,6 +1,5 @@
-use crate::cli::Status;
 use crate::output::{self, OutputFormat};
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use provenance_store::{layout::ProvenanceLayout, state_store::StateStore};
 use std::collections::BTreeSet;
 
@@ -8,17 +7,33 @@ mod edges;
 mod index;
 mod references;
 mod scope;
+mod statement_report;
 
 use index::CheckIndex;
 
-pub(super) fn check(repo: Utf8PathBuf, format: OutputFormat) -> anyhow::Result<()> {
-    validate_repository(repo)?;
-    output::print(format, &Status { status: "ok" })
+pub(super) fn check(repo: &Utf8Path, format: OutputFormat) -> anyhow::Result<()> {
+    let store = StateStore::new(ProvenanceLayout::new(repo.to_path_buf()));
+    let report = store.with_repository_publication(|| collect_report_locked(&store, repo))?;
+    output::print(format, &report)
+}
+
+#[derive(serde::Serialize)]
+struct CheckReport {
+    status: &'static str,
+    diagnostics: Vec<provenance_store::statement_analysis::StatementDiagnostic>,
 }
 
 pub(super) fn validate_repository(repo: Utf8PathBuf) -> anyhow::Result<()> {
     let store = StateStore::new(ProvenanceLayout::new(repo));
     store.with_repository_publication(|| validate_locked(&store))
+}
+
+fn collect_report_locked(store: &StateStore, repo: &Utf8Path) -> anyhow::Result<CheckReport> {
+    validate_locked(store)?;
+    Ok(CheckReport {
+        status: "ok",
+        diagnostics: statement_report::changed_statements_from_head(store, repo)?,
+    })
 }
 
 fn validate_locked(store: &StateStore) -> anyhow::Result<()> {

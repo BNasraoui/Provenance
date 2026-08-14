@@ -66,6 +66,7 @@ fn exact_shipped_promotion_decisions_export_is_accepted() {
     std::fs::write(&input, serde_json::to_vec(&legacy).unwrap()).unwrap();
     let repo = dir.path().join("repo");
     init(&repo);
+    seed_legacy_statements(&repo, &legacy);
     Command::cargo_bin("provenance")
         .unwrap()
         .args([
@@ -104,6 +105,7 @@ fn import_cannot_omit_entire_existing_shipped_legacy_terminal_set() {
     let mut shipped = export_shipped(&dir);
     let repo = dir.path().join("repo");
     init(&repo);
+    seed_legacy_statements(&repo, &shipped);
     let complete = dir.path().join("complete.json");
     std::fs::write(&complete, serde_json::to_vec(&shipped).unwrap()).unwrap();
     Command::cargo_bin("provenance")
@@ -246,4 +248,17 @@ fn init(repo: &std::path::Path) {
         ])
         .assert()
         .success();
+}
+
+fn seed_legacy_statements(repo: &std::path::Path, export: &serde_json::Value) {
+    for (family, shard) in [("requirements", "req.jsonl"), ("rules", "rule.jsonl")] {
+        let directory = repo.join(format!(".provenance/state/scopes/default/{family}"));
+        std::fs::create_dir_all(&directory).unwrap();
+        let mut bytes = Vec::new();
+        for record in export[family].as_array().unwrap() {
+            serde_json::to_writer(&mut bytes, record).unwrap();
+            bytes.push(b'\n');
+        }
+        std::fs::write(directory.join(shard), bytes).unwrap();
+    }
 }

@@ -4,15 +4,25 @@ use super::support::{
 };
 
 #[test]
-fn shipped_legacy_export_imports_into_fresh_repo_and_materializes() {
+fn shipped_legacy_export_imports_when_legacy_statements_are_already_canonical() {
     let dir = tempfile::tempdir().unwrap();
     let fresh = dir.path().join("fresh");
     let export = dir.path().join("shipped.json");
     export_scope(&shipped_repo(), &export).success();
     init_repo_with_actors(&fresh, &["codex-review-panel-gpt55-medium", "ben_nasraoui"]);
+    seed_statement_shards(&shipped_repo(), &fresh);
     import_scope(&fresh, &export).success();
     for command in ["check", "materialize"] {
         run_repo_command(command, &fresh);
+    }
+}
+
+fn seed_statement_shards(source: &std::path::Path, destination: &std::path::Path) {
+    for family in ["requirements", "rules"] {
+        copy_tree(
+            &source.join(format!(".provenance/state/scopes/default/{family}")),
+            &destination.join(format!(".provenance/state/scopes/default/{family}")),
+        );
     }
 }
 
