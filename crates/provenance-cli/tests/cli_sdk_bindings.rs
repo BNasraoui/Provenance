@@ -61,9 +61,17 @@ fn repeated_verification_runs_reuse_one_durable_binding() {
         .unwrap()["id"]
         .as_str()
         .unwrap();
+    #[cfg(unix)]
+    let verification_file = {
+        let alias = directory.path().join("repo-alias");
+        std::os::unix::fs::symlink(".", &alias).unwrap();
+        alias.join("tests/share-links.test.ts")
+    };
+    #[cfg(not(unix))]
+    let verification_file = directory.path().join("tests/share-links.test.ts");
     let request = json!({
         "rule": rule_id, "key": "share-link-expiry", "method": "examples",
-        "declared_by": "ci://node-test", "file": "tests/share-links.test.ts",
+        "declared_by": "ci://node-test", "file": verification_file,
         "symbol": "share links expire"
     });
 

@@ -12,25 +12,62 @@ Define a spec without touching the engine:
 
 ```ts
 import { defineSpec } from "@quality-sh/provenance";
+import { createShareLink } from "./share-links.js";
 
-const spec = defineSpec("share-links", ({ requirement }) => {
-  const sharing = requirement("sharing", {
-    statement: "Users can securely share documentation",
-  });
-  const expiry = sharing.rule("expiry", {
-    statement: "Share links must expire within 30 days",
-  });
-
-  return { sharing, expiry };
-});
+const provenance = defineSpec("share-links");
+const sharing = provenance.requirement("sharing")
+  .statement("Users can securely share documentation");
+export const expiry = sharing.rule("expiry")
+  .statement("Share links must expire within 30 days")
+  .implementedBy(createShareLink);
+export const spec = provenance.build(sharing.rules(expiry));
 
 export default spec;
-export const { expiry, sharing } = spec.handles;
 ```
 
-Construction is synchronous, deterministic, and in-memory. `defineSpec`
-finalizes mutable builders into frozen handles. Importing this module does not
-write state or start a process.
+Each fluent call returns a new immutable declaration. `build()` validates and
+finalizes the desired-state document. Construction is synchronous,
+deterministic, and in-memory: importing this module does not write state or
+start a process. The declaration itself is the frozen handle tests import.
+
+Rules created through a Requirement have a requirement-local declaration
+address, so equal local keys under different Requirements remain distinct. A
+Rule created through the spec context has an explicitly shared address:
+
+```ts
+export const authenticatedExpiry = provenance
+  .rule("authenticated-expiry")
+  .statement("Authenticated access expires");
+
+const shares = provenance
+  .requirement("shares")
+  .statement("Shares expire")
+  .rules(authenticatedExpiry);
+const sessions = provenance
+  .requirement("sessions")
+  .statement("Sessions expire")
+  .rules(authenticatedExpiry);
+
+export default provenance.build(shares, sessions);
+```
+
+This emits one Rule with two relationships. Shared versus local identity is
+chosen by where the Rule is declared, not inferred from JavaScript object
+reuse. Sources linked with `.from(...)` are collected transitively by `build()`.
+
+`implementedBy()` accepts a direct named import or namespace member. The SDK
+reads that expression from the spec source and records the imported module and
+exported symbol; it never inspects the function object, its name, or its body.
+Calls, conditionals, computed members, and local values fail clearly because
+they do not provide one durable source identity. Rust checks that the resolved
+file belongs to the repository and owns the canonical implementation binding.
+Production code does not import Provenance.
+
+Moving a local Rule to a shared declaration, or back, preserves its canonical
+ID when Rust finds exactly one owned candidate. If several local Rules could
+become the shared Rule, apply fails instead of guessing. An immutable
+`.id(existingId)` call can choose the canonical record, but this lifecycle slice
+is additive: it does not retire the other Rule or remove old graph edges.
 
 Materialize only this spec at a deliberate entry point:
 
@@ -86,10 +123,12 @@ variables override the defaults:
 `configure()` provides the same settings in code. The SDK still uses one short
 process per command; it does not start a daemon.
 
-The original top-level `source()` / `requirement()` functions remain for POC
-compatibility. They use a process-local registry and `verify()` applies pending
-declarations automatically. New code should prefer `defineSpec()` plus explicit
-`apply(spec)` so imports stay free of hidden persistence.
+The original top-level fluent call chains, object-options declarations, and
+callback form of `defineSpec()` remain available as compatibility surfaces. The
+older object-options API uses a process-local registry and `verify()` applies
+pending declarations automatically. New code should prefer spec-bound
+declarations plus explicit `apply(spec)` so imports stay free of hidden
+persistence.
 
 See `examples/typescript-sdk/` for package-name consumption through a local npm
 dependency.

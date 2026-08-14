@@ -184,6 +184,16 @@ export interface SpecHandle<Handles extends Readonly<Record<string, unknown>>> {
 type DesiredSpecDocument = Omit<TypedSpecDocument, "declared_by">;
 const documents = new WeakMap<object, DesiredSpecDocument>();
 
+export function registerSpec<Handles extends Readonly<Record<string, unknown>>>(
+  key: string,
+  handles: Handles,
+  document: DesiredSpecDocument,
+): SpecHandle<Handles> {
+  const spec = Object.freeze({ key, handles });
+  documents.set(spec, document);
+  return spec;
+}
+
 export function defineSpec<const Declarations extends DeclarationRecord>(
   key: string,
   build: (author: SpecAuthor) => Declarations,
@@ -199,9 +209,7 @@ export function defineSpec<const Declarations extends DeclarationRecord>(
   session.close();
 
   const finalized = finalizeDeclarations(declarations, session, verify);
-  const spec = Object.freeze({ key, handles: finalized });
-  documents.set(spec, document(session));
-  return spec;
+  return registerSpec(key, finalized, document(session));
 }
 
 export function specDocument(
@@ -298,7 +306,8 @@ function document(session: ConstructionSession): DesiredSpecDocument {
   sources.sort(byKey);
   requirements.sort(byKey);
   rules.sort((left, right) =>
-    left.requirement.localeCompare(right.requirement) || left.key.localeCompare(right.key),
+    (left.requirement ?? "").localeCompare(right.requirement ?? "") ||
+    left.key.localeCompare(right.key),
   );
   return { schema_version: 1, spec: session.spec, sources, requirements, rules };
 }

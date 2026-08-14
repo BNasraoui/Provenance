@@ -34,7 +34,8 @@ pub(super) fn handle(command: SdkCommand) -> anyhow::Result<()> {
             format,
         } => {
             let repo = resolve_repository(repo)?;
-            let input = read_stdin_json::<TypedSpecInput>()?;
+            let mut input = read_stdin_json::<TypedSpecInput>()?;
+            normalize_implementation_context(&repo, &mut input)?;
             let result = plan::typed_spec(&repo, &ScopeId::new(scope)?, input)?;
             output::print(format, &result)?;
         }
@@ -44,7 +45,8 @@ pub(super) fn handle(command: SdkCommand) -> anyhow::Result<()> {
             format,
         } => {
             let repo = resolve_repository(repo)?;
-            let input = read_stdin_json::<TypedSpecInput>()?;
+            let mut input = read_stdin_json::<TypedSpecInput>()?;
+            normalize_implementation_context(&repo, &mut input)?;
             let scope_id = ScopeId::new(scope)?;
             let result =
                 StateStore::new(ProvenanceLayout::new(repo)).apply_typed_spec(&scope_id, input)?;
@@ -155,7 +157,14 @@ fn normalize_verification_context(
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("file is required for a durable verification binding"))?;
     let relative = if file.is_absolute() {
-        file.strip_prefix(repo)
+        let canonical = std::fs::canonicalize(file).map_err(|error| {
+            anyhow::anyhow!("verification file `{file}` cannot be resolved: {error}")
+        })?;
+        let canonical = camino::Utf8PathBuf::from_path_buf(canonical).map_err(|path| {
+            anyhow::anyhow!("verification file is not UTF-8: {}", path.display())
+        })?;
+        canonical
+            .strip_prefix(repo)
             .map_err(|_| {
                 anyhow::anyhow!("verification file `{file}` is outside repository `{repo}`")
             })?
@@ -169,9 +178,66 @@ fn normalize_verification_context(
             .any(|part| matches!(part, camino::Utf8Component::ParentDir)),
         "verification file must not leave the repository"
     );
+    let relative = portable_repository_path(&relative)?;
     input.commit = clean_file_commit(repo, &relative);
     input.file = Some(relative);
     Ok(())
+}
+
+fn normalize_implementation_context(
+    repo: &camino::Utf8Path,
+    input: &mut TypedSpecInput,
+) -> anyhow::Result<()> {
+    for rule in &mut input.rules {
+        let Some(implementation) = &mut rule.implementation else {
+            continue;
+        };
+        let candidate = if implementation.file.is_absolute() {
+            implementation.file.clone()
+        } else {
+            repo.join(&implementation.file)
+        };
+        let canonical = std::fs::canonicalize(&candidate).map_err(|error| {
+            anyhow::anyhow!(
+                "implementation target `{}` does not exist or cannot be resolved: {error}",
+                implementation.file
+            )
+        })?;
+        let canonical = camino::Utf8PathBuf::from_path_buf(canonical).map_err(|path| {
+            anyhow::anyhow!("implementation target is not UTF-8: {}", path.display())
+        })?;
+        anyhow::ensure!(
+            canonical.is_file(),
+            "implementation target `{canonical}` is not a file"
+        );
+        let relative = canonical
+            .strip_prefix(repo)
+            .map_err(|_| {
+                anyhow::anyhow!(
+                    "implementation target `{canonical}` is outside repository `{repo}`"
+                )
+            })?
+            .to_path_buf();
+        implementation.file = portable_repository_path(&relative)?;
+    }
+    Ok(())
+}
+
+fn portable_repository_path(path: &camino::Utf8Path) -> anyhow::Result<camino::Utf8PathBuf> {
+    let mut segments = Vec::new();
+    for component in path.components() {
+        match component {
+            camino::Utf8Component::Normal(segment) => segments.push(segment),
+            camino::Utf8Component::CurDir => {}
+            camino::Utf8Component::ParentDir
+            | camino::Utf8Component::RootDir
+            | camino::Utf8Component::Prefix(_) => {
+                anyhow::bail!("path must be repository-relative")
+            }
+        }
+    }
+    anyhow::ensure!(!segments.is_empty(), "path must name a repository file");
+    Ok(segments.join("/").into())
 }
 
 fn clean_file_commit(repo: &camino::Utf8Path, file: &camino::Utf8Path) -> Option<String> {

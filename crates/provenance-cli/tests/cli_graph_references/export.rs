@@ -257,3 +257,74 @@ fn collaboration_claims_do_not_change_digest_or_appear_in_exact_export() {
     assert!(!output.contains("thread_private"));
     assert!(!output.contains("message_private"));
 }
+
+#[test]
+fn implementation_binding_travels_in_the_exact_graph_and_changes_its_digest() {
+    let temp = committed_store();
+    provenance(temp.path())
+        .args([
+            "rules",
+            "create",
+            "--repo",
+            ".",
+            "--scope",
+            "default",
+            "--id",
+            "rule_runtime",
+            "--statement",
+            "Accepted workflows start",
+        ])
+        .assert()
+        .success();
+    git(temp.path(), &["add", ".provenance/state"]);
+    git(temp.path(), &["commit", "-qm", "add runtime rule"]);
+    let without_binding = issue(temp.path(), &[]);
+
+    let path = temp
+        .path()
+        .join(".provenance/state/scopes/default/implementations/binding.jsonl");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(
+        &path,
+        concat!(
+            "{\"schema_version\":1,\"scope_id\":\"default\",",
+            "\"id\":\"implementation_binding_runtime\",\"rule_id\":\"rule_runtime\",",
+            "\"declared_by\":\"spec://typescript/workflows\",",
+            "\"file\":\"src/runtime.ts\",\"symbol\":\"startWorkflow\"}\n"
+        ),
+    )
+    .unwrap();
+    git(temp.path(), &["add", ".provenance/state"]);
+    git(
+        temp.path(),
+        &["commit", "-qm", "bind runtime implementation"],
+    );
+    let with_binding = issue(temp.path(), &[]);
+    assert_ne!(
+        without_binding["graph_digest"],
+        with_binding["graph_digest"]
+    );
+
+    let reference_path = write_reference(temp.path(), &with_binding);
+    let output = provenance(temp.path())
+        .args([
+            "graph-reference",
+            "exact-export",
+            "--repo",
+            ".",
+            "--reference",
+            reference_path.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let document: Value = serde_json::from_slice(&output).unwrap();
+    let bindings = document["graph"]["implementation_bindings"]
+        .as_array()
+        .unwrap();
+    assert_eq!(bindings.len(), 1);
+    assert_eq!(bindings[0]["rule_id"], "rule_runtime");
+    validate_elsewhere(&document).success();
+}

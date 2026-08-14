@@ -9,7 +9,8 @@ use super::super::{
     ReconcileState, ReconciledResource, TypedFieldChange, TypedRequirementInput, TypedResourceKind,
     TypedRuleInput, TypedSourceInput,
 };
-use super::identity::{requirement_address, rule_address, source_address};
+use super::identity::{requirement_address, source_address};
+use super::rule_addresses::{local_parent, rule_address};
 
 pub(super) fn reconcile_sources(
     mut records: Vec<Source>,
@@ -169,12 +170,13 @@ pub(super) fn reconcile_rules(
     scope_id: &ScopeId,
     owner: &str,
     declarations: Vec<TypedRuleInput>,
-    ids: &BTreeMap<(String, String), StableId>,
+    ids: &BTreeMap<provenance_core::DeclarationAddress, StableId>,
 ) -> anyhow::Result<(Vec<Rule>, Vec<ReconciledResource>)> {
     let mut resources = Vec::new();
     for declaration in declarations {
-        let id = ids[&(declaration.requirement.clone(), declaration.key.clone())].clone();
-        let address = rule_address(spec, &declaration.requirement, &declaration.key)?;
+        let address = rule_address(spec, &declaration)?;
+        let id = ids[&address].clone();
+        let parent = local_parent(&address);
         let desired = Rule {
             schema_version: SUPPORTED_SCHEMA_VERSION,
             scope_id: scope_id.clone(),
@@ -195,7 +197,7 @@ pub(super) fn reconcile_rules(
         resources.push(resource(
             TypedResourceKind::Rule,
             declaration.key,
-            Some(declaration.requirement),
+            parent,
             address,
             id,
             state,

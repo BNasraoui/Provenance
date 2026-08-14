@@ -14,7 +14,7 @@ A recorded decision that removes ambiguity. A Resolution may produce a Rule when
 
 ## Rule
 
-An identified atomic behavioural obligation that refines a Requirement and may also be produced by a Resolution. A Rule can exist before any Implementation binding or Verification.
+An identified atomic behavioural obligation that refines one or more Requirements and may also be produced by a Resolution. A Rule can exist before any Implementation binding or Verification.
 
 ## Implementation binding
 

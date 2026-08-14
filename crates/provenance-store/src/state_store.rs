@@ -2,6 +2,7 @@ mod canonical_artifacts;
 mod domain_writers;
 mod ideation_batches;
 mod ideation_writers;
+mod implementation_bindings;
 mod inputs;
 mod proposal_surfaces;
 mod proposal_writers;
@@ -9,7 +10,7 @@ pub(crate) mod readers;
 mod rule_writers;
 mod shaping_writers;
 mod thread_writers;
-mod typed_specs;
+pub(super) mod typed_specs;
 mod verification_bindings;
 mod verification_runs;
 mod writers;
@@ -25,9 +26,10 @@ pub use inputs::{
     CreateDomainInput, CreateEdgeInput, CreateProposalCardInput, CreateQuestionInput,
     CreateRequirementInput, CreateResolutionInput, CreateRuleInput, CreateSourceInput,
     CreateSynthesisPacketInput, CreateTopicInput, DeclarationReferenceInput,
-    MaterializeVerificationBindingInput, PostMessageInput, ReconcileState, ReconciledResource,
-    TypedFieldChange, TypedRequirementInput, TypedResourceKind, TypedRuleInput, TypedSourceInput,
-    TypedSpecInput, TypedSpecResult, UpdateQuestionInput,
+    MaterializeImplementationBindingInput, MaterializeVerificationBindingInput, PostMessageInput,
+    ReconcileState, ReconciledResource, TypedFieldChange, TypedImplementationInput,
+    TypedRequirementInput, TypedResourceKind, TypedRuleInput, TypedSourceInput, TypedSpecInput,
+    TypedSpecResult, UpdateQuestionInput,
 };
 pub use proposal_surfaces::{ProposalDemand, ProposalSurfaceReason, SurfacedProposal, TopicClaim};
 
@@ -35,8 +37,9 @@ use crate::{layout::ProvenanceLayout, shards};
 use ideation_batches::overlay_records;
 use provenance_core::{
     ensure_supported_schema_version, AssertionRecord, Boundary, Contribution, DispositionRecord,
-    Domain, Edge, Manifest, Message, ProposalCard, Question, Requirement, Resolution, Rule,
-    SchemaVersion, Scope, ScopeId, Source, SynthesisPacket, Thread, Topic, VerificationBinding,
+    Domain, Edge, ImplementationBinding, Manifest, Message, ProposalCard, Question, Requirement,
+    Resolution, Rule, SchemaVersion, Scope, ScopeId, Source, SynthesisPacket, Thread, Topic,
+    VerificationBinding,
 };
 use readers::{
     deserialize_closed, read_edge_shards, read_ideation_landings, read_jsonl, read_jsonl_closed,
@@ -167,6 +170,12 @@ impl StateStore {
     ) -> anyhow::Result<Vec<VerificationBinding>> {
         read_jsonl(&shards::verification_bindings_path(&self.layout, scope))
     }
+    pub fn list_implementation_bindings(
+        &self,
+        scope: &ScopeId,
+    ) -> anyhow::Result<Vec<ImplementationBinding>> {
+        read_jsonl(&shards::implementation_bindings_path(&self.layout, scope))
+    }
     pub(crate) fn closed_sources(&self, scope: &ScopeId) -> anyhow::Result<Vec<Source>> {
         read_jsonl_closed(&shards::sources_path(&self.layout, scope))
     }
@@ -196,6 +205,12 @@ impl StateStore {
         scope: &ScopeId,
     ) -> anyhow::Result<Vec<VerificationBinding>> {
         read_jsonl_closed(&shards::verification_bindings_path(&self.layout, scope))
+    }
+    pub(crate) fn closed_implementation_bindings(
+        &self,
+        scope: &ScopeId,
+    ) -> anyhow::Result<Vec<ImplementationBinding>> {
+        read_jsonl_closed(&shards::implementation_bindings_path(&self.layout, scope))
     }
     pub(crate) fn closed_edges(&self, scope: &ScopeId) -> anyhow::Result<Vec<Edge>> {
         read_edge_shards(&self.layout, Some(scope))

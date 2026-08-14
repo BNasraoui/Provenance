@@ -12,6 +12,9 @@ impl ProvenanceLayout {
     pub fn provenance_dir(&self) -> Utf8PathBuf {
         self.root.join(".provenance")
     }
+    pub(crate) fn root(&self) -> &Utf8Path {
+        &self.root
+    }
     pub fn state_dir(&self) -> Utf8PathBuf {
         self.provenance_dir().join("state")
     }

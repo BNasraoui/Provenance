@@ -22,6 +22,7 @@ enum RecordFamily {
     Resolution,
     Rule,
     VerificationBinding,
+    ImplementationBinding,
     Edge,
 }
 
@@ -39,7 +40,8 @@ fn all_families() -> Vec<RecordFamily> {
         RecordFamily::Question => Some(RecordFamily::Resolution),
         RecordFamily::Resolution => Some(RecordFamily::Rule),
         RecordFamily::Rule => Some(RecordFamily::VerificationBinding),
-        RecordFamily::VerificationBinding => Some(RecordFamily::Edge),
+        RecordFamily::VerificationBinding => Some(RecordFamily::ImplementationBinding),
+        RecordFamily::ImplementationBinding => Some(RecordFamily::Edge),
         RecordFamily::Edge => None,
     } {
         all.push(next);
@@ -58,6 +60,7 @@ const fn record_id(family: RecordFamily) -> &'static str {
         RecordFamily::Resolution => "res_pinned",
         RecordFamily::Rule => "rule_pinned",
         RecordFamily::VerificationBinding => "verification_binding_pinned",
+        RecordFamily::ImplementationBinding => "implementation_binding_pinned",
         RecordFamily::Edge => "edge_pinned",
     }
 }
@@ -214,6 +217,18 @@ fn verification_binding_record(scope: &ScopeId) -> VerificationBinding {
     }
 }
 
+fn implementation_binding_record(scope: &ScopeId) -> ImplementationBinding {
+    ImplementationBinding {
+        schema_version: SchemaVersion(1),
+        scope_id: scope.clone(),
+        id: stable_id(RecordFamily::ImplementationBinding),
+        rule_id: stable_id(RecordFamily::Rule),
+        declared_by: "spec://typescript/pinned".into(),
+        file: "src/pinned.ts".into(),
+        symbol: "pinnedImplementation".into(),
+    }
+}
+
 fn edge_record(scope: &ScopeId) -> Edge {
     Edge {
         schema_version: SchemaVersion(1),
@@ -274,6 +289,10 @@ fn graph_in_scope(scope: &ScopeId, populated: &[RecordFamily]) -> GraphExport {
             .then(|| verification_binding_record(scope))
             .into_iter()
             .collect(),
+        implementation_bindings: holds(RecordFamily::ImplementationBinding)
+            .then(|| implementation_binding_record(scope))
+            .into_iter()
+            .collect(),
         edges: holds(RecordFamily::Edge)
             .then(|| edge_record(scope))
             .into_iter()
@@ -330,6 +349,11 @@ fn move_family_to_scope(graph: &mut GraphExport, family: RecordFamily, scope: &S
                 record.scope_id = scope.clone();
             }
         }
+        RecordFamily::ImplementationBinding => {
+            for record in &mut graph.implementation_bindings {
+                record.scope_id = scope.clone();
+            }
+        }
         RecordFamily::Edge => {
             for record in &mut graph.edges {
                 record.scope_id = scope.clone();
@@ -357,6 +381,7 @@ fn family_count_of(graph: &GraphExport) -> usize {
         resolutions,
         rules,
         verification_bindings,
+        implementation_bindings,
         edges,
     } = graph;
     let counts = [
@@ -369,6 +394,7 @@ fn family_count_of(graph: &GraphExport) -> usize {
         resolutions.len(),
         rules.len(),
         verification_bindings.len(),
+        implementation_bindings.len(),
         edges.len(),
     ];
     assert!(

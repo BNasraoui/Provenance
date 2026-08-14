@@ -25,6 +25,9 @@
     "@quality-sh/provenance-linux-x64-gnu": "0.1.0",
     "@quality-sh/provenance-win32-x64-msvc": "0.1.0"
   },
+  "dependencies": {
+    "typescript": "^5.9.3"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepack": "npm run build",
@@ -34,7 +37,6 @@
     "test:packed": "node scripts/test-packed-install.js"
   },
   "devDependencies": {
-    "@types/node": "^24.10.1",
-    "typescript": "^5.9.3"
+    "@types/node": "^24.10.1"
   }
 }

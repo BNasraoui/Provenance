@@ -1,5 +1,6 @@
 mod identity;
 mod reconcile;
+mod rule_addresses;
 
 use std::collections::BTreeMap;
 
@@ -14,10 +15,11 @@ use super::{
 };
 use crate::shards;
 use identity::{
-    declaration_ids, owned_declaration_ids, requirement_identity, rule_declaration_ids,
-    source_identity, validate_ownership, validate_references,
+    declaration_ids, normalize_rule_relationships, owned_declaration_ids, requirement_identity,
+    rule_declaration_ids, source_identity, validate_ownership, validate_references,
 };
 use reconcile::{reconcile_requirements, reconcile_rules, reconcile_sources};
+pub(in crate::state_store) use rule_addresses::rule_address;
 
 struct CurrentTypedState {
     sources: Vec<Source>,
@@ -28,10 +30,76 @@ struct CurrentTypedState {
     rule_addresses: BTreeMap<DeclarationAddress, StableId>,
 }
 
+struct DesiredTypedIds {
+    sources: BTreeMap<String, StableId>,
+    requirements: BTreeMap<String, StableId>,
+    rules: BTreeMap<DeclarationAddress, StableId>,
+}
+
+#[derive(Clone, Copy)]
+struct DesiredTypedGraph<'a> {
+    spec: &'a str,
+    requirements: &'a [TypedRequirementInput],
+    rules: &'a [TypedRuleInput],
+    source_ids: &'a BTreeMap<String, StableId>,
+    requirement_ids: &'a BTreeMap<String, StableId>,
+    rule_ids: &'a BTreeMap<DeclarationAddress, StableId>,
+}
+
 #[derive(Clone, Copy)]
 enum ReconcileMode {
     Plan,
     Apply,
+}
+
+fn desired_typed_ids(
+    input: &TypedSpecInput,
+    current: &CurrentTypedState,
+) -> anyhow::Result<DesiredTypedIds> {
+    let sources = declaration_ids(
+        "source",
+        &input.declared_by,
+        &input.spec,
+        input.sources.iter().map(source_identity),
+        &current.source_addresses,
+    )?;
+    let requirements = declaration_ids(
+        "requirement",
+        &input.declared_by,
+        &input.spec,
+        input.requirements.iter().map(requirement_identity),
+        &current.requirement_addresses,
+    )?;
+    let rules = rule_declaration_ids(
+        &input.declared_by,
+        &input.spec,
+        &input.rules,
+        &current.rule_addresses,
+    )?;
+    validate_references(&input.requirements, &input.rules, &sources, &requirements)?;
+    validate_ownership(
+        &input.declared_by,
+        &current.sources,
+        sources.values(),
+        |record| (&record.id, record.declared_by.as_deref()),
+    )?;
+    validate_ownership(
+        &input.declared_by,
+        &current.requirements,
+        requirements.values(),
+        |record| (&record.id, record.declared_by.as_deref()),
+    )?;
+    validate_ownership(
+        &input.declared_by,
+        &current.rules,
+        rules.values(),
+        |record| (&record.id, record.declared_by.as_deref()),
+    )?;
+    Ok(DesiredTypedIds {
+        sources,
+        requirements,
+        rules,
+    })
 }
 
 impl StateStore {
@@ -68,55 +136,8 @@ impl StateStore {
         input: TypedSpecInput,
         mode: ReconcileMode,
     ) -> anyhow::Result<TypedSpecResult> {
-        self.validate_typed_spec(scope_id, &input)?;
-
-        let current = self.current_typed_state(scope_id, &input.declared_by)?;
-
-        let source_ids = declaration_ids(
-            "source",
-            &input.declared_by,
-            &input.spec,
-            input.sources.iter().map(source_identity),
-            &current.source_addresses,
-        )?;
-        let requirement_ids = declaration_ids(
-            "requirement",
-            &input.declared_by,
-            &input.spec,
-            input.requirements.iter().map(requirement_identity),
-            &current.requirement_addresses,
-        )?;
-        let rule_ids = rule_declaration_ids(
-            &input.declared_by,
-            &input.spec,
-            &input.rules,
-            &current.rule_addresses,
-        )?;
-        validate_references(
-            &input.requirements,
-            &input.rules,
-            &source_ids,
-            &requirement_ids,
-        )?;
-
-        validate_ownership(
-            &input.declared_by,
-            &current.sources,
-            source_ids.values(),
-            |record| (&record.id, record.declared_by.as_deref()),
-        )?;
-        validate_ownership(
-            &input.declared_by,
-            &current.requirements,
-            requirement_ids.values(),
-            |record| (&record.id, record.declared_by.as_deref()),
-        )?;
-        validate_ownership(
-            &input.declared_by,
-            &current.rules,
-            rule_ids.values(),
-            |record| (&record.id, record.declared_by.as_deref()),
-        )?;
+        let (input, current) = self.prepare_typed_spec(scope_id, input)?;
+        let ids = desired_typed_ids(&input, &current)?;
 
         let requirement_relationships = input.requirements.clone();
         let rule_relationships = input.rules.clone();
@@ -127,7 +148,7 @@ impl StateStore {
             scope_id,
             &input.declared_by,
             input.sources,
-            &source_ids,
+            &ids.sources,
         )?;
         let (requirements, requirement_resources) = reconcile_requirements(
             current.requirements,
@@ -135,8 +156,8 @@ impl StateStore {
             scope_id,
             &input.declared_by,
             input.requirements,
-            &requirement_ids,
-            &source_ids,
+            &ids.requirements,
+            &ids.sources,
         )?;
         let (rules, rule_resources) = reconcile_rules(
             current.rules,
@@ -144,7 +165,16 @@ impl StateStore {
             scope_id,
             &input.declared_by,
             input.rules,
-            &rule_ids,
+            &ids.rules,
+        )?;
+        let implementation_bindings = super::implementation_bindings::reconcile(
+            self,
+            scope_id,
+            &input.declared_by,
+            &spec,
+            &rule_relationships,
+            &ids.rules,
+            false,
         )?;
 
         if matches!(mode, ReconcileMode::Apply) {
@@ -155,13 +185,25 @@ impl StateStore {
                 requirements,
             )?;
             replace_records(self, &shards::rules_path(&self.layout, scope_id), rules)?;
+            super::implementation_bindings::reconcile(
+                self,
+                scope_id,
+                &input.declared_by,
+                &spec,
+                &rule_relationships,
+                &ids.rules,
+                true,
+            )?;
             self.write_typed_spec_edges(
                 scope_id,
-                &requirement_relationships,
-                &rule_relationships,
-                &source_ids,
-                &requirement_ids,
-                &rule_ids,
+                DesiredTypedGraph {
+                    spec: &spec,
+                    requirements: &requirement_relationships,
+                    rules: &rule_relationships,
+                    source_ids: &ids.sources,
+                    requirement_ids: &ids.requirements,
+                    rule_ids: &ids.rules,
+                },
             )?;
         }
 
@@ -170,6 +212,7 @@ impl StateStore {
             source_resources,
             requirement_resources,
             rule_resources,
+            implementation_bindings,
         ))
     }
 
@@ -212,6 +255,17 @@ impl StateStore {
         })
     }
 
+    fn prepare_typed_spec(
+        &self,
+        scope_id: &ScopeId,
+        mut input: TypedSpecInput,
+    ) -> anyhow::Result<(TypedSpecInput, CurrentTypedState)> {
+        self.validate_typed_spec(scope_id, &input)?;
+        normalize_rule_relationships(&mut input.rules)?;
+        let current = self.current_typed_state(scope_id, &input.declared_by)?;
+        Ok((input, current))
+    }
+
     fn validate_typed_spec(
         &self,
         scope_id: &ScopeId,
@@ -241,36 +295,35 @@ impl StateStore {
     fn write_typed_spec_edges(
         &self,
         scope_id: &ScopeId,
-        requirements: &[TypedRequirementInput],
-        rules: &[TypedRuleInput],
-        source_ids: &BTreeMap<String, StableId>,
-        requirement_ids: &BTreeMap<String, StableId>,
-        rule_ids: &BTreeMap<(String, String), StableId>,
+        graph: DesiredTypedGraph<'_>,
     ) -> anyhow::Result<()> {
-        for declaration in requirements {
+        for declaration in graph.requirements {
             for source in &declaration.sources {
                 self.add_edge(
                     scope_id.clone(),
                     EdgeType::References,
                     NodeType::Source,
-                    source_ids[source].clone(),
+                    graph.source_ids[source].clone(),
                     NodeType::Requirement,
-                    requirement_ids[&declaration.key].clone(),
+                    graph.requirement_ids[&declaration.key].clone(),
                 )?;
             }
         }
 
         // Relationships are additive in this POC. Reapplying is idempotent,
         // while omission never erases a relationship another owner may use.
-        for declaration in rules {
-            self.add_edge(
-                scope_id.clone(),
-                EdgeType::Produces,
-                NodeType::Requirement,
-                requirement_ids[&declaration.requirement].clone(),
-                NodeType::Rule,
-                rule_ids[&(declaration.requirement.clone(), declaration.key.clone())].clone(),
-            )?;
+        for declaration in graph.rules {
+            let address = rule_address(graph.spec, declaration)?;
+            for requirement in &declaration.requirements {
+                self.add_edge(
+                    scope_id.clone(),
+                    EdgeType::Produces,
+                    NodeType::Requirement,
+                    graph.requirement_ids[requirement].clone(),
+                    NodeType::Rule,
+                    graph.rule_ids[&address].clone(),
+                )?;
+            }
         }
         Ok(())
     }
@@ -281,6 +334,7 @@ fn spec_result(
     source_resources: Vec<ReconciledResource>,
     requirement_resources: Vec<ReconciledResource>,
     rule_resources: Vec<ReconciledResource>,
+    implementation_bindings: Vec<provenance_core::ImplementationBinding>,
 ) -> TypedSpecResult {
     let mut resources = source_resources;
     resources.extend(requirement_resources);
@@ -291,6 +345,7 @@ fn spec_result(
         updated: count_state(&resources, ReconcileState::Updated),
         unchanged: count_state(&resources, ReconcileState::Unchanged),
         resources,
+        implementation_bindings,
     }
 }
 

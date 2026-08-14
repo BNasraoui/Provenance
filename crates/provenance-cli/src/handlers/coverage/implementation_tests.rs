@@ -48,7 +48,7 @@ fn scan_comment(source: &str) -> FileScan {
 
 #[test]
 fn active_rule_without_an_implementation_warns() {
-    let warnings = unimplemented_rule_warnings(&[rule("rule_foo", RuleStatus::Active)], &[]);
+    let warnings = unimplemented_rule_warnings(&[rule("rule_foo", RuleStatus::Active)], &[], &[]);
 
     assert_eq!(warnings.len(), 1);
     assert_eq!(warnings[0].rule_id, "rule_foo");
@@ -62,7 +62,7 @@ fn scanned_primary_implementation_binding_satisfies_the_finding() {
     let active = rule("rule_foo", RuleStatus::Active);
     let scan = scan_with_binding("rule_foo", None);
 
-    assert!(unimplemented_rule_warnings(&[active], &[scan]).is_empty());
+    assert!(unimplemented_rule_warnings(&[active], &[scan], &[]).is_empty());
 }
 
 #[test]
@@ -70,7 +70,7 @@ fn verification_without_an_implementation_only_warns_as_unimplemented() {
     let active = rule("rule_foo", RuleStatus::Active);
     let scan = scan_with_binding("rule_foo", Some(Verification::Examples));
 
-    let warnings = unimplemented_rule_warnings(&[active], &[scan]);
+    let warnings = unimplemented_rule_warnings(&[active], &[scan], &[]);
 
     assert_eq!(warnings.len(), 1);
     assert!(warnings[0].message.contains("has no implementation"));
@@ -82,7 +82,7 @@ fn comment_implementation_satisfies_the_finding() {
     let active = rule("rule_foo", RuleStatus::Active);
     let scan = scan_comment("// @provenance rule: rule_foo\nfn implementation() {}");
 
-    assert!(unimplemented_rule_warnings(&[active], &[scan]).is_empty());
+    assert!(unimplemented_rule_warnings(&[active], &[scan], &[]).is_empty());
 }
 
 #[test]
@@ -92,7 +92,10 @@ fn comment_verification_does_not_count_as_an_implementation() {
         "// @provenance rule: rule_foo\n// @provenance verification: examples\nfn verifies_it() {}",
     );
 
-    assert_eq!(unimplemented_rule_warnings(&[active], &[scan]).len(), 1);
+    assert_eq!(
+        unimplemented_rule_warnings(&[active], &[scan], &[]).len(),
+        1
+    );
 }
 
 #[test]
@@ -103,7 +106,7 @@ fn source_citations_do_not_count_as_an_implementation() {
         ..rule("rule_foo", RuleStatus::Active)
     };
 
-    assert_eq!(unimplemented_rule_warnings(&[active], &[]).len(), 1);
+    assert_eq!(unimplemented_rule_warnings(&[active], &[], &[]).len(), 1);
 }
 
 #[test]
@@ -111,5 +114,5 @@ fn draft_and_deprecated_rules_do_not_warn() {
     let draft = rule("rule_draft", RuleStatus::Draft);
     let deprecated = rule("rule_deprecated", RuleStatus::Deprecated);
 
-    assert!(unimplemented_rule_warnings(&[draft, deprecated], &[]).is_empty());
+    assert!(unimplemented_rule_warnings(&[draft, deprecated], &[], &[]).is_empty());
 }

@@ -161,6 +161,14 @@ fn materialization_requires_a_known_rule_and_filled_identity_fields() {
         .unwrap_err()
         .to_string()
         .contains("repository-relative"));
+
+    let mut platform_specific = input(&scope);
+    platform_specific.file = r"tests\share-links.test.ts".into();
+    assert!(store
+        .materialize_verification_binding(platform_specific)
+        .unwrap_err()
+        .to_string()
+        .contains("repository-relative"));
 }
 
 #[test]

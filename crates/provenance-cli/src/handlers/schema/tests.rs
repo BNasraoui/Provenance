@@ -350,6 +350,20 @@ fn graph_reference_export_schema_validates_record_structure() {
     let valid = minimal_exact_export();
     assert!(validator.is_valid(&valid));
 
+    let mut with_implementation = minimal_exact_export_without_digest();
+    with_implementation["graph"]["rules"] = json!([{
+        "schema_version": 1, "scope_id": "default", "id": "rule_runtime",
+        "statement": "Accepted workflows start", "status": "active", "severity": "medium"
+    }]);
+    with_implementation["graph"]["implementation_bindings"] = json!([{
+        "schema_version": 1, "scope_id": "default",
+        "id": "implementation_binding_runtime", "rule_id": "rule_runtime",
+        "declared_by": "spec://typescript/workflows",
+        "file": "src/runtime.ts", "symbol": "startWorkflow"
+    }]);
+    with_implementation["graph_digest"] = json!(derived_digest(&with_implementation["graph"]));
+    assert!(validator.is_valid(&with_implementation));
+
     let malformed_cases = [
         // The digest is not optional: a document without it cannot be checked
         // against the graph it carries, and one that is not a sha256 digest
@@ -390,6 +404,11 @@ fn graph_reference_export_schema_validates_record_structure() {
         {
             let mut value = minimal_exact_export();
             value["graph"]["scope"]["workflow_id"] = json!("workflowd-123");
+            value
+        },
+        {
+            let mut value = with_implementation;
+            value["graph"]["implementation_bindings"][0]["symbol"] = json!(null);
             value
         },
     ];

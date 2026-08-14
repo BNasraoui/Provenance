@@ -2,8 +2,8 @@ use super::{ensure_graph_schema_version, GraphReferenceError};
 use crate::{layout::ProvenanceLayout, state_store::StateStore};
 use camino::Utf8Path;
 use provenance_core::{
-    Boundary, Domain, Edge, Question, Requirement, Resolution, Rule, Scope, ScopeId, Source, Topic,
-    VerificationBinding, SUPPORTED_SCHEMA_VERSION,
+    Boundary, Domain, Edge, ImplementationBinding, Question, Requirement, Resolution, Rule, Scope,
+    ScopeId, Source, Topic, VerificationBinding, SUPPORTED_SCHEMA_VERSION,
 };
 use provenance_macros::rule;
 use serde::{Deserialize, Serialize};
@@ -42,6 +42,8 @@ pub struct GraphExport {
     pub rules: Vec<Rule>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub verification_bindings: Vec<VerificationBinding>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub implementation_bindings: Vec<ImplementationBinding>,
     pub edges: Vec<Edge>,
 }
 
@@ -81,6 +83,9 @@ pub(super) fn load_projection(
         verification_bindings: store
             .closed_verification_bindings(&scope_id)
             .map_err(incomplete)?,
+        implementation_bindings: store
+            .closed_implementation_bindings(&scope_id)
+            .map_err(incomplete)?,
         edges: store.closed_edges(&scope_id).map_err(incomplete)?,
     };
     graph.validate_schema_versions()?;
@@ -111,6 +116,7 @@ impl GraphExport {
         require_supported!(&self.resolutions, "resolution");
         require_supported!(&self.rules, "rule");
         require_supported!(&self.verification_bindings, "verification binding");
+        require_supported!(&self.implementation_bindings, "implementation binding");
         require_supported!(&self.edges, "edge");
         Ok(())
     }
@@ -229,6 +235,9 @@ fn sort_records(graph: &mut GraphExport) {
     graph
         .verification_bindings
         .sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+    graph
+        .implementation_bindings
+        .sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
     graph.edges.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
 }
 
@@ -272,6 +281,7 @@ pub(super) fn validate_scope_ownership(
     require_scope!(&graph.resolutions, "resolution");
     require_scope!(&graph.rules, "rule");
     require_scope!(&graph.verification_bindings, "verification binding");
+    require_scope!(&graph.implementation_bindings, "implementation binding");
     require_scope!(&graph.edges, "edge");
     Ok(())
 }
