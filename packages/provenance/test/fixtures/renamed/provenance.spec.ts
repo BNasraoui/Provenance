@@ -1,10 +1,11 @@
-import { defineSpec, requirement, rule } from "@quality-sh/provenance";
+import { defineSpec } from "@quality-sh/provenance";
 
-const expiryDeclaration = rule("expiry").statement("Share links expire within 30 days");
-const sharingDeclaration = requirement("sharing")
-  .statement("Users can securely share documentation")
-  .rules(expiryDeclaration);
-const spec = defineSpec("share-links").requirements(sharingDeclaration).build();
+const provenance = defineSpec("share-links");
+const sharing = provenance
+  .requirement("sharing")
+  .statement("Users can securely share documentation");
+export const shareLinkExpiry = sharing
+  .rule("expiry")
+  .statement("Share links expire within 30 days");
 
-export const sharing = spec.handles.requirements.sharing;
-export const shareLinkExpiry = sharing.rules.expiry;
+export default provenance.build(sharing.rules(shareLinkExpiry));

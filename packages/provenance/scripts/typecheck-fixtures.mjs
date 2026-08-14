@@ -54,5 +54,5 @@ assert.match(missingKey.stdout + missingKey.stderr, /TS2554/);
 
 const renamed = typecheck("renamed");
 assert.notEqual(renamed.status, 0, "renamed export unexpectedly typechecked");
-assert.match(renamed.stdout + renamed.stderr, /TS2305/);
+assert.match(renamed.stdout + renamed.stderr, /TS(?:2305|2614)/);
 assert.match(renamed.stdout + renamed.stderr, /expiry/);

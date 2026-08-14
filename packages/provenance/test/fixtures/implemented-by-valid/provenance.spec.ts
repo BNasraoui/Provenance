@@ -1,11 +1,14 @@
-import { defineSpec, requirement, rule } from "@quality-sh/provenance";
+import { defineSpec } from "@quality-sh/provenance";
 import { startWorkflow } from "./runtime.js";
 
-const start = rule("start")
+const provenance = defineSpec("workflow-runtime");
+export const start = provenance
+  .rule("start")
   .statement("Accepted workflows start")
   .implementedBy(startWorkflow);
-const workflows = requirement("workflows")
+const workflows = provenance
+  .requirement("workflows")
   .statement("Accepted workflows execute")
   .rules(start);
 
-export const spec = defineSpec("workflow-runtime").requirements(workflows).build();
+export default provenance.build(workflows);

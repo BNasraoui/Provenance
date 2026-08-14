@@ -1,16 +1,15 @@
-import { defineSpec, requirement, rule, source } from "@quality-sh/provenance";
+import { defineSpec } from "@quality-sh/provenance";
 
-const policy = source("policy").document("docs/policy.md").name("Security policy");
-const expiryDeclaration = rule("expiry").statement("Share links expire within 30 days");
-const sharingDeclaration = requirement("sharing")
+const provenance = defineSpec("share-links");
+const policy = provenance
+  .source("policy")
+  .document("docs/policy.md")
+  .name("Security policy");
+const sharing = provenance
+  .requirement("sharing")
   .statement("Users can securely share documentation")
   .description("Share-link lifecycle requirements")
-  .from(policy)
-  .rules(expiryDeclaration);
-const spec = defineSpec("share-links").sources(policy).requirements(sharingDeclaration).build();
+  .from(policy);
+export const expiry = sharing.rule("expiry").statement("Share links expire within 30 days");
 
-export const sharing = spec.handles.requirements.sharing;
-export const expiry = sharing.rules.expiry;
-
-// @ts-expect-error only declared handles are available
-void sharing.rules.revocation;
+export default provenance.build(sharing.rules(expiry));
