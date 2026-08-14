@@ -4,6 +4,7 @@ members = [
     "crates/provenance-core",
     "crates/provenance-macros",
     "crates/provenance-scanner",
+    "crates/provenance-ste100",
     "crates/provenance-store",
 ]
 resolver = "2"

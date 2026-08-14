@@ -32,6 +32,10 @@ A durable relationship from an owner-local test key and repository code location
 
 A volatile observation from one execution of a Verification binding. It records the outcome and execution context without changing the durable relationship.
 
+## ASD-STE100 finding
+
+A structured diagnostic that identifies where descriptive text does not conform to a specified issue and rule of ASD-STE100 Simplified Technical English.
+
 ## Engine protocol
 
 The versioned, language-neutral request and response contract through which an SDK invokes the Rust engine. It carries declarations, plans, queries, and verification outcomes; it never carries host-language callbacks or a mirror of Rust objects.
