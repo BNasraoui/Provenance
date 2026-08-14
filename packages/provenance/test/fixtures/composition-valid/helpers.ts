@@ -39,14 +39,3 @@ export function preserveRule<
 ): RuleDeclaration<Spec, Key, RequirementKey> {
   return declaration.id(`existing-${declaration.key}`);
 }
-
-export function bindClass<
-  const Spec extends string,
-  const Key extends string,
-  const RequirementKey extends string | undefined,
->(
-  declaration: RuleDeclaration<Spec, Key, RequirementKey>,
-  target: abstract new (...args: never[]) => unknown,
-): RuleDeclaration<Spec, Key, RequirementKey> {
-  return declaration.implementedBy(target);
-}

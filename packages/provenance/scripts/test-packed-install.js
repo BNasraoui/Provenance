@@ -80,9 +80,6 @@ export class WorkflowRunner {
   constructor() { WorkflowRunner.constructions += 1; }
 }
 `);
-writeFileSync(join(application, "runtime-types.ts"), `
-export class WorkflowRunner {}
-`);
 writeFileSync(join(application, "helpers.ts"), `
 import type {
   RequirementDeclaration,
@@ -116,26 +113,15 @@ export function invocation<
   return requirement.rule("invocation")
     .statement("A direct Rule handle remains typed across module boundaries");
 }
-export function bindClass<
-  const Spec extends string,
-  const Key extends string,
-  const RequirementKey extends string | undefined,
->(
-  declaration: RuleDeclaration<Spec, Key, RequirementKey>,
-  target: abstract new (...args: never[]) => unknown,
-): RuleDeclaration<Spec, Key, RequirementKey> {
-  return declaration.implementedBy(target);
-}
 `);
 writeFileSync(join(application, "consumer.ts"), `
 import { defineSpec } from "@quality-sh/provenance";
-import { WorkflowRunner } from "./runtime-types.js";
-import { bindClass, guide, installed, invocation as declareInvocation } from "./helpers.js";
+import { guide, installed, invocation as declareInvocation } from "./helpers.js";
 
 const provenance = defineSpec("packed-typescript-consumer");
 const packedGuide = guide(provenance);
 const packedInstallation = installed(provenance, packedGuide);
-export const invocation = bindClass(declareInvocation(packedInstallation), WorkflowRunner);
+export const invocation = declareInvocation(packedInstallation);
 export const spec = provenance.build(packedInstallation.rules(invocation));
 
 void invocation.verify("packed-consumer", () => undefined);
