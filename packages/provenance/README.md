@@ -38,14 +38,17 @@ finalizes the desired-state document and collects Sources linked with
 `Requirement.from(...)`; they do not need to be repeated in `.sources(...)`.
 Construction is synchronous,
 deterministic, and in-memory: importing this module does not write state or
-start a process. `build()` returns the frozen semantic handles tests import.
+start a process. `build()` returns the frozen, typed objects that tests import.
 The built spec exposes typed Requirement and Rule paths directly while keeping
 the same objects under `.handles` for compatibility. Source `.name(...)`
 overrides the key-derived canonical display name, and
 Requirement `.description(...)` can replace the canonical description on a
 later apply. Rust remains responsible for reconciling those desired values.
 
-Helpers can name construction values directly, including across files:
+## Compatibility helpers
+
+Existing code that uses spec-scoped factories can keep declarations in typed
+helpers, including helpers in other files:
 
 ```ts
 import type {
@@ -69,13 +72,12 @@ export function sharing<const Spec extends string>(author: SpecAuthoring<Spec>) 
 ```
 
 `SourceDeclaration`, `RequirementDeclaration`, and `RuleDeclaration` describe
-immutable construction snapshots, not materialized records or finalized spec
-handles. Their literal spec and Requirement parameters keep helpers from
-mixing declarations from different contexts.
+immutable declarations before `build()`. Their literal spec and Requirement
+parameters stop helpers from mixing declarations from different specs.
 
-Rules created through a Requirement have a requirement-local declaration
-address, so equal local keys under different Requirements remain distinct. A
-Rule created through the spec context has an explicitly shared address:
+In this compatibility API, a Rule created through a Requirement belongs to that
+Requirement. Equal local keys under different Requirements remain distinct. A
+Rule created through the spec context can be shared:
 
 ```ts
 export const authenticatedExpiry = provenance
