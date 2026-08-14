@@ -1,0 +1,1 @@
+{"schema_version":1,"scope_id":"default","id":"boundary_no_proprietary_ste_replacement","requirement_id":"req_ste_syntax_checked_before_graph_write","statement":"Provenance must use ASD-STE100 rules instead of a separate Provenance writing standard"}
