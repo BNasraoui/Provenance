@@ -1,16 +1,32 @@
 import { defineSpec, requirement, rule, source } from "@quality-sh/provenance";
+import type { FluentRequirement } from "@quality-sh/provenance";
+import { createShareLink } from "./runtime.js";
 
-const policy = source("policy").document("docs/policy.md").name("Security policy");
-const expiryDeclaration = rule("expiry").statement("Share links expire within 30 days");
-const sharingDeclaration = requirement("sharing")
-  .statement("Users can securely share documentation")
-  .description("Share-link lifecycle requirements")
-  .from(policy)
-  .rules(expiryDeclaration);
-const spec = defineSpec("share-links").sources(policy).requirements(sharingDeclaration).build();
+const annotatedRequirement: FluentRequirement<"annotated"> = requirement("annotated").from(
+  source("annotated-source"),
+);
+void annotatedRequirement;
 
-export const sharing = spec.handles.requirements.sharing;
-export const expiry = sharing.rules.expiry;
+export const shareLinks = defineSpec("share-links")
+  .requirements(
+    requirement("sharing")
+      .statement("Users can securely share documentation")
+      .description("Controls for links shared outside the organization")
+      .from(
+        source("sharing-policy")
+          .name("Sharing policy")
+          .document("docs/sharing-policy.md"),
+      )
+      .rules(
+        rule("expiry")
+          .statement("Share links must expire within 30 days")
+          .implementedBy(createShareLink),
+      ),
+  )
+  .build();
+
+void shareLinks.handles.requirements.sharing.rules.expiry;
+void shareLinks.sources["sharing-policy"];
 
 // @ts-expect-error only declared handles are available
-void sharing.rules.revocation;
+void shareLinks.requirements.sharing.rules.revocation;

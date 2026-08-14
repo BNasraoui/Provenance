@@ -1,9 +1,9 @@
-import { expiry } from "./provenance.spec.js";
+import { shareLinks } from "./provenance.spec.js";
 import { createShareLink } from "./share-links.js";
 
 const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
 
-await expiry.verify("share-link-expiry", () => {
+await shareLinks.requirements.sharing.rules.expiry.verify("share-link-expiry", () => {
   const now = new Date();
   const link = createShareLink(now);
 

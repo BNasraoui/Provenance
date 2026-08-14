@@ -55,7 +55,13 @@ class BoundSpecAuthor<SpecKey extends string> implements SpecAuthoring<SpecKey> 
     return fluentSpec(this.key, this.#context.verify).sources(...sources);
   }
 
-  requirements<const Added extends readonly FluentRequirement<string, readonly FluentRule[]>[]>(
+  requirements<
+    const Added extends readonly FluentRequirement<
+      string,
+      readonly FluentRule[],
+      readonly FluentSource[]
+    >[],
+  >(
     ...requirements: Added
   ): FluentSpec<readonly [], Added> {
     return fluentSpec(this.key, this.#context.verify).requirements(...requirements);

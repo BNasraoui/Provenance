@@ -188,6 +188,126 @@ test("top-level fluent declarations author source names and Requirement descript
   });
 });
 
+test("build collects Sources referenced by Requirements", async () => {
+  const recorder = recordingEngine();
+  configure({ engine: recorder.engine, owner: "spec://typescript/collected-source" });
+  const spec = defineSpec("collected-source")
+    .requirements(
+      requirement("sharing")
+        .statement("Users can securely share documentation")
+        .from(source("policy").name("Sharing policy").document("docs/policy.md"))
+        .rules(rule("expiry").statement("Share links expire")),
+    )
+    .build();
+
+  assert.deepEqual(recorder.requests(), []);
+  await apply(spec);
+
+  const request = recorder.requests().find(({ command }) => command === "apply");
+  assert.deepEqual((request?.input as { sources?: unknown }).sources, [
+    {
+      key: "policy",
+      name: "Sharing policy",
+      kind: "document",
+      reference: "docs/policy.md",
+    },
+  ]);
+});
+
+test("built fluent specs expose direct typed semantic handles", () => {
+  const spec = defineSpec("direct-handles")
+    .requirements(
+      requirement("sharing")
+        .statement("Shares are time bounded")
+        .rules(rule("expiry").statement("Share links expire")),
+    )
+    .build();
+
+  assert.equal(spec.requirements, spec.handles.requirements);
+  assert.equal(
+    spec.requirements.sharing.rules.expiry,
+    spec.handles.requirements.sharing.rules.expiry,
+  );
+  assert.equal(Object.isFrozen(spec.requirements), true);
+});
+
+test("direct nested Rule handles apply and verify through the Rust engine", async () => {
+  const repo = repository();
+  configure({ engine, repository: repo, owner: "spec://typescript/direct-verification" });
+  const spec = defineSpec("direct-verification")
+    .requirements(
+      requirement("sharing")
+        .statement("Shares are time bounded")
+        .rules(rule("expiry").statement("Share links expire")),
+    )
+    .build();
+
+  await apply(spec);
+  writeFileSync(join(repo, "share-links.test.ts"), "");
+  let callbackRan = false;
+  await spec.requirements.sharing.rules.expiry.verify(
+    "share-links-expire",
+    () => {
+      callbackRan = true;
+    },
+    { file: join(repo, "share-links.test.ts") },
+  );
+
+  assert.equal(callbackRan, true);
+  const runs = JSON.parse(
+    execFileSync(
+      engine,
+      [
+        "sdk",
+        "verification-runs",
+        "--repo",
+        repo,
+        "--scope",
+        "default",
+        "--format",
+        "json",
+      ],
+      { encoding: "utf8" },
+    ),
+  ) as Array<{ status: string }>;
+  assert.deepEqual(runs.map(({ status }) => status), ["passed"]);
+});
+
+test("a preferred fluent spec collects linked Sources and exposes its typed Rule", async () => {
+  const repo = repository();
+  configure({ engine, repository: repo, owner: "spec://typescript/preferred" });
+  const shareLinks = defineSpec("share-links")
+    .requirements(
+      requirement("sharing")
+        .statement("Users can securely share documentation")
+        .description("Controls for links shared outside the organization")
+        .from(
+          source("sharing-policy")
+            .name("Sharing policy")
+            .document("docs/sharing-policy.md"),
+        )
+        .rules(
+          rule("expiry").statement("Share links must expire within 30 days"),
+        ),
+    )
+    .build();
+
+  const result = await apply(shareLinks);
+  writeFileSync(join(repo, "share-links.test.ts"), "");
+  await shareLinks.requirements.sharing.rules.expiry.verify(
+    "share-links-expire",
+    () => undefined,
+    { file: join(repo, "share-links.test.ts") },
+  );
+
+  assert.equal(result.resources.filter(({ kind }) => kind === "source").length, 1);
+  assert.equal(result.resources.filter(({ kind }) => kind === "rule").length, 1);
+  assert.equal(
+    shareLinks.requirements.sharing.rules.expiry,
+    shareLinks.handles.requirements.sharing.rules.expiry,
+  );
+});
+
 test("one shared Rule materializes once and refines both Requirements", async () => {
   const repo = repository();
   configure({ engine, repository: repo, owner: "spec://typescript/shared" });
