@@ -157,7 +157,14 @@ fn normalize_verification_context(
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("file is required for a durable verification binding"))?;
     let relative = if file.is_absolute() {
-        file.strip_prefix(repo)
+        let canonical = std::fs::canonicalize(file).map_err(|error| {
+            anyhow::anyhow!("verification file `{file}` cannot be resolved: {error}")
+        })?;
+        let canonical = camino::Utf8PathBuf::from_path_buf(canonical).map_err(|path| {
+            anyhow::anyhow!("verification file is not UTF-8: {}", path.display())
+        })?;
+        canonical
+            .strip_prefix(repo)
             .map_err(|_| {
                 anyhow::anyhow!("verification file `{file}` is outside repository `{repo}`")
             })?
