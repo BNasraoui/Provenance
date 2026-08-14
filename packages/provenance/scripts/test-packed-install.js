@@ -80,20 +80,49 @@ export class WorkflowRunner {
   constructor() { WorkflowRunner.constructions += 1; }
 }
 `);
+writeFileSync(join(application, "helpers.ts"), `
+import type {
+  RequirementDeclaration,
+  RuleDeclaration,
+  SourceDeclaration,
+  SpecAuthoring,
+} from "@quality-sh/provenance";
+
+export function guide<const Spec extends string>(
+  author: SpecAuthoring<Spec>,
+): SourceDeclaration<Spec, "guide"> {
+  return author.source("guide").name("Packed SDK guide").document("README.md");
+}
+
+export function installed<const Spec extends string>(
+  author: SpecAuthoring<Spec>,
+  source: SourceDeclaration<Spec, "guide">,
+): RequirementDeclaration<Spec, "installed"> {
+  return author.requirement("installed")
+    .statement("The packed SDK exposes spec-bound TypeScript declarations")
+    .description("Exercises emitted fluent metadata types")
+    .from(source);
+}
+
+export function invocation<
+  const Spec extends string,
+  const RequirementKey extends string,
+>(
+  requirement: RequirementDeclaration<Spec, RequirementKey>,
+): RuleDeclaration<Spec, "invocation", RequirementKey> {
+  return requirement.rule("invocation")
+    .statement("A direct Rule handle remains typed across module boundaries");
+}
+`);
 writeFileSync(join(application, "consumer.ts"), `
 import { defineSpec } from "@quality-sh/provenance";
+import { guide, installed, invocation as declareInvocation } from "./helpers.js";
 
 const provenance = defineSpec("packed-typescript-consumer");
-const guide = provenance.source("guide")
-  .name("Packed SDK guide")
-  .document("README.md");
-const installed = provenance.requirement("installed")
-  .statement("The packed SDK exposes spec-bound TypeScript declarations")
-  .description("Exercises emitted fluent metadata types")
-  .from(guide);
-export const invocation = installed.rule("invocation")
-  .statement("A direct Rule handle remains typed across module boundaries");
-export const spec = provenance.build(installed.rules(invocation));
+const packedGuide = guide(provenance);
+const packedInstallation = installed(provenance, packedGuide);
+export const invocation = declareInvocation(packedInstallation);
+export const spec = provenance.build(packedInstallation.rules(invocation));
 
 void invocation.verify("packed-consumer", () => undefined);
 `);
@@ -106,7 +135,7 @@ writeFileSync(join(application, "tsconfig.json"), JSON.stringify({
     noEmit: true,
     skipLibCheck: true,
   },
-  include: ["consumer.ts"],
+  include: ["*.ts"],
 }));
 execFileSync(process.execPath, [
   join(application, "node_modules", "typescript", "bin", "tsc"),

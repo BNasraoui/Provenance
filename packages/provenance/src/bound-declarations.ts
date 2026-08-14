@@ -9,6 +9,10 @@ import type {
   SourceDeclaration,
 } from "./protocol.js";
 import type { VerifyOptions } from "./spec.js";
+import type {
+  RuleDeclaration as PublicRule,
+  SourceDeclaration as PublicSource,
+} from "./bound-types.js";
 
 export type RuleVerifier = (
   address: readonly string[],
@@ -183,13 +187,6 @@ export class BoundRule<
   }
 }
 
-type SharedRule<SpecKey extends string> = BoundRule<SpecKey, string, undefined>;
-type LocalRule<SpecKey extends string, RequirementKey extends string> = BoundRule<
-  SpecKey,
-  string,
-  RequirementKey
->;
-
 export class BoundRequirement<SpecKey extends string, Key extends string> {
   declare readonly [specAffinity]: Invariant<SpecKey>;
   readonly key: Key;
@@ -224,7 +221,7 @@ export class BoundRequirement<SpecKey extends string, Key extends string> {
     return this.copy({ description });
   }
 
-  from(...sources: readonly BoundSource<SpecKey, string>[]): BoundRequirement<SpecKey, Key> {
+  from(...sources: readonly PublicSource<SpecKey, string>[]): BoundRequirement<SpecKey, Key> {
     const state = requirementState(this);
     for (const source of sources) assertContext("Source", sourceState(source), state.context);
     return this.copy({ sources: appendSnapshots("Source", state.sources, sources, sourceState) });
@@ -240,7 +237,10 @@ export class BoundRequirement<SpecKey extends string, Key extends string> {
   }
 
   rules(
-    ...rules: readonly (SharedRule<SpecKey> | LocalRule<SpecKey, Key>)[]
+    ...rules: readonly (
+      | PublicRule<SpecKey, string, undefined>
+      | PublicRule<SpecKey, string, Key>
+    )[]
   ): BoundRequirement<SpecKey, Key> {
     const state = requirementState(this);
     for (const rule of rules) validateRuleOwner(state, ruleState(rule));
