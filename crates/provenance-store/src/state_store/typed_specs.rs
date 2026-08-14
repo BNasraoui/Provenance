@@ -176,8 +176,21 @@ impl StateStore {
             &ids.rules,
             false,
         )?;
+        let mut result = spec_result(
+            input.declared_by.clone(),
+            source_resources,
+            requirement_resources,
+            rule_resources,
+            implementation_bindings,
+        );
+        result.diagnostics = super::typed_statement_policy::analyze_typed_statements(
+            &result.resources,
+            &requirements,
+            &rules,
+        );
 
         if matches!(mode, ReconcileMode::Apply) {
+            super::typed_statement_policy::ensure_typed_spec_is_writable(&result)?;
             replace_records(self, &shards::sources_path(&self.layout, scope_id), sources)?;
             replace_records(
                 self,
@@ -207,13 +220,7 @@ impl StateStore {
             )?;
         }
 
-        Ok(spec_result(
-            input.declared_by,
-            source_resources,
-            requirement_resources,
-            rule_resources,
-            implementation_bindings,
-        ))
+        Ok(result)
     }
 
     fn current_typed_state(
@@ -345,6 +352,7 @@ fn spec_result(
         updated: count_state(&resources, ReconcileState::Updated),
         unchanged: count_state(&resources, ReconcileState::Unchanged),
         resources,
+        diagnostics: Vec::new(),
         implementation_bindings,
     }
 }
