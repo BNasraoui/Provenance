@@ -14,7 +14,11 @@ import {
   rule,
   source,
 } from "./index.js";
-import { startWorkflow } from "./implementation-target.test-helper.js";
+import * as implementationTargets from "./implementation-target.test-helper.js";
+import {
+  startWorkflow,
+  WorkflowRunner,
+} from "./implementation-target.test-helper.js";
 
 const engine = fileURLToPath(
   new URL("../../../target/debug/provenance", import.meta.url),
@@ -117,6 +121,17 @@ test("fluent declarations and their finalized handles are immutable", () => {
     "expiry",
   ]);
   assert.deepEqual(recorder.requests(), []);
+});
+
+test("exported classes bind without construction or runtime inspection", () => {
+  const direct = rule("direct-class").implementedBy(WorkflowRunner);
+  const namespaced = rule("namespaced-class").implementedBy(
+    implementationTargets.WorkflowRunner,
+  );
+
+  assert.equal(WorkflowRunner.constructions, 0);
+  assert.equal(direct.implementation?.symbol, "WorkflowRunner");
+  assert.equal(namespaced.implementation?.symbol, "WorkflowRunner");
 });
 
 test("top-level fluent declarations author source names and Requirement descriptions", async () => {

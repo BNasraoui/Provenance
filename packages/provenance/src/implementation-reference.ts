@@ -11,6 +11,10 @@ export interface CallSite {
   readonly column?: number;
 }
 
+export type ImplementationTarget =
+  | ((...args: never[]) => unknown)
+  | (abstract new (...args: never[]) => unknown);
+
 const moduleFile = fileURLToPath(import.meta.url);
 
 export function captureImplementationReference(
