@@ -1451,6 +1451,7 @@ dependencies = [
  "fs2",
  "provenance-core",
  "provenance-macros",
+ "provenance-ste100",
  "serde",
  "serde_ignored",
  "serde_json",
