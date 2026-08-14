@@ -11,23 +11,22 @@ stores verification outcomes.
 The package interface is:
 
 ```ts
-import { defineSpec } from "@quality-sh/provenance";
+import { defineSpec, requirement, rule, source } from "@quality-sh/provenance";
 
-const provenance = defineSpec("share-links");
-const authority = provenance.source("sharing-policy").document("docs/sharing-policy.md");
-const sharing = provenance.requirement("sharing")
-  .statement("Users can securely share documentation")
-  .from(authority);
-export const expiry = sharing.rule("expiry")
-  .statement("Share links must expire within 30 days");
-const spec = provenance.build(sharing.rules(expiry));
-
-export default spec;
+export const shareLinks = defineSpec("share-links")
+  .requirements(
+    requirement("sharing")
+      .statement("Users can securely share documentation")
+      .from(source("sharing-policy").document("docs/sharing-policy.md"))
+      .rules(rule("expiry").statement("Share links must expire within 30 days")),
+  )
+  .build();
 ```
 
-An explicit entry point calls `apply(spec)`. Importing the declaration module
-only constructs and freezes values in memory. Tests import `expiry` and call
-`expiry.verify("share-link-expiry", callback)`. The local key gives the durable
+An explicit entry point calls `apply(shareLinks)`. Importing the declaration
+module only constructs and freezes values in memory. Tests import `shareLinks`
+and call `shareLinks.requirements.sharing.rules.expiry.verify("share-link-expiry", callback)`.
+The local key gives the durable
 Verification binding a stable identity; the Rule itself remains a real typed
 reference. The callback never crosses the process seam. Node
 runs it between Rust-backed begin and complete commands. On failure, the SDK
