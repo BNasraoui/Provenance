@@ -39,6 +39,34 @@ Source `.name(...)` overrides the key-derived canonical display name, and
 Requirement `.description(...)` can replace the canonical description on a
 later apply. Rust remains responsible for reconciling those desired values.
 
+Helpers can name construction values directly, including across files:
+
+```ts
+import type {
+  RequirementDeclaration,
+  RuleDeclaration,
+  SpecAuthoring,
+} from "@quality-sh/provenance";
+
+export function expiryRule<
+  const Spec extends string,
+  const RequirementKey extends string,
+>(
+  requirement: RequirementDeclaration<Spec, RequirementKey>,
+): RuleDeclaration<Spec, "expiry", RequirementKey> {
+  return requirement.rule("expiry").statement("Share links expire");
+}
+
+export function sharing<const Spec extends string>(author: SpecAuthoring<Spec>) {
+  return author.requirement("sharing").statement("Shares expire");
+}
+```
+
+`SourceDeclaration`, `RequirementDeclaration`, and `RuleDeclaration` describe
+immutable construction snapshots, not materialized records or finalized spec
+handles. Their literal spec and Requirement parameters keep helpers from
+mixing declarations from different contexts.
+
 Rules created through a Requirement have a requirement-local declaration
 address, so equal local keys under different Requirements remain distinct. A
 Rule created through the spec context has an explicitly shared address:

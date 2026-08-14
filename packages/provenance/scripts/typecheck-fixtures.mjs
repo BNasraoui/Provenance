@@ -24,6 +24,25 @@ assert.equal(valid.status, 0, valid.stdout + valid.stderr);
 const contextValid = typecheck("context-valid");
 assert.equal(contextValid.status, 0, contextValid.stdout + contextValid.stderr);
 
+const compositionValid = typecheck("composition-valid");
+assert.equal(compositionValid.status, 0, compositionValid.stdout + compositionValid.stderr);
+
+const compositionCrossContext = typecheck("composition-cross-context");
+assert.notEqual(
+  compositionCrossContext.status,
+  0,
+  "a public helper unexpectedly accepted declarations from different specs",
+);
+assert.match(compositionCrossContext.stdout + compositionCrossContext.stderr, /TS2345/);
+
+const declarationImmutability = typecheck("declaration-immutability");
+assert.notEqual(
+  declarationImmutability.status,
+  0,
+  "a public construction declaration unexpectedly allowed mutation",
+);
+assert.match(declarationImmutability.stdout + declarationImmutability.stderr, /TS2540/);
+
 const contextLocalRuleMismatch = typecheck("context-local-rule-mismatch");
 assert.notEqual(
   contextLocalRuleMismatch.status,

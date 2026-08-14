@@ -5,6 +5,9 @@ import {
   type BoundRequirement,
   type BoundRule,
   type BoundSource,
+  type RequirementDeclaration,
+  type RuleDeclaration,
+  type SourceDeclaration,
   type SpecAuthoring,
 } from "./bound-spec.js";
 import type {
@@ -106,7 +109,15 @@ export type {
   SpecHandle,
 } from "./spec.js";
 export type { FluentRequirement, FluentRule, FluentSource, FluentSpec } from "./fluent-spec.js";
-export type { BoundRequirement, BoundRule, BoundSource, SpecAuthoring } from "./bound-spec.js";
+export type {
+  BoundRequirement,
+  BoundRule,
+  BoundSource,
+  RequirementDeclaration,
+  RuleDeclaration,
+  SourceDeclaration,
+  SpecAuthoring,
+} from "./bound-spec.js";
 
 const registry = new DeclarationRegistry();
 const moduleFile = fileURLToPath(import.meta.url);
