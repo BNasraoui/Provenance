@@ -1,5 +1,7 @@
 //! Deterministic descriptive-text checks from ASD-STE100 Issue 9.
 
+mod contracted_verbs;
+
 use provenance_macros::rule;
 use serde::{Deserialize, Serialize};
 
@@ -7,6 +9,7 @@ use serde::{Deserialize, Serialize};
 pub const ANALYZER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const SEMICOLON_MESSAGE: &str = "Do not use semicolons in descriptive text.";
+const CONTRACTED_VERB_MESSAGE: &str = "Use the full verb form in descriptive text.";
 
 /// A report from the fixed ASD-STE100 Issue 9 analyzer.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -62,6 +65,8 @@ pub struct Finding {
 /// An ASD-STE100 Issue 9 rule implemented by this analyzer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum RuleNumber {
+    #[serde(rename = "4.2")]
+    FourTwo,
     #[serde(rename = "8.1")]
     EightOne,
 }
@@ -80,10 +85,10 @@ pub struct Span {
     pub end: usize,
 }
 
-/// Reports each semicolon that violates ASD-STE100 Issue 9 Rule 8.1.
+/// Reports deterministic Rule 4.2 and Rule 8.1 violations in source order.
 #[rule("rule_ste100_semicolon")]
 pub fn check_descriptive(text: &str) -> Report {
-    let findings = text
+    let mut findings = text
         .match_indices(';')
         .map(|(start, _)| Finding {
             rule: RuleNumber::EightOne,
@@ -94,7 +99,22 @@ pub fn check_descriptive(text: &str) -> Report {
             },
             message: SEMICOLON_MESSAGE.to_owned(),
         })
-        .collect();
+        .collect::<Vec<_>>();
+
+    findings.extend(
+        contracted_verbs::find(text)
+            .into_iter()
+            .map(|contracted| Finding {
+                rule: RuleNumber::FourTwo,
+                kind: FindingKind::Violation,
+                span: Span {
+                    start: contracted.start,
+                    end: contracted.end,
+                },
+                message: CONTRACTED_VERB_MESSAGE.to_owned(),
+            }),
+    );
+    findings.sort_by_key(|finding| finding.span.start);
 
     Report {
         standard: Standard::AsdSte100,
