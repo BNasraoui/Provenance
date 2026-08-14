@@ -22,7 +22,8 @@ A person must review checks about meaning and clarity.
 
 ASD-STE100 must define the rules and vocabulary.
 Provenance must not define a replacement writing standard.
-Provenance must not offer a bespoke language or a general custom ruleset.
+The first release must not offer a custom substitute language or an extension mechanism.
+Later extensions may supplement ASD-STE100, but they must not replace it.
 Apply the check first to Requirement statements and Rule statements.
 
 The strict tier must contain only proven violations.
@@ -139,7 +140,7 @@ Provenance can ship original executable checks without distributing copied ASD c
 
 1. Implement only individually cited deterministic ASD-STE100 rules in original code.
 2. Rule 8.1 is an example: the checker can report semicolons without copying a rule table, example, or dictionary entry.
-3. Do not offer an empty configurable rule profile or accept user-defined rules as a substitute language.
+3. Do not offer a custom substitute language or extension mechanism in the first release.
 4. Do not ship the Issue 9 PDF, extracted word lists, definitions, alternatives, examples, tables, screenshots, or substantial rule text.
 5. Do not ship a PDF extractor as a substitute for distribution rights.
 6. Link users to the official STEMG download page for their separate copy.
@@ -369,6 +370,8 @@ Keep the first public interface small.
 Select the standard issue, text type, target fields, technical terms, and enforcement levels.
 Do not provide one switch for each ASD rule.
 This file configures one ASD-STE100 checker. It is not a rule-profile system or a user-defined language.
+The first release does not include an extension mechanism.
+Later extensions can supplement ASD-STE100 but cannot replace it.
 
 ```toml
 schema_version = 1
@@ -411,9 +414,10 @@ value = "JSONL"
 Use official dictionary data only with the necessary permission.
 Until Provenance has that permission, built-in official vocabulary checks stay blocked.
 Do not create a substitute general vocabulary.
-Do not add custom writing rules.
+Do not add custom writing rules or an extension mechanism in the first release.
 Project technical terms remain necessary because ASD-STE100 permits approved technical terms.
 They must not become a user-defined replacement for ASD-STE100 rules or general vocabulary.
+Later extensions must supplement ASD-STE100 and must not replace it.
 
 ### Finding format
 
@@ -548,7 +552,8 @@ Use ASD-STE100 Issue 9 as the only rule source.
 Implement original checks only for individually cited deterministic rules.
 Keep built-in official vocabulary data blocked until sufficient rights exist.
 Do not create a Provenance replacement standard.
-Do not add a general custom ruleset.
+Do not add a custom substitute language or extension mechanism in the first release.
+Later extensions can supplement ASD-STE100 but cannot replace it.
 
 Review product words and redistribution rights.
 Do not claim that an automated result certifies full conformance.

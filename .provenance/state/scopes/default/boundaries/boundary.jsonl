@@ -1,2 +1,2 @@
 {"schema_version":1,"scope_id":"default","id":"boundary_no_proprietary_ste_replacement","requirement_id":"req_ste_syntax_checked_before_graph_write","statement":"Provenance applies ASD-STE100 Issue 9 directly instead of defining a separate writing standard"}
-{"schema_version":1,"scope_id":"default","id":"boundary_ste_extensions_not_required","requirement_id":"req_ste_syntax_checked_before_graph_write","statement":"Provenance does not offer a bespoke language or a general custom writing ruleset"}
+{"schema_version":1,"scope_id":"default","id":"boundary_ste_extensions_not_required","requirement_id":"req_ste_syntax_checked_before_graph_write","statement":"Extensions are not required in the first implementation. Any later extension must supplement, not replace, ASD-STE100"}
