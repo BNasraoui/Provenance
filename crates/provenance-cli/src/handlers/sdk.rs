@@ -12,10 +12,12 @@ use provenance_store::{
     state_store::{BeginVerificationInput, CompleteVerificationInput, StateStore, TypedSpecInput},
 };
 
+mod check_statement;
 mod plan;
 
 pub(super) fn handle(command: SdkCommand) -> anyhow::Result<()> {
     match command {
+        SdkCommand::CheckStatement { format } => check_statement::handle(format)?,
         SdkCommand::Info { repo, format } => {
             let repo = resolve_repository(repo)?;
             output::print(

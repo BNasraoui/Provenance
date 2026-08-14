@@ -1390,6 +1390,7 @@ dependencies = [
  "provenance-core",
  "provenance-macros",
  "provenance-scanner",
+ "provenance-ste100",
  "provenance-store",
  "pulldown-cmark",
  "remove_dir_all",
