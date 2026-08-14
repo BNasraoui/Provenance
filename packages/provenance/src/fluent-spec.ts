@@ -106,7 +106,7 @@ export class FluentRule<Key extends string = string> {
 export class FluentRequirement<
   Key extends string = string,
   Rules extends readonly FluentRule[] = readonly [],
-  Sources extends readonly FluentSource[] = readonly [],
+  Sources extends readonly FluentSource[] = readonly FluentSource[],
 > {
   readonly key: Key;
   readonly text?: string;
@@ -280,7 +280,9 @@ export function fluentRule<const Key extends string>(key: Key): FluentRule<Key> 
   return new FluentRule(key);
 }
 
-export function fluentRequirement<const Key extends string>(key: Key): FluentRequirement<Key> {
+export function fluentRequirement<const Key extends string>(
+  key: Key,
+): FluentRequirement<Key, readonly [], readonly []> {
   return new FluentRequirement(key);
 }
 

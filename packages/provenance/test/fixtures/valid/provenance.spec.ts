@@ -1,5 +1,11 @@
 import { defineSpec, requirement, rule, source } from "@quality-sh/provenance";
+import type { FluentRequirement } from "@quality-sh/provenance";
 import { createShareLink } from "./runtime.js";
+
+const annotatedRequirement: FluentRequirement<"annotated"> = requirement("annotated").from(
+  source("annotated-source"),
+);
+void annotatedRequirement;
 
 export const shareLinks = defineSpec("share-links")
   .requirements(

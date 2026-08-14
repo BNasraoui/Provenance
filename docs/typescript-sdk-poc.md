@@ -139,10 +139,11 @@ path as disturbed evidence without executing the callback.
 ## Compile-time result
 
 The useful guarantee is ordinary TypeScript referential integrity. The valid
-fixture imports `expiry` and typechecks. A second fixture renames the export to
-`shareLinkExpiry` but leaves the import unchanged; `tsc` fails with TS2305.
-This proves only that the verification code refers to a declared rule handle.
-It does not prove that the callback tests the right production behaviour.
+fixture follows `shareLinks.requirements.sharing.rules.expiry` and typechecks. A
+second fixture renames that Rule key but leaves the nested access unchanged;
+`tsc` fails with TS2339. This proves only that the verification code refers to a
+declared Rule handle. It does not prove that the callback tests the right
+production behaviour.
 
 ## Coexistence with existing bindings
 
@@ -162,10 +163,10 @@ canonical model without a data migration.
 
 ## Answers from the POC
 
-1. `expiry.verify("local-key", callback)` is more natural than a repeated Rule
-   ID marker for tests. The string identifies the test relationship, not the
-   Rule. The imported Rule declaration is also its immutable handle and provides
-   that referential integrity without a post-build lookup.
+1. `shareLinks.requirements.sharing.rules.expiry.verify("local-key", callback)`
+   is more natural than a repeated Rule ID marker for tests. The string
+   identifies the test relationship, not the Rule. The built spec exposes an
+   immutable typed Rule handle at that semantic path.
    Imports, rename, autocomplete, navigation, and find-references all work in
    the TypeScript toolchain. The explicit `defineSpec` / `apply(spec)` split is
    also easier to reason about than persistence triggered by module import or

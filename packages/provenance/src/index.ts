@@ -161,7 +161,9 @@ export function source(key: string, options?: SourceOptions): SourceHandle | Flu
   return handle;
 }
 
-export function requirement<const Key extends string>(key: Key): FluentRequirement<Key>;
+export function requirement<const Key extends string>(
+  key: Key,
+): FluentRequirement<Key, readonly [], readonly []>;
 export function requirement(key: string, options: RequirementOptions): RequirementHandle;
 export function requirement(
   key: string,
