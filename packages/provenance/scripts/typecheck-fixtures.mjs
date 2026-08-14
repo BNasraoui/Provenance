@@ -21,6 +21,21 @@ assert.equal(built.status, 0, built.stdout + built.stderr);
 const valid = typecheck("valid");
 assert.equal(valid.status, 0, valid.stdout + valid.stderr);
 
+const contextValid = typecheck("context-valid");
+assert.equal(contextValid.status, 0, contextValid.stdout + contextValid.stderr);
+
+const contextLocalRuleMismatch = typecheck("context-local-rule-mismatch");
+assert.notEqual(
+  contextLocalRuleMismatch.status,
+  0,
+  "a requirement-local Rule unexpectedly attached to another Requirement",
+);
+assert.match(contextLocalRuleMismatch.stdout + contextLocalRuleMismatch.stderr, /TS2345/);
+
+const contextCrossSpec = typecheck("context-cross-spec");
+assert.notEqual(contextCrossSpec.status, 0, "a Source unexpectedly crossed spec contexts");
+assert.match(contextCrossSpec.stdout + contextCrossSpec.stderr, /TS2345/);
+
 const implementedByValid = typecheck("implemented-by-valid");
 assert.equal(implementedByValid.status, 0, implementedByValid.stdout + implementedByValid.stderr);
 

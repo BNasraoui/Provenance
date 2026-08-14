@@ -11,30 +11,49 @@ npx provenance init --path . --scope default --path-prefix .
 Define a spec without touching the engine:
 
 ```ts
-import { defineSpec, requirement, rule } from "@quality-sh/provenance";
+import { defineSpec } from "@quality-sh/provenance";
 import { createShareLink } from "./share-links.js";
 
-const expiry = rule("expiry")
+const provenance = defineSpec("share-links");
+const sharing = provenance.requirement("sharing")
+  .statement("Users can securely share documentation");
+export const expiry = sharing.rule("expiry")
   .statement("Share links must expire within 30 days")
   .implementedBy(createShareLink);
-const sharing = requirement("sharing")
-  .statement("Users can securely share documentation")
-  .rules(expiry);
-const spec = defineSpec("share-links")
-  .requirements(sharing)
-  .build();
+export const spec = provenance.build(sharing.rules(expiry));
 
 export default spec;
-export const { sharing: sharingRequirement } = spec.handles.requirements;
-export const { expiry: expiryRule } = sharingRequirement.rules;
 ```
 
 Each fluent call returns a new immutable declaration. `build()` validates and
-finalizes the declarations into frozen handles. Construction is synchronous,
+finalizes the desired-state document. Construction is synchronous,
 deterministic, and in-memory: importing this module does not write state or
-start a process. Reusing one Rule declaration under several Requirements emits
-one Rule with several relationships. Equal local Rule keys remain distinct when
-their declaration objects and parent Requirements differ.
+start a process. The declaration itself is the frozen handle tests import.
+
+Rules created through a Requirement have a requirement-local declaration
+address, so equal local keys under different Requirements remain distinct. A
+Rule created through the spec context has an explicitly shared address:
+
+```ts
+export const authenticatedExpiry = provenance
+  .rule("authenticated-expiry")
+  .statement("Authenticated access expires");
+
+const shares = provenance
+  .requirement("shares")
+  .statement("Shares expire")
+  .rules(authenticatedExpiry);
+const sessions = provenance
+  .requirement("sessions")
+  .statement("Sessions expire")
+  .rules(authenticatedExpiry);
+
+export default provenance.build(shares, sessions);
+```
+
+This emits one Rule with two relationships. Shared versus local identity is
+chosen by where the Rule is declared, not inferred from JavaScript object
+reuse. Sources linked with `.from(...)` are collected transitively by `build()`.
 
 `implementedBy()` accepts a direct named import or namespace member. The SDK
 reads that expression from the spec source and records the imported module and
@@ -73,9 +92,9 @@ reconciliation path.
 A test imports the actual rule handle and runs its callback in Node:
 
 ```ts
-import { expiryRule } from "./provenance.spec.js";
+import { expiry } from "./provenance.spec.js";
 
-await expiryRule.verify("share-link-expiry", async () => {
+await expiry.verify("share-link-expiry", async () => {
   // Exercise ordinary production code with the test runner of your choice.
 });
 ```
@@ -104,10 +123,11 @@ variables override the defaults:
 `configure()` provides the same settings in code. The SDK still uses one short
 process per command; it does not start a daemon.
 
-The original object-options declarations and callback form of `defineSpec()`
-remain compatible. The older top-level API uses a process-local registry and
-`verify()` applies pending declarations automatically. New code should prefer
-fluent declarations plus explicit `apply(spec)` so imports stay free of hidden
+The original top-level fluent call chains, object-options declarations, and
+callback form of `defineSpec()` remain available as compatibility surfaces. The
+older object-options API uses a process-local registry and `verify()` applies
+pending declarations automatically. New code should prefer spec-bound
+declarations plus explicit `apply(spec)` so imports stay free of hidden
 persistence.
 
 See `examples/typescript-sdk/` for package-name consumption through a local npm

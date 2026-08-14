@@ -1,5 +1,6 @@
 mod identity;
 mod reconcile;
+mod rule_addresses;
 
 use std::collections::BTreeMap;
 
@@ -13,12 +14,12 @@ use super::{
     TypedSpecInput, TypedSpecResult,
 };
 use crate::shards;
-pub(super) use identity::rule_address;
 use identity::{
     declaration_ids, normalize_rule_relationships, owned_declaration_ids, requirement_identity,
     rule_declaration_ids, source_identity, validate_ownership, validate_references,
 };
 use reconcile::{reconcile_requirements, reconcile_rules, reconcile_sources};
+pub(in crate::state_store) use rule_addresses::rule_address;
 
 struct CurrentTypedState {
     sources: Vec<Source>,
@@ -312,7 +313,7 @@ impl StateStore {
         // Relationships are additive in this POC. Reapplying is idempotent,
         // while omission never erases a relationship another owner may use.
         for declaration in graph.rules {
-            let address = rule_address(graph.spec, &declaration.requirements, &declaration.key)?;
+            let address = rule_address(graph.spec, declaration)?;
             for requirement in &declaration.requirements {
                 self.add_edge(
                     scope_id.clone(),

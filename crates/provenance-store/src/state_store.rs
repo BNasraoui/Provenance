@@ -10,7 +10,7 @@ pub(crate) mod readers;
 mod rule_writers;
 mod shaping_writers;
 mod thread_writers;
-mod typed_specs;
+pub(super) mod typed_specs;
 mod verification_bindings;
 mod verification_runs;
 mod writers;

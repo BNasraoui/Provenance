@@ -20,6 +20,7 @@ export interface RequirementDeclaration {
 export interface RuleDeclaration {
   key: string;
   id?: string;
+  address?: DeclarationAddress;
   requirement?: string;
   requirements?: string[];
   statement: string;

@@ -1,7 +1,7 @@
 use camino::Utf8PathBuf;
 use serde::{Deserialize, Serialize};
 
-pub const SDK_PROTOCOL_VERSION: u32 = 1;
+pub const SDK_PROTOCOL_VERSION: u32 = 2;
 
 /// Language-neutral contract advertised by the Rust engine before SDK work.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]

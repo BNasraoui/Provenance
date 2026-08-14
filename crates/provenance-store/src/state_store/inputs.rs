@@ -183,6 +183,8 @@ pub struct TypedRuleInput {
     #[serde(default)]
     pub id: Option<String>,
     #[serde(default)]
+    pub address: Option<provenance_core::DeclarationAddress>,
+    #[serde(default)]
     pub requirement: Option<String>,
     #[serde(default)]
     pub requirements: Vec<String>,

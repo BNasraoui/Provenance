@@ -1,5 +1,12 @@
 import { invokeEngine, type EngineSettings } from "./engine.js";
 import { fileURLToPath } from "node:url";
+import {
+  authorSpec,
+  type BoundRequirement,
+  type BoundRule,
+  type BoundSource,
+  type SpecAuthoring,
+} from "./bound-spec.js";
 import type {
   ApplyResult,
   PlanResult,
@@ -10,7 +17,6 @@ import {
   fluentRequirement,
   fluentRule,
   fluentSource,
-  fluentSpec,
   type FluentRequirement,
   type FluentRule,
   type FluentSource,
@@ -100,10 +106,15 @@ export type {
   SpecHandle,
 } from "./spec.js";
 export type { FluentRequirement, FluentRule, FluentSource, FluentSpec } from "./fluent-spec.js";
+export type { BoundRequirement, BoundRule, BoundSource, SpecAuthoring } from "./bound-spec.js";
 
 const registry = new DeclarationRegistry();
 const moduleFile = fileURLToPath(import.meta.url);
 const specModuleFile = fileURLToPath(new URL("./spec.js", import.meta.url));
+const boundSpecModuleFile = fileURLToPath(new URL("./bound-spec.js", import.meta.url));
+const boundDeclarationsModuleFile = fileURLToPath(
+  new URL("./bound-declarations.js", import.meta.url),
+);
 let settings = defaults();
 
 interface SdkSettings {
@@ -163,7 +174,7 @@ export function rule<const Key extends string>(key: Key): FluentRule<Key> {
   return fluentRule(key);
 }
 
-export function defineSpec(key: string): FluentSpec;
+export function defineSpec<const Key extends string>(key: Key): SpecAuthoring<Key>;
 export function defineSpec<const Declarations extends DeclarationRecord>(
   key: string,
   build: (author: SpecAuthor) => Declarations,
@@ -171,8 +182,8 @@ export function defineSpec<const Declarations extends DeclarationRecord>(
 export function defineSpec<const Declarations extends DeclarationRecord>(
   key: string,
   build?: (author: SpecAuthor) => Declarations,
-): SpecHandle<FinalizedRecord<Declarations>> | FluentSpec {
-  if (build === undefined) return fluentSpec(key, verifyDeclaration);
+): SpecHandle<FinalizedRecord<Declarations>> | SpecAuthoring<string> {
+  if (build === undefined) return authorSpec(key, verifyDeclaration);
   return constructSpec(key, build, verifyDeclaration);
 }
 
@@ -343,7 +354,12 @@ function callerLocation(): { file: string } | undefined {
       const file = match[1].startsWith("file:")
         ? fileURLToPath(match[1])
         : match[1];
-      if (file !== moduleFile && file !== specModuleFile) {
+      if (
+        file !== moduleFile &&
+        file !== specModuleFile &&
+        file !== boundSpecModuleFile &&
+        file !== boundDeclarationsModuleFile
+      ) {
         return { file };
       }
     }

@@ -14,7 +14,7 @@ interface EngineInfo {
   repository: string;
 }
 
-const SUPPORTED_PROTOCOL_VERSION = 1;
+const SUPPORTED_PROTOCOL_VERSION = 2;
 const handshakes = new Map<string, Promise<void>>();
 
 export async function invokeEngine<Result>(

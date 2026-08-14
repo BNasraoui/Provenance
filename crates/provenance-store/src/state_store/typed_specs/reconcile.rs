@@ -9,7 +9,8 @@ use super::super::{
     ReconcileState, ReconciledResource, TypedFieldChange, TypedRequirementInput, TypedResourceKind,
     TypedRuleInput, TypedSourceInput,
 };
-use super::identity::{requirement_address, rule_address, source_address};
+use super::identity::{requirement_address, source_address};
+use super::rule_addresses::{local_parent, rule_address};
 
 pub(super) fn reconcile_sources(
     mut records: Vec<Source>,
@@ -173,12 +174,9 @@ pub(super) fn reconcile_rules(
 ) -> anyhow::Result<(Vec<Rule>, Vec<ReconciledResource>)> {
     let mut resources = Vec::new();
     for declaration in declarations {
-        let address = rule_address(spec, &declaration.requirements, &declaration.key)?;
+        let address = rule_address(spec, &declaration)?;
         let id = ids[&address].clone();
-        let parent = match declaration.requirements.as_slice() {
-            [requirement] => Some(requirement.clone()),
-            _ => None,
-        };
+        let parent = local_parent(&address);
         let desired = Rule {
             schema_version: SUPPORTED_SCHEMA_VERSION,
             scope_id: scope_id.clone(),

@@ -11,28 +11,23 @@ stores verification outcomes.
 The package interface is:
 
 ```ts
-import { defineSpec, requirement, rule, source } from "@quality-sh/provenance";
+import { defineSpec } from "@quality-sh/provenance";
 
-const authority = source("sharing-policy").document("docs/sharing-policy.md");
-const expiry = rule("expiry")
-  .statement("Share links must expire within 30 days");
-const sharing = requirement("sharing")
+const provenance = defineSpec("share-links");
+const authority = provenance.source("sharing-policy").document("docs/sharing-policy.md");
+const sharing = provenance.requirement("sharing")
   .statement("Users can securely share documentation")
-  .from(authority)
-  .rules(expiry);
-const spec = defineSpec("share-links")
-  .sources(authority)
-  .requirements(sharing)
-  .build();
+  .from(authority);
+export const expiry = sharing.rule("expiry")
+  .statement("Share links must expire within 30 days");
+const spec = provenance.build(sharing.rules(expiry));
 
 export default spec;
-export const sharingHandle = spec.handles.requirements.sharing;
-export const expiryHandle = sharingHandle.rules.expiry;
 ```
 
 An explicit entry point calls `apply(spec)`. Importing the declaration module
-only constructs and freezes values in memory. Tests import `expiryHandle` and call
-`expiryHandle.verify("share-link-expiry", callback)`. The local key gives the durable
+only constructs and freezes values in memory. Tests import `expiry` and call
+`expiry.verify("share-link-expiry", callback)`. The local key gives the durable
 Verification binding a stable identity; the Rule itself remains a real typed
 reference. The callback never crosses the process seam. Node
 runs it between Rust-backed begin and complete commands. On failure, the SDK
@@ -71,20 +66,25 @@ Each declaration has two identities:
 - a structured, owner-local declaration address used by typed handles;
 - a canonical Provenance Stable ID assigned or accepted by Rust.
 
-The address includes the spec and hierarchy. Distinct local declarations at
-`sharing/expiry` and `sessions/expiry` remain separate, as do equal top-level
-keys in different specs. Reusing the same Rule declaration under both
-Requirements creates one shared address and two graph relationships.
+The address includes the spec and hierarchy. Distinct Rules created through
+`sharing.rule("expiry")` and `sessions.rule("expiry")` remain separate, as do
+equal top-level keys in different specs. A Rule created through
+`provenance.rule("expiry")` has an explicitly spec-scoped address and can refine
+several Requirements. Shared identity is not inferred from object reuse.
 Declaration keys are not TypeScript variable names. Renaming:
 
 ```ts
-const expiry = rule("expiry").statement(...);
+const provenance = defineSpec("share-links");
+const sharing = provenance.requirement("sharing").statement(...);
+const expiry = sharing.rule("expiry").statement(...);
 ```
 
 to:
 
 ```ts
-const shareLinkExpiry = rule("expiry").statement(...);
+const provenance = defineSpec("share-links");
+const sharing = provenance.requirement("sharing").statement(...);
+const shareLinkExpiry = sharing.rule("expiry").statement(...);
 ```
 
 leaves both the declaration address and canonical ID unchanged. On reapply,
@@ -164,7 +164,8 @@ canonical model without a data migration.
 
 1. `expiry.verify("local-key", callback)` is more natural than a repeated Rule
    ID marker for tests. The string identifies the test relationship, not the
-   Rule. The imported Rule handle provides that referential integrity.
+   Rule. The imported Rule declaration is also its immutable handle and provides
+   that referential integrity without a post-build lookup.
    Imports, rename, autocomplete, navigation, and find-references all work in
    the TypeScript toolchain. The explicit `defineSpec` / `apply(spec)` split is
    also easier to reason about than persistence triggered by module import or

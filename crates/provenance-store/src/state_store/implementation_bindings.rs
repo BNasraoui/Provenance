@@ -18,7 +18,7 @@ pub(super) fn reconcile(
     let mut existing = store.list_implementation_bindings(scope_id)?;
     let mut desired = Vec::new();
     for rule in rules.iter().filter(|rule| rule.implementation.is_some()) {
-        let address = super::typed_specs::rule_address(spec, &rule.requirements, &rule.key)?;
+        let address = super::typed_specs::rule_address(spec, rule)?;
         let rule_id = rule_ids[&address].clone();
         let implementation = rule.implementation.as_ref().unwrap();
         validate_target(&implementation.file, &implementation.symbol)?;

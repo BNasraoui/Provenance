@@ -67,8 +67,35 @@ execFileSync(localEngine, ["init", "--path", application, "--scope", "default", 
 writeFileSync(join(application, "runtime.mjs"), `
 export function startWorkflow() {}
 `);
+writeFileSync(join(application, "consumer.ts"), `
+import { defineSpec } from "@quality-sh/provenance";
+
+const provenance = defineSpec("packed-typescript-consumer");
+const installed = provenance.requirement("installed")
+  .statement("The packed SDK exposes spec-bound TypeScript declarations");
+export const invocation = installed.rule("invocation")
+  .statement("A direct Rule handle remains typed across module boundaries");
+export const spec = provenance.build(installed.rules(invocation));
+
+void invocation.verify("packed-consumer", () => undefined);
+`);
+writeFileSync(join(application, "tsconfig.json"), JSON.stringify({
+  compilerOptions: {
+    module: "NodeNext",
+    moduleResolution: "NodeNext",
+    target: "ES2022",
+    strict: true,
+    noEmit: true,
+    skipLibCheck: true,
+  },
+  include: ["consumer.ts"],
+}));
+execFileSync(process.execPath, [
+  join(application, "node_modules", "typescript", "bin", "tsc"),
+  "-p", join(application, "tsconfig.json"),
+], { cwd: application, stdio: "pipe" });
 writeFileSync(join(application, "verify.mjs"), `
-import { apply, defineSpec, plan, requirement, rule } from "@quality-sh/provenance";
+import { apply, defineSpec, plan } from "@quality-sh/provenance";
 import { startWorkflow } from "./runtime.mjs";
 const spec = defineSpec("packed-install", ({ requirement }) => {
   const installed = requirement("installed", {
@@ -88,19 +115,22 @@ await spec.handles.invocation.verify("packed-install", () => undefined, {
   symbol: "packedInstall"
 });
 
-const typedStart = rule("typed-start")
+const provenance = defineSpec("packed-implemented-by");
+const typedStart = provenance.rule("typed-start")
   .statement("Installed typed specs resolve imported production implementations")
   .implementedBy(startWorkflow);
-const typedRequirement = requirement("typed-implementation")
+const typedRequirement = provenance.requirement("typed-implementation")
   .statement("Installed typed specs retain implementation links")
   .rules(typedStart);
-const typedSpec = defineSpec("packed-implemented-by")
-  .requirements(typedRequirement)
-  .build();
+const typedSpec = provenance.build(typedRequirement);
 const typedResult = await apply(typedSpec);
 if (typedResult.implementation_bindings?.[0]?.file !== "runtime.mjs") {
   throw new Error("implementedBy did not survive the packed install");
 }
+await typedStart.verify("packed-direct-rule", () => undefined, {
+  file: "verify.mjs",
+  symbol: "packedDirectRule"
+});
 `);
 
 const { PROVENANCE_BIN: _removed, ...environment } = process.env;
@@ -112,8 +142,8 @@ execFileSync(process.execPath, [join(application, "verify.mjs")], {
 const runs = JSON.parse(execFileSync(localEngine, [
   "sdk", "verification-runs", "--repo", application, "--scope", "default", "--format", "json",
 ], { encoding: "utf8" }));
-assert.equal(runs.length, 1);
-assert.equal(runs[0].status, "passed");
+assert.equal(runs.length, 2);
+assert.deepEqual(runs.map(({ status }) => status), ["passed", "passed"]);
 
 function archiveNamed(archives, expected) {
   const archive = archives.find((name) => name === expected);

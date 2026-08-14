@@ -120,6 +120,133 @@ fn shared_rule_materializes_once_with_two_relationships() {
 }
 
 #[test]
+fn an_explicit_spec_scoped_address_stays_shared_with_one_requirement() {
+    let directory = init_repo();
+    let repo = directory.path().to_str().unwrap();
+    let result = apply(
+        repo,
+        &document(json!([{
+            "key": "expiry",
+            "address": ["lifecycles", "rule", "expiry"],
+            "requirements": ["sharing"],
+            "statement": "Share links expire"
+        }])),
+    )
+    .unwrap();
+
+    assert_eq!(
+        rule_resource(&result)["address"],
+        json!(["lifecycles", "rule", "expiry"])
+    );
+    assert!(rule_resource(&result).get("parent").is_none());
+}
+
+#[test]
+fn an_explicit_local_address_must_name_its_only_requirement() {
+    let directory = init_repo();
+    let repo = directory.path().to_str().unwrap();
+    let error = apply(
+        repo,
+        &document(json!([{
+            "key": "expiry",
+            "address": ["lifecycles", "requirement", "sessions", "rule", "expiry"],
+            "requirements": ["sharing"],
+            "statement": "Share links expire"
+        }])),
+    )
+    .unwrap_err();
+
+    assert!(error.contains("address"), "{error}");
+    assert!(error.contains("sharing"), "{error}");
+}
+
+#[test]
+fn inferred_local_to_explicit_shared_with_one_requirement_preserves_id() {
+    let directory = init_repo();
+    let repo = directory.path().to_str().unwrap();
+    let local = document(json!([{
+        "key": "expiry",
+        "requirements": ["sharing"],
+        "statement": "Share links expire"
+    }]));
+    let shared = document(json!([{
+        "key": "expiry",
+        "address": ["lifecycles", "rule", "expiry"],
+        "requirements": ["sharing"],
+        "statement": "Share links expire"
+    }]));
+
+    let first = apply(repo, &local).unwrap();
+    let second = apply(repo, &shared).unwrap();
+
+    assert_eq!(rule_resource(&second)["id"], rule_resource(&first)["id"]);
+    assert_eq!(
+        rule_resource(&second)["address"],
+        json!(["lifecycles", "rule", "expiry"])
+    );
+}
+
+#[test]
+fn explicit_address_rejects_the_wrong_spec() {
+    let directory = init_repo();
+    let error = apply(
+        directory.path().to_str().unwrap(),
+        &document(json!([{
+            "key": "expiry",
+            "address": ["another-spec", "rule", "expiry"],
+            "requirements": ["sharing"],
+            "statement": "Share links expire"
+        }])),
+    )
+    .unwrap_err();
+
+    assert!(error.contains("address"), "{error}");
+    assert!(error.contains("lifecycles"), "{error}");
+}
+
+#[test]
+fn explicit_address_rejects_the_wrong_key_and_arbitrary_shape() {
+    for address in [
+        json!(["lifecycles", "rule", "another-key"]),
+        json!(["lifecycles", "rules", "expiry"]),
+        json!(["lifecycles", "rule", "expiry", "extra"]),
+    ] {
+        let directory = init_repo();
+        let error = apply(
+            directory.path().to_str().unwrap(),
+            &document(json!([{
+                "key": "expiry",
+                "address": address,
+                "requirements": ["sharing"],
+                "statement": "Share links expire"
+            }])),
+        )
+        .unwrap_err();
+
+        assert!(error.contains("address"), "{error}");
+        assert!(error.contains("expiry"), "{error}");
+    }
+}
+
+#[test]
+fn explicit_local_address_rejects_several_requirements() {
+    let directory = init_repo();
+    let error = apply(
+        directory.path().to_str().unwrap(),
+        &document(json!([{
+            "key": "expiry",
+            "address": ["lifecycles", "requirement", "sharing", "rule", "expiry"],
+            "requirements": ["sharing", "sessions"],
+            "statement": "Authenticated access expires"
+        }])),
+    )
+    .unwrap_err();
+
+    assert!(error.contains("shared address"), "{error}");
+    assert!(error.contains("lifecycles/rule/expiry"), "{error}");
+}
+
+#[test]
 fn local_to_shared_and_shared_to_local_preserve_the_canonical_id() {
     let directory = init_repo();
     let repo = directory.path().to_str().unwrap();

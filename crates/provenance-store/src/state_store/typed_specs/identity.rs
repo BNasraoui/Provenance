@@ -4,6 +4,7 @@ use provenance_core::{DeclarationAddress, StableId};
 use sha2::{Digest, Sha256};
 
 use super::super::{TypedRequirementInput, TypedRuleInput, TypedSourceInput};
+use super::rule_addresses::{migration_candidates, rule_address};
 
 pub(super) fn source_address(spec: &str, key: &str) -> anyhow::Result<DeclarationAddress> {
     DeclarationAddress::new([spec, "source", key])
@@ -11,26 +12,6 @@ pub(super) fn source_address(spec: &str, key: &str) -> anyhow::Result<Declaratio
 
 pub(super) fn requirement_address(spec: &str, key: &str) -> anyhow::Result<DeclarationAddress> {
     DeclarationAddress::new([spec, "requirement", key])
-}
-
-pub fn rule_address(
-    spec: &str,
-    requirements: &[String],
-    key: &str,
-) -> anyhow::Result<DeclarationAddress> {
-    match requirements {
-        [requirement] => local_rule_address(spec, requirement, key),
-        [] => anyhow::bail!("rule `{key}` must refine at least one requirement"),
-        _ => DeclarationAddress::new([spec, "rule", key]),
-    }
-}
-
-fn local_rule_address(
-    spec: &str,
-    requirement: &str,
-    key: &str,
-) -> anyhow::Result<DeclarationAddress> {
-    DeclarationAddress::new([spec, "requirement", requirement, "rule", key])
 }
 
 pub(super) fn source_identity(input: &TypedSourceInput) -> (&str, Option<&str>) {
@@ -55,7 +36,7 @@ pub(super) fn rule_declaration_ids(
             !declaration.key.trim().is_empty(),
             "rule key must not be empty"
         );
-        let address = rule_address(spec, &declaration.requirements, &declaration.key)?;
+        let address = rule_address(spec, declaration)?;
         anyhow::ensure!(
             !ids.contains_key(&address),
             "distinct rule declarations resolve to address `{}`",
@@ -68,10 +49,9 @@ pub(super) fn rule_declaration_ids(
                 declaration.key
             );
         }
-        let candidates =
-            migration_candidates(spec, &declaration.requirements, &declaration.key, existing)?;
-        let canonical_key = match declaration.requirements.as_slice() {
-            [requirement] => format!("{spec}/{requirement}/{}", declaration.key),
+        let candidates = migration_candidates(spec, declaration, &address, existing)?;
+        let canonical_key = match address.segments() {
+            [_, _, requirement, _, _] => format!("{spec}/{requirement}/{}", declaration.key),
             _ => format!("{spec}/{}", declaration.key),
         };
         let id = resolve_rule_id(
@@ -90,28 +70,6 @@ pub(super) fn rule_declaration_ids(
         ids.insert(address, id);
     }
     Ok(ids)
-}
-
-fn migration_candidates(
-    spec: &str,
-    requirements: &[String],
-    key: &str,
-    existing: &BTreeMap<DeclarationAddress, StableId>,
-) -> anyhow::Result<Vec<StableId>> {
-    let addresses = if requirements.len() == 1 {
-        vec![DeclarationAddress::new([spec, "rule", key])?]
-    } else {
-        requirements
-            .iter()
-            .map(|requirement| local_rule_address(spec, requirement, key))
-            .collect::<anyhow::Result<Vec<_>>>()?
-    };
-    let candidates = addresses
-        .iter()
-        .filter_map(|address| existing.get(address))
-        .map(|id| (id.as_str(), id))
-        .collect::<BTreeMap<_, _>>();
-    Ok(candidates.into_values().cloned().collect())
 }
 
 fn resolve_rule_id(
@@ -336,7 +294,8 @@ pub(super) fn validate_ownership<'a, T: 'a>(
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{declaration_ids, requirement_address, rule_address, rule_declaration_ids};
+    use super::{declaration_ids, requirement_address, rule_declaration_ids};
+    use crate::state_store::typed_specs::rule_address;
     use crate::state_store::TypedRuleInput;
     use provenance_core::StableId;
 
@@ -364,6 +323,7 @@ mod tests {
         let declaration = TypedRuleInput {
             key: "expiry".to_string(),
             id: None,
+            address: None,
             requirement: None,
             requirements: vec!["sharing".to_string()],
             statement: "Share links expire".to_string(),
@@ -385,8 +345,8 @@ mod tests {
             &existing,
         )
         .unwrap();
-        let first_address = rule_address("sharing", &declaration.requirements, "expiry").unwrap();
-        let second_address = rule_address("sessions", &declaration.requirements, "expiry").unwrap();
+        let first_address = rule_address("sharing", &declaration).unwrap();
+        let second_address = rule_address("sessions", &declaration).unwrap();
         assert_ne!(first[&first_address], second[&second_address]);
     }
 
