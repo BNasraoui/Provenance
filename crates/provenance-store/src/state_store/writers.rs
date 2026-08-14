@@ -68,6 +68,7 @@ impl StateStore {
             origin_thread,
             origin_message,
         } = input;
+        super::statement_policy::ensure_statement_is_writable(&statement)?;
         if let Some(domain_id) = &domain_id {
             anyhow::ensure!(
                 self.list_domains(&scope_id)?

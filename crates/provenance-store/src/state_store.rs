@@ -9,6 +9,7 @@ mod proposal_writers;
 pub(crate) mod readers;
 mod rule_writers;
 mod shaping_writers;
+mod statement_policy;
 mod thread_writers;
 pub(super) mod typed_specs;
 mod verification_bindings;
