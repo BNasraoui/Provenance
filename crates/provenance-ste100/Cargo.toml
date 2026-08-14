@@ -1,0 +1,14 @@
+[package]
+name = "provenance-ste100"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+provenance-macros = { path = "../provenance-macros" }
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

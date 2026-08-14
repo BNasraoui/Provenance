@@ -1434,6 +1434,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "provenance-ste100"
+version = "0.1.0"
+dependencies = [
+ "provenance-macros",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "provenance-store"
 version = "0.1.0"
 dependencies = [
