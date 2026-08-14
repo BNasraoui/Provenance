@@ -132,6 +132,7 @@ function compileDocument(
     return {
       key: state.key,
       statement: state.text!,
+      description: state.description,
       sources: state.sources.map((source) => sourceState(source).key).sort(),
     };
   });

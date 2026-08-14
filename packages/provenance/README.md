@@ -15,8 +15,14 @@ import { defineSpec } from "@quality-sh/provenance";
 import { createShareLink } from "./share-links.js";
 
 const provenance = defineSpec("share-links");
+const policy = provenance
+  .source("sharing-policy")
+  .name("Sharing policy")
+  .document("docs/sharing-policy.md");
 const sharing = provenance.requirement("sharing")
-  .statement("Users can securely share documentation");
+  .statement("Users can securely share documentation")
+  .description("Controls for links shared outside the organization")
+  .from(policy);
 export const expiry = sharing.rule("expiry")
   .statement("Share links must expire within 30 days")
   .implementedBy(createShareLink);
@@ -29,6 +35,9 @@ Each fluent call returns a new immutable declaration. `build()` validates and
 finalizes the desired-state document. Construction is synchronous,
 deterministic, and in-memory: importing this module does not write state or
 start a process. The declaration itself is the frozen handle tests import.
+Source `.name(...)` overrides the key-derived canonical display name, and
+Requirement `.description(...)` can replace the canonical description on a
+later apply. Rust remains responsible for reconciling those desired values.
 
 Rules created through a Requirement have a requirement-local declaration
 address, so equal local keys under different Requirements remain distinct. A

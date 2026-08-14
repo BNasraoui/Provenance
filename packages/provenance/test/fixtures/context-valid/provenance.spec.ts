@@ -1,10 +1,11 @@
 import { defineSpec, requirement, rule } from "../../../dist/index.js";
 
 const provenance = defineSpec("lifecycles");
-const policy = provenance.source("policy").document("docs/policy.md");
+const policy = provenance.source("policy").name("Security policy").document("docs/policy.md");
 const sharing = provenance
   .requirement("sharing")
   .statement("Shares expire")
+  .description("Share-link lifecycle requirements")
   .from(policy);
 const sessions = provenance
   .requirement("sessions")
