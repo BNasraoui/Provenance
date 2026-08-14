@@ -4,6 +4,11 @@ use clap::Subcommand;
 
 #[derive(Subcommand)]
 pub enum SdkCommand {
+    /// Check one unfinished Requirement or Rule statement from stdin.
+    CheckStatement {
+        #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
+        format: OutputFormat,
+    },
     /// Report engine compatibility and the resolved project root.
     Info {
         #[arg(long)]

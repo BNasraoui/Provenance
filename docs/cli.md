@@ -17,15 +17,21 @@ Agent-facing commands support JSON output for deterministic parsing.
 
 ## Typed SDK protocol (POC)
 
-The TypeScript package named `provenance` uses four one-shot commands. Apply,
-begin, and complete read one JSON document from stdin; all four write JSON:
+The SDK protocol uses one-shot commands that read or write JSON:
 
 ```sh
+printf '%s' '{"statement":"Install the cover."}' | provenance sdk check-statement --format json
 provenance sdk apply --repo . --scope default --format json < declarations.json
 provenance sdk begin-verification --repo . --scope default --format json < begin.json
 provenance sdk complete-verification --repo . --scope default --format json < complete.json
 provenance sdk verification-runs --repo . --scope default --rule <canonical-rule-id> --format json
 ```
+
+`check-statement` accepts exactly one object with a string `statement` field. It
+does not resolve a repository. It writes the authoritative
+`provenance-ste100::check_descriptive` Report unchanged, including UTF-8 byte
+spans, so a later editor adapter can transport the result without implementing
+ASD-STE100 rules.
 
 `apply` creates missing records and updates records whose `declared_by` matches
 the document. It refuses unowned and foreign-owned collisions before writing,
