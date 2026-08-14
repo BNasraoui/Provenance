@@ -12,14 +12,9 @@ mod statement_report;
 use index::CheckIndex;
 
 pub(super) fn check(repo: &Utf8Path, format: OutputFormat) -> anyhow::Result<()> {
-    validate_repository(repo.to_path_buf())?;
-    output::print(
-        format,
-        &CheckReport {
-            status: "ok",
-            diagnostics: statement_report::changed_statements_from_head(repo)?,
-        },
-    )
+    let store = StateStore::new(ProvenanceLayout::new(repo.to_path_buf()));
+    let report = store.with_repository_publication(|| collect_report_locked(&store, repo))?;
+    output::print(format, &report)
 }
 
 #[derive(serde::Serialize)]
@@ -31,6 +26,14 @@ struct CheckReport {
 pub(super) fn validate_repository(repo: Utf8PathBuf) -> anyhow::Result<()> {
     let store = StateStore::new(ProvenanceLayout::new(repo));
     store.with_repository_publication(|| validate_locked(&store))
+}
+
+fn collect_report_locked(store: &StateStore, repo: &Utf8Path) -> anyhow::Result<CheckReport> {
+    validate_locked(store)?;
+    Ok(CheckReport {
+        status: "ok",
+        diagnostics: statement_report::changed_statements_from_head(store, repo)?,
+    })
 }
 
 fn validate_locked(store: &StateStore) -> anyhow::Result<()> {

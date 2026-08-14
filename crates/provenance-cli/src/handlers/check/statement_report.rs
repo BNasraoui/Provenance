@@ -2,7 +2,6 @@ use camino::Utf8Path;
 use provenance_core::{Requirement, Rule, ScopeId};
 use provenance_macros::rule;
 use provenance_store::{
-    layout::ProvenanceLayout,
     state_store::StateStore,
     statement_analysis::{analyze_changed_statements, StatementDiagnostic},
 };
@@ -10,13 +9,13 @@ use serde::de::DeserializeOwned;
 
 #[rule("rule_ste_manual_changed_statement_report")]
 pub(super) fn changed_statements_from_head(
+    store: &StateStore,
     repo: &Utf8Path,
 ) -> anyhow::Result<Vec<StatementDiagnostic>> {
     if !has_head(repo)? {
         return Ok(Vec::new());
     }
 
-    let store = StateStore::new(ProvenanceLayout::new(repo));
     let manifest = store.manifest()?;
     let mut base_requirements = Vec::new();
     let mut base_rules = Vec::new();

@@ -36,20 +36,23 @@ pub enum ShardFamily {
     Edges,
     /// `.provenance/state/scopes/<scope>/ideation/landings.jsonl`
     IdeationLandings,
+    /// `.provenance/state/scopes/<scope>/requirements/*.jsonl`
     Requirements,
+    /// `.provenance/state/scopes/<scope>/rules/*.jsonl`
     Rules,
-    /// Any other path, including the ordinary per-scope record families
-    /// (`requirements`, `rules`, `sources`, `resolutions`, and the rest) and
-    /// files outside the state directory. Merged records pass unchecked.
+    /// Any other path, including unrecognized per-scope record families such
+    /// as `sources` and `resolutions`, and files outside the state directory.
+    /// Merged records pass unchecked.
     Unrecognized,
 }
 
 impl ShardFamily {
     /// Recognizes the family from the path the merged result will be stored at.
     ///
-    /// Only the last two directory names are read, so an absolute path, a
-    /// repository-relative path, and a path inside a test fixture all resolve
-    /// the same way.
+    /// The recognizers inspect the trailing canonical state layout, including
+    /// the `state/scopes/<scope>` ancestors for scoped families. An absolute
+    /// path, a repository-relative path, and a path inside a test fixture all
+    /// resolve the same way.
     #[must_use]
     pub fn for_shard_path(path: &Utf8Path) -> Self {
         let Some(directory) = path.parent() else {
@@ -84,14 +87,14 @@ impl ShardFamily {
 /// Re-checks merged records against the type their shard holds, naming the
 /// first record that fails.
 ///
-/// Scope, stated plainly: only the edges shard is checked today, and only for
-/// the endpoint table. The per-scope families (requirements, rules, sources,
-/// resolutions, boundaries, topics, questions, services, bindings) still merge
-/// unchecked; giving them the same treatment means recognizing their directory
-/// in [`ShardFamily`] and deserializing each merged record into its own type
-/// before applying that type's write-time checks. Cross-record checks that need
-/// the whole graph - dangling endpoints, scope membership - belong to
-/// `provenance check`, not here: a merge driver sees one file.
+/// Edges are checked against the endpoint table, and ideation landings are
+/// checked for supported nested schema versions. Requirement and Rule shards
+/// are recognized and deserialized here; the merge handler also passes their
+/// ancestor and selected records to [`changed_statement_diagnostics`] before it
+/// writes the result. Other per-scope families remain unrecognized and merge
+/// unchecked. Cross-record checks that need the whole graph - dangling
+/// endpoints, scope membership - belong to `provenance check`, not here: a
+/// merge driver sees one file.
 pub fn validate_merged_records(
     shard_path: &Utf8Path,
     records: &[CanonicalRecord],

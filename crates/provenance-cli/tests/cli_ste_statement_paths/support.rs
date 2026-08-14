@@ -125,6 +125,10 @@ fn collect_files(root: &Path, current: &Path, files: &mut BTreeMap<String, Vec<u
     for entry in entries {
         let path = entry.path();
         if entry.file_type().unwrap().is_dir() {
+            files.insert(
+                format!("{}/", path.strip_prefix(root).unwrap().to_string_lossy()),
+                Vec::new(),
+            );
             collect_files(root, &path, files);
         } else {
             files.insert(

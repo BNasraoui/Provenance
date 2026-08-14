@@ -45,7 +45,13 @@ pub(super) fn handle(
     };
     if let Some(shard_path) = target_path {
         validate_merged_records(shard_path, records)?;
-        ensure_changed_statements_are_clean(shard_path, &base_records, records)?;
+        if let Err(error) = ensure_changed_statements_are_clean(shard_path, &base_records, records)
+        {
+            if matches!(outcome, MergeOutcome::Conflicted { .. }) {
+                output::print(format, &outcome)?;
+            }
+            return Err(error);
+        }
     }
     if let Some(output_path) = output_path {
         provenance_store::jsonl::write_jsonl_atomic(&output_path, records)?;

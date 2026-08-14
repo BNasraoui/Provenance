@@ -124,3 +124,29 @@ fn unchanged_legacy_invalid_record_does_not_block_an_unrelated_clean_merge() {
     assert!(merged.contains("req_legacy"));
     assert!(merged.contains("req_clean"));
 }
+
+#[test]
+#[verifies("rule_ste_merge_changed_statement_gate", examples)]
+fn conflicted_changed_statement_reports_both_contracts_without_touching_output() {
+    let directory = tempfile::tempdir().unwrap();
+    let base = record("req_conflict", "Original statement", "requirement");
+    let ours = record("req_conflict", "Ours; invalid", "requirement");
+    let theirs = record("req_conflict", "Their clean change", "requirement");
+    let sides = Sides::new(directory.path(), &base, &ours, &theirs);
+    std::fs::write(&sides.output, b"sentinel output bytes").unwrap();
+
+    let output = sides.run(REQUIREMENTS_SHARD);
+
+    assert!(!output.status.success());
+    assert_eq!(
+        std::fs::read(&sides.output).unwrap(),
+        b"sentinel output bytes"
+    );
+    let conflict: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(conflict["status"], "conflicted");
+    assert_eq!(conflict["conflicts"][0]["record_id"], "req_conflict");
+    assert_eq!(
+        error_json(&output)["diagnostics"],
+        Value::Array(vec![diagnostic("requirement", "req_conflict", 4)])
+    );
+}

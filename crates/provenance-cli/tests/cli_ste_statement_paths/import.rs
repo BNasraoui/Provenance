@@ -42,6 +42,13 @@ fn candidate(repo: &Path, path: &Path, statement: &str) {
         "statement": statement,
         "status": "active",
         "severity": "high"
+    }, {
+        "schema_version": 1,
+        "scope_id": "default",
+        "id": "rule_added",
+        "statement": statement,
+        "status": "active",
+        "severity": "high"
     }]);
     write_json(path, &value);
 }
@@ -73,6 +80,7 @@ fn apply_and_dry_run_reject_with_identical_diagnostics_and_preserve_all_state_by
         apply_report["diagnostics"],
         Value::Array(vec![
             diagnostic("requirement", "req_changed", 5),
+            diagnostic("rule", "rule_added", 5),
             diagnostic("rule", "rule_changed", 5),
         ])
     );
