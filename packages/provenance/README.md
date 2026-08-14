@@ -64,13 +64,16 @@ This emits one Rule with two relationships. Shared versus local identity is
 chosen by where the Rule is declared, not inferred from JavaScript object
 reuse. Sources linked with `.from(...)` are collected transitively by `build()`.
 
-`implementedBy()` accepts a direct named import or namespace member. The SDK
-reads that expression from the spec source and records the imported module and
-exported symbol; it never inspects the function object, its name, or its body.
-Calls, conditionals, computed members, and local values fail clearly because
-they do not provide one durable source identity. Rust checks that the resolved
-file belongs to the repository and owns the canonical implementation binding.
-Production code does not import Provenance.
+`implementedBy()` accepts an exported function or class through a direct named
+import or a non-computed namespace member. The SDK reads that expression from
+the spec source and records the imported module and exported symbol; the runtime
+value exists only for TypeScript assignability. It never inspects a function or
+class name, body, prototype, or object identity, and it never constructs a class.
+Calls, conditionals, computed members, instance methods, anonymous closures,
+constructed values, and local functions fail clearly because they do not provide
+one durable source identity. Rust checks that the resolved file belongs to the
+repository and owns the canonical implementation binding. Production code does
+not import Provenance.
 
 Moving a local Rule to a shared declaration, or back, preserves its canonical
 ID when Rust finds exactly one owned candidate. If several local Rules could

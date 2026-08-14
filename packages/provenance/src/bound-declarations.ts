@@ -1,6 +1,9 @@
 import { fileURLToPath } from "node:url";
 
-import { captureImplementationReference } from "./implementation-reference.js";
+import {
+  captureImplementationReference,
+  type ImplementationTarget,
+} from "./implementation-reference.js";
 import type {
   ImplementationDeclaration,
   SourceDeclaration,
@@ -162,7 +165,7 @@ export class BoundRule<
     return this.copy({ explicitId: existingId });
   }
 
-  implementedBy(_target: (...args: never[]) => unknown): BoundRule<SpecKey, Key, Owner> {
+  implementedBy(_target: ImplementationTarget): BoundRule<SpecKey, Key, Owner> {
     return this.copy({ implementation: captureImplementationReference([moduleFile]) });
   }
 

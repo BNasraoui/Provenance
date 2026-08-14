@@ -39,6 +39,13 @@ assert.match(contextCrossSpec.stdout + contextCrossSpec.stderr, /TS2345/);
 const implementedByValid = typecheck("implemented-by-valid");
 assert.equal(implementedByValid.status, 0, implementedByValid.stdout + implementedByValid.stderr);
 
+const implementedByClassValid = typecheck("implemented-by-class-valid");
+assert.equal(
+  implementedByClassValid.status,
+  0,
+  implementedByClassValid.stdout + implementedByClassValid.stderr,
+);
+
 const implementedByRemoved = typecheck("implemented-by-removed");
 assert.notEqual(
   implementedByRemoved.status,
@@ -47,6 +54,15 @@ assert.notEqual(
 );
 assert.match(implementedByRemoved.stdout + implementedByRemoved.stderr, /TS2305/);
 assert.match(implementedByRemoved.stdout + implementedByRemoved.stderr, /startWorkflow/);
+
+const implementedByClassRemoved = typecheck("implemented-by-class-removed");
+assert.notEqual(
+  implementedByClassRemoved.status,
+  0,
+  "a removed class implementation export unexpectedly typechecked",
+);
+assert.match(implementedByClassRemoved.stdout + implementedByClassRemoved.stderr, /TS2305/);
+assert.match(implementedByClassRemoved.stdout + implementedByClassRemoved.stderr, /WorkflowRunner/);
 
 const missingKey = typecheck("missing-key");
 assert.notEqual(missingKey.status, 0, "verification without a key unexpectedly typechecked");

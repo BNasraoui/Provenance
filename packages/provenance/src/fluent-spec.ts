@@ -5,7 +5,10 @@ import type {
   SourceDeclaration,
   TypedSpecDocument,
 } from "./protocol.js";
-import { captureImplementationReference } from "./implementation-reference.js";
+import {
+  captureImplementationReference,
+  type ImplementationTarget,
+} from "./implementation-reference.js";
 import { fileURLToPath } from "node:url";
 import {
   registerSpec,
@@ -94,7 +97,7 @@ export class FluentRule<Key extends string = string> {
     return new FluentRule(this.key, this.text, existingId, this.implementation);
   }
 
-  implementedBy(_target: (...args: never[]) => unknown): FluentRule<Key> {
+  implementedBy(_target: ImplementationTarget): FluentRule<Key> {
     const implementation = captureImplementationReference([moduleFile]);
     return new FluentRule(this.key, this.text, this.explicitId, implementation);
   }

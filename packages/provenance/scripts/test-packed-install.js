@@ -75,6 +75,10 @@ const localEngine = join(
 execFileSync(localEngine, ["init", "--path", application, "--scope", "default", "--path-prefix", "."]);
 writeFileSync(join(application, "runtime.mjs"), `
 export function startWorkflow() {}
+export class WorkflowRunner {
+  static constructions = 0;
+  constructor() { WorkflowRunner.constructions += 1; }
+}
 `);
 writeFileSync(join(application, "consumer.ts"), `
 import { defineSpec } from "@quality-sh/provenance";
@@ -110,7 +114,7 @@ execFileSync(process.execPath, [
 ], { cwd: application, stdio: "pipe" });
 writeFileSync(join(application, "verify.mjs"), `
 import { apply, defineSpec, plan } from "@quality-sh/provenance";
-import { startWorkflow } from "./runtime.mjs";
+import { startWorkflow, WorkflowRunner } from "./runtime.mjs";
 const spec = defineSpec("packed-install", ({ requirement }) => {
   const installed = requirement("installed", {
     statement: "The installed SDK invokes its package-supplied engine"
@@ -133,13 +137,26 @@ const provenance = defineSpec("packed-implemented-by");
 const typedStart = provenance.rule("typed-start")
   .statement("Installed typed specs resolve imported production implementations")
   .implementedBy(startWorkflow);
+const typedRunner = provenance.rule("typed-runner")
+  .statement("Installed typed specs resolve imported production classes")
+  .implementedBy(WorkflowRunner);
 const typedRequirement = provenance.requirement("typed-implementation")
   .statement("Installed typed specs retain implementation links")
-  .rules(typedStart);
+  .rules(typedStart, typedRunner);
 const typedSpec = provenance.build(typedRequirement);
 const typedResult = await apply(typedSpec);
-if (typedResult.implementation_bindings?.[0]?.file !== "runtime.mjs") {
+if (typedResult.implementation_bindings?.some(
+  ({ file, symbol }) => file === "runtime.mjs" && symbol === "startWorkflow"
+) !== true) {
   throw new Error("implementedBy did not survive the packed install");
+}
+if (typedResult.implementation_bindings?.some(
+  ({ file, symbol }) => file === "runtime.mjs" && symbol === "WorkflowRunner"
+) !== true) {
+  throw new Error("class implementedBy did not survive the packed install");
+}
+if (WorkflowRunner.constructions !== 0) {
+  throw new Error("implementedBy constructed the packed class target");
 }
 await typedStart.verify("packed-direct-rule", () => undefined, {
   file: "verify.mjs",
