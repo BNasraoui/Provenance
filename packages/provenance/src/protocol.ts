@@ -25,6 +25,12 @@ export interface RuleDeclaration {
   statement: string;
   name?: string;
   description?: string;
+  implementation?: ImplementationDeclaration;
+}
+
+export interface ImplementationDeclaration {
+  file: string;
+  symbol: string;
 }
 
 export interface TypedSpecDocument {
@@ -61,11 +67,21 @@ export interface ApplyResult {
   updated: number;
   unchanged: number;
   resources: ReconciledResource[];
+  implementation_bindings?: ImplementationBinding[];
+}
+
+export interface ImplementationBinding {
+  id: string;
+  rule_id: string;
+  declared_by: string;
+  file: string;
+  symbol: string;
 }
 
 export interface ImplementationSite {
   file: string;
-  line: number;
+  line?: number;
+  symbol?: string;
 }
 
 export interface VerificationSite {

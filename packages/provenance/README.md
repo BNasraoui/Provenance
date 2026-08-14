@@ -12,9 +12,11 @@ Define a spec without touching the engine:
 
 ```ts
 import { defineSpec, requirement, rule } from "@quality-sh/provenance";
+import { createShareLink } from "./share-links.js";
 
 const expiry = rule("expiry")
-  .statement("Share links must expire within 30 days");
+  .statement("Share links must expire within 30 days")
+  .implementedBy(createShareLink);
 const sharing = requirement("sharing")
   .statement("Users can securely share documentation")
   .rules(expiry);
@@ -33,6 +35,14 @@ deterministic, and in-memory: importing this module does not write state or
 start a process. Reusing one Rule declaration under several Requirements emits
 one Rule with several relationships. Equal local Rule keys remain distinct when
 their declaration objects and parent Requirements differ.
+
+`implementedBy()` accepts a direct named import or namespace member. The SDK
+reads that expression from the spec source and records the imported module and
+exported symbol; it never inspects the function object, its name, or its body.
+Calls, conditionals, computed members, and local values fail clearly because
+they do not provide one durable source identity. Rust checks that the resolved
+file belongs to the repository and owns the canonical implementation binding.
+Production code does not import Provenance.
 
 Moving a local Rule to a shared declaration, or back, preserves its canonical
 ID when Rust finds exactly one owned candidate. If several local Rules could

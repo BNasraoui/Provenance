@@ -14,6 +14,7 @@ import {
   rule,
   source,
 } from "./index.js";
+import { startWorkflow } from "./implementation-target.test-helper.js";
 
 const engine = fileURLToPath(
   new URL("../../../target/debug/provenance", import.meta.url),
@@ -81,7 +82,8 @@ test("fluent declarations and their finalized handles are immutable", () => {
   const policy = sourceDraft.document("docs/policy.md");
   const ruleDraft = rule("expiry");
   const identified = ruleDraft.id("rule_expiry");
-  const expiry = identified.statement("Share links expire within 30 days");
+  const statedRule = identified.statement("Share links expire within 30 days");
+  const expiry = statedRule.implementedBy(startWorkflow);
   const requirementDraft = requirement("sharing");
   const stated = requirementDraft.statement("Users can securely share documentation");
   const sourced = stated.from(policy);
@@ -94,7 +96,10 @@ test("fluent declarations and their finalized handles are immutable", () => {
   assert.notEqual(sourceDraft, policy);
   assert.notEqual(ruleDraft, expiry);
   assert.notEqual(ruleDraft, identified);
+  assert.notEqual(statedRule, expiry);
   assert.equal(expiry.explicitId, "rule_expiry");
+  assert.equal(expiry.implementation?.symbol, "startWorkflow");
+  assert.match(expiry.implementation?.file ?? "", /implementation-target\.test-helper\.js$/);
   assert.notEqual(requirementDraft, stated);
   assert.notEqual(stated, sourced);
   assert.notEqual(sourced, sharing);

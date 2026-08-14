@@ -34,7 +34,8 @@ pub(super) fn handle(command: SdkCommand) -> anyhow::Result<()> {
             format,
         } => {
             let repo = resolve_repository(repo)?;
-            let input = read_stdin_json::<TypedSpecInput>()?;
+            let mut input = read_stdin_json::<TypedSpecInput>()?;
+            normalize_implementation_context(&repo, &mut input)?;
             let result = plan::typed_spec(&repo, &ScopeId::new(scope)?, input)?;
             output::print(format, &result)?;
         }
@@ -44,7 +45,8 @@ pub(super) fn handle(command: SdkCommand) -> anyhow::Result<()> {
             format,
         } => {
             let repo = resolve_repository(repo)?;
-            let input = read_stdin_json::<TypedSpecInput>()?;
+            let mut input = read_stdin_json::<TypedSpecInput>()?;
+            normalize_implementation_context(&repo, &mut input)?;
             let scope_id = ScopeId::new(scope)?;
             let result =
                 StateStore::new(ProvenanceLayout::new(repo)).apply_typed_spec(&scope_id, input)?;
@@ -171,6 +173,44 @@ fn normalize_verification_context(
     );
     input.commit = clean_file_commit(repo, &relative);
     input.file = Some(relative);
+    Ok(())
+}
+
+fn normalize_implementation_context(
+    repo: &camino::Utf8Path,
+    input: &mut TypedSpecInput,
+) -> anyhow::Result<()> {
+    for rule in &mut input.rules {
+        let Some(implementation) = &mut rule.implementation else {
+            continue;
+        };
+        let candidate = if implementation.file.is_absolute() {
+            implementation.file.clone()
+        } else {
+            repo.join(&implementation.file)
+        };
+        let canonical = std::fs::canonicalize(&candidate).map_err(|error| {
+            anyhow::anyhow!(
+                "implementation target `{}` does not exist or cannot be resolved: {error}",
+                implementation.file
+            )
+        })?;
+        let canonical = camino::Utf8PathBuf::from_path_buf(canonical).map_err(|path| {
+            anyhow::anyhow!("implementation target is not UTF-8: {}", path.display())
+        })?;
+        anyhow::ensure!(
+            canonical.is_file(),
+            "implementation target `{canonical}` is not a file"
+        );
+        implementation.file = canonical
+            .strip_prefix(repo)
+            .map_err(|_| {
+                anyhow::anyhow!(
+                    "implementation target `{canonical}` is outside repository `{repo}`"
+                )
+            })?
+            .to_path_buf();
+    }
     Ok(())
 }
 

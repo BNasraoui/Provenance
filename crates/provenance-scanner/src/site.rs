@@ -52,6 +52,13 @@ impl<'a> SourceSite<'a> {
             Self::Attribute(site) => site.verification,
         }
     }
+
+    pub fn item_name(self) -> Option<&'a str> {
+        match self {
+            Self::Annotation(site) => site.function_name.as_deref(),
+            Self::Attribute(site) => site.item_name.as_deref(),
+        }
+    }
 }
 
 /// Every source relationship in scan order, with native and portable syntax

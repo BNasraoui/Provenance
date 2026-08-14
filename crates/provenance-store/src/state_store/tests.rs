@@ -65,6 +65,7 @@ mod asserted_evidence;
 mod edges;
 mod ideation;
 mod ideation_duplicates;
+mod implementation_bindings;
 mod legacy_coexistence;
 mod manifest;
 mod proposal_surfaces;

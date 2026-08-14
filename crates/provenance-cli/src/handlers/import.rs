@@ -47,6 +47,7 @@ pub(super) fn import_scope(
         + exported.questions.len()
         + exported.resolutions.len()
         + exported.rules.len()
+        + exported.implementation_bindings.len()
         + exported.edges.len()
         + exported.threads.len()
         + exported.messages.len()

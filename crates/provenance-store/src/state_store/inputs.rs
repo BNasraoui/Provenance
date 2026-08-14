@@ -191,6 +191,15 @@ pub struct TypedRuleInput {
     pub name: Option<String>,
     #[serde(default)]
     pub description: Option<String>,
+    #[serde(default)]
+    pub implementation: Option<TypedImplementationInput>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TypedImplementationInput {
+    pub file: camino::Utf8PathBuf,
+    pub symbol: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -236,6 +245,8 @@ pub struct TypedSpecResult {
     pub updated: usize,
     pub unchanged: usize,
     pub resources: Vec<ReconciledResource>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub implementation_bindings: Vec<provenance_core::ImplementationBinding>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -264,6 +275,14 @@ pub struct MaterializeVerificationBindingInput {
     pub declared_by: String,
     pub file: camino::Utf8PathBuf,
     pub symbol: Option<String>,
+}
+
+pub struct MaterializeImplementationBindingInput {
+    pub scope_id: ScopeId,
+    pub rule_id: StableId,
+    pub declared_by: String,
+    pub file: camino::Utf8PathBuf,
+    pub symbol: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

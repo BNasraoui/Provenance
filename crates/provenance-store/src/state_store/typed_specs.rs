@@ -13,9 +13,10 @@ use super::{
     TypedSpecInput, TypedSpecResult,
 };
 use crate::shards;
+pub(super) use identity::rule_address;
 use identity::{
     declaration_ids, normalize_rule_relationships, owned_declaration_ids, requirement_identity,
-    rule_address, rule_declaration_ids, source_identity, validate_ownership, validate_references,
+    rule_declaration_ids, source_identity, validate_ownership, validate_references,
 };
 use reconcile::{reconcile_requirements, reconcile_rules, reconcile_sources};
 
@@ -26,6 +27,12 @@ struct CurrentTypedState {
     source_addresses: BTreeMap<DeclarationAddress, StableId>,
     requirement_addresses: BTreeMap<DeclarationAddress, StableId>,
     rule_addresses: BTreeMap<DeclarationAddress, StableId>,
+}
+
+struct DesiredTypedIds {
+    sources: BTreeMap<String, StableId>,
+    requirements: BTreeMap<String, StableId>,
+    rules: BTreeMap<DeclarationAddress, StableId>,
 }
 
 #[derive(Clone, Copy)]
@@ -42,6 +49,56 @@ struct DesiredTypedGraph<'a> {
 enum ReconcileMode {
     Plan,
     Apply,
+}
+
+fn desired_typed_ids(
+    input: &TypedSpecInput,
+    current: &CurrentTypedState,
+) -> anyhow::Result<DesiredTypedIds> {
+    let sources = declaration_ids(
+        "source",
+        &input.declared_by,
+        &input.spec,
+        input.sources.iter().map(source_identity),
+        &current.source_addresses,
+    )?;
+    let requirements = declaration_ids(
+        "requirement",
+        &input.declared_by,
+        &input.spec,
+        input.requirements.iter().map(requirement_identity),
+        &current.requirement_addresses,
+    )?;
+    let rules = rule_declaration_ids(
+        &input.declared_by,
+        &input.spec,
+        &input.rules,
+        &current.rule_addresses,
+    )?;
+    validate_references(&input.requirements, &input.rules, &sources, &requirements)?;
+    validate_ownership(
+        &input.declared_by,
+        &current.sources,
+        sources.values(),
+        |record| (&record.id, record.declared_by.as_deref()),
+    )?;
+    validate_ownership(
+        &input.declared_by,
+        &current.requirements,
+        requirements.values(),
+        |record| (&record.id, record.declared_by.as_deref()),
+    )?;
+    validate_ownership(
+        &input.declared_by,
+        &current.rules,
+        rules.values(),
+        |record| (&record.id, record.declared_by.as_deref()),
+    )?;
+    Ok(DesiredTypedIds {
+        sources,
+        requirements,
+        rules,
+    })
 }
 
 impl StateStore {
@@ -79,52 +136,7 @@ impl StateStore {
         mode: ReconcileMode,
     ) -> anyhow::Result<TypedSpecResult> {
         let (input, current) = self.prepare_typed_spec(scope_id, input)?;
-
-        let source_ids = declaration_ids(
-            "source",
-            &input.declared_by,
-            &input.spec,
-            input.sources.iter().map(source_identity),
-            &current.source_addresses,
-        )?;
-        let requirement_ids = declaration_ids(
-            "requirement",
-            &input.declared_by,
-            &input.spec,
-            input.requirements.iter().map(requirement_identity),
-            &current.requirement_addresses,
-        )?;
-        let rule_ids = rule_declaration_ids(
-            &input.declared_by,
-            &input.spec,
-            &input.rules,
-            &current.rule_addresses,
-        )?;
-        validate_references(
-            &input.requirements,
-            &input.rules,
-            &source_ids,
-            &requirement_ids,
-        )?;
-
-        validate_ownership(
-            &input.declared_by,
-            &current.sources,
-            source_ids.values(),
-            |record| (&record.id, record.declared_by.as_deref()),
-        )?;
-        validate_ownership(
-            &input.declared_by,
-            &current.requirements,
-            requirement_ids.values(),
-            |record| (&record.id, record.declared_by.as_deref()),
-        )?;
-        validate_ownership(
-            &input.declared_by,
-            &current.rules,
-            rule_ids.values(),
-            |record| (&record.id, record.declared_by.as_deref()),
-        )?;
+        let ids = desired_typed_ids(&input, &current)?;
 
         let requirement_relationships = input.requirements.clone();
         let rule_relationships = input.rules.clone();
@@ -135,7 +147,7 @@ impl StateStore {
             scope_id,
             &input.declared_by,
             input.sources,
-            &source_ids,
+            &ids.sources,
         )?;
         let (requirements, requirement_resources) = reconcile_requirements(
             current.requirements,
@@ -143,8 +155,8 @@ impl StateStore {
             scope_id,
             &input.declared_by,
             input.requirements,
-            &requirement_ids,
-            &source_ids,
+            &ids.requirements,
+            &ids.sources,
         )?;
         let (rules, rule_resources) = reconcile_rules(
             current.rules,
@@ -152,7 +164,16 @@ impl StateStore {
             scope_id,
             &input.declared_by,
             input.rules,
-            &rule_ids,
+            &ids.rules,
+        )?;
+        let implementation_bindings = super::implementation_bindings::reconcile(
+            self,
+            scope_id,
+            &input.declared_by,
+            &spec,
+            &rule_relationships,
+            &ids.rules,
+            false,
         )?;
 
         if matches!(mode, ReconcileMode::Apply) {
@@ -163,15 +184,24 @@ impl StateStore {
                 requirements,
             )?;
             replace_records(self, &shards::rules_path(&self.layout, scope_id), rules)?;
+            super::implementation_bindings::reconcile(
+                self,
+                scope_id,
+                &input.declared_by,
+                &spec,
+                &rule_relationships,
+                &ids.rules,
+                true,
+            )?;
             self.write_typed_spec_edges(
                 scope_id,
                 DesiredTypedGraph {
                     spec: &spec,
                     requirements: &requirement_relationships,
                     rules: &rule_relationships,
-                    source_ids: &source_ids,
-                    requirement_ids: &requirement_ids,
-                    rule_ids: &rule_ids,
+                    source_ids: &ids.sources,
+                    requirement_ids: &ids.requirements,
+                    rule_ids: &ids.rules,
                 },
             )?;
         }
@@ -181,6 +211,7 @@ impl StateStore {
             source_resources,
             requirement_resources,
             rule_resources,
+            implementation_bindings,
         ))
     }
 
@@ -302,6 +333,7 @@ fn spec_result(
     source_resources: Vec<ReconciledResource>,
     requirement_resources: Vec<ReconciledResource>,
     rule_resources: Vec<ReconciledResource>,
+    implementation_bindings: Vec<provenance_core::ImplementationBinding>,
 ) -> TypedSpecResult {
     let mut resources = source_resources;
     resources.extend(requirement_resources);
@@ -312,6 +344,7 @@ fn spec_result(
         updated: count_state(&resources, ReconcileState::Updated),
         unchanged: count_state(&resources, ReconcileState::Unchanged),
         resources,
+        implementation_bindings,
     }
 }
 

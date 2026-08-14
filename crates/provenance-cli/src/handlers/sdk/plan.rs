@@ -1,11 +1,12 @@
 use camino::{Utf8Path, Utf8PathBuf};
-use provenance_core::{EdgeType, NodeType, StableId, VerificationBinding};
+use provenance_core::{EdgeType, ImplementationBinding, NodeType, StableId, VerificationBinding};
 use provenance_scanner::{source_sites, SourceSiteRole};
 use provenance_store::{
     layout::ProvenanceLayout,
     state_store::{ReconcileState, StateStore, TypedResourceKind, TypedSpecInput, TypedSpecResult},
 };
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 #[derive(Serialize)]
 pub(super) struct TypedSpecPlan {
@@ -24,7 +25,10 @@ struct AffectedRule {
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Serialize)]
 struct ImplementationSite {
     file: Utf8PathBuf,
-    line: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    line: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    symbol: Option<String>,
 }
 
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Serialize)]
@@ -53,9 +57,17 @@ pub(super) fn typed_spec(
     changed_rules.dedup();
     let scans = provenance_scanner::scan_path(repo)?;
     let bindings = store.list_verification_bindings(scope)?;
+    let implementations = store
+        .list_implementation_bindings(scope)?
+        .into_iter()
+        .chain(reconciliation.implementation_bindings.iter().cloned())
+        .map(|binding| (binding.id.as_str().to_string(), binding))
+        .collect::<BTreeMap<_, _>>()
+        .into_values()
+        .collect::<Vec<_>>();
     let affected_rules = changed_rules
         .into_iter()
-        .map(|id| affected_rule(repo, id, &scans, &bindings))
+        .map(|id| affected_rule(repo, id, &scans, &bindings, &implementations))
         .collect();
     Ok(TypedSpecPlan {
         reconciliation,
@@ -71,7 +83,7 @@ fn affected_rule_ids(
     let changed = reconciliation
         .resources
         .iter()
-        .filter(|resource| resource.state == ReconcileState::Updated)
+        .filter(|resource| resource.state != ReconcileState::Unchanged)
         .collect::<Vec<_>>();
     let changed_requirements = changed
         .iter()
@@ -83,6 +95,15 @@ fn affected_rule_ids(
         .filter(|resource| resource.kind == TypedResourceKind::Rule)
         .map(|resource| resource.id.clone())
         .collect::<Vec<_>>();
+    let existing_implementations = store.list_implementation_bindings(scope)?;
+    for binding in &reconciliation.implementation_bindings {
+        if !existing_implementations
+            .iter()
+            .any(|existing| existing == binding)
+        {
+            push_unique(&mut rules, binding.rule_id.clone());
+        }
+    }
 
     for edge in store.list_edges()?.into_iter().filter(|edge| {
         edge.scope_id == *scope
@@ -118,14 +139,26 @@ fn affected_rule(
     id: StableId,
     scans: &[provenance_scanner::FileScan],
     bindings: &[VerificationBinding],
+    typed_implementations: &[ImplementationBinding],
 ) -> AffectedRule {
     let mut implementations = source_sites(scans)
         .filter(|site| site.rule_id() == id.as_str())
         .filter(|site| site.role() == SourceSiteRole::Implementation)
         .map(|site| ImplementationSite {
             file: relative(repo, site.file_path()),
-            line: site.line(),
+            line: Some(site.line()),
+            symbol: None,
         })
+        .chain(
+            typed_implementations
+                .iter()
+                .filter(|binding| binding.rule_id == id)
+                .map(|binding| ImplementationSite {
+                    file: binding.file.clone(),
+                    line: None,
+                    symbol: Some(binding.symbol.clone()),
+                }),
+        )
         .collect::<Vec<_>>();
     implementations.sort();
     implementations.dedup();

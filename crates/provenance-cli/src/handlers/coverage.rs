@@ -44,7 +44,11 @@ fn coverage_scan_against(
         // Derived absence needs the whole repository to be honest.
         warnings.extend(retired::stale_rule_warnings(&validation.rules, &scans));
         if scan_covers_repository(repo, path) {
-            warnings.extend(unimplemented_rule_warnings(&validation.rules, &scans));
+            warnings.extend(unimplemented_rule_warnings(
+                &validation.rules,
+                &scans,
+                &validation.implementations,
+            ));
             warnings.extend(unverified_rule_warnings(
                 &validation.rules,
                 &scans,
@@ -156,15 +160,21 @@ fn parse_warnings(
 fn unimplemented_rule_warnings(
     rules: &[provenance_core::Rule],
     scans: &[provenance_scanner::FileScan],
+    typed_bindings: &[provenance_core::ImplementationBinding],
 ) -> Vec<provenance_core::coverage::ValidationWarning> {
-    let scanned_implementations = provenance_scanner::source_sites(scans)
+    let mut implementations = provenance_scanner::source_sites(scans)
         .filter(|site| site.role() == provenance_scanner::SourceSiteRole::Implementation)
         .map(|site| site.rule_id().to_string())
         .collect::<BTreeSet<_>>();
+    implementations.extend(
+        typed_bindings
+            .iter()
+            .map(|binding| binding.rule_id.as_str().to_string()),
+    );
     rules
         .iter()
         .filter(|rule| rule.status == provenance_core::RuleStatus::Active)
-        .filter(|rule| !scanned_implementations.contains(rule.id.as_str()))
+        .filter(|rule| !implementations.contains(rule.id.as_str()))
         .map(|rule| provenance_core::coverage::ValidationWarning {
             rule_id: rule.id.as_str().to_string(),
             file_path: None,

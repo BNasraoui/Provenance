@@ -377,10 +377,15 @@ fn function_name(language: Language, line: &str) -> Option<String> {
         Language::Go => "func ",
         Language::JavaScript | Language::TypeScript | Language::Java => " ",
     };
-    if matches!(language, Language::JavaScript | Language::TypeScript)
-        && line.starts_with("function ")
-    {
-        return token_after(line, "function ");
+    if matches!(language, Language::JavaScript | Language::TypeScript) {
+        if line.contains("function ") {
+            return token_after(line, "function ");
+        }
+        for declaration in ["const ", "let ", "var "] {
+            if line.contains(declaration) {
+                return token_after(line, declaration);
+            }
+        }
     }
     if language == Language::Go && line.starts_with("func (") {
         let after_receiver = line.split_once(") ")?.1;
@@ -413,6 +418,20 @@ mod tests {
         assert_eq!(
             scan.annotations[0].function_name.as_deref(),
             Some("pays_overtime")
+        );
+    }
+
+    #[test]
+    fn typescript_comment_annotation_uses_the_exported_function_name() {
+        let scan = scan_file(
+            Utf8Path::new("runtime.ts"),
+            Language::TypeScript,
+            "// @provenance rule: rule_start\nexport function startWorkflow(): void {}",
+        );
+
+        assert_eq!(
+            scan.annotations[0].function_name.as_deref(),
+            Some("startWorkflow")
         );
     }
 

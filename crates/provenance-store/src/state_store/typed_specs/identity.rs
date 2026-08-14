@@ -13,7 +13,7 @@ pub(super) fn requirement_address(spec: &str, key: &str) -> anyhow::Result<Decla
     DeclarationAddress::new([spec, "requirement", key])
 }
 
-pub(super) fn rule_address(
+pub fn rule_address(
     spec: &str,
     requirements: &[String],
     key: &str,
@@ -369,6 +369,7 @@ mod tests {
             statement: "Share links expire".to_string(),
             name: None,
             description: None,
+            implementation: None,
         };
         let first = rule_declaration_ids(
             "spec://typescript",

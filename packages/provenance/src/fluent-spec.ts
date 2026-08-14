@@ -1,9 +1,12 @@
 import type {
+  ImplementationDeclaration,
   RequirementDeclaration,
   RuleDeclaration,
   SourceDeclaration,
   TypedSpecDocument,
 } from "./protocol.js";
+import { captureImplementationReference } from "./implementation-reference.js";
+import { fileURLToPath } from "node:url";
 import {
   registerSpec,
   type RequirementHandle,
@@ -19,6 +22,8 @@ type RuleVerifier = (
   callback: () => unknown | Promise<unknown>,
   options?: VerifyOptions,
 ) => Promise<void>;
+
+const moduleFile = fileURLToPath(import.meta.url);
 
 export class FluentSource<Key extends string = string> {
   readonly key: Key;
@@ -46,23 +51,35 @@ export class FluentRule<Key extends string = string> {
   readonly key: Key;
   readonly text?: string;
   readonly explicitId?: string;
+  readonly implementation?: ImplementationDeclaration;
 
-  constructor(key: Key, text?: string, explicitId?: string) {
+  constructor(
+    key: Key,
+    text?: string,
+    explicitId?: string,
+    implementation?: ImplementationDeclaration,
+  ) {
     requireKey("rule", key);
     this.key = key;
     this.text = text;
     this.explicitId = explicitId;
+    this.implementation = implementation;
     Object.freeze(this);
   }
 
   statement(text: string): FluentRule<Key> {
     requireText("rule statement", text);
-    return new FluentRule(this.key, text, this.explicitId);
+    return new FluentRule(this.key, text, this.explicitId, this.implementation);
   }
 
   id(existingId: string): FluentRule<Key> {
     requireText("rule id", existingId);
-    return new FluentRule(this.key, this.text, existingId);
+    return new FluentRule(this.key, this.text, existingId, this.implementation);
+  }
+
+  implementedBy(_target: (...args: never[]) => unknown): FluentRule<Key> {
+    const implementation = captureImplementationReference([moduleFile]);
+    return new FluentRule(this.key, this.text, this.explicitId, implementation);
   }
 }
 
@@ -333,6 +350,7 @@ function document(
     id: rule.explicitId,
     requirements: parents.map(({ key }) => key).sort(),
     statement: rule.text!,
+    implementation: rule.implementation,
   }));
   sourceRecords.sort(byKey);
   requirementRecords.sort(byKey);

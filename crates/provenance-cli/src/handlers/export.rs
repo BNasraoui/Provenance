@@ -22,6 +22,8 @@ pub struct ScopeExport {
     pub rules: Vec<provenance_core::Rule>,
     #[serde(default)]
     pub verification_bindings: Vec<provenance_core::VerificationBinding>,
+    #[serde(default)]
+    pub implementation_bindings: Vec<provenance_core::ImplementationBinding>,
     pub edges: Vec<provenance_core::Edge>,
     pub threads: Vec<provenance_core::Thread>,
     pub messages: Vec<provenance_core::Message>,
@@ -53,6 +55,7 @@ pub fn export_scope(repo: Utf8PathBuf, scope: String) -> anyhow::Result<ScopeExp
             resolutions: store.list_resolutions(&scope_id)?,
             rules: store.list_rules(&scope_id)?,
             verification_bindings: store.list_verification_bindings(&scope_id)?,
+            implementation_bindings: store.list_implementation_bindings(&scope_id)?,
             edges: store
                 .list_edges()?
                 .into_iter()

@@ -3,8 +3,8 @@ use crate::handlers::check::references::{
     check_artifact_links, check_origin_references, check_scoped_reference,
 };
 use provenance_core::{
-    Boundary, Domain, Question, Requirement, Resolution, Rule, ScopeId, Source, Topic,
-    VerificationBinding,
+    Boundary, Domain, ImplementationBinding, Question, Requirement, Resolution, Rule, ScopeId,
+    Source, Topic, VerificationBinding,
 };
 use provenance_store::state_store::StateStore;
 
@@ -18,6 +18,7 @@ pub(super) struct Records {
     resolutions: Vec<Resolution>,
     rules: Vec<Rule>,
     verification_bindings: Vec<VerificationBinding>,
+    implementation_bindings: Vec<ImplementationBinding>,
 }
 
 impl Records {
@@ -32,6 +33,7 @@ impl Records {
             resolutions: store.list_resolutions(scope_id)?,
             rules: store.list_rules(scope_id)?,
             verification_bindings: store.list_verification_bindings(scope_id)?,
+            implementation_bindings: store.list_implementation_bindings(scope_id)?,
         })
     }
 
@@ -63,6 +65,7 @@ impl Records {
         check_records!(&self.resolutions, "resolution");
         check_records!(&self.rules, "rule");
         check_records!(&self.verification_bindings, "verification binding");
+        check_records!(&self.implementation_bindings, "implementation binding");
     }
 
     pub(super) fn add_to(&self, index: &mut CheckIndex) {
@@ -102,6 +105,57 @@ impl Records {
         validate_shaping(self, index, scope_id, dangling);
         validate_decisions(self, index, scope_id, dangling);
         validate_verification_bindings(self, index, scope_id, dangling);
+        validate_implementation_bindings(self, index, scope_id, dangling);
+    }
+}
+
+fn validate_implementation_bindings(
+    records: &Records,
+    index: &CheckIndex,
+    scope_id: &ScopeId,
+    dangling: &mut Vec<String>,
+) {
+    let mut ids = std::collections::BTreeSet::new();
+    let mut rules = std::collections::BTreeSet::new();
+    for binding in &records.implementation_bindings {
+        let owner = format!("implementation binding {}", binding.id.as_str());
+        if !ids.insert(binding.id.as_str()) {
+            dangling.push(format!(
+                "duplicate implementation binding id {}",
+                binding.id.as_str()
+            ));
+        }
+        if !rules.insert(binding.rule_id.as_str()) {
+            dangling.push(format!(
+                "more than one canonical primary implementation binding for rule {}",
+                binding.rule_id.as_str()
+            ));
+        }
+        if binding.declared_by.trim().is_empty() {
+            dangling.push(format!("{owner} declared_by must not be empty"));
+        }
+        if binding.file.as_str().is_empty() {
+            dangling.push(format!("{owner} file must not be empty"));
+        } else if binding.file.is_absolute()
+            || binding
+                .file
+                .components()
+                .any(|component| matches!(component, camino::Utf8Component::ParentDir))
+        {
+            dangling.push(format!("{owner} file must be repository-relative"));
+        }
+        if binding.symbol.trim().is_empty() {
+            dangling.push(format!("{owner} symbol must not be empty"));
+        }
+        check_scoped_reference(
+            index,
+            dangling,
+            scope_id,
+            &owner,
+            "rule_id",
+            "rule",
+            &binding.rule_id,
+        );
     }
 }
 

@@ -64,8 +64,12 @@ const localEngine = join(
   binaryName,
 );
 execFileSync(localEngine, ["init", "--path", application, "--scope", "default", "--path-prefix", "."]);
+writeFileSync(join(application, "runtime.mjs"), `
+export function startWorkflow() {}
+`);
 writeFileSync(join(application, "verify.mjs"), `
-import { apply, defineSpec, plan } from "@quality-sh/provenance";
+import { apply, defineSpec, plan, requirement, rule } from "@quality-sh/provenance";
+import { startWorkflow } from "./runtime.mjs";
 const spec = defineSpec("packed-install", ({ requirement }) => {
   const installed = requirement("installed", {
     statement: "The installed SDK invokes its package-supplied engine"
@@ -83,6 +87,20 @@ await spec.handles.invocation.verify("packed-install", () => undefined, {
   file: "verify.mjs",
   symbol: "packedInstall"
 });
+
+const typedStart = rule("typed-start")
+  .statement("Installed typed specs resolve imported production implementations")
+  .implementedBy(startWorkflow);
+const typedRequirement = requirement("typed-implementation")
+  .statement("Installed typed specs retain implementation links")
+  .rules(typedStart);
+const typedSpec = defineSpec("packed-implemented-by")
+  .requirements(typedRequirement)
+  .build();
+const typedResult = await apply(typedSpec);
+if (typedResult.implementation_bindings?.[0]?.file !== "runtime.mjs") {
+  throw new Error("implementedBy did not survive the packed install");
+}
 `);
 
 const { PROVENANCE_BIN: _removed, ...environment } = process.env;

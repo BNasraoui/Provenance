@@ -136,3 +136,16 @@ pub struct VerificationBinding {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub symbol: Option<String>,
 }
+
+/// One canonical primary implementation relationship from an exported
+/// production symbol to a Rule.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImplementationBinding {
+    pub schema_version: SchemaVersion,
+    pub scope_id: ScopeId,
+    pub id: StableId,
+    pub rule_id: StableId,
+    pub declared_by: String,
+    pub file: Utf8PathBuf,
+    pub symbol: String,
+}
