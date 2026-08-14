@@ -123,6 +123,7 @@ const registry = new DeclarationRegistry();
 const moduleFile = fileURLToPath(import.meta.url);
 const specModuleFile = fileURLToPath(new URL("./spec.js", import.meta.url));
 const boundSpecModuleFile = fileURLToPath(new URL("./bound-spec.js", import.meta.url));
+const fluentSpecModuleFile = fileURLToPath(new URL("./fluent-spec.js", import.meta.url));
 const boundDeclarationsModuleFile = fileURLToPath(
   new URL("./bound-declarations.js", import.meta.url),
 );
@@ -369,6 +370,7 @@ function callerLocation(): { file: string } | undefined {
         file !== moduleFile &&
         file !== specModuleFile &&
         file !== boundSpecModuleFile &&
+        file !== fluentSpecModuleFile &&
         file !== boundDeclarationsModuleFile
       ) {
         return { file };

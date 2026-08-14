@@ -11,31 +11,37 @@ npx provenance init --path . --scope default --path-prefix .
 Define a spec without touching the engine:
 
 ```ts
-import { defineSpec } from "@quality-sh/provenance";
+import { defineSpec, requirement, rule, source } from "@quality-sh/provenance";
 import { createShareLink } from "./share-links.js";
 
-const provenance = defineSpec("share-links");
-const policy = provenance
-  .source("sharing-policy")
-  .name("Sharing policy")
-  .document("docs/sharing-policy.md");
-const sharing = provenance.requirement("sharing")
-  .statement("Users can securely share documentation")
-  .description("Controls for links shared outside the organization")
-  .from(policy);
-export const expiry = sharing.rule("expiry")
-  .statement("Share links must expire within 30 days")
-  .implementedBy(createShareLink);
-export const spec = provenance.build(sharing.rules(expiry));
-
-export default spec;
+export const shareLinks = defineSpec("share-links")
+  .requirements(
+    requirement("sharing")
+      .statement("Users can securely share documentation")
+      .description("Controls for links shared outside the organization")
+      .from(
+        source("sharing-policy")
+          .name("Sharing policy")
+          .document("docs/sharing-policy.md"),
+      )
+      .rules(
+        rule("expiry")
+          .statement("Share links must expire within 30 days")
+          .implementedBy(createShareLink),
+      ),
+  )
+  .build();
 ```
 
 Each fluent call returns a new immutable declaration. `build()` validates and
-finalizes the desired-state document. Construction is synchronous,
+finalizes the desired-state document and collects Sources linked with
+`Requirement.from(...)`; they do not need to be repeated in `.sources(...)`.
+Construction is synchronous,
 deterministic, and in-memory: importing this module does not write state or
-start a process. The declaration itself is the frozen handle tests import.
-Source `.name(...)` overrides the key-derived canonical display name, and
+start a process. `build()` returns the frozen semantic handles tests import.
+The built spec exposes typed Requirement and Rule paths directly while keeping
+the same objects under `.handles` for compatibility. Source `.name(...)`
+overrides the key-derived canonical display name, and
 Requirement `.description(...)` can replace the canonical description on a
 later apply. Rust remains responsible for reconciling those desired values.
 
@@ -132,9 +138,9 @@ reconciliation path.
 A test imports the actual rule handle and runs its callback in Node:
 
 ```ts
-import { expiry } from "./provenance.spec.js";
+import { shareLinks } from "./provenance.spec.js";
 
-await expiry.verify("share-link-expiry", async () => {
+await shareLinks.requirements.sharing.rules.expiry.verify("share-link-expiry", async () => {
   // Exercise ordinary production code with the test runner of your choice.
 });
 ```
@@ -163,11 +169,11 @@ variables override the defaults:
 `configure()` provides the same settings in code. The SDK still uses one short
 process per command; it does not start a daemon.
 
-The original top-level fluent call chains, object-options declarations, and
+Spec-scoped declaration factories, object-options declarations, and the
 callback form of `defineSpec()` remain available as compatibility surfaces. The
 older object-options API uses a process-local registry and `verify()` applies
-pending declarations automatically. New code should prefer spec-bound
-declarations plus explicit `apply(spec)` so imports stay free of hidden
+pending declarations automatically. New code should prefer the nested fluent
+form above plus explicit `apply(spec)` so imports stay free of hidden
 persistence.
 
 See `examples/typescript-sdk/` for package-name consumption through a local npm

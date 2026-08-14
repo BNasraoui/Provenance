@@ -5,6 +5,7 @@ import type {
   FluentSpec,
 } from "./fluent-spec.js";
 import type { SpecHandle, VerifyOptions } from "./spec.js";
+import type { ImplementationTarget } from "./implementation-reference.js";
 
 /** An immutable Source declaration tied to one spec authoring context. */
 export interface SourceDeclaration<in out SpecKey extends string, out Key extends string> {
@@ -22,9 +23,7 @@ export interface RuleDeclaration<
   readonly key: Key;
   statement(text: string): RuleDeclaration<SpecKey, Key, RequirementKey>;
   id(existingId: string): RuleDeclaration<SpecKey, Key, RequirementKey>;
-  implementedBy(
-    target: (...args: never[]) => unknown,
-  ): RuleDeclaration<SpecKey, Key, RequirementKey>;
+  implementedBy(target: ImplementationTarget): RuleDeclaration<SpecKey, Key, RequirementKey>;
   verify(
     key: string,
     callback: () => unknown | Promise<unknown>,
@@ -66,7 +65,13 @@ export interface SpecAuthoring<in out SpecKey extends string> {
   sources<const Added extends readonly FluentSource[]>(
     ...sources: Added
   ): FluentSpec<Added, readonly []>;
-  requirements<const Added extends readonly FluentRequirement<string, readonly FluentRule[]>[]>(
+  requirements<
+    const Added extends readonly FluentRequirement<
+      string,
+      readonly FluentRule[],
+      readonly FluentSource[]
+    >[],
+  >(
     ...requirements: Added
   ): FluentSpec<readonly [], Added>;
 }

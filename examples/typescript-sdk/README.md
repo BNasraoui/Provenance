@@ -1,8 +1,9 @@
 # TypeScript SDK fixture
 
 This small app keeps production code unaware of Provenance. The spec declares
-traceability with `@quality-sh/provenance`; the test imports the typed `expiry`
-handle and verifies ordinary production code.
+traceability with `@quality-sh/provenance`; the test follows the built spec's
+typed `requirements.sharing.rules.expiry` path and verifies ordinary production
+code. Sources linked by `Requirement.from(...)` are collected by `build()`.
 
 From this directory, with the Rust CLI built:
 
