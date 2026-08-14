@@ -114,6 +114,40 @@ fn direct_materialization_requires_a_nonempty_owner() {
 }
 
 #[test]
+fn direct_materialization_rejects_platform_specific_path_separators() {
+    let (_directory, store, scope) = seeded_requirement_store();
+    store
+        .create_rule(CreateRuleInput {
+            scope_id: scope.clone(),
+            id: StableId::new("rule_start").unwrap(),
+            name: None,
+            description: None,
+            requirement_id: None,
+            resolution_id: None,
+            statement: "Workflows start".into(),
+            status: RuleStatus::Active,
+            severity: RuleSeverity::Medium,
+            source_document: None,
+            source_section: None,
+            origin_thread: None,
+            origin_message: None,
+        })
+        .unwrap();
+
+    let error = store
+        .materialize_implementation_binding(MaterializeImplementationBindingInput {
+            scope_id: scope,
+            rule_id: StableId::new("rule_start").unwrap(),
+            declared_by: "spec://typescript".into(),
+            file: r"src\runtime.ts".into(),
+            symbol: "start".into(),
+        })
+        .unwrap_err();
+
+    assert!(error.to_string().contains("repository-relative"));
+}
+
+#[test]
 fn another_owner_cannot_replace_the_primary_binding() {
     let (directory, store, scope) = seeded_requirement_store();
     std::fs::write(

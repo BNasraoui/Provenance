@@ -126,10 +126,16 @@ fn validate_target(file: &camino::Utf8Path, symbol: &str) -> anyhow::Result<()> 
         "implementation file must not be empty"
     );
     anyhow::ensure!(
-        !file.is_absolute()
-            && !file
-                .components()
-                .any(|part| matches!(part, camino::Utf8Component::ParentDir)),
+        !file.as_str().contains('\\')
+            && !file.is_absolute()
+            && !file.components().any(|part| {
+                matches!(
+                    part,
+                    camino::Utf8Component::ParentDir
+                        | camino::Utf8Component::RootDir
+                        | camino::Utf8Component::Prefix(_)
+                )
+            }),
         "implementation file must be a repository-relative path"
     );
     anyhow::ensure!(

@@ -52,7 +52,7 @@ fn binding(id: &str, rule_id: &str) -> Value {
     })
 }
 
-fn write_bindings(repo: &Path, bindings: &[Value]) {
+fn write_implementation_bindings(repo: &Path, bindings: &[Value]) {
     let path = repo.join(".provenance/state/scopes/default/implementations/binding.jsonl");
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     let mut contents = String::new();
@@ -90,7 +90,7 @@ fn scope_export_import_round_trip_preserves_implementation_bindings() {
     let reexported_path = directory.path().join("round-trip.json");
     init(&source);
     create_rule(&source, "rule_start");
-    write_bindings(
+    write_implementation_bindings(
         &source,
         &[binding("implementation_binding_start", "rule_start")],
     );
@@ -218,6 +218,15 @@ fn check_rejects_invalid_implementation_binding_rows() {
             "implementation binding implementation_binding_start file must be repository-relative",
         ),
         (
+            "platform-specific separator",
+            vec![{
+                let mut record = binding("implementation_binding_start", "rule_start");
+                record["file"] = json!(r"src\runtime.ts");
+                record
+            }],
+            "implementation binding implementation_binding_start file must be repository-relative",
+        ),
+        (
             "empty owner",
             vec![{
                 let mut record = binding("implementation_binding_start", "rule_start");
@@ -232,11 +241,46 @@ fn check_rejects_invalid_implementation_binding_rows() {
         let directory = tempfile::tempdir().unwrap();
         init(directory.path());
         create_rule(directory.path(), "rule_start");
-        write_bindings(directory.path(), &records);
+        write_implementation_bindings(directory.path(), &records);
         provenance()
             .args(["check", "--repo", directory.path().to_str().unwrap()])
             .assert()
             .failure()
             .stderr(contains(expected));
     }
+}
+
+#[test]
+fn check_rejects_a_platform_specific_verification_path() {
+    let directory = tempfile::tempdir().unwrap();
+    init(directory.path());
+    create_rule(directory.path(), "rule_start");
+    let path = directory
+        .path()
+        .join(".provenance/state/scopes/default/verifications/binding.jsonl");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let record = json!({
+        "schema_version": 1,
+        "scope_id": "default",
+        "id": "verification_binding_start",
+        "rule_id": "rule_start",
+        "key": "start",
+        "method": "examples",
+        "declared_by": "test://typescript",
+        "file": r"tests\runtime.test.ts",
+        "symbol": "workflow starts"
+    });
+    std::fs::write(
+        path,
+        format!("{}\n", serde_json::to_string(&record).unwrap()),
+    )
+    .unwrap();
+
+    provenance()
+        .args(["check", "--repo", directory.path().to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(contains(
+            "verification binding verification_binding_start file must be repository-relative",
+        ));
 }

@@ -20,9 +20,14 @@ const version = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8
 const temporary = mkdtempSync(join(tmpdir(), "provenance-packed-install-"));
 process.once("exit", () => rmSync(temporary, { recursive: true, force: true }));
 const stagedEngine = join(temporary, "engine-package");
+const isolatedCache = join(temporary, "npm-cache");
 const rustTarget = targetFor(process.platform, process.arch);
 const binaryName = process.platform === "win32" ? "provenance.exe" : "provenance";
 const builtBinary = join(repositoryRoot, "target", "debug", binaryName);
+const typescriptRoot = join(packageRoot, "node_modules", "typescript");
+const typescriptManifest = JSON.parse(
+  readFileSync(join(typescriptRoot, "package.json"), "utf8"),
+);
 
 execFileSync(process.execPath, [
   join(packageRoot, "scripts", "package-engine.js"),
@@ -33,12 +38,13 @@ execFileSync(process.execPath, [
 ]);
 npm(["pack", stagedEngine, "--pack-destination", temporary]);
 npm(["pack", packageRoot, "--pack-destination", temporary]);
+npm(["pack", typescriptRoot, "--pack-destination", temporary]);
 
 const archives = readdirSync(temporary).filter((name) => name.endsWith(".tgz"));
 const mainArchive = archiveNamed(archives, `quality-sh-provenance-${version}.tgz`);
-const engineArchive = archives.find((name) => name !== mainArchive);
-assert.ok(engineArchive, "platform engine archive was not created");
 const engineManifest = JSON.parse(readFileSync(join(stagedEngine, "package.json"), "utf8"));
+const engineArchive = archiveNamed(archives, archiveName(engineManifest));
+const typescriptArchive = archiveNamed(archives, archiveName(typescriptManifest));
 
 const application = join(temporary, "application");
 mkdirSync(application);
@@ -47,11 +53,14 @@ npm(
   [
     "install",
     "--offline",
+    "--cache",
+    isolatedCache,
     "--ignore-scripts",
     "--no-audit",
     "--no-fund",
     join(temporary, mainArchive),
     join(temporary, engineArchive),
+    join(temporary, typescriptArchive),
   ],
   { cwd: application },
 );
@@ -149,6 +158,10 @@ function archiveNamed(archives, expected) {
   const archive = archives.find((name) => name === expected);
   assert.ok(archive, `missing ${expected}; found ${archives.join(", ")}`);
   return archive;
+}
+
+function archiveName(manifest) {
+  return `${manifest.name.replace(/^@/, "").replace("/", "-")}-${manifest.version}.tgz`;
 }
 
 function npm(args, options = {}) {

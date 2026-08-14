@@ -136,12 +136,7 @@ fn validate_implementation_bindings(
         }
         if binding.file.as_str().is_empty() {
             dangling.push(format!("{owner} file must not be empty"));
-        } else if binding.file.is_absolute()
-            || binding
-                .file
-                .components()
-                .any(|component| matches!(component, camino::Utf8Component::ParentDir))
-        {
+        } else if !is_portable_repository_path(&binding.file) {
             dangling.push(format!("{owner} file must be repository-relative"));
         }
         if binding.symbol.trim().is_empty() {
@@ -167,22 +162,41 @@ fn validate_verification_bindings(
 ) {
     let mut ids = std::collections::BTreeSet::new();
     for binding in &records.verification_bindings {
+        let owner = format!("verification binding {}", binding.id.as_str());
         if !ids.insert(binding.id.as_str()) {
             dangling.push(format!(
                 "duplicate verification binding id {}",
                 binding.id.as_str()
             ));
         }
+        if binding.file.as_str().is_empty() {
+            dangling.push(format!("{owner} file must not be empty"));
+        } else if !is_portable_repository_path(&binding.file) {
+            dangling.push(format!("{owner} file must be repository-relative"));
+        }
         check_scoped_reference(
             index,
             dangling,
             scope_id,
-            &format!("verification binding {}", binding.id.as_str()),
+            &owner,
             "rule_id",
             "rule",
             &binding.rule_id,
         );
     }
+}
+
+fn is_portable_repository_path(path: &camino::Utf8Path) -> bool {
+    !path.as_str().contains('\\')
+        && !path.is_absolute()
+        && !path.components().any(|component| {
+            matches!(
+                component,
+                camino::Utf8Component::ParentDir
+                    | camino::Utf8Component::RootDir
+                    | camino::Utf8Component::Prefix(_)
+            )
+        })
 }
 
 fn validate_sources_and_requirements(

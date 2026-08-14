@@ -23,11 +23,16 @@ impl StateStore {
         );
         anyhow::ensure!(!input.file.as_str().is_empty(), "file must not be empty");
         anyhow::ensure!(
-            !input.file.is_absolute()
-                && !input
-                    .file
-                    .components()
-                    .any(|part| matches!(part, camino::Utf8Component::ParentDir)),
+            !input.file.as_str().contains('\\')
+                && !input.file.is_absolute()
+                && !input.file.components().any(|part| {
+                    matches!(
+                        part,
+                        camino::Utf8Component::ParentDir
+                            | camino::Utf8Component::RootDir
+                            | camino::Utf8Component::Prefix(_)
+                    )
+                }),
             "file must be a repository-relative path"
         );
         if let Some(symbol) = &input.symbol {

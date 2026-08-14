@@ -171,6 +171,7 @@ fn normalize_verification_context(
             .any(|part| matches!(part, camino::Utf8Component::ParentDir)),
         "verification file must not leave the repository"
     );
+    let relative = portable_repository_path(&relative)?;
     input.commit = clean_file_commit(repo, &relative);
     input.file = Some(relative);
     Ok(())
@@ -202,7 +203,7 @@ fn normalize_implementation_context(
             canonical.is_file(),
             "implementation target `{canonical}` is not a file"
         );
-        implementation.file = canonical
+        let relative = canonical
             .strip_prefix(repo)
             .map_err(|_| {
                 anyhow::anyhow!(
@@ -210,8 +211,26 @@ fn normalize_implementation_context(
                 )
             })?
             .to_path_buf();
+        implementation.file = portable_repository_path(&relative)?;
     }
     Ok(())
+}
+
+fn portable_repository_path(path: &camino::Utf8Path) -> anyhow::Result<camino::Utf8PathBuf> {
+    let mut segments = Vec::new();
+    for component in path.components() {
+        match component {
+            camino::Utf8Component::Normal(segment) => segments.push(segment),
+            camino::Utf8Component::CurDir => {}
+            camino::Utf8Component::ParentDir
+            | camino::Utf8Component::RootDir
+            | camino::Utf8Component::Prefix(_) => {
+                anyhow::bail!("path must be repository-relative")
+            }
+        }
+    }
+    anyhow::ensure!(!segments.is_empty(), "path must name a repository file");
+    Ok(segments.join("/").into())
 }
 
 fn clean_file_commit(repo: &camino::Utf8Path, file: &camino::Utf8Path) -> Option<String> {
