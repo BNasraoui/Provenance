@@ -11,7 +11,15 @@ fn scanned_relative_paths(root: &Utf8Path) -> Vec<String> {
     scan_path(root)
         .unwrap()
         .into_iter()
-        .map(|scan| scan.file_path.strip_prefix(root).unwrap().to_string())
+        .map(|scan| {
+            scan.file_path
+                .strip_prefix(root)
+                .unwrap()
+                .components()
+                .map(|component| component.as_str())
+                .collect::<Vec<_>>()
+                .join("/")
+        })
         .collect()
 }
 
