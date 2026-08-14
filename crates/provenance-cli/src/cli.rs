@@ -11,7 +11,6 @@ pub use ideation::{IdeationArtifactKind, SchemaCommand};
 use crate::output::OutputFormat;
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};
-use serde::Serialize;
 
 #[derive(Parser)]
 #[command(name = "provenance", version)]
@@ -270,9 +269,4 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
         format: OutputFormat,
     },
-}
-
-#[derive(Serialize)]
-pub struct Status<'a> {
-    pub status: &'a str,
 }

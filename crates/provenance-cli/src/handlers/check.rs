@@ -1,6 +1,5 @@
-use crate::cli::Status;
 use crate::output::{self, OutputFormat};
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use provenance_store::{layout::ProvenanceLayout, state_store::StateStore};
 use std::collections::BTreeSet;
 
@@ -8,12 +7,25 @@ mod edges;
 mod index;
 mod references;
 mod scope;
+mod statement_report;
 
 use index::CheckIndex;
 
-pub(super) fn check(repo: Utf8PathBuf, format: OutputFormat) -> anyhow::Result<()> {
-    validate_repository(repo)?;
-    output::print(format, &Status { status: "ok" })
+pub(super) fn check(repo: &Utf8Path, format: OutputFormat) -> anyhow::Result<()> {
+    validate_repository(repo.to_path_buf())?;
+    output::print(
+        format,
+        &CheckReport {
+            status: "ok",
+            diagnostics: statement_report::changed_statements_from_head(repo)?,
+        },
+    )
+}
+
+#[derive(serde::Serialize)]
+struct CheckReport {
+    status: &'static str,
+    diagnostics: Vec<provenance_store::statement_analysis::StatementDiagnostic>,
 }
 
 pub(super) fn validate_repository(repo: Utf8PathBuf) -> anyhow::Result<()> {

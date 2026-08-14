@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub mod validation;
 
-pub use validation::{validate_merged_records, ShardFamily};
+pub use validation::{changed_statement_diagnostics, validate_merged_records, ShardFamily};
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]

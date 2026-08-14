@@ -16,11 +16,12 @@
 
 use anyhow::Context;
 use camino::Utf8Path;
-use provenance_core::{edge_validation::validate_edge_endpoint, Edge};
+use provenance_core::{edge_validation::validate_edge_endpoint, Edge, Requirement, Rule};
 use serde_json::Value;
 
 use super::CanonicalRecord;
 use crate::state_store::readers::ensure_supported_ideation_landing_versions;
+use crate::statement_analysis::{analyze_changed_statements, StatementDiagnostic};
 
 /// The record type a shard holds, read off the repository path of the file
 /// being merged.
@@ -35,6 +36,8 @@ pub enum ShardFamily {
     Edges,
     /// `.provenance/state/scopes/<scope>/ideation/landings.jsonl`
     IdeationLandings,
+    Requirements,
+    Rules,
     /// Any other path, including the ordinary per-scope record families
     /// (`requirements`, `rules`, `sources`, `resolutions`, and the rest) and
     /// files outside the state directory. Merged records pass unchecked.
@@ -55,6 +58,10 @@ impl ShardFamily {
         let in_state = directory.parent().and_then(Utf8Path::file_name) == Some("state");
         if in_state && directory.file_name() == Some("edges") {
             Self::Edges
+        } else if is_scoped_family(path, "requirements") {
+            Self::Requirements
+        } else if is_scoped_family(path, "rules") {
+            Self::Rules
         } else if path.file_name() == Some("landings.jsonl")
             && directory.file_name() == Some("ideation")
             && directory
@@ -97,8 +104,74 @@ pub fn validate_merged_records(
             }
             Ok(())
         }
+        ShardFamily::Requirements => validate_typed_records::<Requirement>(records, "requirement"),
+        ShardFamily::Rules => validate_typed_records::<Rule>(records, "rule"),
         ShardFamily::Unrecognized => Ok(()),
     }
+}
+
+pub fn changed_statement_diagnostics(
+    shard_path: &Utf8Path,
+    base: &[CanonicalRecord],
+    candidate: &[CanonicalRecord],
+) -> anyhow::Result<Vec<StatementDiagnostic>> {
+    match ShardFamily::for_shard_path(shard_path) {
+        ShardFamily::Requirements => Ok(analyze_changed_statements(
+            &deserialize_records(base, "requirement")?,
+            &[],
+            &deserialize_records(candidate, "requirement")?,
+            &[],
+        )),
+        ShardFamily::Rules => Ok(analyze_changed_statements(
+            &[],
+            &deserialize_records(base, "rule")?,
+            &[],
+            &deserialize_records(candidate, "rule")?,
+        )),
+        _ => Ok(Vec::new()),
+    }
+}
+
+fn is_scoped_family(path: &Utf8Path, family: &str) -> bool {
+    let Some(family_dir) = path
+        .parent()
+        .filter(|path| path.file_name() == Some(family))
+    else {
+        return false;
+    };
+    family_dir
+        .parent()
+        .and_then(Utf8Path::parent)
+        .is_some_and(|path| path.file_name() == Some("scopes"))
+        && family_dir
+            .parent()
+            .and_then(Utf8Path::parent)
+            .and_then(Utf8Path::parent)
+            .is_some_and(|path| path.file_name() == Some("state"))
+}
+
+fn validate_typed_records<T: serde::de::DeserializeOwned>(
+    records: &[CanonicalRecord],
+    kind: &str,
+) -> anyhow::Result<()> {
+    deserialize_records::<T>(records, kind).map(|_| ())
+}
+
+fn deserialize_records<T: serde::de::DeserializeOwned>(
+    records: &[CanonicalRecord],
+    kind: &str,
+) -> anyhow::Result<Vec<T>> {
+    records
+        .iter()
+        .map(|record| {
+            let named = record
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or("<record with no id>");
+            serde_json::from_value(record.clone())
+                .with_context(|| format!("merged record {named} is not a {kind} record"))
+        })
+        .collect()
 }
 
 fn validate_merged_edges(records: &[CanonicalRecord]) -> anyhow::Result<()> {
@@ -152,11 +225,7 @@ mod tests {
 
     #[test]
     fn leaves_unrecognized_paths_unchecked() {
-        for path in [
-            ".provenance/state/scopes/default/requirements/req.jsonl",
-            "edges/edges-00.jsonl",
-            "notes.jsonl",
-        ] {
+        for path in ["edges/edges-00.jsonl", "notes.jsonl"] {
             assert_eq!(
                 ShardFamily::for_shard_path(Utf8Path::new(path)),
                 ShardFamily::Unrecognized,
@@ -170,6 +239,22 @@ mod tests {
             &[edge("edge_bad", "references", "rule", "requirement")],
         )
         .unwrap();
+    }
+
+    #[test]
+    fn recognizes_statement_shards_by_their_scoped_logical_paths() {
+        assert_eq!(
+            ShardFamily::for_shard_path(Utf8Path::new(
+                ".provenance/state/scopes/default/requirements/req.jsonl"
+            )),
+            ShardFamily::Requirements
+        );
+        assert_eq!(
+            ShardFamily::for_shard_path(Utf8Path::new(
+                "/repo/.provenance/state/scopes/default/rules/rule.jsonl"
+            )),
+            ShardFamily::Rules
+        );
     }
 
     #[test]
