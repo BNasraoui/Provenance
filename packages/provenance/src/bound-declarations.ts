@@ -24,6 +24,7 @@ export interface SourceState {
   readonly context: AuthoringContext;
   readonly lineage: object;
   readonly key: string;
+  readonly name?: string;
   readonly declaration?: SourceDeclaration;
 }
 
@@ -32,6 +33,7 @@ export interface RequirementState {
   readonly lineage: object;
   readonly key: string;
   readonly text?: string;
+  readonly description?: string;
   readonly sources: readonly object[];
   readonly rules: readonly object[];
 }
@@ -86,10 +88,23 @@ export class BoundSource<SpecKey extends string, Key extends string> {
       ...state,
       declaration: Object.freeze({
         key: state.key,
-        name: state.key,
+        name: state.name ?? state.key,
         kind: "document",
         reference,
       }),
+    });
+  }
+
+  name(name: string): BoundSource<SpecKey, Key> {
+    requireText("source name", name);
+    const state = sourceState(this);
+    return new BoundSource({
+      ...state,
+      name,
+      declaration:
+        state.declaration === undefined
+          ? undefined
+          : Object.freeze({ ...state.declaration, name }),
     });
   }
 }
@@ -199,6 +214,11 @@ export class BoundRequirement<SpecKey extends string, Key extends string> {
   statement(text: string): BoundRequirement<SpecKey, Key> {
     requireText("requirement statement", text);
     return this.copy({ text });
+  }
+
+  description(description: string): BoundRequirement<SpecKey, Key> {
+    requireText("requirement description", description);
+    return this.copy({ description });
   }
 
   from(...sources: readonly BoundSource<SpecKey, string>[]): BoundRequirement<SpecKey, Key> {

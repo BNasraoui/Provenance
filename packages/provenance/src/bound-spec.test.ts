@@ -86,9 +86,15 @@ test("a spec-bound Rule is its own immutable verification handle", async () => {
   const recorder = recordingEngine();
   configure({ engine: recorder.engine, owner: "spec://typescript/bound" });
   const provenance = defineSpec("share-links");
+  const policy = provenance
+    .source("policy")
+    .name("Sharing policy")
+    .document("docs/policy.md");
   const sharing = provenance
     .requirement("sharing")
-    .statement("Users can securely share documentation");
+    .statement("Users can securely share documentation")
+    .description("Controls for shared documentation")
+    .from(policy);
   const expiry = sharing
     .rule("expiry")
     .statement("Share links expire within 30 days");
@@ -145,6 +151,45 @@ test("a spec-scoped Rule materializes once for several Requirements", async () =
     edges.filter(({ edge_type, to_id }) => edge_type === "produces" && to_id === rules[0]?.id)
       .length,
     2,
+  );
+});
+
+test("source names and Requirement descriptions are immutable canonical metadata", async () => {
+  const repo = repository();
+  configure({ engine, repository: repo, owner: "spec://typescript/bound-metadata" });
+  const provenance = defineSpec("metadata");
+  const sourceDraft = provenance.source("policy").document("docs/policy.md");
+  const namedSource = sourceDraft.name("Security policy");
+  const requirementBase = provenance
+    .requirement("sharing")
+    .statement("Users can securely share documentation");
+  const requirementDraft = requirementBase
+    .from(sourceDraft)
+    .description("The first canonical description");
+  const revisedRequirement = requirementBase
+    .from(namedSource)
+    .description("The revised canonical description");
+
+  await apply(provenance.build(requirementDraft));
+  const result = await apply(provenance.build(revisedRequirement));
+
+  assert.notEqual(sourceDraft, namedSource);
+  assert.notEqual(requirementDraft, revisedRequirement);
+  assert.equal(Object.isFrozen(namedSource), true);
+  assert.equal(Object.isFrozen(revisedRequirement), true);
+  assert.deepEqual(
+    result.resources.find(({ kind }) => kind === "source")?.changes,
+    [{ field: "name", before: "policy", after: "Security policy" }],
+  );
+  assert.deepEqual(
+    result.resources.find(({ kind }) => kind === "requirement")?.changes,
+    [
+      {
+        field: "description",
+        before: "The first canonical description",
+        after: "The revised canonical description",
+      },
+    ],
   );
 });
 

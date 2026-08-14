@@ -80,8 +80,13 @@ writeFileSync(join(application, "consumer.ts"), `
 import { defineSpec } from "@quality-sh/provenance";
 
 const provenance = defineSpec("packed-typescript-consumer");
+const guide = provenance.source("guide")
+  .name("Packed SDK guide")
+  .document("README.md");
 const installed = provenance.requirement("installed")
-  .statement("The packed SDK exposes spec-bound TypeScript declarations");
+  .statement("The packed SDK exposes spec-bound TypeScript declarations")
+  .description("Exercises emitted fluent metadata types")
+  .from(guide);
 export const invocation = installed.rule("invocation")
   .statement("A direct Rule handle remains typed across module boundaries");
 export const spec = provenance.build(installed.rules(invocation));

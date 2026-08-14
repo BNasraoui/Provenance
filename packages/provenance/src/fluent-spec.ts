@@ -24,26 +24,43 @@ type RuleVerifier = (
 ) => Promise<void>;
 
 const moduleFile = fileURLToPath(import.meta.url);
+const sourceNames = new WeakMap<object, string>();
+const requirementDescriptions = new WeakMap<object, string>();
 
 export class FluentSource<Key extends string = string> {
   readonly key: Key;
   readonly declaration?: SourceDeclaration;
 
-  constructor(key: Key, declaration?: SourceDeclaration) {
+  constructor(key: Key, declaration?: SourceDeclaration, displayName?: string) {
     requireKey("source", key);
     this.key = key;
     this.declaration = declaration === undefined ? undefined : Object.freeze({ ...declaration });
+    if (displayName !== undefined) sourceNames.set(this, displayName);
     Object.freeze(this);
   }
 
   document(reference: string): FluentSource<Key> {
     requireText("document reference", reference);
-    return new FluentSource(this.key, {
-      key: this.key,
-      name: this.key,
-      kind: "document",
-      reference,
-    });
+    const displayName = sourceNames.get(this);
+    return new FluentSource(
+      this.key,
+      {
+        key: this.key,
+        name: displayName ?? this.key,
+        kind: "document",
+        reference,
+      },
+      displayName,
+    );
+  }
+
+  name(name: string): FluentSource<Key> {
+    requireText("source name", name);
+    return new FluentSource(
+      this.key,
+      this.declaration === undefined ? undefined : { ...this.declaration, name },
+      name,
+    );
   }
 }
 
@@ -97,12 +114,14 @@ export class FluentRequirement<
     text?: string,
     sources: readonly FluentSource[] = [],
     rules: Rules = [] as unknown as Rules,
+    description?: string,
   ) {
     requireKey("requirement", key);
     this.key = key;
     this.text = text;
     this.sourceDeclarations = Object.freeze([...sources]);
     this.ruleDeclarations = Object.freeze([...rules]) as unknown as Rules;
+    if (description !== undefined) requirementDescriptions.set(this, description);
     Object.freeze(this);
   }
 
@@ -113,6 +132,18 @@ export class FluentRequirement<
       text,
       this.sourceDeclarations,
       this.ruleDeclarations,
+      requirementDescriptions.get(this),
+    );
+  }
+
+  description(description: string): FluentRequirement<Key, Rules> {
+    requireText("requirement description", description);
+    return new FluentRequirement(
+      this.key,
+      this.text,
+      this.sourceDeclarations,
+      this.ruleDeclarations,
+      description,
     );
   }
 
@@ -122,6 +153,7 @@ export class FluentRequirement<
       this.text,
       appendByIdentity(this.sourceDeclarations, sources),
       this.ruleDeclarations,
+      requirementDescriptions.get(this),
     );
   }
 
@@ -133,6 +165,7 @@ export class FluentRequirement<
       this.text,
       this.sourceDeclarations,
       appendByIdentity(this.ruleDeclarations, rules) as unknown as readonly [...Rules, ...Added],
+      requirementDescriptions.get(this),
     );
   }
 }
@@ -343,6 +376,7 @@ function document(
   const requirementRecords = requirements.map<RequirementDeclaration>((requirement) => ({
     key: requirement.key,
     statement: requirement.text!,
+    description: requirementDescriptions.get(requirement),
     sources: requirement.sourceDeclarations.map(({ key }) => key).sort(),
   }));
   const ruleRecords = [...memberships].map<RuleDeclaration>(([rule, parents]) => ({

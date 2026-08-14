@@ -119,6 +119,60 @@ test("fluent declarations and their finalized handles are immutable", () => {
   assert.deepEqual(recorder.requests(), []);
 });
 
+test("top-level fluent declarations author source names and Requirement descriptions", async () => {
+  const recorder = recordingEngine();
+  configure({ engine: recorder.engine, owner: "spec://typescript/fluent-metadata" });
+  const policyDraft = source("policy");
+  const policyDocument = policyDraft.document("docs/policy.md");
+  const namedPolicy = policyDocument.name("Security policy");
+  const requirementDraft = requirement("sharing")
+    .description("Covers externally shared documentation");
+  const statedRequirement = requirementDraft
+    .statement("Users can securely share documentation");
+  const expiry = rule("expiry").statement("Shared links expire");
+  const sharing = statedRequirement.from(namedPolicy).rules(expiry);
+  const spec = defineSpec("fluent-metadata")
+    .sources(namedPolicy)
+    .requirements(sharing)
+    .build();
+
+  assert.notEqual(policyDraft, namedPolicy);
+  assert.notEqual(requirementDraft, sharing);
+  assert.deepEqual(recorder.requests(), []);
+
+  await apply(spec);
+
+  const request = recorder.requests().find(({ command }) => command === "apply");
+  assert.deepEqual(request?.input, {
+    schema_version: 1,
+    spec: "fluent-metadata",
+    declared_by: "spec://typescript/fluent-metadata",
+    sources: [
+      {
+        key: "policy",
+        name: "Security policy",
+        kind: "document",
+        reference: "docs/policy.md",
+      },
+    ],
+    requirements: [
+      {
+        key: "sharing",
+        statement: "Users can securely share documentation",
+        description: "Covers externally shared documentation",
+        sources: ["policy"],
+      },
+    ],
+    rules: [
+      {
+        key: "expiry",
+        requirements: ["sharing"],
+        statement: "Shared links expire",
+      },
+    ],
+  });
+});
+
 test("one shared Rule materializes once and refines both Requirements", async () => {
   const repo = repository();
   configure({ engine, repository: repo, owner: "spec://typescript/shared" });
