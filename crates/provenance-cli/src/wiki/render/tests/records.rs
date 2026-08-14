@@ -79,7 +79,7 @@ fn rule_page_links_the_implementation_and_lists_verification_sites() {
 #[test]
 fn rule_page_presents_absent_implementation_as_an_ordinary_state() {
     let mut page = rule_fixture();
-    page.implementation = None;
+    page.implementations.clear();
     page.verifications.clear();
 
     let html = render_rule("default", &page);
@@ -95,7 +95,7 @@ fn rule_page_presents_absent_implementation_as_an_ordinary_state() {
 fn rule_page_built_without_a_scan_claims_nothing_about_bindings() {
     let mut page = rule_fixture();
     page.code_scan = None;
-    page.implementation = None;
+    page.implementations.clear();
     page.verifications.clear();
 
     let html = render_rule("default", &page);
@@ -105,6 +105,21 @@ fn rule_page_built_without_a_scan_claims_nothing_about_bindings() {
     assert!(!html.contains("Not verified"));
     assert!(!html.contains(">Implementation</h2>"));
     assert!(!html.contains(">Verification</h2>"));
+}
+
+#[test]
+fn rule_page_built_without_a_scan_renders_a_canonical_implementation() {
+    let mut page = rule_fixture();
+    page.code_scan = None;
+    page.verifications.clear();
+
+    let html = render_rule("default", &page);
+
+    assert!(html.contains(">Implementation</h2>"), "{html}");
+    assert!(html.contains("suppress_zero_claim_items"), "{html}");
+    assert!(html.contains("src/UseCase.php:153"), "{html}");
+    assert!(html.contains("No code scan was supplied"), "{html}");
+    assert!(!html.contains("No implementation bound"), "{html}");
 }
 
 #[test]

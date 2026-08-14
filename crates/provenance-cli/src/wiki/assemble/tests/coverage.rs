@@ -1,11 +1,15 @@
-use super::super::{build_corpus_with_coverage, repository_relative_path};
+use super::super::{build_corpus_with_coverage, load_coverage_report, repository_relative_path};
 use super::fixtures::*;
 use crate::wiki::links::LinkResolver;
+use crate::wiki::render::render_rule;
 use camino::Utf8PathBuf;
 use provenance_core::coverage::{
     AnchorState, AnnotationResult, BindingResult, CoverageReport, CoverageScan, ScannedFile,
 };
-use provenance_core::{SchemaVersion, ScopeId, StableId, VerificationBinding, VerificationMethod};
+use provenance_core::{
+    ImplementationBinding as CanonicalImplementationBinding, SchemaVersion, ScopeId, StableId,
+    VerificationBinding, VerificationMethod,
+};
 use std::fmt::Write as _;
 
 fn binding(
@@ -62,6 +66,140 @@ fn typed_binding() -> VerificationBinding {
     }
 }
 
+fn typed_implementation(file: &str, symbol: &str) -> CanonicalImplementationBinding {
+    CanonicalImplementationBinding {
+        schema_version: SchemaVersion(1),
+        scope_id: ScopeId::new("default").unwrap(),
+        id: StableId::new("implementation_binding_rule_001").unwrap(),
+        rule_id: StableId::new("rule_001").unwrap(),
+        declared_by: "spec://typescript/payroll".to_string(),
+        file: Utf8PathBuf::from(file),
+        symbol: symbol.to_string(),
+    }
+}
+
+#[test]
+fn typed_implementation_is_visible_without_a_code_scan() {
+    let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
+    let mut state = fixture_state();
+    state
+        .implementation_bindings
+        .push(typed_implementation("src/payroll.ts", "calculatePayroll"));
+
+    let corpus = build_corpus_with_coverage(&state, &resolver, None);
+    let page = rule_page(&corpus, "rule_001");
+    let html = render_rule("default", page);
+
+    assert!(page.code_scan.is_none());
+    assert!(html.contains(">Implementation</h2>"), "{html}");
+    assert!(html.contains("calculatePayroll"), "{html}");
+    assert!(html.contains("src/payroll.ts"), "{html}");
+}
+
+#[test]
+fn matching_scanner_and_typed_implementation_render_once() {
+    let report = CoverageScan {
+        report: CoverageReport::new(
+            Some("abc1234".to_string()),
+            1,
+            Vec::new(),
+            vec![binding("src/payroll.ts", 7, "calculatePayroll", None)],
+            Vec::new(),
+        ),
+        scanned_files: Vec::new(),
+    };
+    let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
+    let mut state = fixture_state();
+    state
+        .implementation_bindings
+        .push(typed_implementation("src/payroll.ts", "calculatePayroll"));
+
+    let corpus = build_corpus_with_coverage(&state, &resolver, Some(&report));
+    let html = render_rule("default", rule_page(&corpus, "rule_001"));
+
+    assert_eq!(html.matches("calculatePayroll").count(), 1, "{html}");
+    assert!(html.contains("src/payroll.ts:7"), "{html}");
+}
+
+#[test]
+fn distinct_scanner_and_typed_primary_claims_remain_visible() {
+    let report = CoverageScan {
+        report: CoverageReport::new(
+            Some("abc1234".to_string()),
+            1,
+            Vec::new(),
+            vec![binding("src/scanned.ts", 7, "scannedPayroll", None)],
+            Vec::new(),
+        ),
+        scanned_files: Vec::new(),
+    };
+    let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
+    let mut state = fixture_state();
+    state
+        .implementation_bindings
+        .push(typed_implementation("src/typed.ts", "typedPayroll"));
+
+    let corpus = build_corpus_with_coverage(&state, &resolver, Some(&report));
+    let html = render_rule("default", rule_page(&corpus, "rule_001"));
+
+    assert!(html.contains("scannedPayroll"), "{html}");
+    assert!(html.contains("src/scanned.ts:7"), "{html}");
+    assert!(html.contains("typedPayroll"), "{html}");
+    assert!(html.contains("src/typed.ts"), "{html}");
+}
+
+#[test]
+fn typed_claim_matching_a_non_rendered_scanner_claim_remains_visible() {
+    let report = CoverageScan {
+        report: CoverageReport::new(
+            Some("abc1234".to_string()),
+            1,
+            vec![annotation("src/typed.ts", 9, "typedPayroll", None)],
+            vec![binding("src/scanned.ts", 7, "scannedPayroll", None)],
+            Vec::new(),
+        ),
+        scanned_files: Vec::new(),
+    };
+    let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
+    let mut state = fixture_state();
+    state
+        .implementation_bindings
+        .push(typed_implementation("src/typed.ts", "typedPayroll"));
+
+    let corpus = build_corpus_with_coverage(&state, &resolver, Some(&report));
+    let html = render_rule("default", rule_page(&corpus, "rule_001"));
+
+    assert_eq!(html.matches("scannedPayroll").count(), 1, "{html}");
+    assert_eq!(html.matches("typedPayroll").count(), 1, "{html}");
+}
+
+#[test]
+fn coverage_loader_makes_annotation_paths_repository_relative() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = Utf8PathBuf::from_path_buf(dir.path().join("repo")).unwrap();
+    std::fs::create_dir_all(&repo).unwrap();
+    let absolute_file = repo.join("src/payroll.ts");
+    let scan = CoverageScan {
+        report: CoverageReport::new(
+            Some("abc1234".to_string()),
+            1,
+            vec![annotation(absolute_file.as_str(), 9, "typedPayroll", None)],
+            Vec::new(),
+            Vec::new(),
+        ),
+        scanned_files: Vec::new(),
+    };
+    let report_path = repo.join("coverage.json");
+    std::fs::write(&report_path, serde_json::to_vec(&scan).unwrap()).unwrap();
+
+    let loaded = load_coverage_report(&report_path, &repo).unwrap();
+
+    assert_eq!(
+        loaded.report.annotations[0].file_path,
+        Utf8PathBuf::from("src/payroll.ts")
+    );
+}
+
 #[test]
 fn typed_verification_binding_is_visible_without_a_code_scan() {
     let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
@@ -105,7 +243,7 @@ fn comment_annotations_become_implementation_and_verification_sites() {
     let page = rule_page(&corpus, "rule_001");
 
     assert_eq!(
-        page.implementation.as_ref().unwrap().symbol.as_deref(),
+        page.implementations[0].symbol.as_deref(),
         Some("implement_rule")
     );
     assert_eq!(page.verifications.len(), 1);
@@ -150,7 +288,7 @@ fn coverage_bindings_become_commit_pinned_implementation_and_verification_sites(
     let corpus = build_corpus_with_coverage(&fixture_state(), &resolver, Some(&report));
     let page = rule_page(&corpus, "rule_001");
 
-    let implementation = page.implementation.as_ref().unwrap();
+    let implementation = &page.implementations[0];
     assert_eq!(implementation.symbol.as_deref(), Some("decide_rule"));
     assert_eq!(implementation.location.label, "src/rules.rs:7");
     assert_eq!(
@@ -192,7 +330,7 @@ fn a_corpus_built_without_a_report_records_no_code_scan() {
     let page = rule_page(&corpus, "rule_001");
 
     assert!(page.code_scan.is_none());
-    assert!(page.implementation.is_none());
+    assert!(page.implementations.is_empty());
     assert!(page.verifications.is_empty());
 }
 
@@ -222,7 +360,7 @@ fn gone_bindings_are_not_presented_as_current_code_sites() {
     let corpus = build_corpus_with_coverage(&fixture_state(), &resolver, Some(&report));
     let page = rule_page(&corpus, "rule_001");
 
-    assert!(page.implementation.is_none());
+    assert!(page.implementations.is_empty());
     assert!(page.verifications.is_empty());
 }
 
@@ -248,7 +386,7 @@ fn an_uncommitted_scan_is_recorded_without_a_commit() {
 
     let scan = page.code_scan.as_ref().unwrap();
     assert!(scan.commit.is_none());
-    let implementation = page.implementation.as_ref().unwrap();
+    let implementation = &page.implementations[0];
     assert!(implementation.location.href.is_none());
     assert_eq!(
         implementation.location.snippet.as_ref().unwrap().content,

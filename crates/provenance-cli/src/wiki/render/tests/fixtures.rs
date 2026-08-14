@@ -307,10 +307,10 @@ pub(super) fn rule_fixture() -> RulePage {
         code_scan: Some(CodeScan {
             commit: Some(SCAN_COMMIT.to_string()),
         }),
-        implementation: Some(ImplementationBinding {
+        implementations: vec![ImplementationBinding {
             symbol: Some("suppress_zero_claim_items".to_string()),
             location: resolver.resolve_at("src/UseCase.php:153", Some(SCAN_COMMIT)),
-        }),
+        }],
         verifications: vec![VerificationSite {
             method: "examples".to_string(),
             symbol: Some("zero_claim_items_emit_no_lines".to_string()),

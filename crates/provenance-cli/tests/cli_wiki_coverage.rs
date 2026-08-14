@@ -100,6 +100,36 @@ fn wiki_build_without_scan_suppresses_unpinned_code_links() {
 }
 
 #[test]
+fn wiki_build_without_scan_renders_canonical_typed_implementation() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    let out = dir.path().join("site");
+    seed_rules(dir.path(), &repo);
+    seed_implementation_binding(&repo);
+    seed_git_remote(&repo);
+
+    Command::cargo_bin("provenance")
+        .unwrap()
+        .args([
+            "wiki",
+            "build",
+            "--repo",
+            &repo.to_string_lossy(),
+            "--out",
+            &out.to_string_lossy(),
+        ])
+        .assert()
+        .success();
+
+    let rule = std::fs::read_to_string(out.join("rules/rule_bound/index.html")).unwrap();
+    assert!(rule.contains(">Implementation</h2>"), "{rule}");
+    assert!(rule.contains("decide_typed_rule"), "{rule}");
+    assert!(rule.contains("src/typed-rules.ts"), "{rule}");
+    assert!(rule.contains("No code scan was supplied"), "{rule}");
+    assert!(!rule.contains("/blob/HEAD/"), "{rule}");
+}
+
+#[test]
 fn wiki_serve_without_coverage_omits_scan_sections_and_unpinned_links() {
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path().join("repo");
@@ -267,6 +297,17 @@ fn seed_rules(dir: &std::path::Path, repo: &std::path::Path) {
         ])
         .assert()
         .success();
+}
+
+fn seed_implementation_binding(repo: &std::path::Path) {
+    let shard = repo.join(".provenance/state/scopes/default/implementations/binding.jsonl");
+    std::fs::create_dir_all(shard.parent().unwrap()).unwrap();
+    std::fs::write(
+        shard,
+        r#"{"schema_version":1,"scope_id":"default","id":"implementation_binding_rule_bound","rule_id":"rule_bound","declared_by":"spec://typescript/payroll","file":"src/typed-rules.ts","symbol":"decide_typed_rule"}
+"#,
+    )
+    .unwrap();
 }
 
 fn seed_git_remote(repo: &std::path::Path) {

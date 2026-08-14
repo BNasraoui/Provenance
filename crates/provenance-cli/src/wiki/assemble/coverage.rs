@@ -12,27 +12,59 @@ impl Assembler<'_> {
         })
     }
 
-    pub(super) fn implementation(&self, rule_id: &str) -> Option<ImplementationBinding> {
-        let report = self.coverage?;
-        if let Some(binding) = report.bindings.iter().find(|binding| {
-            binding.rule_id == rule_id
-                && binding.verification.is_none()
-                && binding.anchor_state != AnchorState::Gone
-        }) {
-            return Some(ImplementationBinding {
+    pub(super) fn implementations(&self, rule_id: &str) -> Vec<ImplementationBinding> {
+        let scanned_binding = self.coverage.and_then(|report| {
+            report.bindings.iter().find(|binding| {
+                binding.rule_id == rule_id
+                    && binding.verification.is_none()
+                    && binding.anchor_state != AnchorState::Gone
+            })
+        });
+        let scanned_annotation = self.coverage.and_then(|report| {
+            report.annotations.iter().find(|annotation| {
+                annotation.rule_id == rule_id
+                    && annotation.verification.is_none()
+                    && annotation.anchor_state != AnchorState::Gone
+            })
+        });
+        let mut implementations = Vec::new();
+        if let Some(binding) = scanned_binding {
+            implementations.push(ImplementationBinding {
                 symbol: binding.item_name.clone(),
                 location: self.binding_location(binding),
             });
+        } else if let Some(annotation) = scanned_annotation {
+            implementations.push(ImplementationBinding {
+                symbol: annotation.function_name.clone(),
+                location: self.annotation_location(annotation),
+            });
         }
-        let annotation = report.annotations.iter().find(|annotation| {
-            annotation.rule_id == rule_id
-                && annotation.verification.is_none()
-                && annotation.anchor_state != AnchorState::Gone
-        })?;
-        Some(ImplementationBinding {
-            symbol: annotation.function_name.clone(),
-            location: self.annotation_location(annotation),
-        })
+        for binding in self
+            .state
+            .implementation_bindings
+            .iter()
+            .filter(|binding| binding.rule_id.as_str() == rule_id)
+        {
+            let matches_scan = scanned_binding.map_or_else(
+                || {
+                    scanned_annotation.is_some_and(|scanned| {
+                        scanned.file_path == binding.file
+                            && scanned.function_name.as_deref() == Some(binding.symbol.as_str())
+                    })
+                },
+                |scanned| {
+                    scanned.file_path == binding.file
+                        && scanned.item_name.as_deref() == Some(binding.symbol.as_str())
+                },
+            );
+            if !matches_scan {
+                implementations.push(ImplementationBinding {
+                    symbol: Some(binding.symbol.clone()),
+                    location: self.resolver.resolve_at(binding.file.as_str(), None),
+                });
+            }
+        }
+        implementations
     }
 
     pub(super) fn verification_sites(&self, rule_id: &str) -> Vec<VerificationSite> {
