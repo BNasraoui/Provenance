@@ -22,6 +22,7 @@ A person must review checks about meaning and clarity.
 
 ASD-STE100 must define the rules and vocabulary.
 Provenance must not define a replacement writing standard.
+Provenance must not offer a bespoke language or a general custom ruleset.
 Apply the check first to Requirement statements and Rule statements.
 
 The strict tier must contain only proven violations.
@@ -134,24 +135,24 @@ Written permission is necessary before Provenance distributes that protected mat
 
 ### Concrete implementation path before permission
 
-Provenance can implement the analyzer seam without distributing ASD content.
+Provenance can ship original executable checks without distributing copied ASD content.
 
-1. Ship original, data-agnostic analyzer code.
-2. Ship an empty interface for vocabulary and rule-profile data.
-3. Accept only data that a user owns or is authorized to use.
+1. Implement only individually cited deterministic ASD-STE100 rules in original code.
+2. Rule 8.1 is an example: the checker can report semicolons without copying a rule table, example, or dictionary entry.
+3. Do not offer an empty configurable rule profile or accept user-defined rules as a substitute language.
 4. Do not ship the Issue 9 PDF, extracted word lists, definitions, alternatives, examples, tables, screenshots, or substantial rule text.
 5. Do not ship a PDF extractor as a substitute for distribution rights.
 6. Link users to the official STEMG download page for their separate copy.
 7. Use a neutral product and package name.
 8. Do not use ASD or STEMG logos.
 9. Do not claim ASD approval, authorization, certification, full compliance, or guaranteed conformance.
-10. Describe results only as independent checks of named configured constraints.
+10. Describe results as independent checks of the cited ASD-STE100 issue and rule.
 
 This path does not provide built-in ASD-STE100 vocabulary enforcement.
-It preserves the analyzer architecture while that feature stays blocked.
-It also does not create a substitute general vocabulary.
+That feature stays blocked pending sufficient rights.
+Project technical terms that ASD-STE100 permits do not replace the official general vocabulary.
 
-An ASD profile can ship only after written rights cover all intended uses.
+Built-in official vocabulary data can ship only after written rights cover all intended uses.
 The request must cover extraction, machine-readable conversion, public reproduction, redistribution, modification, version updates, downstream open-source licensing, attribution, and proposed trademark wording.
 Send the request to [STEMG](mailto:stemg@asd-ste100.org) and the ASD contact named in Issue 9.
 A separately licensed checker or data provider is another path if its license covers Provenance and downstream users.
@@ -161,8 +162,8 @@ A separately licensed checker or data provider is another path if its license co
 No legal product choice is approved by this research.
 The human must select one option:
 
-- **Option A:** Ratify the data-free first release above and keep official vocabulary enforcement blocked.
-- **Option B:** Delay the ASD profile while the project obtains written ASD or STEMG rights, or a licensed integration with sufficient downstream rights.
+- **Option A:** Ratify a data-free first release of original checks for individually cited deterministic rules, and keep built-in official vocabulary enforcement blocked.
+- **Option B:** Delay additional ASD-STE100 release work while the project obtains written ASD or STEMG rights, or a licensed integration with sufficient downstream rights.
 
 The graph question `question_ste_distribution_rights` remains blocked on this choice.
 The candidate position is `prop_res_ste_data_free_until_licensed`.
@@ -367,6 +368,7 @@ Use a committed `.provenance/writing.toml` file.
 Keep the first public interface small.
 Select the standard issue, text type, target fields, technical terms, and enforcement levels.
 Do not provide one switch for each ASD rule.
+This file configures one ASD-STE100 checker. It is not a rule-profile system or a user-defined language.
 
 ```toml
 schema_version = 1
@@ -407,10 +409,11 @@ value = "JSONL"
 ```
 
 Use official dictionary data only with the necessary permission.
-If Provenance cannot distribute that data, use a licensed checker or user-supplied data.
+Until Provenance has that permission, built-in official vocabulary checks stay blocked.
 Do not create a substitute general vocabulary.
-Do not add custom writing rules in the first implementation.
+Do not add custom writing rules.
 Project technical terms remain necessary because ASD-STE100 permits approved technical terms.
+They must not become a user-defined replacement for ASD-STE100 rules or general vocabulary.
 
 ### Finding format
 
@@ -542,9 +545,10 @@ The check must also have an unambiguous input domain.
 ### Stage 0: Define the product promise
 
 Use ASD-STE100 Issue 9 as the only rule source.
-Obtain permission, use a licensed checker, or require user-supplied rule data.
+Implement original checks only for individually cited deterministic rules.
+Keep built-in official vocabulary data blocked until sufficient rights exist.
 Do not create a Provenance replacement standard.
-Do not add custom rule extensions in the first implementation.
+Do not add a general custom ruleset.
 
 Review product words and redistribution rights.
 Do not claim that an automated result certifies full conformance.
