@@ -2,7 +2,7 @@
 
 **Bead:** `provenance-0ss`<br>
 **Date:** 2026-08-15<br>
-**Status:** Research is complete. The team must decide the direction.<br>
+**Status:** Research is complete. ASD-STE100 is the selected standard.<br>
 **Baseline:** `ef8269843b9c9d1f2246a4cc7cd54825e72a4f37`
 
 ## Conformance note
@@ -13,74 +13,27 @@ It does not include the official ASD-STE100 dictionary.
 Some software terms are project-approved technical terms for this report.
 Thus, this report does not claim certified ASD-STE100 conformance.
 
-## Approved technical terms for this report
-
-The following words and phrases are technical nouns:
-
-- adapter
-- analyzer
-- artifact
-- baseline
-- build gate
-- check ID
-- CI
-- CLI
-- compiler
-- configuration
-- corpus
-- finding
-- graph
-- graph record
-- ingress
-- JSON
-- JSONL
-- linter
-- LLM
-- parser
-- policy digest
-- preflight
-- profile
-- repository
-- Rust
-- SDK
-- span
-- strict tier
-- TypeScript
-- token
-- tokenizer
-- TOML
-- Unicode
-- writing profile
-
-The following words are technical verbs:
-
-- analyze
-- lint
-- parse
-- tokenize
-- validate
-
-Names in code font are product names, file names, commands, identifiers, or protected literals.
-
 ## Result
 
-Provenance can use an optional and versioned controlled-writing profile.
-The profile can give repeatable results for mechanical checks.
+Provenance can check Requirement and Rule syntax against ASD-STE100 Issue 9.
+The check can give repeatable results for mechanical rules.
 It can also give useful review messages for syntax checks.
 A person must review checks about meaning and clarity.
 
-Do not call the first profile an ASD-STE100 compliance profile.
-Use the Provenance-owned name `provenance-simple-v1`.
-Apply it first to Requirement statements and Rule statements.
+ASD-STE100 must define the rules and vocabulary.
+Provenance must not define a replacement writing standard.
+Apply the check first to Requirement statements and Rule statements.
 
 The strict tier must contain only proven violations.
-A parser can produce review findings after corpus tests show good precision.
+A parser can produce review findings after tests show good precision.
 Parser findings must not fail CI during the first release.
 
 Do not use TypeScript or Rust type checks as the main control.
 Use `provenance writing check --strict` as the build gate.
 Run this command before a build and in CI.
 Also run the same analyzer from SDK `plan` and `apply` operations.
+Authoring tools must use this analyzer to show findings while a person or agent writes.
+Graph generation must run the analyzer before it changes graph state.
 
 Do not include the ASD-STE100 dictionary, examples, or rule text without permission and legal review.
 Issue 9 states that ASD owns the document and restricts its reproduction.
@@ -104,12 +57,12 @@ The term deterministic verification can describe three different promises.
 
 ### Promise 1: Repeatable execution
 
-The same text, profile, terms, and analyzer version give the same findings.
+The same text, standard issue, terms, and analyzer version give the same findings.
 Provenance can make this promise.
 
 ### Promise 2: Correct violations
 
-Each strict finding identifies a real violation of the selected profile.
+Each strict finding identifies a real violation of the selected ASD-STE100 rule.
 Provenance can make this promise for a small mechanical tier.
 
 ### Promise 3: Complete conformance
@@ -149,7 +102,7 @@ It does not support an automated compliance certificate.
 ### Level 1: Mechanical violations
 
 These checks do not need a probabilistic model.
-A fixed tokenizer and profile revision can give exact and stable results.
+A fixed tokenizer, standard issue, and analyzer version can give exact and stable results.
 
 The strict tier can check these items:
 
@@ -164,11 +117,10 @@ The strict tier can check these items:
 - word-count rules for numbers and identifiers
 - word-count rules for quotations and list colons
 
-The profile must define what one word is.
+The analyzer must apply the ASD-STE100 word-count rules.
 Without this definition, the 25-word limit is not deterministic.
 
-ASD counting rules can help with the tokenizer design.
-Provenance must not call a similar count an official ASD count.
+Tests must show that its result agrees with the standard.
 
 ### Level 2: Terms from committed configuration
 
@@ -176,7 +128,7 @@ Vocabulary checks are deterministic when all permitted inputs are versioned.
 
 The configuration can contain these term groups:
 
-- the general vocabulary for the profile
+- the official general vocabulary for the selected issue
 - approved technical nouns and their plural forms
 - approved technical verbs and their permitted forms
 - product names, abbreviations, identifiers, and protected literals
@@ -198,10 +150,10 @@ A fixed rule-based parser can find these possible problems:
 
 - an approved word that has the wrong part of speech
 - a noun cluster that exceeds the configured limit
-- a tense that the profile does not permit
+- a tense that the selected issue does not permit
 - a complex auxiliary verb
 - possible passive voice
-- an `-ing` form in a position that the profile does not permit
+- an `-ing` form in a position that the selected issue does not permit
 - a missing article
 - a possible instruction in descriptive text
 - more than one possible command
@@ -243,7 +195,7 @@ An LLM can suggest review items or new text.
 Its output must not affect the strict result.
 
 Do not store a `compliant` Boolean value on an artifact.
-Derive findings from the current text, profile, terms, and analyzer version.
+Derive findings from the current text, standard issue, terms, and analyzer version.
 
 ## Compile-time verification
 
@@ -324,16 +276,16 @@ Do not add writing state to a Requirement or Rule.
 Stored state would become incorrect after an analyzer update.
 
 Add a separate lint command first.
-Do not make `provenance check` reject the old corpus.
+Do not make `provenance check` reject all existing statements without a migration step.
 
 Put the analyzer below every graph ingress.
 Do not keep a separate rule copy in TypeScript.
 
-Include the analyzer version, profile revision, and policy digest in each report.
+Include the analyzer version, standard issue, and policy digest in each report.
 An exact graph export does not need this policy in the first release.
 Add it later only if exports must reproduce findings without repository configuration.
 
-The writing profile supports artifact semantics.
+The ASD-STE100 check supports artifact semantics.
 It does not replace the Swap, Name, Evidence, and Climb tests.
 Those tests check the decision, not only its grammar.
 
@@ -343,16 +295,18 @@ Those tests check the decision, not only its grammar.
 
 Use a committed `.provenance/writing.toml` file.
 Keep the first public interface small.
-Select a profile, target fields, term files, and enforcement levels.
+Select the standard issue, text type, target fields, technical terms, and enforcement levels.
 Do not provide one switch for each ASD rule.
 
 ```toml
 schema_version = 1
 
 [defaults]
-profile = "provenance-simple-v1"
+standard = "ASD-STE100"
+issue = 9
+text_type = "descriptive"
 targets = ["requirement.statement", "rule.statement"]
-term_files = [".provenance/technical-terms.toml"]
+technical_term_files = [".provenance/technical-terms.toml"]
 
 [defaults.enforcement]
 violation = "warn"
@@ -363,9 +317,9 @@ violation = "error"
 review = "warn"
 ```
 
-The profile name contains its revision.
-A change to token rules, vocabulary, or check meaning creates `provenance-simple-v2`.
-Do not change the results of version 1 without a new profile version.
+The standard name and issue identify the rule source.
+The analyzer version identifies the implementation.
+A change to the issue or analyzer changes the policy digest.
 
 Use a term file for project term decisions.
 
@@ -382,9 +336,11 @@ forms = ["materialize", "materializes", "materialized"]
 value = "JSONL"
 ```
 
-Do not include the ASD dictionary as a built-in asset.
-Use an original general vocabulary for `provenance-simple-v1`.
-The first version can also omit closed-vocabulary enforcement.
+Use official dictionary data only with the necessary permission.
+If Provenance cannot distribute that data, use a licensed checker or user-supplied data.
+Do not create a substitute general vocabulary.
+Do not add custom writing rules in the first implementation.
+Project technical terms remain necessary because ASD-STE100 permits approved technical terms.
 
 ### Finding format
 
@@ -393,7 +349,8 @@ Each result must contain these data:
 - a stable check ID
 - the exact graph location
 - the source span
-- the profile revision
+- the standard issue
+- the analyzer version
 - the policy digest
 - the finding disposition
 - a direct message
@@ -403,7 +360,9 @@ Use `review` when a person must decide.
 
 ```json
 {
-  "profile": "provenance-simple-v1",
+  "standard": "ASD-STE100",
+  "issue": 9,
+  "analyzer": "provenance-writing@0.1.0",
   "policy_digest": "sha256:...",
   "artifact": { "scope": "default", "type": "rule", "id": "rule_example" },
   "field": "statement",
@@ -450,7 +409,7 @@ Adapters create `TextSite` values from canonical records and typed declarations.
 CLI create -----+
 SDK plan/apply -+--> TextSite --> provenance-writing --> stable findings
 repository scan +                         ^
-                                  profile + term registry
+                                  standard + technical terms
 ```
 
 The first version does not need a parser dependency.
@@ -460,7 +419,7 @@ It runs in the process and gives access to tokens and verb data.
 It also accepts custom dictionaries and has an Apache-2.0 license.
 
 These features do not prove STE accuracy.
-Compare it with a small project parser and a labeled Provenance corpus.
+Compare it with a small project parser and labeled Requirement and Rule statements.
 
 [Vale](https://vale.sh/docs/styles) is useful for a prototype and comparison.
 It has configurable style rules and JSON output.
@@ -470,7 +429,7 @@ Provenance already knows each graph record and field.
 An external process adds field serialization and span mapping.
 It does not solve meaning checks.
 
-## Current corpus test
+## Current statement test
 
 A read-only script checked the current Requirement and Rule statements.
 The test used the pinned baseline.
@@ -495,7 +454,7 @@ The test gives these results:
 - Strict default enforcement would reject much of the current graph.
 - Rule statements have more findings than Requirement statements.
 - Current guidance uses semicolons for some boundary cases.
-- A new profile can require changes to the grounded-writing skill.
+- The ASD-STE100 check can require changes to the grounded-writing skill.
 - Reviewers must make sure that a sentence split does not change atomic meaning.
 - The first release needs warning-only enforcement.
 - The tokenizer needs fixture tests before the word limit becomes a gate.
@@ -512,14 +471,14 @@ The check must also have an unambiguous input domain.
 
 ### Stage 0: Define the product promise
 
-Select one of these products before implementation.
-
-- Use an original `provenance-simple-v1` profile without an ASD compliance claim.
-- Make a future ASD-STE100 Issue 9 adapter only after permission or a license.
+Use ASD-STE100 Issue 9 as the only rule source.
+Obtain permission, use a licensed checker, or require user-supplied rule data.
+Do not create a Provenance replacement standard.
+Do not add custom rule extensions in the first implementation.
 
 Review product words and redistribution rights.
-Stop if the product must certify full ASD-STE100 conformance.
-The evidence does not support that promise.
+Do not claim that an automated result certifies full conformance.
+The evidence does not support that claim.
 
 ### Stage 1: Make the mechanical linter
 
@@ -536,7 +495,7 @@ The stage has these exit criteria:
 - Golden fixtures give identical JSON order and spans on Linux, macOS, and Windows.
 - The mechanical test set has no false positive or false negative result.
 - A test of 1,000 short statements takes less than 100 milliseconds in a release build on CI hardware.
-- The current corpus has a reviewed migration report.
+- The current Requirement and Rule statements have a reviewed migration report.
 - The command does not produce an uncontrolled warning list.
 
 ### Stage 2: Use one analyzer at every ingress
@@ -565,7 +524,7 @@ Each ingress must give the same finding.
 6. Keep each new check at the `review` level first.
 
 A check can move to the strict tier only after it reaches 95 percent precision.
-Use a held-out corpus for this measurement.
+Use a separate test set for this measurement.
 The check must not have a known meaning-changing automatic fix.
 
 Low recall is acceptable for author guidance.
@@ -584,22 +543,22 @@ It must not define a second analyzer.
 Review `boundary.statement` and `resolution.position` after the first two fields give value.
 
 Keep descriptions, rationales, context, source material, and messages outside strict checks.
-Add a field only when it has a suitable profile.
+Add a field only when the selected ASD-STE100 text type applies to it.
 
 ## Decision
 
-Start a two-week implementation spike for the mechanical `provenance-simple-v1` linter.
+Start a two-week implementation spike for deterministic ASD-STE100 Issue 9 syntax checks.
 
 Do not start these products:
 
 - full ASD-STE100 conformance checks
-- compiler type enforcement
+- a second checker in a language type system
 - automatic text changes
 - LLM-based CI decisions
 
 Continue after the spike only when all these conditions are true:
 
-1. The strict subset has no false positives on the labeled current corpus.
+1. The strict subset has no false positives on the labeled current statements.
 2. Authors can correct findings without loss of thresholds, exceptions, actors, or failure conditions.
 3. Custom term setup stays small and easy to review.
 4. The policy digest and version make results repeatable.
