@@ -1,8 +1,8 @@
 # Simplified Technical English configuration research
 
-**Bead:** `provenance-0ss`<br>
+**Beads:** `provenance-0ss`, `provenance-l3m.6`<br>
 **Date:** 2026-08-15<br>
-**Status:** Research is complete. ASD-STE100 is the selected standard.<br>
+**Status:** Technical research is complete. The distribution-rights choice is blocked on a human.<br>
 **Baseline:** `ef8269843b9c9d1f2246a4cc7cd54825e72a4f37`
 
 ## Conformance note
@@ -35,9 +35,9 @@ Also run the same analyzer from SDK `plan` and `apply` operations.
 Authoring tools must use this analyzer to show findings while a person or agent writes.
 Graph generation must run the analyzer before it changes graph state.
 
-Do not include the ASD-STE100 dictionary, examples, or rule text without permission and legal review.
-Issue 9 states that ASD owns the document and restricts its reproduction.
-ASD also states that software cannot check all rules.
+Do not include the ASD-STE100 dictionary, examples, or rule text without written permission and legal review.
+Public download access does not give Provenance a distribution license.
+ASD and STEMG also do not certify or authorize software checkers.
 
 ## Scope of the research
 
@@ -86,9 +86,9 @@ Thus, the 25-word descriptive limit is the better limit.
 
 The following sources set a clear limit on automated checks:
 
-- The [Issue 9 standard](https://www.asd-ste100.org/assets/files/ASD-STE100_ISSUE9.pdf) contains lexical, grammar, structure, and meaning rules.
+- The [Issue 9 standard](https://asd-web-be-prod.azurewebsites.net/media/wunhmi5y/asd-ste100-issue-9.pdf) contains lexical, grammar, structure, and meaning rules.
 - Its copyright notice restricts reproduction of the standard.
-- The STEMG [software guidance](https://www.asd-ste100.org/software.html) states that no checker can test all rules.
+- The STEMG [software guidance](https://www.asd-ste100.org/STEsoftware.html) states that no checker can test all rules.
 - The guidance tells authors to decide if a finding applies in its context.
 - The [Boeing checker description](https://www.boeing.com/company/simplified-english-checker) describes more than 400 syntax rules and a full parser.
 - The Boeing checker does only limited word-sense checks.
@@ -96,6 +96,76 @@ The following sources set a clear limit on automated checks:
 
 This evidence supports a linter with different finding types.
 It does not support an automated compliance certificate.
+
+## Distribution-rights research
+
+This section uses only official ASD and STEMG sources.
+It records source facts and a conservative product path.
+It is not legal advice.
+
+### Official source findings
+
+1. [ASD-STE100 Issue 9](https://asd-web-be-prod.azurewebsites.net/media/wunhmi5y/asd-ste100-issue-9.pdf), title page and PDF page 2, says that ASD owns the copyright and reserves all rights.
+   The copyright notice says that receipt of the document does not give a license.
+   It requires written ASD authority for reproduction or publication of all or part of the document.
+2. Issue 9, General Introduction, printed page iv, says that the standard is free through STEMG or ASD-STAN.
+   The same section prohibits unauthorized distribution without written STEMG permission.
+   Therefore, free access is not a redistribution grant.
+3. Issue 9 gives special usage rights to named groups and purposes.
+   It does not state that Provenance can publish the material in an unrestricted open-source package.
+   It also does not state downstream redistribution or sublicensing terms.
+4. The STEMG [FAQ](https://www.asd-ste100.org/STE_faq.html) sections “What is ASD-STE100 Simplified Technical English?”, “Where can I get a copy of ASD-STE100?”, and “Does the STE dictionary include all the words...” identify the rules and dictionary as parts of the standard.
+   The FAQ says that PDF is the only distribution format.
+5. The STEMG [About ASD-STE100](https://www.asd-ste100.org/about_STE.html) section “How does STE work?” describes approximately 900 approved words and approximately 1,200 non-approved words.
+   No reviewed official page provides a separate JSON, CSV, API, or public data license for these entries.
+6. The STEMG [Tools for STE](https://www.asd-ste100.org/STEsoftware.html) disclaimer says that ASD and STEMG do not endorse, certify, or authorize software tools.
+   It also bars providers from claiming ASD approval or using the ASD logo, ASD-STE100 copyright, or trademark.
+7. The STEMG [copyright and legal notice](https://www.asd-ste100.org/index.html) identifies ASD-STE100 as ASD copyright and a registered trademark.
+   It gives European Union Trade Mark No. 017966390.
+8. The ASD [STE FAQ](https://www.asd-europe.org/standards-specifications/simplified-technical-english/faq-simplified-technical-english-ste/) calls ASD-STE100 an open-source standard and says that it is free to download.
+   That page does not give license text, redistribution terms, modification rights, or sublicensing terms.
+   The specific Issue 9 copyright and distribution notices still apply.
+9. The STEMG [download page](https://www.asd-ste100.org/STE_downloads.html#article02-2l) is the official route to request a free copy.
+   Provenance can link to this route instead of mirroring the PDF.
+
+The reviewed official sources do not give Provenance a public license to extract and distribute the official rules or dictionary as software data.
+They also do not provide checker certification.
+Written permission is necessary before Provenance distributes that protected material.
+
+### Concrete implementation path before permission
+
+Provenance can implement the analyzer seam without distributing ASD content.
+
+1. Ship original, data-agnostic analyzer code.
+2. Ship an empty interface for vocabulary and rule-profile data.
+3. Accept only data that a user owns or is authorized to use.
+4. Do not ship the Issue 9 PDF, extracted word lists, definitions, alternatives, examples, tables, screenshots, or substantial rule text.
+5. Do not ship a PDF extractor as a substitute for distribution rights.
+6. Link users to the official STEMG download page for their separate copy.
+7. Use a neutral product and package name.
+8. Do not use ASD or STEMG logos.
+9. Do not claim ASD approval, authorization, certification, full compliance, or guaranteed conformance.
+10. Describe results only as independent checks of named configured constraints.
+
+This path does not provide built-in ASD-STE100 vocabulary enforcement.
+It preserves the analyzer architecture while that feature stays blocked.
+It also does not create a substitute general vocabulary.
+
+An ASD profile can ship only after written rights cover all intended uses.
+The request must cover extraction, machine-readable conversion, public reproduction, redistribution, modification, version updates, downstream open-source licensing, attribution, and proposed trademark wording.
+Send the request to [STEMG](mailto:stemg@asd-ste100.org) and the ASD contact named in Issue 9.
+A separately licensed checker or data provider is another path if its license covers Provenance and downstream users.
+
+### Human choice
+
+No legal product choice is approved by this research.
+The human must select one option:
+
+- **Option A:** Ratify the data-free first release above and keep official vocabulary enforcement blocked.
+- **Option B:** Delay the ASD profile while the project obtains written ASD or STEMG rights, or a licensed integration with sufficient downstream rights.
+
+The graph question `question_ste_distribution_rights` remains blocked on this choice.
+The candidate position is `prop_res_ste_data_free_until_licensed`.
 
 ## Determinism levels
 
