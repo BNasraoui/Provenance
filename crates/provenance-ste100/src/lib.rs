@@ -5,11 +5,15 @@ mod contracted_verbs;
 use provenance_macros::rule;
 use serde::{Deserialize, Serialize};
 
+pub(crate) mod sentence;
+pub(crate) mod word_count;
+
 /// The analyzer implementation version included in every report.
 pub const ANALYZER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const SEMICOLON_MESSAGE: &str = "Do not use semicolons in descriptive text.";
 const CONTRACTED_VERB_MESSAGE: &str = "Use the full verb form in descriptive text.";
+const SENTENCE_LENGTH_MESSAGE: &str = "This descriptive sentence has more than 25 words.";
 
 /// A report from the fixed ASD-STE100 Issue 9 analyzer.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -67,6 +71,8 @@ pub struct Finding {
 pub enum RuleNumber {
     #[serde(rename = "4.2")]
     FourTwo,
+    #[serde(rename = "6.3")]
+    SixThree,
     #[serde(rename = "8.1")]
     EightOne,
 }
@@ -85,10 +91,10 @@ pub struct Span {
     pub end: usize,
 }
 
-/// Reports deterministic Rule 4.2 and Rule 8.1 violations in source order.
+/// Reports implemented, determinate ASD-STE100 violations in descriptive text.
 #[rule("rule_ste100_semicolon")]
 pub fn check_descriptive(text: &str) -> Report {
-    let mut findings = text
+    let mut findings: Vec<_> = text
         .match_indices(';')
         .map(|(start, _)| Finding {
             rule: RuleNumber::EightOne,
@@ -114,7 +120,18 @@ pub fn check_descriptive(text: &str) -> Report {
                 message: CONTRACTED_VERB_MESSAGE.to_owned(),
             }),
     );
-    findings.sort_by_key(|finding| finding.span.start);
+    findings.extend(sentence_length_findings(text));
+    findings.sort_by_key(|finding| {
+        (
+            finding.span.start,
+            finding.span.end,
+            match finding.rule {
+                RuleNumber::FourTwo => 0,
+                RuleNumber::SixThree => 1,
+                RuleNumber::EightOne => 2,
+            },
+        )
+    });
 
     Report {
         standard: Standard::AsdSte100,
@@ -122,4 +139,27 @@ pub fn check_descriptive(text: &str) -> Report {
         analyzer_version: ANALYZER_VERSION.to_owned(),
         findings,
     }
+}
+
+/// Reports each determinate descriptive sentence that has more than 25 words.
+#[rule("rule_ste100_descriptive_sentence_length")]
+fn sentence_length_findings(text: &str) -> Vec<Finding> {
+    sentence::scan(text)
+        .into_iter()
+        .filter_map(|sentence| {
+            let content = &text[sentence.start..sentence.end];
+            match word_count::count(content, sentence.indeterminate) {
+                word_count::Count::Exact(count) if count > 25 => Some(Finding {
+                    rule: RuleNumber::SixThree,
+                    kind: FindingKind::Violation,
+                    span: Span {
+                        start: sentence.start,
+                        end: sentence.end,
+                    },
+                    message: SENTENCE_LENGTH_MESSAGE.to_owned(),
+                }),
+                word_count::Count::Exact(_) | word_count::Count::Indeterminate => None,
+            }
+        })
+        .collect()
 }
