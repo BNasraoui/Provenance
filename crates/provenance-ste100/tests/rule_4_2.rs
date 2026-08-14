@@ -118,7 +118,7 @@ fn contracted_verbs_have_exact_ordered_utf8_spans() {
 
 #[test]
 #[verifies("rule_ste100_contracted_verb", examples)]
-fn recognized_form_regression_corpus_is_case_and_apostrophe_insensitive() {
+fn recognized_form_regression_set_is_case_and_apostrophe_insensitive() {
     for form in RECOGNIZED_FORMS {
         for spelling in [
             (*form).to_owned(),
