@@ -1,5 +1,7 @@
 use provenance_macros::rule;
 
+use crate::protected_spans::ProtectedSpans;
+
 pub struct ContractedVerb {
     pub start: usize,
     pub end: usize,
@@ -7,9 +9,9 @@ pub struct ContractedVerb {
 
 /// Finds contracted verb tokens whose classification needs no grammar or meaning choice.
 #[rule("rule_ste100_contracted_verb")]
-pub fn find(text: &str) -> Vec<ContractedVerb> {
+pub fn find(text: &str, protected: &ProtectedSpans) -> Vec<ContractedVerb> {
     token_ranges(text)
-        .filter(|&(start, end)| is_recognized(&text[start..end]))
+        .filter(|&(start, end)| !protected.protects(start, end) && is_recognized(&text[start..end]))
         .map(|(start, end)| ContractedVerb { start, end })
         .collect()
 }

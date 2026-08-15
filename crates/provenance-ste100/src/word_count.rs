@@ -1,5 +1,7 @@
 use provenance_macros::rule;
 
+use crate::{protected_spans::ProtectedSpans, sentence::Sentence};
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Count {
     Exact(usize),
@@ -23,18 +25,18 @@ struct Unit {
 
 /// Counts balanced parenthetical text once in its containing sentence.
 #[rule("rule_ste100_parenthetical_counting")]
-pub fn count(text: &str, scanner_indeterminate: bool) -> Count {
-    if scanner_indeterminate {
+pub fn count(text: &str, sentence: Sentence, protected: &ProtectedSpans) -> Count {
+    if sentence.indeterminate || protected.is_indeterminate() {
         return Count::Indeterminate;
     }
 
-    let mut offset = 0;
+    let mut offset = sentence.start;
     let mut units = Vec::new();
     let mut unclear_punctuation = false;
-    while offset < text.len() {
+    while offset < sentence.end {
         let character = next_char(text, offset);
         let unit = match character {
-            '"' | '“' => quoted_unit(text, offset),
+            '"' | '“' => quoted_unit(protected, offset),
             '(' => parenthetical_unit(text, offset),
             character if character.is_ascii_digit() => Some(number_unit(text, offset)),
             character if character.is_alphabetic() => Some(hyphenated_unit(text, offset)),
@@ -62,14 +64,10 @@ pub fn count(text: &str, scanner_indeterminate: bool) -> Count {
 
 /// Consumes a mechanically delimited quotation as one count unit.
 #[rule("rule_ste100_explicit_quotation_counting")]
-fn quoted_unit(text: &str, start: usize) -> Option<Unit> {
-    let opening = next_char(text, start);
-    let closing = if opening == '"' { '"' } else { '”' };
-    let content_start = start + opening.len_utf8();
-    let relative_end = text[content_start..].find(closing)?;
-    Some(Unit {
-        start,
-        end: content_start + relative_end + closing.len_utf8(),
+fn quoted_unit(protected: &ProtectedSpans, start: usize) -> Option<Unit> {
+    protected.quotation_at(start).map(|span| Unit {
+        start: span.start,
+        end: span.end,
         kind: UnitKind::Other,
     })
 }
