@@ -248,3 +248,31 @@ fn rule_8_1_and_rule_6_3_findings_have_stable_source_order() {
         assert_eq!(check_descriptive(&text), first);
     }
 }
+
+#[test]
+fn all_implemented_rule_findings_have_stable_source_order() {
+    let long_sentence = sentence(26);
+    let text = format!("{long_sentence} It isn't ready;");
+    let first = check_descriptive(&text);
+
+    assert_eq!(
+        first
+            .findings
+            .iter()
+            .map(|finding| finding.rule)
+            .collect::<Vec<_>>(),
+        vec![
+            RuleNumber::SixThree,
+            RuleNumber::FourTwo,
+            RuleNumber::EightOne,
+        ]
+    );
+    assert!(first
+        .findings
+        .windows(2)
+        .all(|pair| pair[0].span.start <= pair[1].span.start));
+
+    for _ in 0..10 {
+        assert_eq!(check_descriptive(&text), first);
+    }
+}
