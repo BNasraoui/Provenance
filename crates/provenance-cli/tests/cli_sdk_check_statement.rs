@@ -58,7 +58,12 @@ fn file_bytes(root: &Path) -> BTreeMap<String, Vec<u8>> {
 #[verifies("rule_ste_sdk_statement_report", examples)]
 fn check_statement_returns_the_authoritative_report_for_clean_and_flagged_text() {
     let outside_repo = tempfile::tempdir().unwrap();
-    for statement in ["Install the cover.", "Stop; wait.", "A; B;; C;"] {
+    for statement in [
+        "Install the cover.",
+        "Stop; wait.",
+        "A; B;; C;",
+        "It isn't ready.",
+    ] {
         let output = check_from(
             outside_repo.path(),
             &serde_json::to_vec(&json!({"statement": statement})).unwrap(),
