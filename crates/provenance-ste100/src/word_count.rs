@@ -48,7 +48,7 @@ pub fn count(text: &str, scanner_indeterminate: bool) -> Count {
             unclear_punctuation |= matches!(
                 character,
                 '\'' | '‘' | '’' | '′' | '″' | '‵' | '‶' | '/' | '\\'
-            );
+            ) || is_unresolved_grouping_mark(text, offset, character);
             offset += character.len_utf8();
         }
     }
@@ -165,6 +165,18 @@ fn consume_alphanumeric(text: &str, start: usize) -> usize {
         .map_or(start, |(offset, character)| {
             start + offset + character.len_utf8()
         })
+}
+
+fn is_unresolved_grouping_mark(text: &str, offset: usize, character: char) -> bool {
+    matches!(character, '_' | ':' | '-')
+        && text[..offset]
+            .chars()
+            .next_back()
+            .is_some_and(char::is_alphanumeric)
+        && text[offset + character.len_utf8()..]
+            .chars()
+            .next()
+            .is_some_and(char::is_alphanumeric)
 }
 
 fn next_char(text: &str, offset: usize) -> char {

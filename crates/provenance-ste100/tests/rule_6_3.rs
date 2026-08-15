@@ -191,6 +191,24 @@ fn digit_first_alphanumeric_candidates_are_indeterminate() {
 }
 
 #[test]
+fn lowercase_underscore_identifier_candidates_are_indeterminate() {
+    let text = format!("{}.", vec!["pump_id"; 13].join(" "));
+    assert!(rule_6_3_spans(&text).is_empty());
+}
+
+#[test]
+fn internal_colon_alphanumeric_candidates_are_indeterminate() {
+    let text = format!("{}.", vec!["port:1"; 13].join(", "));
+    assert!(rule_6_3_spans(&text).is_empty());
+}
+
+#[test]
+fn digit_hyphen_letter_measurement_candidates_are_indeterminate() {
+    let text = format!("{}.", vec!["10-mm"; 13].join(" "));
+    assert!(rule_6_3_spans(&text).is_empty());
+}
+
+#[test]
 fn unresolved_multiword_names_are_indeterminate_without_grouping_them() {
     let uppercase = format!("{}.", vec!["ALPHA BETA"; 13].join(" "));
     let lowercase_connector = format!("{} Bank of America.", words(23));

@@ -45,19 +45,21 @@ pub fn scan(text: &str) -> Vec<Sentence> {
                     top_level_indeterminate = true;
                 }
             }
-            '.' | '?' | '!' if quote_end.is_none() && parentheses.is_empty() => {
-                if character != '.' || !is_decimal_point(text, offset) {
-                    let end = offset + character.len_utf8();
-                    push_trimmed(
-                        text,
-                        sentence_start,
-                        end,
-                        top_level_indeterminate,
-                        &mut sentences,
-                    );
-                    sentence_start = end;
-                    top_level_indeterminate = false;
-                }
+            '.' | '?' | '!'
+                if quote_end.is_none()
+                    && parentheses.is_empty()
+                    && (character != '.' || !is_decimal_point(text, offset)) =>
+            {
+                let end = offset + character.len_utf8();
+                push_trimmed(
+                    text,
+                    sentence_start,
+                    end,
+                    top_level_indeterminate,
+                    &mut sentences,
+                );
+                sentence_start = end;
+                top_level_indeterminate = false;
             }
             _ => {}
         }
