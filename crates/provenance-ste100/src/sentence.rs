@@ -1,5 +1,7 @@
 use provenance_macros::rule;
 
+use crate::protected_spans::ProtectedSpans;
+
 #[derive(Clone, Copy, Debug)]
 pub struct Sentence {
     pub start: usize,
@@ -9,27 +11,24 @@ pub struct Sentence {
 
 /// Keeps ordinary colons within a sentence and leaves list-like input indeterminate.
 #[rule("rule_ste100_ordinary_colon_continuity")]
-pub fn scan(text: &str) -> Vec<Sentence> {
+pub fn scan(text: &str, protected: &ProtectedSpans) -> Vec<Sentence> {
     let mut sentences = Vec::new();
     let mut sentence_start = 0;
     let mut parentheses = Vec::new();
-    let mut quote_end = None;
-    let mut top_level_indeterminate = false;
+    let mut top_level_indeterminate = protected.is_indeterminate();
 
     for (offset, character) in text.char_indices() {
+        if protected.contains_offset(offset) {
+            continue;
+        }
         match character {
-            '"' if quote_end.is_none() => quote_end = Some('"'),
-            '"' if quote_end == Some('"') => quote_end = None,
-            '“' if quote_end.is_none() => quote_end = Some('”'),
-            '”' if quote_end == Some('”') => quote_end = None,
-            '”' if quote_end.is_none() => top_level_indeterminate = true,
-            '(' if quote_end.is_none() => {
+            '(' => {
                 if !parentheses.is_empty() {
                     top_level_indeterminate = true;
                 }
                 parentheses.push(offset);
             }
-            ')' if quote_end.is_none() => {
+            ')' => {
                 if let Some(open) = parentheses.pop() {
                     let parenthetical = &text[open + 1..offset];
                     push_trimmed(
@@ -46,8 +45,7 @@ pub fn scan(text: &str) -> Vec<Sentence> {
                 }
             }
             '.' | '?' | '!'
-                if quote_end.is_none()
-                    && parentheses.is_empty()
+                if parentheses.is_empty()
                     && (character != '.' || !is_decimal_point(text, offset)) =>
             {
                 let end = offset + character.len_utf8();
@@ -59,13 +57,13 @@ pub fn scan(text: &str) -> Vec<Sentence> {
                     &mut sentences,
                 );
                 sentence_start = end;
-                top_level_indeterminate = false;
+                top_level_indeterminate = protected.is_indeterminate();
             }
             _ => {}
         }
     }
 
-    top_level_indeterminate |= quote_end.is_some() || !parentheses.is_empty();
+    top_level_indeterminate |= !parentheses.is_empty();
     push_trimmed(
         text,
         sentence_start,

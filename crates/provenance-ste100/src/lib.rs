@@ -1,6 +1,7 @@
 //! Deterministic descriptive-text checks from ASD-STE100 Issue 9.
 
 mod contracted_verbs;
+mod protected_spans;
 
 use provenance_macros::rule;
 use serde::{Deserialize, Serialize};
@@ -94,8 +95,10 @@ pub struct Span {
 /// Reports implemented, determinate ASD-STE100 violations in descriptive text.
 #[rule("rule_ste100_semicolon")]
 pub fn check_descriptive(text: &str) -> Report {
+    let protected = protected_spans::analyze(text);
     let mut findings: Vec<_> = text
         .match_indices(';')
+        .filter(|(start, _)| !protected.protects(*start, *start + 1))
         .map(|(start, _)| Finding {
             rule: RuleNumber::EightOne,
             kind: FindingKind::Violation,
@@ -108,7 +111,7 @@ pub fn check_descriptive(text: &str) -> Report {
         .collect::<Vec<_>>();
 
     findings.extend(
-        contracted_verbs::find(text)
+        contracted_verbs::find(text, &protected)
             .into_iter()
             .map(|contracted| Finding {
                 rule: RuleNumber::FourTwo,
@@ -120,7 +123,7 @@ pub fn check_descriptive(text: &str) -> Report {
                 message: CONTRACTED_VERB_MESSAGE.to_owned(),
             }),
     );
-    findings.extend(sentence_length_findings(text));
+    findings.extend(sentence_length_findings(text, &protected));
     findings.sort_by_key(|finding| {
         (
             finding.span.start,
@@ -143,12 +146,14 @@ pub fn check_descriptive(text: &str) -> Report {
 
 /// Reports each determinate descriptive sentence that has more than 25 words.
 #[rule("rule_ste100_descriptive_sentence_length")]
-fn sentence_length_findings(text: &str) -> Vec<Finding> {
-    sentence::scan(text)
+fn sentence_length_findings(
+    text: &str,
+    protected: &protected_spans::ProtectedSpans,
+) -> Vec<Finding> {
+    sentence::scan(text, protected)
         .into_iter()
-        .filter_map(|sentence| {
-            let content = &text[sentence.start..sentence.end];
-            match word_count::count(content, sentence.indeterminate) {
+        .filter_map(
+            |sentence| match word_count::count(text, sentence, protected) {
                 word_count::Count::Exact(count) if count > 25 => Some(Finding {
                     rule: RuleNumber::SixThree,
                     kind: FindingKind::Violation,
@@ -159,7 +164,7 @@ fn sentence_length_findings(text: &str) -> Vec<Finding> {
                     message: SENTENCE_LENGTH_MESSAGE.to_owned(),
                 }),
                 word_count::Count::Exact(_) | word_count::Count::Indeterminate => None,
-            }
-        })
+            },
+        )
         .collect()
 }
