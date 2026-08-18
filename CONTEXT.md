@@ -26,7 +26,7 @@ Evidence supporting belief that a Rule holds. A Rule can have no Verification; t
 
 ## Verification binding
 
-A durable relationship from an owner-local test key and repository code location to a canonical Rule. It records what is intended to verify the Rule, not whether an execution passed.
+A durable relationship from an owner-local test key and repository code location to a canonical Rule. It records what is intended to verify the Rule, not whether an execution passed. A retired Verification binding preserves a former relationship as history but does not verify the Rule in active views.
 
 ## Verification run
 

@@ -123,6 +123,15 @@ unimplemented. Plan reports an `implementation` field change on the Rule;
 reintroducing the relationship reuses its binding ID, and changing the exported
 target updates that binding in place. Other specs' bindings remain untouched.
 
+## Verification relationships
+
+`verify` reports the owner, file, and key it just ran and nothing wider.
+Pointing one of those keys at a different Rule from the same file retires the
+binding it replaced; calling it again reactivates the same binding ID. Retired
+bindings stay in canonical exports as history and stop making the Rule appear
+verified. Bindings whose test file disappeared are surfaced by the stale gate,
+because one run cannot vouch for a file it never executed.
+
 ## Verification evidence
 
 Callback results are volatile run evidence, so they live under:
