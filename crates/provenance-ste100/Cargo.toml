@@ -7,8 +7,10 @@ edition.workspace = true
 workspace = true
 
 [dependencies]
+pdf_oxide = { version = "=0.3.77", default-features = false, features = ["legacy-crypto"] }
 provenance-macros = { path = "../provenance-macros" }
 serde.workspace = true
+sha2.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true

@@ -1,8 +1,14 @@
 //! Deterministic descriptive-text checks from ASD-STE100 Issue 9.
 
 mod contracted_verbs;
+mod dictionary;
 mod paragraph;
 mod protected_spans;
+
+pub use dictionary::{
+    import_dictionary, DictionaryEntry, DictionaryImport, DictionaryImportError,
+    DictionaryImportIdentity, DictionaryStatus, PartOfSpeech,
+};
 
 use provenance_macros::rule;
 use serde::{Deserialize, Serialize};
