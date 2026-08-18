@@ -95,22 +95,27 @@ address receives a deterministic implicit ID. Moving one owned local Rule to a
 shared address, or one shared Rule to a local address, keeps its Stable ID when
 there is exactly one matching candidate. If several local Rules could be
 merged, Rust rejects the guess; `rule(key).id(existingId)` selects which
-canonical Rule receives the new address. It does not retire the other Rule.
+canonical Rule receives the new address. Other owned declarations omitted from
+the complete document are retired, not deleted.
 Immutable handles do not cache IDs;
 `apply` returns them and Rust resolves later verification by owner and address.
 
 Sources, requirements, and rules carry optional `declared_by` metadata.
 Apply may create a missing record or update a record with the same owner. It
 refuses to take over an unowned record or one owned by another integration,
-and performs that check before writing. Omitted declarations and graph edges
-are retained. Fields outside the small TypeScript interface are preserved;
+and performs that check before writing. Plan reports that takeover as a
+structured conflict, while apply refuses it. Omitted declarations are marked
+retired and disappear from active graph and assurance checks without losing
+their Stable IDs or history. Reintroducing one clears retirement on the same
+record. Fields outside the small TypeScript interface are preserved;
 source references declared by the spec are added rather than replacing
 external references.
 
-This is deliberately not a full lifecycle engine. The POC has no adoption,
-pruning, automatic rename/move inference, deletion, or ownership-transfer
-operation. Relationships remain additive, so changing a Rule's Requirement set
-does not yet remove old edges.
+Plan distinguishes created, updated, moved, retired, conflicted, and unchanged
+resources. An identity-preserving Rule move updates the active owned
+Requirement relationships. Historical relationships attached to retired
+records remain canonical history. The POC still has no hard deletion,
+ownership-transfer, or automatic ambiguous rename operation.
 
 ## Verification evidence
 
@@ -181,8 +186,8 @@ canonical model without a data migration.
    matching engine without a global CLI, install script download, Rust toolchain,
    daemon, or gRPC.
 4. Typed declarations coexist with external state by refusing takeover,
-   retaining omissions and edges, and preserving fields outside the façade.
-   Full lifecycle semantics remain unsolved by design.
+   retiring only records owned by the same spec, preserving history, and
+   preserving fields outside the façade.
 5. The operations are portable: declare a source, requirement, or rule; apply
    desired state; begin a verification; run a language callback; complete the
    verification. No operation depends on a TypeScript-only runtime concept.

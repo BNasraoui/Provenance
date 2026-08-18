@@ -66,11 +66,19 @@ fn graph_evidence_locked(
     store: &StateStore,
 ) -> anyhow::Result<GraphEvidence> {
     let edges = store.list_edges()?;
-    let requirements = store.list_requirements(scope)?;
+    let requirements = store
+        .list_requirements(scope)?
+        .into_iter()
+        .filter(|requirement| !requirement.retired)
+        .collect::<Vec<_>>();
     let mut cited_sources = requirements
         .iter()
         .flat_map(|requirement| &requirement.source_refs)
         .map(|reference| reference.source_id.as_str().to_string())
+        .collect::<BTreeSet<_>>();
+    let active_requirements = requirements
+        .iter()
+        .map(|requirement| requirement.id.as_str().to_string())
         .collect::<BTreeSet<_>>();
     cited_sources.extend(
         edges
@@ -80,14 +88,19 @@ fn graph_evidence_locked(
                     && edge.edge_type == EdgeType::References
                     && edge.from_type == NodeType::Source
                     && edge.to_type == NodeType::Requirement
+                    && active_requirements.contains(edge.to_id.as_str())
             })
             .map(|edge| edge.from_id.as_str().to_string()),
     );
-    let rules = store.list_rules(scope)?;
+    let rules = store
+        .list_rules(scope)?
+        .into_iter()
+        .filter(|rule| !rule.retired)
+        .collect::<Vec<_>>();
     let rule_ids = rules
         .iter()
         .map(|rule| rule.id.as_str().to_string())
-        .collect();
+        .collect::<BTreeSet<_>>();
     let mut references = rules
         .into_iter()
         .filter_map(|rule| {
@@ -99,6 +112,9 @@ fn graph_evidence_locked(
         })
         .collect::<Vec<_>>();
     references.extend(store.list_sources(scope)?.into_iter().filter_map(|source| {
+        if source.retired {
+            return None;
+        }
         (cited_sources.contains(source.id.as_str()))
             .then_some(source.reference)
             .flatten()
@@ -117,10 +133,18 @@ fn graph_evidence_locked(
     });
     references.dedup();
     Ok(GraphEvidence {
+        verification_bindings: store
+            .list_verification_bindings(scope)?
+            .into_iter()
+            .filter(|binding| rule_ids.contains(binding.rule_id.as_str()))
+            .collect(),
+        implementation_bindings: store
+            .list_implementation_bindings(scope)?
+            .into_iter()
+            .filter(|binding| rule_ids.contains(binding.rule_id.as_str()))
+            .collect(),
         rule_ids,
         references,
-        verification_bindings: store.list_verification_bindings(scope)?,
-        implementation_bindings: store.list_implementation_bindings(scope)?,
     })
 }
 
@@ -137,8 +161,16 @@ fn coverage_health_locked(
     scope: &provenance_core::ScopeId,
     store: &StateStore,
 ) -> anyhow::Result<HealthView> {
-    let requirements = store.list_requirements(scope)?;
-    let rules = store.list_rules(scope)?;
+    let requirements = store
+        .list_requirements(scope)?
+        .into_iter()
+        .filter(|requirement| !requirement.retired)
+        .collect::<Vec<_>>();
+    let rules = store
+        .list_rules(scope)?
+        .into_iter()
+        .filter(|rule| !rule.retired)
+        .collect::<Vec<_>>();
     let edges: Vec<_> = store
         .list_edges()?
         .into_iter()

@@ -44,7 +44,13 @@ export interface TypedSpecDocument {
 }
 
 export type ResourceKind = "source" | "requirement" | "rule";
-export type ReconcileState = "created" | "updated" | "unchanged";
+export type ReconcileState =
+  | "created"
+  | "updated"
+  | "moved"
+  | "retired"
+  | "conflict"
+  | "unchanged";
 
 export interface ReconciledResource {
   kind: ResourceKind;
@@ -66,6 +72,9 @@ export interface ApplyResult {
   declared_by: string;
   created: number;
   updated: number;
+  moved: number;
+  retired: number;
+  conflicts: number;
   unchanged: number;
   resources: ReconciledResource[];
   implementation_bindings?: ImplementationBinding[];

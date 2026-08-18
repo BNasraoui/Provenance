@@ -54,10 +54,11 @@ const source = readFileSync(0, "utf8");
 const input = source === "" ? undefined : JSON.parse(source);
 appendFileSync(${JSON.stringify(log)}, JSON.stringify({ command, input }) + "\\n");
 if (command === "info") process.stdout.write(JSON.stringify({
-  engine_version: "0.1.0", protocol_version: 2, state_schema_version: 1, repository: "/project"
+  engine_version: "0.1.0", protocol_version: 3, state_schema_version: 1, repository: "/project"
 }));
 else process.stdout.write(JSON.stringify({
-  declared_by: "spec://typescript", created: 0, updated: 0, unchanged: 0,
+  declared_by: "spec://typescript", created: 0, updated: 0, moved: 0,
+  retired: 0, conflicts: 0, unchanged: 0,
   resources: [], affected_rules: []
 }));
 `,

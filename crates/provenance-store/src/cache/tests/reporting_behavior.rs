@@ -47,6 +47,42 @@ fn health_counts_rules_with_complete_traceability() {
     assert_eq!(health.gaps.total, 0);
 }
 
+#[test]
+fn retired_declarations_are_absent_from_active_health_and_gap_views() {
+    let (_dir, layout, scope) = seeded_layout();
+    retire_records(&layout, &scope);
+
+    let health = coverage_health(&layout, &scope).unwrap();
+    assert_eq!(health.requirements.total, 0);
+    assert_eq!(health.rules.total, 0);
+    assert_eq!(health.gaps.total, 0);
+    assert!(graph_evidence(&layout, &scope).unwrap().rule_ids.is_empty());
+    assert!(prime_context(&layout, &scope, false)
+        .unwrap()
+        .rules
+        .is_empty());
+}
+
+fn retire_records(layout: &ProvenanceLayout, scope: &ScopeId) {
+    for path in [
+        crate::shards::sources_path(layout, scope),
+        crate::shards::requirements_path(layout, scope),
+        crate::shards::rules_path(layout, scope),
+    ] {
+        let contents = std::fs::read_to_string(&path).unwrap();
+        let retired = contents
+            .lines()
+            .map(|line| {
+                let mut record = serde_json::from_str::<serde_json::Value>(line).unwrap();
+                record["retired"] = serde_json::Value::Bool(true);
+                serde_json::to_string(&record).unwrap()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(path, format!("{retired}\n")).unwrap();
+    }
+}
+
 /// Seeds a requirement, the decision that settles it, and a rule both are
 /// recorded as producing. No source is attached to the requirement.
 fn seed_unsourced_chain(layout: &ProvenanceLayout, scope: &ScopeId) {

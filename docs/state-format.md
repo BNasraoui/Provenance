@@ -11,6 +11,14 @@ integration allowed to reconcile that record; it does not grant ownership of
 the scope or of unrelated graph state. The typed SDK refuses to adopt an
 existing record whose value is absent or different.
 
+Typed-owned Sources, Requirements, and Rules may carry `retired: true`.
+Omitting the field means active. A complete typed declaration document retires
+owned records from the same spec when they disappear, but keeps their canonical
+IDs, addresses, and historical edges. Reintroducing the declaration clears the
+field and reuses the same record. Active graph, gap, health, implementation, and
+verification checks exclude retired declarations. Hard deletion is a separate,
+unsupported operation.
+
 Typed verification relationships live in
 `scopes/<scope>/verifications/binding.jsonl`. Each row joins an owner-local
 binding key and repository code location to a canonical Rule. Scanner markers

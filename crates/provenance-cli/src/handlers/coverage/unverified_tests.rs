@@ -20,6 +20,7 @@ fn rule(id: &str, status: RuleStatus) -> Rule {
         id: StableId::new(id).unwrap(),
         declared_by: None,
         declaration_address: None,
+        retired: false,
         name: None,
         description: None,
         statement: "Claims must be grouped by participant".to_string(),
@@ -101,6 +102,16 @@ fn active_rule_with_no_verification_warns() {
     assert_eq!(warnings.len(), 1);
     assert_eq!(warnings[0].rule_id, "rule_foo");
     assert!(warnings[0].message.contains("has no verification"));
+}
+
+#[test]
+fn retired_active_rule_does_not_warn_about_missing_verification() {
+    let retired = Rule {
+        retired: true,
+        ..rule("rule_retired", RuleStatus::Active)
+    };
+
+    assert!(unverified_rule_warnings(&[retired], &[], &[]).is_empty());
 }
 
 /// The rule names a source document, and the warning still points at no

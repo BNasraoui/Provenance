@@ -85,7 +85,7 @@ if (Object.hasOwn(responses, command)) {
 } else if (command === "info") {
   process.stdout.write(JSON.stringify({
     engine_version: "0.1.0",
-    protocol_version: 2,
+    protocol_version: 3,
     state_schema_version: 1,
     repository: "/project",
   }));
@@ -202,7 +202,7 @@ test("plan sends the finalized spec to the read-only engine command", async () =
   const recorder = recordingEngine({
     info: {
       engine_version: "0.1.0",
-      protocol_version: 2,
+      protocol_version: 3,
       state_schema_version: 1,
       repository: "/project",
     },
@@ -210,6 +210,9 @@ test("plan sends the finalized spec to the read-only engine command", async () =
       declared_by: "spec://typescript",
       created: 0,
       updated: 1,
+      moved: 0,
+      retired: 0,
+      conflicts: 0,
       unchanged: 1,
       resources: [],
       affected_rules: [],
@@ -291,6 +294,37 @@ test("requirement source order stays unchanged after apply", async () => {
 
   assert.equal(result.updated, 0);
   assert.equal(result.unchanged, 4);
+});
+
+test("omitted declarations retire and later reactivate with the same ids", async () => {
+  const repo = repository();
+  configure({
+    engine,
+    repository: repo,
+    owner: "spec://typescript/retirement",
+  });
+  const full = defineSpec("retirement", ({ requirement }) => {
+    const sharing = requirement("sharing", {
+      statement: "Users can securely share documentation",
+    });
+    return {
+      expiry: sharing.rule("expiry", {
+        statement: "Share links expire within 30 days",
+      }),
+    };
+  });
+  const empty = defineSpec("retirement", () => ({}));
+
+  const first = await apply(full);
+  const ids = first.resources.map(({ id }) => id).sort();
+  const preview = await plan(empty);
+  assert.equal(preview.retired, 2);
+  assert.deepEqual(preview.resources.map(({ state }) => state), ["retired", "retired"]);
+
+  await apply(empty);
+  const reactivated = await apply(full);
+  assert.equal(reactivated.updated, 2);
+  assert.deepEqual(reactivated.resources.map(({ id }) => id).sort(), ids);
 });
 
 test("equal local rule keys under different requirements reconcile separately", async () => {

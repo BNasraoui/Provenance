@@ -13,6 +13,17 @@ fn graph_reference_schemas_are_exposed() {
             .stdout(predicate::str::contains("\"const\": 1"))
             .stdout(predicate::str::contains("additionalProperties"));
     }
+    provenance(temp.path())
+        .args([
+            "schema",
+            "show",
+            "graph-reference-export",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"retired\""));
 }
 
 #[test]
