@@ -143,6 +143,17 @@ fn imports_the_local_official_issue_9_pdf() {
         status_count(&dictionary.entries, DictionaryStatus::Unapproved),
         UNAPPROVED_TABLE_ROWS
     );
+
+    let index_directory = std::env::temp_dir().join(format!(
+        "provenance-ste100-official-index-{}",
+        std::process::id()
+    ));
+    provenance_ste100::store_dictionary_index(&dictionary, &index_directory)
+        .expect("store the official import as an index");
+    let reloaded = provenance_ste100::load_dictionary_index(&index_directory, &dictionary.identity)
+        .expect("load the official index again");
+    assert_eq!(reloaded, dictionary);
+    std::fs::remove_dir_all(&index_directory).expect("remove the scratch directory");
 }
 
 fn status_count(entries: &[provenance_ste100::DictionaryEntry], status: DictionaryStatus) -> usize {

@@ -1,7 +1,10 @@
 mod digest;
+mod index;
 mod layout;
 mod parse;
 mod pdf;
+
+pub use index::{load_dictionary_index, store_dictionary_index, DictionaryIndexError};
 
 use provenance_macros::rule;
 use serde::{Deserialize, Serialize};

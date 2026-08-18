@@ -18,7 +18,7 @@ pub(super) fn identity(source: &[u8], entries: &[DictionaryEntry]) -> Dictionary
     }
 }
 
-fn normalized_data_digest(entries: &[DictionaryEntry]) -> String {
+pub(super) fn normalized_data_digest(entries: &[DictionaryEntry]) -> String {
     let mut digest = Sha256::new();
     put(&mut digest, "provenance-ste100-dictionary-import-v1");
     for entry in entries {

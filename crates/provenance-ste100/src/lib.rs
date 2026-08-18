@@ -6,8 +6,9 @@ mod paragraph;
 mod protected_spans;
 
 pub use dictionary::{
-    import_dictionary, DictionaryEntry, DictionaryImport, DictionaryImportError,
-    DictionaryImportIdentity, DictionaryStatus, PartOfSpeech,
+    import_dictionary, load_dictionary_index, store_dictionary_index, DictionaryEntry,
+    DictionaryImport, DictionaryImportError, DictionaryImportIdentity, DictionaryIndexError,
+    DictionaryStatus, PartOfSpeech,
 };
 
 use provenance_macros::rule;
