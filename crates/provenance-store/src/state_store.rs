@@ -170,6 +170,16 @@ impl StateStore {
     ) -> anyhow::Result<Vec<VerificationBinding>> {
         read_jsonl(&shards::verification_bindings_path(&self.layout, scope))
     }
+    pub fn active_verification_bindings(
+        &self,
+        scope: &ScopeId,
+    ) -> anyhow::Result<Vec<VerificationBinding>> {
+        Ok(self
+            .list_verification_bindings(scope)?
+            .into_iter()
+            .filter(|binding| !binding.retired)
+            .collect())
+    }
     pub fn list_implementation_bindings(
         &self,
         scope: &ScopeId,

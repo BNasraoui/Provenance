@@ -56,7 +56,7 @@ pub(super) fn typed_spec(
     changed_rules.sort_by(|left, right| left.as_str().cmp(right.as_str()));
     changed_rules.dedup();
     let scans = provenance_scanner::scan_path(repo)?;
-    let bindings = store.list_verification_bindings(scope)?;
+    let bindings = store.active_verification_bindings(scope)?;
     let implementation_changes = reconciliation
         .resources
         .iter()

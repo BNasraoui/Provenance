@@ -56,7 +56,7 @@ pub(super) fn load_validation_state(
     }
     Ok(ValidationState {
         rules,
-        bindings: store.list_verification_bindings(&scope)?,
+        bindings: store.active_verification_bindings(&scope)?,
         implementations,
         warnings: warnings
             .into_iter()

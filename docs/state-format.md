@@ -36,6 +36,16 @@ exact graph references preserve them as canonical history. Applying one spec
 does not retire bindings attached to Rules declared by another spec, even when
 both specs use the same declaration owner.
 
+Typed verification relationships live in
+`scopes/<scope>/verifications/binding.jsonl`. When a verification owner reports
+one of its keys from a file against a different Rule, the binding that key
+previously named gets its `retired` field set instead of being deleted.
+Reporting it again clears retirement on the same binding ID. Active coverage,
+wiki, stale, health, and plan views exclude retired bindings; export, import,
+checking, and exact graph references preserve them. A run reconciles only the
+owner, file, and key it reported, so another owner's binding and the same key
+declared from another file stay active.
+
 A Rule with no active implementation binding is a valid unimplemented Rule. This
 semantic change does not alter the version `1` record shape: existing source
 fields remain citations and do not count as implementation, so existing

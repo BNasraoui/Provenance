@@ -88,6 +88,7 @@ fn typed_binding(rule_id: &str) -> VerificationBinding {
         key: "typed-check".to_string(),
         method: VerificationMethod::Examples,
         declared_by: "ci://typescript".to_string(),
+        retired: false,
         file: "tests/rule.test.ts".into(),
         symbol: Some("rule holds".to_string()),
     }

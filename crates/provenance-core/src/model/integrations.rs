@@ -137,6 +137,8 @@ pub struct VerificationBinding {
     pub key: String,
     pub method: VerificationMethod,
     pub declared_by: String,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub retired: bool,
     pub file: Utf8PathBuf,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub symbol: Option<String>,

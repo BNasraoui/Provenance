@@ -214,7 +214,8 @@ fn export_definitions() -> Value {
                 "schema_version": version.clone(), "scope_id": id.clone(), "id": id.clone(),
                 "rule_id": id.clone(), "key": string.clone(),
                 "method": {"enum": ["exhaustion", "property", "examples", "conformance", "construction", "proof"]},
-                "declared_by": string.clone(), "file": string.clone(), "symbol": string.clone()
+                "declared_by": string.clone(), "retired": {"type": "boolean"},
+                "file": string.clone(), "symbol": string.clone()
             })
         ),
         "implementationBinding": closed_record(

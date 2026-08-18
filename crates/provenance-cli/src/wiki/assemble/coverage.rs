@@ -133,7 +133,7 @@ impl Assembler<'_> {
             .state
             .verification_bindings
             .iter()
-            .filter(|binding| binding.rule_id.as_str() == rule_id)
+            .filter(|binding| !binding.retired && binding.rule_id.as_str() == rule_id)
         {
             let typed = VerificationSite {
                 method: binding.method.to_string(),

@@ -155,6 +155,14 @@ await shareLinks.requirements.sharing.rules.expiry.verify("share-link-expiry", a
 });
 ```
 
+Pointing an owner-local verification key at a different Rule from the same
+test file retires the binding that key previously named. Calling it again
+reactivates the same binding ID, and moving the key to another file updates it
+in place. Retired bindings remain in canonical exports as history but no longer
+make the Rule appear verified. Because one run only sees the call sites it ran,
+nothing else is retired, and a binding whose test file disappeared is reported
+by `provenance stale` instead.
+
 The handle keeps an owner-local declaration address, not a mutable database
 ID. Rust resolves that address to the canonical Rule when verification begins.
 Calling `verify` before applying the spec fails before the callback runs. A

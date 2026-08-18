@@ -55,11 +55,13 @@ impl StateStore {
             key: input.key,
             method: input.method,
             declared_by: input.declared_by,
+            retired: false,
             file: input.file,
             symbol: input.symbol,
         };
         let path = shards::verification_bindings_path(&self.layout, &input.scope_id);
         self.mutate_jsonl_records(&path, |records: &mut Vec<VerificationBinding>| {
+            retire_replaced(records, &binding);
             if let Some(existing) = records.iter_mut().find(|record| record.id == id) {
                 *existing = binding.clone();
             } else {
@@ -68,6 +70,20 @@ impl StateStore {
             records.sort_by(|left, right| left.id.as_str().cmp(right.id.as_str()));
             Ok(binding)
         })
+    }
+}
+
+/// Retires the relationship an owner-local key replaced in one test file. A
+/// run vouches only for the owner, file, and key it just reported, so a key
+/// reused by another owner or from another file stays untouched.
+fn retire_replaced(records: &mut [VerificationBinding], reported: &VerificationBinding) {
+    for record in records.iter_mut().filter(|record| {
+        record.declared_by == reported.declared_by
+            && record.file == reported.file
+            && record.key == reported.key
+            && record.rule_id != reported.rule_id
+    }) {
+        record.retired = true;
     }
 }
 
