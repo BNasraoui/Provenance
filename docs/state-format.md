@@ -46,6 +46,16 @@ checking, and exact graph references preserve them. A run reconciles only the
 owner, file, and key it reported, so another owner's binding and the same key
 declared from another file stay active.
 
+Requirement review records live in
+`scopes/<scope>/requirements/review.jsonl`. When an applied reconciliation
+restates a Requirement's `statement`, one row per affected Rule records the
+Requirement, the field, both statements, and when the change landed. A review
+is identified by that exact restatement, so re-applying the same change never
+reopens a cleared review. A verification run for the Rule recorded after the
+change sets `cleared_at` and `cleared_by_run` while keeping the reason; nothing
+is deleted. Plan reads these rows to report review-required evidence, and
+previews the reviews an unapplied diff would raise without writing them.
+
 A Rule with no active implementation binding is a valid unimplemented Rule. This
 semantic change does not alter the version `1` record shape: existing source
 fields remain citations and do not count as implementation, so existing
