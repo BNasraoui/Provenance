@@ -73,14 +73,16 @@ impl StateStore {
     }
 }
 
-/// Retires the relationship an owner-local key replaced. Reporting a key
-/// proves only where that key points now, so nothing outside the reported
-/// key is reconciled.
+/// Retires the relationship an owner-local key replaced in one test file. A
+/// run vouches only for the owner, file, and key it just reported, so a key
+/// reused by another owner or from another file stays untouched.
 fn retire_replaced(records: &mut [VerificationBinding], reported: &VerificationBinding) {
-    for record in records
-        .iter_mut()
-        .filter(|record| record.key == reported.key && record.rule_id != reported.rule_id)
-    {
+    for record in records.iter_mut().filter(|record| {
+        record.declared_by == reported.declared_by
+            && record.file == reported.file
+            && record.key == reported.key
+            && record.rule_id != reported.rule_id
+    }) {
         record.retired = true;
     }
 }
