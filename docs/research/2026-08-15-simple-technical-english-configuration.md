@@ -1,9 +1,9 @@
 # ASD-STE100 checks for Provenance statements
 
-**Beads:** `provenance-0ss`, `provenance-l3m`<br>
-**Date:** 2026-08-15<br>
-**Status:** The technical spike, first exact check, direct write gate, and typed SDK gate are complete.<br>
-**Baseline:** `5d1eae4`
+**Beads:** `provenance-0ss`, `provenance-l3m`, `provenance-l3m.12`<br>
+**Date:** 2026-08-18<br>
+**Status:** The shared checker and all planned graph-write paths are merged. The standards audit is complete.<br>
+**Baseline:** `ca8f873`
 
 ## Writing note
 
@@ -58,12 +58,20 @@ It cannot meet the third claim.
 A parser can make the same wrong choice each time.
 Repeatable output does not prove correct analysis.
 
-## First exact rule
+## Current merged checks
 
-The first implementation uses ASD-STE100 Issue 9 Rule 8.1.
-It reports each semicolon in descriptive text.
+The current checker implements strict findings for these rules:
 
-This rule has useful exact properties:
+- Rule 8.1 semicolons, with the quotation condition in Rule 8.6.
+- A sound subset of Rule 4.2 contracted verb forms.
+- The Rule 6.3 limit for descriptive sentences.
+- The counting behavior in Rules 8.4 through 8.7 that Rule 6.3 needs.
+
+These changes are merged through PR 104 at `ca8f873`.
+The same Rust report now controls direct writes, typed SDK plan and apply, staged import, merged JSONL, and manual-change reports.
+Manual-change findings remain informational.
+
+The Rule 8.1 check has these exact properties:
 
 - The input is only a string.
 - Each semicolon gives one finding.
@@ -76,39 +84,95 @@ The test suite tries every short string from a finite test alphabet.
 It also tests Unicode text, many semicolons, stable order, and stable JSON.
 This gives strong evidence for the implemented Rule 8.1 behavior.
 
-This evidence applies only to Rule 8.1.
+This evidence applies only to the implemented Rule 8.1 behavior.
 It does not apply to all ASD-STE100 rules.
 
-## Other possible strict checks
+## Standards audit of remaining descriptive rules
 
-Some other Issue 9 checks can become exact.
-They need their full counting or matching rules before they can reject a write.
+The audit reviewed all 53 Part 1 rules in the official Issue 9 PDF.
+It then removed the procedural rules in Section 5 and the safety-instruction rules in Section 7 from this statement-field scope.
+Section 5 applies only when a Rule statement is an instruction.
+Section 7 applies only when a field is a designated warning or caution.
 
-Possible checks include these items:
+The classifications below apply to plain `requirement.statement` and `rule.statement` strings.
+They do not apply to a future structured document model.
+The locators are printed Issue 9 page numbers.
 
-- recognized contractions under Rule 4.2
-- permitted uses of `shall` and `should` under Rule 1.1 and Part 2
-- the 25-word limit for descriptive sentences under Rule 6.3
-- word-count behavior under Rules 8.4 to 8.7
+### Exact
 
-Do not use a simple word counter for Rule 6.3.
-The standard defines how some hyphenated terms, numbers, identifiers, quotations, and other spans count.
-An unclear Rule 8.6 span must not cause a strict finding.
+Rule 6.6 is the only remaining data-free check that is ready for a strict implementation.
+It limits a descriptive paragraph to six sentences (Rule 6.6, page 1-6-7).
+The existing exact-or-indeterminate sentence model can support this check without a grammar guess.
+The grounded implementation Bead is `provenance-l3m.11`.
 
-Do not report several sentences as a violation by itself.
-Rule 6.6 permits as many as six sentences in a paragraph.
+The test boundary must be narrow:
 
-Do not make these checks strict from simple expressions:
+- Check only paragraph spans that the input preserves.
+- Emit one finding only when an exact sentence segmentation has more than six sentences.
+- Cover the complete half-open UTF-8 paragraph span.
+- Treat a heading as outside the paragraph.
+- Do not count list fragments as paragraph sentences only because Rule 8.4 counts list text separately for sentence length.
+- Return no strict Rule 6.6 finding for an abbreviation, decimal, identifier, quotation, or other boundary that the scanner cannot segment exactly.
+- Test zero through six sentences, seven sentences, several paragraphs, Unicode spans, protected punctuation, stable order, and indeterminate boundaries.
 
-- passive voice
-- `-ing` forms
-- noun clusters
-- articles
-- imperatives
-- phrasal verbs
+Rule 4.3 has data-free structural parts for a vertical list (pages 1-4-4 through 1-4-6).
+For example, its introduction and item punctuation have mechanical constraints.
+It is not ready for this plain-string checker because the input does not identify a vertical list or its items.
+Do not infer that structure from a regular expression.
+If a later host supplies typed list nodes, audit the structural subset again.
 
-These checks need a grammar parse or a choice about meaning.
-They should start as review messages.
+### Partial
+
+These rules have a possible sound subset, but the complete rule needs syntax, terminology, meaning, or document context:
+
+- Rule 1.7, technical nouns used as verbs (page 1-1-11).
+- Rule 1.9, length and quality of technical nouns (page 1-1-12).
+- Rule 1.13, technical verbs used as nouns (pages 1-1-16 through 1-1-17).
+- Rules 2.1 and 2.2, multi-word nouns and long official names (pages 1-2-1 through 1-2-4).
+- Rules 3.2 and 3.4, permitted verb constructions (pages 1-3-2 through 1-3-3).
+- Rule 3.6, active voice and its unknown-agent exception (pages 1-3-5 through 1-3-8).
+- Rule 4.2, omitted sentence components and contraction forms outside the merged finite matcher (page 1-4-3).
+- Rule 4.3, list selection, attachment, and the plain-string structural problem (pages 1-4-4 through 1-4-6).
+- Rule 8.6, protected formulas, names, titles, labels, and other special spans that plain text does not identify (pages 1-8-5 through 1-8-8).
+
+A partial checker must report only a proved subset.
+For example, a parsed passive clause does not prove that its omitted agent is known.
+A word that ends in `-ing` does not prove a Rule 3.5 violation.
+Four adjacent words do not prove a Rule 2.1 noun cluster.
+
+### Indeterminate
+
+These rules need a decision about meaning, discourse, grammar, technical accuracy, or external project context:
+
+- Rules 1.8, 1.10, and 1.11, approved project terms, audience-specific jargon, and names for the same item (pages 1-1-11 through 1-1-13).
+- Rule 4.1, clear and accurate descriptive prose with one topic (pages 1-4-1 through 1-4-2).
+- Rules 4.2, 4.4, and 4.5, omitted components, topic connections, and applicable articles (pages 1-4-3 through 1-4-9).
+- Rules 6.1 and 6.2, information order and repeated key terms (pages 1-6-1 through 1-6-4).
+- The qualitative part of Rule 6.3, ease of understanding (page 1-6-4).
+- Rules 6.4 and 6.5, paragraph topic structure (pages 1-6-5 through 1-6-6).
+- Rules 8.2 and 8.3, meaningful hyphens and permitted uses of parentheses (pages 1-8-2 through 1-8-4).
+- Rules 9.1 and 9.4, meaning-preserving rewrites and consistent wording (pages 1-9-1 through 1-9-5 and 1-9-8 through 1-9-9).
+
+The official STEMG tools page also says that a checker cannot determine whether the first sentence is the topic sentence.
+These items can support human review, but they must not become strict checks from surface grammar guesses.
+
+### Rights-blocked
+
+These rules need official vocabulary, forms, meanings, categories, exceptions, or other extracted standard data:
+
+- Rules 1.1 through 1.6, approved words, parts of speech, meanings, forms, and technical-noun categories (pages 1-1-1 through 1-1-10).
+- Rule 1.12, technical-verb categories and approved alternatives (pages 1-1-13 through 1-1-16).
+- Rule 1.14, official spelling and directive exceptions (page 1-1-17).
+- Rules 3.1, 3.3, 3.5, and 3.7, approved verb forms, participles, `-ing` exceptions, and approved action verbs (pages 1-3-1 through 1-3-5 and page 1-3-9).
+- Rules 9.2 and 9.3, approved meanings, parts of speech, and phrasal-verb exceptions (pages 1-9-5 through 1-9-8).
+
+Some rights-blocked rules also need a parser or project termbase.
+Written rights to the data would remove only the distribution block.
+They would not make the linguistic analysis exact.
+
+Section 9 also contains eight general recommendations on pages 1-9-9 through 1-9-13.
+Issue 9 says that they are not STE rules.
+They must not produce strict conformance findings.
 
 ## Compile-time checks
 
@@ -168,7 +232,9 @@ The typed check must run after in-memory reconciliation.
 It must run before the first Apply write.
 Plan and Apply must use the same ordered diagnostic list.
 
-Import, merge, and manual-edit checks are separate work in `provenance-l3m.7`.
+Import, merge, and manual-edit checks are complete.
+Imports and accepted merges use the changed-statement gate.
+Manual edits produce an informational report.
 
 ## Diagnostic data
 
@@ -259,7 +325,7 @@ Add one cited graph Rule for each implemented ASD behavior.
 Bind production code with `#[rule]`.
 Bind meaningful tests with `#[verifies]`.
 
-Status: complete for Rule 8.1 in PR 96.
+Status: complete for Rules 4.2, 6.3, 8.1, and the related Rules 8.4 through 8.7 through PR 104.
 
 ### Step 2: Direct graph writes
 
@@ -285,7 +351,8 @@ Map declaration addresses and spans back to source locations.
 Call the Rust checker from an editor or language-server process.
 Do not add a TypeScript copy of the rules.
 
-Status: planned under `provenance-l3m.5`.
+Status: the shared `sdk check-statement` preflight is complete in PR 99.
+An editor adapter remains optional later work.
 
 ### Step 5: Other graph paths
 
@@ -293,7 +360,7 @@ Check staged import before state replacement.
 Check merged and hand-edited JSONL before acceptance.
 Use the same checker and diagnostic format.
 
-Status: planned under `provenance-l3m.7`.
+Status: complete in PR 101.
 
 ## Test plan
 
