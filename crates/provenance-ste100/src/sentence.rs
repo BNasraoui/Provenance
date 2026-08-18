@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use provenance_macros::rule;
 
 use crate::protected_spans::ProtectedSpans;
@@ -12,12 +14,17 @@ pub struct Sentence {
 /// Keeps ordinary colons within a sentence and leaves list-like input indeterminate.
 #[rule("rule_ste100_ordinary_colon_continuity")]
 pub fn scan(text: &str, protected: &ProtectedSpans) -> Vec<Sentence> {
+    scan_range(text, protected, 0..text.len())
+}
+
+pub fn scan_range(text: &str, protected: &ProtectedSpans, range: Range<usize>) -> Vec<Sentence> {
     let mut sentences = Vec::new();
-    let mut sentence_start = 0;
+    let mut sentence_start = range.start;
     let mut parentheses = Vec::new();
     let mut top_level_indeterminate = protected.is_indeterminate();
 
-    for (offset, character) in text.char_indices() {
+    for (relative_offset, character) in text[range.clone()].char_indices() {
+        let offset = range.start + relative_offset;
         if protected.contains_offset(offset) {
             continue;
         }
@@ -49,15 +56,16 @@ pub fn scan(text: &str, protected: &ProtectedSpans) -> Vec<Sentence> {
                     && (character != '.' || !is_decimal_point(text, offset)) =>
             {
                 let end = offset + character.len_utf8();
+                let unclear_period = character == '.' && is_unclear_period_boundary(text, end);
                 push_trimmed(
                     text,
                     sentence_start,
                     end,
-                    top_level_indeterminate,
+                    top_level_indeterminate || unclear_period,
                     &mut sentences,
                 );
                 sentence_start = end;
-                top_level_indeterminate = protected.is_indeterminate();
+                top_level_indeterminate = protected.is_indeterminate() || unclear_period;
             }
             _ => {}
         }
@@ -67,7 +75,7 @@ pub fn scan(text: &str, protected: &ProtectedSpans) -> Vec<Sentence> {
     push_trimmed(
         text,
         sentence_start,
-        text.len(),
+        range.end,
         top_level_indeterminate,
         &mut sentences,
     );
@@ -118,4 +126,19 @@ fn is_decimal_point(text: &str, offset: usize) -> bool {
             .chars()
             .next()
             .is_some_and(|character| character.is_ascii_digit())
+}
+
+fn is_unclear_period_boundary(text: &str, after_period: usize) -> bool {
+    let remainder = &text[after_period..];
+    let Some(next) = remainder.chars().next() else {
+        return false;
+    };
+    if !next.is_whitespace() {
+        return next.is_alphabetic() || next == '.';
+    }
+
+    remainder
+        .chars()
+        .find(|character| !character.is_whitespace())
+        .is_some_and(char::is_lowercase)
 }
