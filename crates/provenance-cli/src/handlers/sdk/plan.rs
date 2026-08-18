@@ -57,9 +57,22 @@ pub(super) fn typed_spec(
     changed_rules.dedup();
     let scans = provenance_scanner::scan_path(repo)?;
     let bindings = store.list_verification_bindings(scope)?;
+    let implementation_changes = reconciliation
+        .resources
+        .iter()
+        .filter(|resource| {
+            resource.kind == TypedResourceKind::Rule
+                && resource
+                    .changes
+                    .iter()
+                    .any(|change| change.field == "implementation")
+        })
+        .map(|resource| &resource.id)
+        .collect::<Vec<_>>();
     let implementations = store
-        .list_implementation_bindings(scope)?
+        .active_implementation_bindings(scope)?
         .into_iter()
+        .filter(|binding| !implementation_changes.contains(&&binding.rule_id))
         .chain(reconciliation.implementation_bindings.iter().cloned())
         .map(|binding| (binding.id.as_str().to_string(), binding))
         .collect::<BTreeMap<_, _>>()
@@ -95,7 +108,7 @@ fn affected_rule_ids(
         .filter(|resource| resource.kind == TypedResourceKind::Rule)
         .map(|resource| resource.id.clone())
         .collect::<Vec<_>>();
-    let existing_implementations = store.list_implementation_bindings(scope)?;
+    let existing_implementations = store.active_implementation_bindings(scope)?;
     for binding in &reconciliation.implementation_bindings {
         if !existing_implementations
             .iter()
@@ -152,7 +165,7 @@ fn affected_rule(
         .chain(
             typed_implementations
                 .iter()
-                .filter(|binding| binding.rule_id == id)
+                .filter(|binding| !binding.retired && binding.rule_id == id)
                 .map(|binding| ImplementationSite {
                     file: binding.file.clone(),
                     line: None,

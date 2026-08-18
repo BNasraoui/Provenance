@@ -117,6 +117,12 @@ Requirement relationships. Historical relationships attached to retired
 records remain canonical history. The POC still has no hard deletion,
 ownership-transfer, or automatic ambiguous rename operation.
 
+Implementation relationships follow the same non-destructive rule. Removing
+`implementedBy` retires the binding owned by that spec and makes the active Rule
+unimplemented. Plan reports an `implementation` field change on the Rule;
+reintroducing the relationship reuses its binding ID, and changing the exported
+target updates that binding in place. Other specs' bindings remain untouched.
+
 ## Verification evidence
 
 Callback results are volatile run evidence, so they live under:

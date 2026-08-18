@@ -5,11 +5,25 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { configure, defineSpec, plan } from "./index.js";
+import type { ImplementationBinding } from "./protocol.js";
 
 interface RecordedRequest {
   command: string;
   args: string[];
 }
+
+const retiredBinding: ImplementationBinding = {
+  id: "implementation_binding_start",
+  rule_id: "rule_start",
+  declared_by: "spec://typescript/workflows",
+  retired: true,
+  file: "src/runtime.ts",
+  symbol: "startWorkflow",
+};
+
+test("the SDK preserves retired implementation history in engine results", () => {
+  assert.equal(retiredBinding.retired, true);
+});
 
 function recordingEngine(responses: Readonly<Record<string, unknown>>): {
   engine: string;

@@ -18,7 +18,7 @@ An identified atomic behavioural obligation that refines one or more Requirement
 
 ## Implementation binding
 
-A relationship from a Rule to production code that realizes it. A Rule without an Implementation binding is unimplemented, but remains a Rule.
+A durable relationship from a Rule to production code that realizes it. A retired Implementation binding preserves a former claim as history but does not implement the Rule in active views. A Rule without an active Implementation binding is unimplemented, but remains a Rule.
 
 ## Verification
 

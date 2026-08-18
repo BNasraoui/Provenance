@@ -222,6 +222,7 @@ fn export_definitions() -> Value {
             json!({
                 "schema_version": version.clone(), "scope_id": id.clone(), "id": id.clone(),
                 "rule_id": id.clone(), "declared_by": string.clone(),
+                "retired": {"type": "boolean"},
                 "file": {"type": "string", "minLength": 1},
                 "symbol": {"type": "string", "minLength": 1}
             })

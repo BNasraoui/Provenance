@@ -227,6 +227,7 @@ fn implementation_binding_record(scope: &ScopeId) -> ImplementationBinding {
         id: stable_id(RecordFamily::ImplementationBinding),
         rule_id: stable_id(RecordFamily::Rule),
         declared_by: "spec://typescript/pinned".into(),
+        retired: false,
         file: "src/pinned.ts".into(),
         symbol: "pinnedImplementation".into(),
     }

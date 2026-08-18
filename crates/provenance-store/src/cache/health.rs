@@ -139,7 +139,7 @@ fn graph_evidence_locked(
             .filter(|binding| rule_ids.contains(binding.rule_id.as_str()))
             .collect(),
         implementation_bindings: store
-            .list_implementation_bindings(scope)?
+            .active_implementation_bindings(scope)?
             .into_iter()
             .filter(|binding| rule_ids.contains(binding.rule_id.as_str()))
             .collect(),

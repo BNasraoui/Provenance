@@ -176,6 +176,16 @@ impl StateStore {
     ) -> anyhow::Result<Vec<ImplementationBinding>> {
         read_jsonl(&shards::implementation_bindings_path(&self.layout, scope))
     }
+    pub fn active_implementation_bindings(
+        &self,
+        scope: &ScopeId,
+    ) -> anyhow::Result<Vec<ImplementationBinding>> {
+        Ok(self
+            .list_implementation_bindings(scope)?
+            .into_iter()
+            .filter(|binding| !binding.retired)
+            .collect())
+    }
     pub(crate) fn closed_sources(&self, scope: &ScopeId) -> anyhow::Result<Vec<Source>> {
         read_jsonl_closed(&shards::sources_path(&self.layout, scope))
     }

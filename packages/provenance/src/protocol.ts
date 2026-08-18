@@ -84,6 +84,7 @@ export interface ImplementationBinding {
   id: string;
   rule_id: string;
   declared_by: string;
+  retired?: boolean;
   file: string;
   symbol: string;
 }

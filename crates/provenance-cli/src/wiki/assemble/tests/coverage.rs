@@ -73,6 +73,7 @@ fn typed_implementation(file: &str, symbol: &str) -> CanonicalImplementationBind
         id: StableId::new("implementation_binding_rule_001").unwrap(),
         rule_id: StableId::new("rule_001").unwrap(),
         declared_by: "spec://typescript/payroll".to_string(),
+        retired: false,
         file: Utf8PathBuf::from(file),
         symbol: symbol.to_string(),
     }
@@ -94,6 +95,22 @@ fn typed_implementation_is_visible_without_a_code_scan() {
     assert!(html.contains(">Implementation</h2>"), "{html}");
     assert!(html.contains("calculatePayroll"), "{html}");
     assert!(html.contains("src/payroll.ts"), "{html}");
+}
+
+#[test]
+fn retired_typed_implementation_is_not_presented_as_current() {
+    let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
+    let mut state = fixture_state();
+    let mut retired = typed_implementation("src/payroll.ts", "calculatePayroll");
+    retired.retired = true;
+    state.implementation_bindings.push(retired);
+
+    let corpus = build_corpus_with_coverage(&state, &resolver, None);
+    let page = rule_page(&corpus, "rule_001");
+    let html = render_rule("default", page);
+
+    assert!(page.implementations.is_empty());
+    assert!(!html.contains("calculatePayroll"), "{html}");
 }
 
 #[test]

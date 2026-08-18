@@ -12,8 +12,8 @@ use provenance_core::{
 };
 
 use super::{
-    ReconcileState, ReconciledResource, StateStore, TypedRequirementInput, TypedRuleInput,
-    TypedSpecInput, TypedSpecResult,
+    ReconcileState, ReconciledResource, StateStore, TypedFieldChange, TypedRequirementInput,
+    TypedRuleInput, TypedSpecInput, TypedSpecResult,
 };
 use crate::shards;
 use identity::{
@@ -158,7 +158,7 @@ impl StateStore {
             &ids.requirements,
             &ids.sources,
         )?;
-        let (rules, rule_resources) = reconcile_rules(
+        let (rules, mut rule_resources) = reconcile_rules(
             current.rules,
             &spec,
             scope_id,
@@ -166,15 +166,16 @@ impl StateStore {
             input.rules,
             &ids.rules,
         )?;
-        let implementation_bindings = super::implementation_bindings::reconcile(
+        let implementation_reconciliation = super::implementation_bindings::reconcile(
             self,
             scope_id,
             &input.declared_by,
             &spec,
             &rule_relationships,
             &ids.rules,
-            false,
+            &rules,
         )?;
+        attach_implementation_changes(&mut rule_resources, &implementation_reconciliation.changes);
 
         if matches!(mode, ReconcileMode::Apply) {
             replace_records(self, &shards::sources_path(&self.layout, scope_id), sources)?;
@@ -184,14 +185,10 @@ impl StateStore {
                 requirements,
             )?;
             replace_records(self, &shards::rules_path(&self.layout, scope_id), rules)?;
-            super::implementation_bindings::reconcile(
+            replace_records(
                 self,
-                scope_id,
-                &input.declared_by,
-                &spec,
-                &rule_relationships,
-                &ids.rules,
-                true,
+                &shards::implementation_bindings_path(&self.layout, scope_id),
+                implementation_reconciliation.records,
             )?;
             relationships::reconcile(
                 self,
@@ -213,7 +210,7 @@ impl StateStore {
             source_resources,
             requirement_resources,
             rule_resources,
-            implementation_bindings,
+            implementation_reconciliation.active,
         ))
     }
 
@@ -358,4 +355,19 @@ fn count_state(resources: &[ReconciledResource], state: ReconcileState) -> usize
         .iter()
         .filter(|resource| resource.state == state)
         .count()
+}
+
+fn attach_implementation_changes(
+    resources: &mut [ReconciledResource],
+    changes: &[(StableId, TypedFieldChange)],
+) {
+    for resource in resources.iter_mut() {
+        let Some((_, change)) = changes.iter().find(|(id, _)| id == &resource.id) else {
+            continue;
+        };
+        if resource.state == ReconcileState::Unchanged {
+            resource.state = ReconcileState::Updated;
+        }
+        resource.changes.push(change.clone());
+    }
 }
