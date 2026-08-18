@@ -11,6 +11,7 @@ use provenance_core::{
     DeclarationAddress, Requirement, Rule, ScopeId, Source, StableId, SUPPORTED_SCHEMA_VERSION,
 };
 
+use super::requirement_reviews;
 use super::{
     ReconcileState, ReconciledResource, StateStore, TypedFieldChange, TypedRequirementInput,
     TypedRuleInput, TypedSpecInput, TypedSpecResult,
@@ -203,6 +204,7 @@ impl StateStore {
                     rule_ids: &ids.rules,
                 },
             )?;
+            self.raise_requirement_reviews(scope_id, &requirement_resources, &rule_resources)?;
         }
 
         Ok(spec_result(
@@ -212,6 +214,43 @@ impl StateStore {
             rule_resources,
             implementation_reconciliation.active,
         ))
+    }
+
+    /// Puts the evidence of every Rule under a restated Requirement up for review.
+    fn raise_requirement_reviews(
+        &self,
+        scope_id: &ScopeId,
+        requirements: &[ReconciledResource],
+        rules: &[ReconciledResource],
+    ) -> anyhow::Result<()> {
+        let changes = requirement_reviews::requirement_statement_changes(requirements);
+        if changes.is_empty() {
+            return Ok(());
+        }
+        let changed_at = requirement_reviews::now_millis()?;
+        let mut reviews = Vec::new();
+        for change in changes {
+            let mut rule_ids = self.rule_ids_for_requirement(scope_id, &change.requirement_id)?;
+            for rule in rules
+                .iter()
+                .filter(|rule| rule.parent.as_deref() == Some(change.requirement_key.as_str()))
+            {
+                if !rule_ids.contains(&rule.id) {
+                    rule_ids.push(rule.id.clone());
+                }
+            }
+            reviews.extend(rule_ids.into_iter().map(|rule_id| {
+                requirement_reviews::RequirementReviewInput {
+                    rule_id,
+                    requirement_id: change.requirement_id.clone(),
+                    field: change.field.clone(),
+                    before: change.before.clone(),
+                    after: change.after.clone(),
+                    changed_at,
+                }
+            }));
+        }
+        self.record_requirement_reviews(scope_id, reviews)
     }
 
     fn current_typed_state(

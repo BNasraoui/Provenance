@@ -4,6 +4,7 @@ use provenance_core::{
 };
 use std::str::FromStr as _;
 
+use super::requirement_reviews::now_millis;
 use super::{
     BeginVerificationInput, CompleteVerificationInput, MaterializeVerificationBindingInput,
     StateStore,
@@ -78,7 +79,7 @@ impl StateStore {
         let started_at = now_millis()?;
         let path = self.layout.verification_runs_path(&scope_id);
         let lock_path = self.layout.verification_runs_lock_path(&scope_id);
-        crate::jsonl::mutate_jsonl_locked(
+        let run = crate::jsonl::mutate_jsonl_locked(
             &path,
             &lock_path,
             |records: &mut Vec<VerificationRun>| {
@@ -107,7 +108,9 @@ impl StateStore {
                 });
                 Ok(run)
             },
-        )
+        )?;
+        self.clear_requirement_reviews(&run.scope_id, &run.rule_id, &run.id, run.started_at)?;
+        Ok(run)
     }
 
     pub fn complete_verification(
@@ -176,9 +179,4 @@ fn next_run_id(records: &[VerificationRun], started_at: i64) -> anyhow::Result<S
             .ok_or_else(|| anyhow::anyhow!("verification run id suffix overflow"))?;
     }
     StableId::new(candidate)
-}
-
-fn now_millis() -> anyhow::Result<i64> {
-    let duration = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?;
-    i64::try_from(duration.as_millis()).map_err(Into::into)
 }

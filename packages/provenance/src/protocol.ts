@@ -104,10 +104,24 @@ export interface VerificationSite {
   symbol?: string;
 }
 
+export interface ReviewReason {
+  requirement: string;
+  field: string;
+  before: string;
+  after: string;
+  changed_at?: number;
+}
+
+export interface RuleEvidence {
+  review_required: boolean;
+  reasons?: ReviewReason[];
+}
+
 export interface AffectedRule {
   id: string;
   implementations: ImplementationSite[];
   verifications: VerificationSite[];
+  evidence?: RuleEvidence;
 }
 
 export interface PlanResult extends ApplyResult {

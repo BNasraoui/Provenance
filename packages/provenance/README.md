@@ -130,6 +130,19 @@ Rules also list the implementation and verification sites that may need
 review. Provenance computes both `plan` and `apply` through the same Rust
 reconciliation path.
 
+Each affected Rule carries an `evidence` object saying whether its evidence is
+`review_required`, and why. Rewording a Requirement statement puts every Rule
+it produces up for review, because the obligation those tests vouch for is no
+longer the one that was written down. Each reason names the Requirement, the
+field, and its value before and after, so a reviewer can see the wording change
+that prompted it. Reasons for a change already applied also carry `changed_at`.
+
+Review required is not the same as stale. Stale means the code holding the
+evidence changed and is reported by `provenance stale`. A Requirement wording
+change never claims anything about the code. Running the tests for a Rule again
+clears its review automatically; the recorded reason stays as history. Ask for
+`--format markdown` to read the same explanation as prose.
+
 The result classifies each declaration as `created`, `updated`, `moved`,
 `retired`, `conflict`, or `unchanged`. Omission retires only records owned by
 that same spec. Their Stable IDs and history remain, active checks ignore them,

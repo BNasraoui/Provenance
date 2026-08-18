@@ -144,6 +144,28 @@ pub struct VerificationBinding {
     pub symbol: Option<String>,
 }
 
+/// One record of a Rule whose evidence needs review because the Requirement
+/// it serves was restated.
+///
+/// The record keeps why review was asked for. A verification run arriving
+/// after the change clears it in place rather than removing the reason.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RequirementReview {
+    pub schema_version: SchemaVersion,
+    pub scope_id: ScopeId,
+    pub id: StableId,
+    pub rule_id: StableId,
+    pub requirement_id: StableId,
+    pub field: String,
+    pub before: String,
+    pub after: String,
+    pub changed_at: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cleared_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cleared_by_run: Option<StableId>,
+}
+
 /// One canonical primary implementation relationship from an exported
 /// production symbol to a Rule.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
