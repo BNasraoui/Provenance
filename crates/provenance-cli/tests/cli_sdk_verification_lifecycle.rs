@@ -199,3 +199,63 @@ fn reporting_a_retired_verification_again_reactivates_the_same_binding() {
     assert_eq!(stored.len(), 2);
     assert!(binding(&stored, &original).get("retired").is_none());
 }
+
+#[test]
+fn the_same_key_reported_from_another_file_leaves_the_first_file_alone() {
+    let directory = init_repo();
+    let start = rule_id(directory.path(), "start");
+    let resume = rule_id(directory.path(), "resume");
+    let untouched = verify(
+        directory.path(),
+        Verification {
+            rule: &start,
+            key: "expiry",
+            owner: "ci://typescript",
+            file: "tests/expiry.test.ts",
+        },
+    );
+
+    verify(
+        directory.path(),
+        Verification {
+            rule: &resume,
+            key: "expiry",
+            owner: "ci://typescript",
+            file: "tests/other.test.ts",
+        },
+    );
+
+    let stored = stored_bindings(directory.path());
+    assert_eq!(stored.len(), 2);
+    assert!(binding(&stored, &untouched).get("retired").is_none());
+}
+
+#[test]
+fn one_owner_cannot_retire_a_verification_binding_declared_by_another() {
+    let directory = init_repo();
+    let start = rule_id(directory.path(), "start");
+    let resume = rule_id(directory.path(), "resume");
+    let untouched = verify(
+        directory.path(),
+        Verification {
+            rule: &start,
+            key: "expiry",
+            owner: "ci://typescript",
+            file: "tests/expiry.test.ts",
+        },
+    );
+
+    verify(
+        directory.path(),
+        Verification {
+            rule: &resume,
+            key: "expiry",
+            owner: "ci://rust",
+            file: "tests/expiry.test.ts",
+        },
+    );
+
+    let stored = stored_bindings(directory.path());
+    assert_eq!(stored.len(), 2);
+    assert!(binding(&stored, &untouched).get("retired").is_none());
+}
