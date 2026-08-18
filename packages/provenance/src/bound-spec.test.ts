@@ -43,7 +43,7 @@ const source = readFileSync(0, "utf8");
 const input = source === "" ? undefined : JSON.parse(source);
 appendFileSync(${JSON.stringify(log)}, JSON.stringify({ command, input }) + "\\n");
 if (command === "info") process.stdout.write(JSON.stringify({
-  engine_version: "0.1.0", protocol_version: 2, state_schema_version: 1, repository: "/project"
+  engine_version: "0.1.0", protocol_version: 3, state_schema_version: 1, repository: "/project"
 }));
 else if (command === "begin-verification") process.stdout.write(JSON.stringify({
   id: "run_1", binding_id: "binding_1", rule_id: "rule_1", status: "running"
@@ -52,7 +52,8 @@ else if (command === "complete-verification") process.stdout.write(JSON.stringif
   id: "run_1", binding_id: "binding_1", rule_id: "rule_1", status: "passed"
 }));
 else process.stdout.write(JSON.stringify({
-  declared_by: "spec://typescript", created: 0, updated: 0, unchanged: 0,
+  declared_by: "spec://typescript", created: 0, updated: 0, moved: 0,
+  retired: 0, conflicts: 0, unchanged: 0,
   resources: [], affected_rules: []
 }));
 `,
@@ -86,9 +87,15 @@ test("a spec-bound Rule is its own immutable verification handle", async () => {
   const recorder = recordingEngine();
   configure({ engine: recorder.engine, owner: "spec://typescript/bound" });
   const provenance = defineSpec("share-links");
+  const policy = provenance
+    .source("policy")
+    .name("Sharing policy")
+    .document("docs/policy.md");
   const sharing = provenance
     .requirement("sharing")
-    .statement("Users can securely share documentation");
+    .statement("Users can securely share documentation")
+    .description("Controls for shared documentation")
+    .from(policy);
   const expiry = sharing
     .rule("expiry")
     .statement("Share links expire within 30 days");
@@ -145,6 +152,45 @@ test("a spec-scoped Rule materializes once for several Requirements", async () =
     edges.filter(({ edge_type, to_id }) => edge_type === "produces" && to_id === rules[0]?.id)
       .length,
     2,
+  );
+});
+
+test("source names and Requirement descriptions are immutable canonical metadata", async () => {
+  const repo = repository();
+  configure({ engine, repository: repo, owner: "spec://typescript/bound-metadata" });
+  const provenance = defineSpec("metadata");
+  const sourceDraft = provenance.source("policy").document("docs/policy.md");
+  const namedSource = sourceDraft.name("Security policy");
+  const requirementBase = provenance
+    .requirement("sharing")
+    .statement("Users can securely share documentation");
+  const requirementDraft = requirementBase
+    .from(sourceDraft)
+    .description("The first canonical description");
+  const revisedRequirement = requirementBase
+    .from(namedSource)
+    .description("The revised canonical description");
+
+  await apply(provenance.build(requirementDraft));
+  const result = await apply(provenance.build(revisedRequirement));
+
+  assert.notEqual(sourceDraft, namedSource);
+  assert.notEqual(requirementDraft, revisedRequirement);
+  assert.equal(Object.isFrozen(namedSource), true);
+  assert.equal(Object.isFrozen(revisedRequirement), true);
+  assert.deepEqual(
+    result.resources.find(({ kind }) => kind === "source")?.changes,
+    [{ field: "name", before: "policy", after: "Security policy" }],
+  );
+  assert.deepEqual(
+    result.resources.find(({ kind }) => kind === "requirement")?.changes,
+    [
+      {
+        field: "description",
+        before: "The first canonical description",
+        after: "The revised canonical description",
+      },
+    ],
   );
 });
 

@@ -34,13 +34,7 @@ pub(super) fn handle(command: SdkCommand) -> anyhow::Result<()> {
             repo,
             scope,
             format,
-        } => {
-            let repo = resolve_repository(repo)?;
-            let mut input = read_stdin_json::<TypedSpecInput>()?;
-            normalize_implementation_context(&repo, &mut input)?;
-            let result = plan::typed_spec(&repo, &ScopeId::new(scope)?, input)?;
-            output::print(format, &result)?;
-        }
+        } => plan_command(repo, scope, format)?,
         SdkCommand::Apply {
             repo,
             scope,
@@ -112,6 +106,27 @@ pub(super) fn handle(command: SdkCommand) -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+/// Previews one reconciliation and explains what it means for evidence.
+fn plan_command(
+    repo: Option<camino::Utf8PathBuf>,
+    scope: String,
+    format: output::OutputFormat,
+) -> anyhow::Result<()> {
+    let repo = resolve_repository(repo)?;
+    let mut input = read_stdin_json::<TypedSpecInput>()?;
+    normalize_implementation_context(&repo, &mut input)?;
+    let result = plan::typed_spec(&repo, &ScopeId::new(scope)?, input)?;
+    match format {
+        output::OutputFormat::Json | output::OutputFormat::Jsonl => output::print(format, &result),
+        output::OutputFormat::Markdown
+        | output::OutputFormat::Table
+        | output::OutputFormat::Toon => {
+            print!("{}", plan::render(&result));
+            Ok(())
+        }
+    }
 }
 
 /// Resolves one explicit root or discovers the nearest enclosing project.

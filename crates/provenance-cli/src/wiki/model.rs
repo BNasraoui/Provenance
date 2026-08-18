@@ -278,7 +278,8 @@ pub struct ResolutionPage {
     pub threads: Vec<EvidenceThread>,
 }
 
-/// The scanned production item identified as a Rule's primary implementation.
+/// A production item claimed as a Rule's primary implementation by a scanner
+/// relationship or canonical typed binding.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ImplementationBinding {
     pub symbol: Option<String>,
@@ -314,12 +315,11 @@ pub struct RulePage {
     pub description: Option<String>,
     pub status: RuleStatus,
     pub severity: RuleSeverity,
-    /// The scan behind `implementation` and `verifications`. `None` means no
-    /// scan was supplied, so neither field says anything about the code.
+    /// The scan behind scanner-discovered implementations and verifications.
+    /// Canonical typed bindings remain available when this is `None`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub code_scan: Option<CodeScan>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub implementation: Option<ImplementationBinding>,
+    pub implementations: Vec<ImplementationBinding>,
     pub verifications: Vec<VerificationSite>,
     /// Resolutions or requirements with a `produces` edge into this rule.
     pub produced_by: Vec<PageLink>,

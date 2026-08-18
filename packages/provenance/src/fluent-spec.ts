@@ -5,10 +5,13 @@ import type {
   SourceDeclaration,
   TypedSpecDocument,
 } from "./protocol.js";
-import { captureImplementationReference } from "./implementation-reference.js";
+import {
+  captureImplementationReference,
+  type ImplementationTarget,
+} from "./implementation-reference.js";
 import { fileURLToPath } from "node:url";
 import {
-  registerSpec,
+  registerSpecProperties,
   type RequirementHandle,
   type RuleHandle,
   type SourceHandle,
@@ -24,26 +27,43 @@ type RuleVerifier = (
 ) => Promise<void>;
 
 const moduleFile = fileURLToPath(import.meta.url);
+const sourceNames = new WeakMap<object, string>();
+const requirementDescriptions = new WeakMap<object, string>();
 
 export class FluentSource<Key extends string = string> {
   readonly key: Key;
   readonly declaration?: SourceDeclaration;
 
-  constructor(key: Key, declaration?: SourceDeclaration) {
+  constructor(key: Key, declaration?: SourceDeclaration, displayName?: string) {
     requireKey("source", key);
     this.key = key;
     this.declaration = declaration === undefined ? undefined : Object.freeze({ ...declaration });
+    if (displayName !== undefined) sourceNames.set(this, displayName);
     Object.freeze(this);
   }
 
   document(reference: string): FluentSource<Key> {
     requireText("document reference", reference);
-    return new FluentSource(this.key, {
-      key: this.key,
-      name: this.key,
-      kind: "document",
-      reference,
-    });
+    const displayName = sourceNames.get(this);
+    return new FluentSource(
+      this.key,
+      {
+        key: this.key,
+        name: displayName ?? this.key,
+        kind: "document",
+        reference,
+      },
+      displayName,
+    );
+  }
+
+  name(name: string): FluentSource<Key> {
+    requireText("source name", name);
+    return new FluentSource(
+      this.key,
+      this.declaration === undefined ? undefined : { ...this.declaration, name },
+      name,
+    );
   }
 }
 
@@ -77,7 +97,7 @@ export class FluentRule<Key extends string = string> {
     return new FluentRule(this.key, this.text, existingId, this.implementation);
   }
 
-  implementedBy(_target: (...args: never[]) => unknown): FluentRule<Key> {
+  implementedBy(_target: ImplementationTarget): FluentRule<Key> {
     const implementation = captureImplementationReference([moduleFile]);
     return new FluentRule(this.key, this.text, this.explicitId, implementation);
   }
@@ -86,58 +106,84 @@ export class FluentRule<Key extends string = string> {
 export class FluentRequirement<
   Key extends string = string,
   Rules extends readonly FluentRule[] = readonly [],
+  Sources extends readonly FluentSource[] = readonly FluentSource[],
 > {
   readonly key: Key;
   readonly text?: string;
-  readonly sourceDeclarations: readonly FluentSource[];
+  readonly sourceDeclarations: Sources;
   readonly ruleDeclarations: Rules;
 
   constructor(
     key: Key,
     text?: string,
-    sources: readonly FluentSource[] = [],
+    sources: Sources = [] as unknown as Sources,
     rules: Rules = [] as unknown as Rules,
+    description?: string,
   ) {
     requireKey("requirement", key);
     this.key = key;
     this.text = text;
-    this.sourceDeclarations = Object.freeze([...sources]);
+    this.sourceDeclarations = Object.freeze([...sources]) as unknown as Sources;
     this.ruleDeclarations = Object.freeze([...rules]) as unknown as Rules;
+    if (description !== undefined) requirementDescriptions.set(this, description);
     Object.freeze(this);
   }
 
-  statement(text: string): FluentRequirement<Key, Rules> {
+  statement(text: string): FluentRequirement<Key, Rules, Sources> {
     requireText("requirement statement", text);
     return new FluentRequirement(
       this.key,
       text,
       this.sourceDeclarations,
       this.ruleDeclarations,
+      requirementDescriptions.get(this),
     );
   }
 
-  from(...sources: readonly FluentSource[]): FluentRequirement<Key, Rules> {
+  description(description: string): FluentRequirement<Key, Rules, Sources> {
+    requireText("requirement description", description);
     return new FluentRequirement(
       this.key,
       this.text,
-      appendByIdentity(this.sourceDeclarations, sources),
+      this.sourceDeclarations,
       this.ruleDeclarations,
+      description,
+    );
+  }
+
+  from<const Added extends readonly FluentSource[]>(
+    ...sources: Added
+  ): FluentRequirement<Key, Rules, readonly [...Sources, ...Added]> {
+    return new FluentRequirement(
+      this.key,
+      this.text,
+      appendByIdentity(this.sourceDeclarations, sources) as unknown as readonly [
+        ...Sources,
+        ...Added,
+      ],
+      this.ruleDeclarations,
+      requirementDescriptions.get(this),
     );
   }
 
   rules<const Added extends readonly FluentRule[]>(
     ...rules: Added
-  ): FluentRequirement<Key, readonly [...Rules, ...Added]> {
+  ): FluentRequirement<Key, readonly [...Rules, ...Added], Sources> {
     return new FluentRequirement(
       this.key,
       this.text,
       this.sourceDeclarations,
       appendByIdentity(this.ruleDeclarations, rules) as unknown as readonly [...Rules, ...Added],
+      requirementDescriptions.get(this),
     );
   }
 }
 
-type AnyRequirement = FluentRequirement<string, readonly FluentRule[]>;
+type AnyRequirement = FluentRequirement<
+  string,
+  readonly FluentRule[],
+  readonly FluentSource[]
+>;
 
 type RuleHandles<Rules extends readonly FluentRule[]> = Readonly<{
   [Declaration in Rules[number] as Declaration["key"]]: RuleHandle;
@@ -155,12 +201,20 @@ export type FluentSpecHandles<
   Requirements extends readonly AnyRequirement[],
 > = Readonly<Record<string, unknown>> & {
   readonly sources: Readonly<{
-    [Declaration in Sources[number] as Declaration["key"]]: SourceHandle;
+    [Declaration in
+      | Sources[number]
+      | Requirements[number]["sourceDeclarations"][number] as Declaration["key"]]: SourceHandle;
   }>;
   readonly requirements: Readonly<{
     [Declaration in Requirements[number] as Declaration["key"]]: TypedRequirementHandle<Declaration>;
   }>;
 };
+
+export type FluentBuiltSpec<
+  Sources extends readonly FluentSource[],
+  Requirements extends readonly AnyRequirement[],
+> = SpecHandle<FluentSpecHandles<Sources, Requirements>> &
+  FluentSpecHandles<Sources, Requirements>;
 
 export class FluentSpec<
   Sources extends readonly FluentSource[] = readonly [],
@@ -213,7 +267,7 @@ export class FluentSpec<
     );
   }
 
-  build(): SpecHandle<FluentSpecHandles<Sources, Requirements>> {
+  build(): FluentBuiltSpec<Sources, Requirements> {
     return buildSpec(this, this.#verify);
   }
 }
@@ -226,7 +280,9 @@ export function fluentRule<const Key extends string>(key: Key): FluentRule<Key> 
   return new FluentRule(key);
 }
 
-export function fluentRequirement<const Key extends string>(key: Key): FluentRequirement<Key> {
+export function fluentRequirement<const Key extends string>(
+  key: Key,
+): FluentRequirement<Key, readonly [], readonly []> {
   return new FluentRequirement(key);
 }
 
@@ -240,9 +296,12 @@ function buildSpec<
 >(
   spec: FluentSpec<Sources, Requirements>,
   verify: RuleVerifier,
-): SpecHandle<FluentSpecHandles<Sources, Requirements>> {
-  const sources = uniqueByKey("Source", spec.sourceDeclarations);
+): FluentBuiltSpec<Sources, Requirements> {
   const requirements = uniqueByKey("Requirement", spec.requirementDeclarations);
+  const sources = uniqueByKey("Source", [
+    ...spec.sourceDeclarations,
+    ...requirements.flatMap((requirement) => requirement.sourceDeclarations),
+  ]);
   const sourceSet = new Set(sources);
   const memberships = new Map<FluentRule, AnyRequirement[]>();
   const relationOwners = new Map<string, FluentRule>();
@@ -326,7 +385,7 @@ function buildSpec<
     ),
   );
   const handles = Object.freeze({ sources: sourceHandles, requirements: requirementHandles });
-  return registerSpec(
+  return registerSpecProperties(
     spec.key,
     handles as FluentSpecHandles<Sources, Requirements>,
     document(spec, sources, requirements, memberships),
@@ -343,6 +402,7 @@ function document(
   const requirementRecords = requirements.map<RequirementDeclaration>((requirement) => ({
     key: requirement.key,
     statement: requirement.text!,
+    description: requirementDescriptions.get(requirement),
     sources: requirement.sourceDeclarations.map(({ key }) => key).sort(),
   }));
   const ruleRecords = [...memberships].map<RuleDeclaration>(([rule, parents]) => ({

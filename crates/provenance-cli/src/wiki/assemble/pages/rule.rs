@@ -72,7 +72,7 @@ impl<'a> Assembler<'a> {
             status: rule.status.clone(),
             severity: rule.severity.clone(),
             code_scan: self.code_scan(),
-            implementation: self.implementation(rule.id.as_str()),
+            implementations: self.implementations(rule.id.as_str()),
             verifications: self.verification_sites(rule.id.as_str()),
             produced_by,
             requirements: upstream_requirements

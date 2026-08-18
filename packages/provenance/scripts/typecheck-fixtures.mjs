@@ -24,6 +24,25 @@ assert.equal(valid.status, 0, valid.stdout + valid.stderr);
 const contextValid = typecheck("context-valid");
 assert.equal(contextValid.status, 0, contextValid.stdout + contextValid.stderr);
 
+const compositionValid = typecheck("composition-valid");
+assert.equal(compositionValid.status, 0, compositionValid.stdout + compositionValid.stderr);
+
+const compositionCrossContext = typecheck("composition-cross-context");
+assert.notEqual(
+  compositionCrossContext.status,
+  0,
+  "a public helper unexpectedly accepted declarations from different specs",
+);
+assert.match(compositionCrossContext.stdout + compositionCrossContext.stderr, /TS2345/);
+
+const declarationImmutability = typecheck("declaration-immutability");
+assert.notEqual(
+  declarationImmutability.status,
+  0,
+  "a public construction declaration unexpectedly allowed mutation",
+);
+assert.match(declarationImmutability.stdout + declarationImmutability.stderr, /TS2540/);
+
 const contextLocalRuleMismatch = typecheck("context-local-rule-mismatch");
 assert.notEqual(
   contextLocalRuleMismatch.status,
@@ -39,6 +58,13 @@ assert.match(contextCrossSpec.stdout + contextCrossSpec.stderr, /TS2345/);
 const implementedByValid = typecheck("implemented-by-valid");
 assert.equal(implementedByValid.status, 0, implementedByValid.stdout + implementedByValid.stderr);
 
+const implementedByClassValid = typecheck("implemented-by-class-valid");
+assert.equal(
+  implementedByClassValid.status,
+  0,
+  implementedByClassValid.stdout + implementedByClassValid.stderr,
+);
+
 const implementedByRemoved = typecheck("implemented-by-removed");
 assert.notEqual(
   implementedByRemoved.status,
@@ -48,11 +74,20 @@ assert.notEqual(
 assert.match(implementedByRemoved.stdout + implementedByRemoved.stderr, /TS2305/);
 assert.match(implementedByRemoved.stdout + implementedByRemoved.stderr, /startWorkflow/);
 
+const implementedByClassRemoved = typecheck("implemented-by-class-removed");
+assert.notEqual(
+  implementedByClassRemoved.status,
+  0,
+  "a removed class implementation export unexpectedly typechecked",
+);
+assert.match(implementedByClassRemoved.stdout + implementedByClassRemoved.stderr, /TS2305/);
+assert.match(implementedByClassRemoved.stdout + implementedByClassRemoved.stderr, /WorkflowRunner/);
+
 const missingKey = typecheck("missing-key");
 assert.notEqual(missingKey.status, 0, "verification without a key unexpectedly typechecked");
 assert.match(missingKey.stdout + missingKey.stderr, /TS2554/);
 
 const renamed = typecheck("renamed");
 assert.notEqual(renamed.status, 0, "renamed export unexpectedly typechecked");
-assert.match(renamed.stdout + renamed.stderr, /TS2305/);
+assert.match(renamed.stdout + renamed.stderr, /TS2339/);
 assert.match(renamed.stdout + renamed.stderr, /expiry/);

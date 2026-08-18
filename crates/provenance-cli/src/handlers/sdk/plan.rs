@@ -7,6 +7,12 @@ use provenance_store::{
 };
 use serde::Serialize;
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
+
+mod evidence;
+mod human;
+
+pub(super) use human::render;
 
 #[derive(Serialize)]
 pub(super) struct TypedSpecPlan {
@@ -16,14 +22,15 @@ pub(super) struct TypedSpecPlan {
 }
 
 #[derive(Serialize)]
-struct AffectedRule {
+pub(super) struct AffectedRule {
     id: StableId,
     implementations: Vec<ImplementationSite>,
     verifications: Vec<VerificationSite>,
+    evidence: evidence::RuleEvidence,
 }
 
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Serialize)]
-struct ImplementationSite {
+pub(super) struct ImplementationSite {
     file: Utf8PathBuf,
     #[serde(skip_serializing_if = "Option::is_none")]
     line: Option<usize>,
@@ -32,7 +39,7 @@ struct ImplementationSite {
 }
 
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Serialize)]
-struct VerificationSite {
+pub(super) struct VerificationSite {
     #[serde(skip_serializing_if = "Option::is_none")]
     key: Option<String>,
     method: String,
@@ -45,6 +52,34 @@ struct VerificationSite {
     symbol: Option<String>,
 }
 
+impl ImplementationSite {
+    /// Names where a reader should look, as precisely as the record allows.
+    fn location(&self) -> String {
+        match (self.line, self.symbol.as_deref()) {
+            (Some(line), _) => format!("{}:{line}", self.file),
+            (None, Some(symbol)) => format!("{} ({symbol})", self.file),
+            (None, None) => self.file.to_string(),
+        }
+    }
+}
+
+impl VerificationSite {
+    /// Names the test site and how it checks the Rule.
+    fn location(&self) -> String {
+        let mut location = self.line.map_or_else(
+            || self.file.to_string(),
+            |line| format!("{}:{line}", self.file),
+        );
+        if let Some(symbol) = &self.symbol {
+            let _ = write!(location, " ({symbol})");
+        }
+        self.key.as_ref().map_or_else(
+            || format!("{location} [{}]", self.method),
+            |key| format!("{location} [{key}, {}]", self.method),
+        )
+    }
+}
+
 pub(super) fn typed_spec(
     repo: &Utf8Path,
     scope: &provenance_core::ScopeId,
@@ -52,14 +87,29 @@ pub(super) fn typed_spec(
 ) -> anyhow::Result<TypedSpecPlan> {
     let store = StateStore::new(ProvenanceLayout::new(repo.to_path_buf()));
     let reconciliation = store.plan_typed_spec(scope, input)?;
+    let reviews = evidence::reviews(&store, scope, &reconciliation)?;
     let mut changed_rules = affected_rule_ids(&store, scope, &reconciliation)?;
+    changed_rules.extend(reviews.rules.iter().cloned());
     changed_rules.sort_by(|left, right| left.as_str().cmp(right.as_str()));
     changed_rules.dedup();
     let scans = provenance_scanner::scan_path(repo)?;
-    let bindings = store.list_verification_bindings(scope)?;
+    let bindings = store.active_verification_bindings(scope)?;
+    let implementation_changes = reconciliation
+        .resources
+        .iter()
+        .filter(|resource| {
+            resource.kind == TypedResourceKind::Rule
+                && resource
+                    .changes
+                    .iter()
+                    .any(|change| change.field == "implementation")
+        })
+        .map(|resource| &resource.id)
+        .collect::<Vec<_>>();
     let implementations = store
-        .list_implementation_bindings(scope)?
+        .active_implementation_bindings(scope)?
         .into_iter()
+        .filter(|binding| !implementation_changes.contains(&&binding.rule_id))
         .chain(reconciliation.implementation_bindings.iter().cloned())
         .map(|binding| (binding.id.as_str().to_string(), binding))
         .collect::<BTreeMap<_, _>>()
@@ -67,7 +117,10 @@ pub(super) fn typed_spec(
         .collect::<Vec<_>>();
     let affected_rules = changed_rules
         .into_iter()
-        .map(|id| affected_rule(repo, id, &scans, &bindings, &implementations))
+        .map(|id| {
+            let rule_evidence = reviews.evidence(&id);
+            affected_rule(repo, id, &scans, &bindings, &implementations, rule_evidence)
+        })
         .collect();
     Ok(TypedSpecPlan {
         reconciliation,
@@ -95,7 +148,7 @@ fn affected_rule_ids(
         .filter(|resource| resource.kind == TypedResourceKind::Rule)
         .map(|resource| resource.id.clone())
         .collect::<Vec<_>>();
-    let existing_implementations = store.list_implementation_bindings(scope)?;
+    let existing_implementations = store.active_implementation_bindings(scope)?;
     for binding in &reconciliation.implementation_bindings {
         if !existing_implementations
             .iter()
@@ -140,6 +193,7 @@ fn affected_rule(
     scans: &[provenance_scanner::FileScan],
     bindings: &[VerificationBinding],
     typed_implementations: &[ImplementationBinding],
+    evidence: evidence::RuleEvidence,
 ) -> AffectedRule {
     let mut implementations = source_sites(scans)
         .filter(|site| site.rule_id() == id.as_str())
@@ -152,7 +206,7 @@ fn affected_rule(
         .chain(
             typed_implementations
                 .iter()
-                .filter(|binding| binding.rule_id == id)
+                .filter(|binding| !binding.retired && binding.rule_id == id)
                 .map(|binding| ImplementationSite {
                     file: binding.file.clone(),
                     line: None,
@@ -188,6 +242,7 @@ fn affected_rule(
         id,
         implementations,
         verifications,
+        evidence,
     }
 }
 

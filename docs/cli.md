@@ -41,9 +41,11 @@ ASD-STE100 rules.
 
 `apply` creates missing records and updates records whose `declared_by` matches
 the document. It refuses unowned and foreign-owned collisions before writing,
-does not delete omissions, and adds relationships idempotently. Verification
-runs live in the derived cache and always cite an existing Rule. Begin accepts
-either a canonical Rule ID or a declaration owner plus hierarchical address;
+while omitted owned declarations retire in place. Identity-preserving moves
+replace their active owned relationships. `plan` previews creates, updates,
+moves, retirements, and ownership conflicts without writing. Verification runs
+live in the derived cache and always cite an existing Rule. Begin accepts either
+a canonical Rule ID or a declaration owner plus hierarchical address;
 the language callback itself runs in Node and never crosses into Rust. See
 [`typescript-sdk-poc.md`](typescript-sdk-poc.md) for the package interface,
 identity rules, limits, and experiment results.

@@ -131,7 +131,7 @@ fn export_definitions() -> Value {
             &["schema_version", "scope_id", "id", "name", "source_type", "url"],
             json!({
                 "schema_version": version.clone(), "scope_id": id.clone(), "id": id.clone(),
-                "declared_by": string.clone(), "declaration_address": declaration_address(), "name": string.clone(),
+                "declared_by": string.clone(), "declaration_address": declaration_address(), "retired": {"type": "boolean"}, "name": string.clone(),
                 "source_type": {"enum": ["policy", "document", "legislation", "company_agreement", "system_state", "external_integration", "domain_knowledge", "project_artifact", "incident", "api_spec"]},
                 "url": {"type": ["string", "null"]}, "reference": string.clone(),
                 "commit_pin": {
@@ -150,7 +150,7 @@ fn export_definitions() -> Value {
             &["schema_version", "scope_id", "id", "statement", "status"],
             json!({
                 "schema_version": version.clone(), "scope_id": id.clone(), "id": id.clone(),
-                "declared_by": string.clone(), "declaration_address": declaration_address(), "statement": string.clone(),
+                "declared_by": string.clone(), "declaration_address": declaration_address(), "retired": {"type": "boolean"}, "statement": string.clone(),
                 "description": string.clone(), "fog": string.clone(),
                 "status": {"enum": ["active", "discovery", "refinement", "resolved"]},
                 "domain_id": id.clone(),
@@ -201,7 +201,7 @@ fn export_definitions() -> Value {
             &["schema_version", "scope_id", "id", "statement", "status", "severity"],
             json!({
                 "schema_version": version.clone(), "scope_id": id.clone(), "id": id.clone(),
-                "declared_by": string.clone(), "declaration_address": declaration_address(), "name": string.clone(),
+                "declared_by": string.clone(), "declaration_address": declaration_address(), "retired": {"type": "boolean"}, "name": string.clone(),
                 "description": string.clone(),
                 "statement": string.clone(), "status": {"enum": ["draft", "review", "active", "deprecated", "archived"]},
                 "severity": {"enum": ["low", "medium", "high", "critical"]},
@@ -214,7 +214,8 @@ fn export_definitions() -> Value {
                 "schema_version": version.clone(), "scope_id": id.clone(), "id": id.clone(),
                 "rule_id": id.clone(), "key": string.clone(),
                 "method": {"enum": ["exhaustion", "property", "examples", "conformance", "construction", "proof"]},
-                "declared_by": string.clone(), "file": string.clone(), "symbol": string.clone()
+                "declared_by": string.clone(), "retired": {"type": "boolean"},
+                "file": string.clone(), "symbol": string.clone()
             })
         ),
         "implementationBinding": closed_record(
@@ -222,6 +223,7 @@ fn export_definitions() -> Value {
             json!({
                 "schema_version": version.clone(), "scope_id": id.clone(), "id": id.clone(),
                 "rule_id": id.clone(), "declared_by": string.clone(),
+                "retired": {"type": "boolean"},
                 "file": {"type": "string", "minLength": 1},
                 "symbol": {"type": "string", "minLength": 1}
             })

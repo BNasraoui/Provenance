@@ -1,10 +1,16 @@
 use std::collections::BTreeMap;
 
-use provenance_core::{ImplementationBinding, ScopeId, StableId, SUPPORTED_SCHEMA_VERSION};
+use provenance_core::{ImplementationBinding, Rule, ScopeId, StableId, SUPPORTED_SCHEMA_VERSION};
 use sha2::{Digest, Sha256};
 
-use super::{MaterializeImplementationBindingInput, StateStore, TypedRuleInput};
+use super::{MaterializeImplementationBindingInput, StateStore, TypedFieldChange, TypedRuleInput};
 use crate::shards;
+
+pub(super) struct Reconciliation {
+    pub records: Vec<ImplementationBinding>,
+    pub active: Vec<ImplementationBinding>,
+    pub changes: Vec<(StableId, TypedFieldChange)>,
+}
 
 pub(super) fn reconcile(
     store: &StateStore,
@@ -13,53 +19,98 @@ pub(super) fn reconcile(
     spec: &str,
     rules: &[TypedRuleInput],
     rule_ids: &BTreeMap<provenance_core::DeclarationAddress, StableId>,
-    write: bool,
-) -> anyhow::Result<Vec<ImplementationBinding>> {
-    let mut existing = store.list_implementation_bindings(scope_id)?;
-    let mut desired = Vec::new();
-    for rule in rules.iter().filter(|rule| rule.implementation.is_some()) {
-        let address = super::typed_specs::rule_address(spec, rule)?;
-        let rule_id = rule_ids[&address].clone();
-        let implementation = rule.implementation.as_ref().unwrap();
-        validate_target(&implementation.file, &implementation.symbol)?;
-        let id = binding_id(&rule_id)?;
-        if let Some(record) = existing.iter().find(|record| record.rule_id == rule_id) {
-            anyhow::ensure!(
-                record.declared_by == owner,
-                "rule `{}` implementation is owned by `{}`",
-                rule_id.as_str(),
-                record.declared_by
-            );
-        }
-        desired.push(ImplementationBinding {
-            schema_version: SUPPORTED_SCHEMA_VERSION,
-            scope_id: scope_id.clone(),
-            id,
-            rule_id,
-            declared_by: owner.to_string(),
-            file: implementation.file.clone(),
-            symbol: implementation.symbol.clone(),
-        });
-    }
+    canonical_rules: &[Rule],
+) -> anyhow::Result<Reconciliation> {
+    let mut records = store.list_implementation_bindings(scope_id)?;
+    let desired = desired_bindings(scope_id, owner, spec, rules, rule_ids, &records)?;
+    let mut changes = Vec::new();
+
     for binding in &desired {
-        if let Some(record) = existing
+        if let Some(record) = records
             .iter_mut()
             .find(|record| record.rule_id == binding.rule_id)
         {
+            let before = target(record);
             *record = binding.clone();
+            record_change(&mut changes, record.rule_id.clone(), before, target(record));
         } else {
-            existing.push(binding.clone());
+            records.push(binding.clone());
+            record_change(
+                &mut changes,
+                binding.rule_id.clone(),
+                serde_json::Value::Null,
+                target(binding),
+            );
         }
     }
-    if write {
-        existing.sort_by(|left, right| left.id.as_str().cmp(right.id.as_str()));
-        let path = shards::implementation_bindings_path(&store.layout, scope_id);
-        store.mutate_jsonl_records(&path, |records| {
-            *records = existing;
-            Ok(())
-        })?;
+
+    let desired_rule_ids = desired
+        .iter()
+        .map(|binding| &binding.rule_id)
+        .collect::<Vec<_>>();
+    for record in records.iter_mut().filter(|binding| {
+        !binding.retired
+            && binding.declared_by == owner
+            && !desired_rule_ids.contains(&&binding.rule_id)
+            && rule_belongs_to_spec(canonical_rules, &binding.rule_id, owner, spec)
+    }) {
+        let before = target(record);
+        record.retired = true;
+        record_change(
+            &mut changes,
+            record.rule_id.clone(),
+            before,
+            serde_json::Value::Null,
+        );
     }
-    Ok(desired)
+
+    records.sort_by(|left, right| left.id.as_str().cmp(right.id.as_str()));
+    Ok(Reconciliation {
+        records,
+        active: desired,
+        changes,
+    })
+}
+
+fn desired_bindings(
+    scope_id: &ScopeId,
+    owner: &str,
+    spec: &str,
+    rules: &[TypedRuleInput],
+    rule_ids: &BTreeMap<provenance_core::DeclarationAddress, StableId>,
+    existing: &[ImplementationBinding],
+) -> anyhow::Result<Vec<ImplementationBinding>> {
+    rules
+        .iter()
+        .filter_map(|rule| {
+            rule.implementation
+                .as_ref()
+                .map(|implementation| (rule, implementation))
+        })
+        .map(|(rule, implementation)| {
+            let address = super::typed_specs::rule_address(spec, rule)?;
+            let rule_id = rule_ids[&address].clone();
+            validate_target(&implementation.file, &implementation.symbol)?;
+            if let Some(record) = existing.iter().find(|record| record.rule_id == rule_id) {
+                anyhow::ensure!(
+                    record.declared_by == owner,
+                    "rule `{}` implementation is owned by `{}`",
+                    rule_id.as_str(),
+                    record.declared_by
+                );
+            }
+            Ok(ImplementationBinding {
+                schema_version: SUPPORTED_SCHEMA_VERSION,
+                scope_id: scope_id.clone(),
+                id: binding_id(&rule_id)?,
+                rule_id,
+                declared_by: owner.to_string(),
+                retired: false,
+                file: implementation.file.clone(),
+                symbol: implementation.symbol.clone(),
+            })
+        })
+        .collect()
 }
 
 impl StateStore {
@@ -92,6 +143,7 @@ impl StateStore {
                 id,
                 rule_id: input.rule_id,
                 declared_by: input.declared_by,
+                retired: false,
                 file: input.file,
                 symbol: input.symbol,
             };
@@ -117,6 +169,46 @@ impl StateStore {
                 Ok(binding)
             })
         })
+    }
+}
+
+fn rule_belongs_to_spec(rules: &[Rule], rule_id: &StableId, owner: &str, spec: &str) -> bool {
+    rules.iter().any(|rule| {
+        rule.id == *rule_id
+            && rule.declared_by.as_deref() == Some(owner)
+            && rule
+                .declaration_address
+                .as_ref()
+                .is_some_and(|address| address.segments().first().is_some_and(|part| part == spec))
+    })
+}
+
+fn target(binding: &ImplementationBinding) -> serde_json::Value {
+    if binding.retired {
+        serde_json::Value::Null
+    } else {
+        serde_json::json!({
+            "file": binding.file,
+            "symbol": binding.symbol,
+        })
+    }
+}
+
+fn record_change(
+    changes: &mut Vec<(StableId, TypedFieldChange)>,
+    rule_id: StableId,
+    before: serde_json::Value,
+    after: serde_json::Value,
+) {
+    if before != after {
+        changes.push((
+            rule_id,
+            TypedFieldChange {
+                field: "implementation".to_string(),
+                before,
+                after,
+            },
+        ));
     }
 }
 

@@ -13,7 +13,7 @@ function fixture(source: string): string {
   const directory = mkdtempSync(join(tmpdir(), "provenance-implementation-reference-"));
   writeFileSync(
     join(directory, "runtime.ts"),
-    "export function startWorkflow(): void {}\nexport function stopWorkflow(): void {}\n",
+    "export function startWorkflow(): void {}\nexport function stopWorkflow(): void {}\nexport class WorkflowRunner {}\n",
   );
   const spec = join(directory, "provenance.spec.ts");
   writeFileSync(spec, source);
@@ -63,21 +63,39 @@ rule("start").implementedBy(runtime.startWorkflow);
   assert.equal(reference.symbol, "startWorkflow");
 });
 
+test("a directly imported class resolves to its exported symbol", () => {
+  const spec = fixture(`
+import { WorkflowRunner as Runner } from "./runtime.js";
+rule("start").implementedBy(Runner);
+`);
+
+  const reference = resolveImplementationReferenceAt({ file: spec, line: 3 });
+
+  assert.equal(reference.file, join(spec, "../runtime.ts"));
+  assert.equal(reference.symbol, "WorkflowRunner");
+});
+
 test("dynamic implementation expressions are rejected instead of reflected", () => {
   const cases = [
     "enabled ? runtime.startWorkflow : runtime.stopWorkflow",
     "chooseImplementation()",
     'runtime["startWorkflow"]',
+    "() => undefined",
+    "new runtime.WorkflowRunner()",
+    "runner.run",
+    "localImplementation",
   ];
   for (const expression of cases) {
     const spec = fixture(`
 import * as runtime from "./runtime.js";
 declare const enabled: boolean;
 declare function chooseImplementation(): typeof runtime.startWorkflow;
+declare const runner: { run(): void };
+declare function localImplementation(): void;
 rule("start").implementedBy(${expression});
 `);
     assert.throws(
-      () => resolveImplementationReferenceAt({ file: spec, line: 5 }),
+      () => resolveImplementationReferenceAt({ file: spec, line: 7 }),
       /direct named import or namespace member/i,
     );
   }

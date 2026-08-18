@@ -194,6 +194,16 @@ export function registerSpec<Handles extends Readonly<Record<string, unknown>>>(
   return spec;
 }
 
+export function registerSpecProperties<Handles extends Readonly<Record<string, unknown>>>(
+  key: string,
+  handles: Handles,
+  document: DesiredSpecDocument,
+): SpecHandle<Handles> & Handles {
+  const spec = Object.freeze({ key, handles, ...handles }) as SpecHandle<Handles> & Handles;
+  documents.set(spec, document);
+  return spec;
+}
+
 export function defineSpec<const Declarations extends DeclarationRecord>(
   key: string,
   build: (author: SpecAuthor) => Declarations,

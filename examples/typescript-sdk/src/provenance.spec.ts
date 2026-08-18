@@ -1,21 +1,16 @@
-import { defineSpec } from "@quality-sh/provenance";
+import { defineSpec, requirement, rule, source } from "@quality-sh/provenance";
 
-const spec = defineSpec("share-links", ({ requirement, source }) => {
-  const linear = source("linear:ABC-123", {
-    kind: "linear",
-    name: "Linear ABC-123",
-    url: "https://linear.app/example/issue/ABC-123",
-  });
-  const sharing = requirement("sharing", {
-    statement: "Users can securely share documentation",
-    sources: [linear],
-  });
-  const expiry = sharing.rule("expiry", {
-    statement: "Share links must expire within 30 days",
-  });
+import { createShareLink } from "./share-links.js";
 
-  return { sharing, expiry };
-});
-
-export default spec;
-export const { expiry, sharing } = spec.handles;
+export const shareLinks = defineSpec("share-links")
+  .requirements(
+    requirement("sharing")
+      .statement("Users can securely share documentation")
+      .from(source("sharing-policy").document("docs/sharing-policy.md"))
+      .rules(
+        rule("expiry")
+          .statement("Share links must expire within 30 days")
+          .implementedBy(createShareLink),
+      ),
+  )
+  .build();

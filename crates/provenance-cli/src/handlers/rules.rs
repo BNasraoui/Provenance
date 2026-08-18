@@ -147,6 +147,7 @@ mod tests {
             id: StableId::new("rule_overtime").unwrap(),
             declared_by: None,
             declaration_address: None,
+            retired: false,
             name: None,
             description: None,
             statement: statement.to_string(),

@@ -1,11 +1,18 @@
 import { fileURLToPath } from "node:url";
 
-import { captureImplementationReference } from "./implementation-reference.js";
+import {
+  captureImplementationReference,
+  type ImplementationTarget,
+} from "./implementation-reference.js";
 import type {
   ImplementationDeclaration,
   SourceDeclaration,
 } from "./protocol.js";
 import type { VerifyOptions } from "./spec.js";
+import type {
+  RuleDeclaration as PublicRule,
+  SourceDeclaration as PublicSource,
+} from "./bound-types.js";
 
 export type RuleVerifier = (
   address: readonly string[],
@@ -24,6 +31,7 @@ export interface SourceState {
   readonly context: AuthoringContext;
   readonly lineage: object;
   readonly key: string;
+  readonly name?: string;
   readonly declaration?: SourceDeclaration;
 }
 
@@ -32,6 +40,7 @@ export interface RequirementState {
   readonly lineage: object;
   readonly key: string;
   readonly text?: string;
+  readonly description?: string;
   readonly sources: readonly object[];
   readonly rules: readonly object[];
 }
@@ -86,10 +95,23 @@ export class BoundSource<SpecKey extends string, Key extends string> {
       ...state,
       declaration: Object.freeze({
         key: state.key,
-        name: state.key,
+        name: state.name ?? state.key,
         kind: "document",
         reference,
       }),
+    });
+  }
+
+  name(name: string): BoundSource<SpecKey, Key> {
+    requireText("source name", name);
+    const state = sourceState(this);
+    return new BoundSource({
+      ...state,
+      name,
+      declaration:
+        state.declaration === undefined
+          ? undefined
+          : Object.freeze({ ...state.declaration, name }),
     });
   }
 }
@@ -147,7 +169,7 @@ export class BoundRule<
     return this.copy({ explicitId: existingId });
   }
 
-  implementedBy(_target: (...args: never[]) => unknown): BoundRule<SpecKey, Key, Owner> {
+  implementedBy(_target: ImplementationTarget): BoundRule<SpecKey, Key, Owner> {
     return this.copy({ implementation: captureImplementationReference([moduleFile]) });
   }
 
@@ -164,13 +186,6 @@ export class BoundRule<
     return new BoundRule({ ...ruleState(this), ...change });
   }
 }
-
-type SharedRule<SpecKey extends string> = BoundRule<SpecKey, string, undefined>;
-type LocalRule<SpecKey extends string, RequirementKey extends string> = BoundRule<
-  SpecKey,
-  string,
-  RequirementKey
->;
 
 export class BoundRequirement<SpecKey extends string, Key extends string> {
   declare readonly [specAffinity]: Invariant<SpecKey>;
@@ -201,7 +216,12 @@ export class BoundRequirement<SpecKey extends string, Key extends string> {
     return this.copy({ text });
   }
 
-  from(...sources: readonly BoundSource<SpecKey, string>[]): BoundRequirement<SpecKey, Key> {
+  description(description: string): BoundRequirement<SpecKey, Key> {
+    requireText("requirement description", description);
+    return this.copy({ description });
+  }
+
+  from(...sources: readonly PublicSource<SpecKey, string>[]): BoundRequirement<SpecKey, Key> {
     const state = requirementState(this);
     for (const source of sources) assertContext("Source", sourceState(source), state.context);
     return this.copy({ sources: appendSnapshots("Source", state.sources, sources, sourceState) });
@@ -217,7 +237,10 @@ export class BoundRequirement<SpecKey extends string, Key extends string> {
   }
 
   rules(
-    ...rules: readonly (SharedRule<SpecKey> | LocalRule<SpecKey, Key>)[]
+    ...rules: readonly (
+      | PublicRule<SpecKey, string, undefined>
+      | PublicRule<SpecKey, string, Key>
+    )[]
   ): BoundRequirement<SpecKey, Key> {
     const state = requirementState(this);
     for (const rule of rules) validateRuleOwner(state, ruleState(rule));

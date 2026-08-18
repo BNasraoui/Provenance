@@ -44,8 +44,8 @@ pub use ideation::{
 };
 pub use ids::{SchemaVersion, ScopeId, StableId};
 pub use integrations::{
-    DeclarationAddress, ImplementationBinding, VerificationBinding, VerificationMethod,
-    VerificationRun, VerificationRunStatus,
+    DeclarationAddress, ImplementationBinding, RequirementReview, VerificationBinding,
+    VerificationMethod, VerificationRun, VerificationRunStatus,
 };
 pub use manifest::{Manifest, RepoPathPrefix, Scope};
 pub use services::Domain;

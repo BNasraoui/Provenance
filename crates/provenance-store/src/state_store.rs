@@ -7,6 +7,7 @@ mod inputs;
 mod proposal_surfaces;
 mod proposal_writers;
 pub(crate) mod readers;
+mod requirement_reviews;
 mod rule_writers;
 mod shaping_writers;
 mod statement_policy;
@@ -34,6 +35,7 @@ pub use inputs::{
     TypedSpecDiagnostic, TypedSpecInput, TypedSpecResult, UpdateQuestionInput,
 };
 pub use proposal_surfaces::{ProposalDemand, ProposalSurfaceReason, SurfacedProposal, TopicClaim};
+pub use requirement_reviews::{requirement_statement_changes, RequirementStatementChange};
 pub use typed_statement_policy::TypedSpecWriteError;
 
 use crate::{layout::ProvenanceLayout, shards};
@@ -173,11 +175,31 @@ impl StateStore {
     ) -> anyhow::Result<Vec<VerificationBinding>> {
         read_jsonl(&shards::verification_bindings_path(&self.layout, scope))
     }
+    pub fn active_verification_bindings(
+        &self,
+        scope: &ScopeId,
+    ) -> anyhow::Result<Vec<VerificationBinding>> {
+        Ok(self
+            .list_verification_bindings(scope)?
+            .into_iter()
+            .filter(|binding| !binding.retired)
+            .collect())
+    }
     pub fn list_implementation_bindings(
         &self,
         scope: &ScopeId,
     ) -> anyhow::Result<Vec<ImplementationBinding>> {
         read_jsonl(&shards::implementation_bindings_path(&self.layout, scope))
+    }
+    pub fn active_implementation_bindings(
+        &self,
+        scope: &ScopeId,
+    ) -> anyhow::Result<Vec<ImplementationBinding>> {
+        Ok(self
+            .list_implementation_bindings(scope)?
+            .into_iter()
+            .filter(|binding| !binding.retired)
+            .collect())
     }
     pub(crate) fn closed_sources(&self, scope: &ScopeId) -> anyhow::Result<Vec<Source>> {
         read_jsonl_closed(&shards::sources_path(&self.layout, scope))

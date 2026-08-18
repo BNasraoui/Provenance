@@ -1,17 +1,20 @@
+mod conflicts;
 mod identity;
+mod lifecycle;
 mod reconcile;
+mod relationships;
 mod rule_addresses;
 
 use std::collections::BTreeMap;
 
 use provenance_core::{
-    DeclarationAddress, EdgeType, NodeType, Requirement, Rule, ScopeId, Source, StableId,
-    SUPPORTED_SCHEMA_VERSION,
+    DeclarationAddress, Requirement, Rule, ScopeId, Source, StableId, SUPPORTED_SCHEMA_VERSION,
 };
 
+use super::requirement_reviews;
 use super::{
-    ReconcileState, ReconciledResource, StateStore, TypedRequirementInput, TypedRuleInput,
-    TypedSpecInput, TypedSpecResult,
+    ReconcileState, ReconciledResource, StateStore, TypedFieldChange, TypedRequirementInput,
+    TypedRuleInput, TypedSpecInput, TypedSpecResult,
 };
 use crate::shards;
 use identity::{
@@ -39,6 +42,7 @@ struct DesiredTypedIds {
 #[derive(Clone, Copy)]
 struct DesiredTypedGraph<'a> {
     spec: &'a str,
+    owner: &'a str,
     requirements: &'a [TypedRequirementInput],
     rules: &'a [TypedRuleInput],
     source_ids: &'a BTreeMap<String, StableId>,
@@ -77,24 +81,6 @@ fn desired_typed_ids(
         &current.rule_addresses,
     )?;
     validate_references(&input.requirements, &input.rules, &sources, &requirements)?;
-    validate_ownership(
-        &input.declared_by,
-        &current.sources,
-        sources.values(),
-        |record| (&record.id, record.declared_by.as_deref()),
-    )?;
-    validate_ownership(
-        &input.declared_by,
-        &current.requirements,
-        requirements.values(),
-        |record| (&record.id, record.declared_by.as_deref()),
-    )?;
-    validate_ownership(
-        &input.declared_by,
-        &current.rules,
-        rules.values(),
-        |record| (&record.id, record.declared_by.as_deref()),
-    )?;
     Ok(DesiredTypedIds {
         sources,
         requirements,
@@ -105,10 +91,10 @@ fn desired_typed_ids(
 impl StateStore {
     /// Reconciles one language-owned desired-state document with canonical state.
     ///
-    /// Omitted records and relationships are deliberately retained. This first
-    /// lifecycle slice creates and updates only records carrying the same
-    /// `declared_by` value, so applying one spec cannot take over another
-    /// integration's or a human's records.
+    /// Omitted owned records retire in place, while records from another owner
+    /// remain untouched. Moves replace only active relationships owned by this
+    /// spec, so applying one spec cannot take over another integration's or a
+    /// human's records.
     pub fn apply_typed_spec(
         &self,
         scope_id: &ScopeId,
@@ -138,6 +124,20 @@ impl StateStore {
     ) -> anyhow::Result<TypedSpecResult> {
         let (input, current) = self.prepare_typed_spec(scope_id, input)?;
         let ids = desired_typed_ids(&input, &current)?;
+        let conflicts = conflicts::ownership_conflicts(&input, &current, &ids)?;
+        if !conflicts.is_empty() {
+            if matches!(mode, ReconcileMode::Apply) {
+                validate_desired_ownership(&input, &current, &ids)?;
+                unreachable!("ownership validation must reject reported conflicts");
+            }
+            return Ok(spec_result(
+                input.declared_by,
+                Vec::new(),
+                Vec::new(),
+                conflicts,
+                Vec::new(),
+            ));
+        }
 
         let requirement_relationships = input.requirements.clone();
         let rule_relationships = input.rules.clone();
@@ -159,7 +159,7 @@ impl StateStore {
             &ids.requirements,
             &ids.sources,
         )?;
-        let (rules, rule_resources) = reconcile_rules(
+        let (rules, mut rule_resources) = reconcile_rules(
             current.rules,
             &spec,
             scope_id,
@@ -167,21 +167,22 @@ impl StateStore {
             input.rules,
             &ids.rules,
         )?;
-        let implementation_bindings = super::implementation_bindings::reconcile(
+        let implementation_reconciliation = super::implementation_bindings::reconcile(
             self,
             scope_id,
             &input.declared_by,
             &spec,
             &rule_relationships,
             &ids.rules,
-            false,
+            &rules,
         )?;
+        attach_implementation_changes(&mut rule_resources, &implementation_reconciliation.changes);
         let mut result = spec_result(
             input.declared_by.clone(),
             source_resources,
-            requirement_resources,
-            rule_resources,
-            implementation_bindings,
+            requirement_resources.clone(),
+            rule_resources.clone(),
+            implementation_reconciliation.active,
         );
         let dictionary = crate::dictionary_reference::load_project_dictionary(&self.layout);
         result.diagnostics = super::typed_statement_policy::analyze_typed_statements(
@@ -200,19 +201,17 @@ impl StateStore {
                 requirements,
             )?;
             replace_records(self, &shards::rules_path(&self.layout, scope_id), rules)?;
-            super::implementation_bindings::reconcile(
+            replace_records(
                 self,
-                scope_id,
-                &input.declared_by,
-                &spec,
-                &rule_relationships,
-                &ids.rules,
-                true,
+                &shards::implementation_bindings_path(&self.layout, scope_id),
+                implementation_reconciliation.records,
             )?;
-            self.write_typed_spec_edges(
+            relationships::reconcile(
+                self,
                 scope_id,
                 DesiredTypedGraph {
                     spec: &spec,
+                    owner: &input.declared_by,
                     requirements: &requirement_relationships,
                     rules: &rule_relationships,
                     source_ids: &ids.sources,
@@ -220,9 +219,47 @@ impl StateStore {
                     rule_ids: &ids.rules,
                 },
             )?;
+            self.raise_requirement_reviews(scope_id, &requirement_resources, &rule_resources)?;
         }
 
         Ok(result)
+    }
+
+    /// Puts the evidence of every Rule under a restated Requirement up for review.
+    fn raise_requirement_reviews(
+        &self,
+        scope_id: &ScopeId,
+        requirements: &[ReconciledResource],
+        rules: &[ReconciledResource],
+    ) -> anyhow::Result<()> {
+        let changes = requirement_reviews::requirement_statement_changes(requirements);
+        if changes.is_empty() {
+            return Ok(());
+        }
+        let changed_at = requirement_reviews::now_millis()?;
+        let mut reviews = Vec::new();
+        for change in changes {
+            let mut rule_ids = self.rule_ids_for_requirement(scope_id, &change.requirement_id)?;
+            for rule in rules
+                .iter()
+                .filter(|rule| rule.parent.as_deref() == Some(change.requirement_key.as_str()))
+            {
+                if !rule_ids.contains(&rule.id) {
+                    rule_ids.push(rule.id.clone());
+                }
+            }
+            reviews.extend(rule_ids.into_iter().map(|rule_id| {
+                requirement_reviews::RequirementReviewInput {
+                    rule_id,
+                    requirement_id: change.requirement_id.clone(),
+                    field: change.field.clone(),
+                    before: change.before.clone(),
+                    after: change.after.clone(),
+                    changed_at,
+                }
+            }));
+        }
+        self.record_requirement_reviews(scope_id, reviews)
     }
 
     fn current_typed_state(
@@ -300,42 +337,6 @@ impl StateStore {
         );
         Ok(())
     }
-
-    fn write_typed_spec_edges(
-        &self,
-        scope_id: &ScopeId,
-        graph: DesiredTypedGraph<'_>,
-    ) -> anyhow::Result<()> {
-        for declaration in graph.requirements {
-            for source in &declaration.sources {
-                self.add_edge(
-                    scope_id.clone(),
-                    EdgeType::References,
-                    NodeType::Source,
-                    graph.source_ids[source].clone(),
-                    NodeType::Requirement,
-                    graph.requirement_ids[&declaration.key].clone(),
-                )?;
-            }
-        }
-
-        // Relationships are additive in this POC. Reapplying is idempotent,
-        // while omission never erases a relationship another owner may use.
-        for declaration in graph.rules {
-            let address = rule_address(graph.spec, declaration)?;
-            for requirement in &declaration.requirements {
-                self.add_edge(
-                    scope_id.clone(),
-                    EdgeType::Produces,
-                    NodeType::Requirement,
-                    graph.requirement_ids[requirement].clone(),
-                    NodeType::Rule,
-                    graph.rule_ids[&address].clone(),
-                )?;
-            }
-        }
-        Ok(())
-    }
 }
 
 fn spec_result(
@@ -352,11 +353,39 @@ fn spec_result(
         declared_by,
         created: count_state(&resources, ReconcileState::Created),
         updated: count_state(&resources, ReconcileState::Updated),
+        moved: count_state(&resources, ReconcileState::Moved),
+        retired: count_state(&resources, ReconcileState::Retired),
+        conflicts: count_state(&resources, ReconcileState::Conflict),
         unchanged: count_state(&resources, ReconcileState::Unchanged),
         resources,
         diagnostics: Vec::new(),
         implementation_bindings,
     }
+}
+
+fn validate_desired_ownership(
+    input: &TypedSpecInput,
+    current: &CurrentTypedState,
+    ids: &DesiredTypedIds,
+) -> anyhow::Result<()> {
+    validate_ownership(
+        &input.declared_by,
+        &current.sources,
+        ids.sources.values(),
+        |record| (&record.id, record.declared_by.as_deref()),
+    )?;
+    validate_ownership(
+        &input.declared_by,
+        &current.requirements,
+        ids.requirements.values(),
+        |record| (&record.id, record.declared_by.as_deref()),
+    )?;
+    validate_ownership(
+        &input.declared_by,
+        &current.rules,
+        ids.rules.values(),
+        |record| (&record.id, record.declared_by.as_deref()),
+    )
 }
 
 fn replace_records<T: serde::de::DeserializeOwned + serde::Serialize>(
@@ -375,4 +404,19 @@ fn count_state(resources: &[ReconciledResource], state: ReconcileState) -> usize
         .iter()
         .filter(|resource| resource.state == state)
         .count()
+}
+
+fn attach_implementation_changes(
+    resources: &mut [ReconciledResource],
+    changes: &[(StableId, TypedFieldChange)],
+) {
+    for resource in resources.iter_mut() {
+        let Some((_, change)) = changes.iter().find(|(id, _)| id == &resource.id) else {
+            continue;
+        };
+        if resource.state == ReconcileState::Unchanged {
+            resource.state = ReconcileState::Updated;
+        }
+        resource.changes.push(change.clone());
+    }
 }

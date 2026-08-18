@@ -14,7 +14,11 @@ import {
   rule,
   source,
 } from "./index.js";
-import { startWorkflow } from "./implementation-target.test-helper.js";
+import * as implementationTargets from "./implementation-target.test-helper.js";
+import {
+  startWorkflow,
+  WorkflowRunner,
+} from "./implementation-target.test-helper.js";
 
 const engine = fileURLToPath(
   new URL("../../../target/debug/provenance", import.meta.url),
@@ -50,10 +54,11 @@ const source = readFileSync(0, "utf8");
 const input = source === "" ? undefined : JSON.parse(source);
 appendFileSync(${JSON.stringify(log)}, JSON.stringify({ command, input }) + "\\n");
 if (command === "info") process.stdout.write(JSON.stringify({
-  engine_version: "0.1.0", protocol_version: 2, state_schema_version: 1, repository: "/project"
+  engine_version: "0.1.0", protocol_version: 3, state_schema_version: 1, repository: "/project"
 }));
 else process.stdout.write(JSON.stringify({
-  declared_by: "spec://typescript", created: 0, updated: 0, unchanged: 0,
+  declared_by: "spec://typescript", created: 0, updated: 0, moved: 0,
+  retired: 0, conflicts: 0, unchanged: 0,
   resources: [], affected_rules: []
 }));
 `,
@@ -117,6 +122,191 @@ test("fluent declarations and their finalized handles are immutable", () => {
     "expiry",
   ]);
   assert.deepEqual(recorder.requests(), []);
+});
+
+test("exported classes bind without construction or runtime inspection", () => {
+  const direct = rule("direct-class").implementedBy(WorkflowRunner);
+  const namespaced = rule("namespaced-class").implementedBy(
+    implementationTargets.WorkflowRunner,
+  );
+
+  assert.equal(WorkflowRunner.constructions, 0);
+  assert.equal(direct.implementation?.symbol, "WorkflowRunner");
+  assert.equal(namespaced.implementation?.symbol, "WorkflowRunner");
+});
+
+test("top-level fluent declarations author source names and Requirement descriptions", async () => {
+  const recorder = recordingEngine();
+  configure({ engine: recorder.engine, owner: "spec://typescript/fluent-metadata" });
+  const policyDraft = source("policy");
+  const policyDocument = policyDraft.document("docs/policy.md");
+  const namedPolicy = policyDocument.name("Security policy");
+  const requirementDraft = requirement("sharing")
+    .description("Covers externally shared documentation");
+  const statedRequirement = requirementDraft
+    .statement("Users can securely share documentation");
+  const expiry = rule("expiry").statement("Shared links expire");
+  const sharing = statedRequirement.from(namedPolicy).rules(expiry);
+  const spec = defineSpec("fluent-metadata")
+    .sources(namedPolicy)
+    .requirements(sharing)
+    .build();
+
+  assert.notEqual(policyDraft, namedPolicy);
+  assert.notEqual(requirementDraft, sharing);
+  assert.deepEqual(recorder.requests(), []);
+
+  await apply(spec);
+
+  const request = recorder.requests().find(({ command }) => command === "apply");
+  assert.deepEqual(request?.input, {
+    schema_version: 1,
+    spec: "fluent-metadata",
+    declared_by: "spec://typescript/fluent-metadata",
+    sources: [
+      {
+        key: "policy",
+        name: "Security policy",
+        kind: "document",
+        reference: "docs/policy.md",
+      },
+    ],
+    requirements: [
+      {
+        key: "sharing",
+        statement: "Users can securely share documentation",
+        description: "Covers externally shared documentation",
+        sources: ["policy"],
+      },
+    ],
+    rules: [
+      {
+        key: "expiry",
+        requirements: ["sharing"],
+        statement: "Shared links expire",
+      },
+    ],
+  });
+});
+
+test("build collects Sources referenced by Requirements", async () => {
+  const recorder = recordingEngine();
+  configure({ engine: recorder.engine, owner: "spec://typescript/collected-source" });
+  const spec = defineSpec("collected-source")
+    .requirements(
+      requirement("sharing")
+        .statement("Users can securely share documentation")
+        .from(source("policy").name("Sharing policy").document("docs/policy.md"))
+        .rules(rule("expiry").statement("Share links expire")),
+    )
+    .build();
+
+  assert.deepEqual(recorder.requests(), []);
+  await apply(spec);
+
+  const request = recorder.requests().find(({ command }) => command === "apply");
+  assert.deepEqual((request?.input as { sources?: unknown }).sources, [
+    {
+      key: "policy",
+      name: "Sharing policy",
+      kind: "document",
+      reference: "docs/policy.md",
+    },
+  ]);
+});
+
+test("built fluent specs expose direct typed semantic handles", () => {
+  const spec = defineSpec("direct-handles")
+    .requirements(
+      requirement("sharing")
+        .statement("Shares are time bounded")
+        .rules(rule("expiry").statement("Share links expire")),
+    )
+    .build();
+
+  assert.equal(spec.requirements, spec.handles.requirements);
+  assert.equal(
+    spec.requirements.sharing.rules.expiry,
+    spec.handles.requirements.sharing.rules.expiry,
+  );
+  assert.equal(Object.isFrozen(spec.requirements), true);
+});
+
+test("direct nested Rule handles apply and verify through the Rust engine", async () => {
+  const repo = repository();
+  configure({ engine, repository: repo, owner: "spec://typescript/direct-verification" });
+  const spec = defineSpec("direct-verification")
+    .requirements(
+      requirement("sharing")
+        .statement("Shares are time bounded")
+        .rules(rule("expiry").statement("Share links expire")),
+    )
+    .build();
+
+  await apply(spec);
+  writeFileSync(join(repo, "share-links.test.ts"), "");
+  let callbackRan = false;
+  await spec.requirements.sharing.rules.expiry.verify(
+    "share-links-expire",
+    () => {
+      callbackRan = true;
+    },
+    { file: join(repo, "share-links.test.ts") },
+  );
+
+  assert.equal(callbackRan, true);
+  const runs = JSON.parse(
+    execFileSync(
+      engine,
+      [
+        "sdk",
+        "verification-runs",
+        "--repo",
+        repo,
+        "--scope",
+        "default",
+        "--format",
+        "json",
+      ],
+      { encoding: "utf8" },
+    ),
+  ) as Array<{ status: string }>;
+  assert.deepEqual(runs.map(({ status }) => status), ["passed"]);
+});
+
+test("a preferred fluent spec collects linked Sources and exposes its typed Rule", async () => {
+  const repo = repository();
+  configure({ engine, repository: repo, owner: "spec://typescript/preferred" });
+  const shareLinks = defineSpec("share-links")
+    .requirements(
+      requirement("sharing")
+        .statement("Users can securely share documentation")
+        .description("Controls for links shared outside the organization")
+        .from(
+          source("sharing-policy")
+            .name("Sharing policy")
+            .document("docs/sharing-policy.md"),
+        )
+        .rules(
+          rule("expiry").statement("Share links must expire within 30 days"),
+        ),
+    )
+    .build();
+
+  const result = await apply(shareLinks);
+  writeFileSync(join(repo, "share-links.test.ts"), "");
+  await shareLinks.requirements.sharing.rules.expiry.verify(
+    "share-links-expire",
+    () => undefined,
+    { file: join(repo, "share-links.test.ts") },
+  );
+
+  assert.equal(result.resources.filter(({ kind }) => kind === "source").length, 1);
+  assert.equal(result.resources.filter(({ kind }) => kind === "rule").length, 1);
+  assert.equal(
+    shareLinks.requirements.sharing.rules.expiry,
+    shareLinks.handles.requirements.sharing.rules.expiry,
+  );
 });
 
 test("one shared Rule materializes once and refines both Requirements", async () => {

@@ -11,6 +11,14 @@ integration allowed to reconcile that record; it does not grant ownership of
 the scope or of unrelated graph state. The typed SDK refuses to adopt an
 existing record whose value is absent or different.
 
+Typed-owned Sources, Requirements, and Rules may carry `retired: true`.
+Omitting the field means active. A complete typed declaration document retires
+owned records from the same spec when they disappear, but keeps their canonical
+IDs, addresses, and historical edges. Reintroducing the declaration clears the
+field and reuses the same record. Active graph, gap, health, implementation, and
+verification checks exclude retired declarations. Hard deletion is a separate,
+unsupported operation.
+
 Typed verification relationships live in
 `scopes/<scope>/verifications/binding.jsonl`. Each row joins an owner-local
 binding key and repository code location to a canonical Rule. Scanner markers
@@ -18,7 +26,37 @@ remain an equal source of verification relationships. No shard stores a
 `verified` boolean: Unverified is derived only when neither source supplies a
 live binding.
 
-A Rule with no implementation binding is a valid unimplemented Rule. This
+Typed implementation relationships live in
+`scopes/<scope>/implementations/binding.jsonl`. Removing `implementedBy` from
+an otherwise active typed Rule sets the owned binding's `retired` field instead
+of deleting the row. Reintroducing it clears retirement on the same binding ID;
+changing its exported target updates that row. Active coverage, wiki, stale,
+health, and plan views exclude retired bindings. Export, import, checking, and
+exact graph references preserve them as canonical history. Applying one spec
+does not retire bindings attached to Rules declared by another spec, even when
+both specs use the same declaration owner.
+
+Typed verification relationships live in
+`scopes/<scope>/verifications/binding.jsonl`. When a verification owner reports
+one of its keys from a file against a different Rule, the binding that key
+previously named gets its `retired` field set instead of being deleted.
+Reporting it again clears retirement on the same binding ID. Active coverage,
+wiki, stale, health, and plan views exclude retired bindings; export, import,
+checking, and exact graph references preserve them. A run reconciles only the
+owner, file, and key it reported, so another owner's binding and the same key
+declared from another file stay active.
+
+Requirement review records live in
+`scopes/<scope>/requirements/review.jsonl`. When an applied reconciliation
+restates a Requirement's `statement`, one row per affected Rule records the
+Requirement, the field, both statements, and when the change landed. A review
+is identified by that exact restatement, so re-applying the same change never
+reopens a cleared review. A verification run for the Rule recorded after the
+change sets `cleared_at` and `cleared_by_run` while keeping the reason; nothing
+is deleted. Plan reads these rows to report review-required evidence, and
+previews the reviews an unapplied diff would raise without writing them.
+
+A Rule with no active implementation binding is a valid unimplemented Rule. This
 semantic change does not alter the version `1` record shape: existing source
 fields remain citations and do not count as implementation, so existing
 records need no migration.

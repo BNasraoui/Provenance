@@ -5,6 +5,9 @@ import {
   type BoundRequirement,
   type BoundRule,
   type BoundSource,
+  type RequirementDeclaration,
+  type RuleDeclaration,
+  type SourceDeclaration,
   type SpecAuthoring,
 } from "./bound-spec.js";
 import type {
@@ -97,7 +100,13 @@ export interface RuleHandle {
   ): Promise<void>;
 }
 
-export type { ApplyResult, PlanResult } from "./protocol.js";
+export type {
+  AffectedRule,
+  ApplyResult,
+  PlanResult,
+  ReviewReason,
+  RuleEvidence,
+} from "./protocol.js";
 export type {
   RequirementHandle as SpecRequirement,
   RuleHandle as SpecRule,
@@ -106,12 +115,21 @@ export type {
   SpecHandle,
 } from "./spec.js";
 export type { FluentRequirement, FluentRule, FluentSource, FluentSpec } from "./fluent-spec.js";
-export type { BoundRequirement, BoundRule, BoundSource, SpecAuthoring } from "./bound-spec.js";
+export type {
+  BoundRequirement,
+  BoundRule,
+  BoundSource,
+  RequirementDeclaration,
+  RuleDeclaration,
+  SourceDeclaration,
+  SpecAuthoring,
+} from "./bound-spec.js";
 
 const registry = new DeclarationRegistry();
 const moduleFile = fileURLToPath(import.meta.url);
 const specModuleFile = fileURLToPath(new URL("./spec.js", import.meta.url));
 const boundSpecModuleFile = fileURLToPath(new URL("./bound-spec.js", import.meta.url));
+const fluentSpecModuleFile = fileURLToPath(new URL("./fluent-spec.js", import.meta.url));
 const boundDeclarationsModuleFile = fileURLToPath(
   new URL("./bound-declarations.js", import.meta.url),
 );
@@ -149,7 +167,9 @@ export function source(key: string, options?: SourceOptions): SourceHandle | Flu
   return handle;
 }
 
-export function requirement<const Key extends string>(key: Key): FluentRequirement<Key>;
+export function requirement<const Key extends string>(
+  key: Key,
+): FluentRequirement<Key, readonly [], readonly []>;
 export function requirement(key: string, options: RequirementOptions): RequirementHandle;
 export function requirement(
   key: string,
@@ -358,6 +378,7 @@ function callerLocation(): { file: string } | undefined {
         file !== moduleFile &&
         file !== specModuleFile &&
         file !== boundSpecModuleFile &&
+        file !== fluentSpecModuleFile &&
         file !== boundDeclarationsModuleFile
       ) {
         return { file };

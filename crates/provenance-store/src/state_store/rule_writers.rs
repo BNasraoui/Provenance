@@ -131,6 +131,7 @@ impl StateStore {
                 id: id.clone(),
                 declared_by: None,
                 declaration_address: None,
+                retired: false,
                 name,
                 description,
                 statement,

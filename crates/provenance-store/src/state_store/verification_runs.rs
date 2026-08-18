@@ -4,6 +4,7 @@ use provenance_core::{
 };
 use std::str::FromStr as _;
 
+use super::requirement_reviews::now_millis;
 use super::{
     BeginVerificationInput, CompleteVerificationInput, MaterializeVerificationBindingInput,
     StateStore,
@@ -29,27 +30,35 @@ impl StateStore {
         let rule_id = match (input.rule, input.declaration) {
             (Some(rule), None) => {
                 let rule_id = StableId::new(rule)?;
-                anyhow::ensure!(
-                    rules.iter().any(|rule| rule.id == rule_id),
-                    "rule `{}` does not exist",
-                    rule_id.as_str()
-                );
+                let rule = rules
+                    .iter()
+                    .find(|rule| rule.id == rule_id)
+                    .ok_or_else(|| anyhow::anyhow!("rule `{}` does not exist", rule_id.as_str()))?;
+                anyhow::ensure!(!rule.retired, "rule `{}` is retired", rule_id.as_str());
                 rule_id
             }
-            (None, Some(declaration)) => rules
-                .iter()
-                .find(|rule| {
-                    rule.declared_by.as_deref() == Some(declaration.declared_by.as_str())
-                        && rule.declaration_address.as_ref() == Some(&declaration.address)
-                })
-                .map(|rule| rule.id.clone())
-                .ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "declaration owned by `{}` at `{}` has not been applied",
-                        declaration.declared_by,
-                        declaration.address.segments().join("/")
-                    )
-                })?,
+            (None, Some(declaration)) => {
+                let rule = rules
+                    .iter()
+                    .find(|rule| {
+                        rule.declared_by.as_deref() == Some(declaration.declared_by.as_str())
+                            && rule.declaration_address.as_ref() == Some(&declaration.address)
+                    })
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "declaration owned by `{}` at `{}` has not been applied",
+                            declaration.declared_by,
+                            declaration.address.segments().join("/")
+                        )
+                    })?;
+                anyhow::ensure!(
+                    !rule.retired,
+                    "declaration owned by `{}` at `{}` is retired",
+                    declaration.declared_by,
+                    declaration.address.segments().join("/")
+                );
+                rule.id.clone()
+            }
             (Some(_), Some(_)) => {
                 anyhow::bail!("begin verification accepts either rule or declaration, not both")
             }
@@ -70,7 +79,7 @@ impl StateStore {
         let started_at = now_millis()?;
         let path = self.layout.verification_runs_path(&scope_id);
         let lock_path = self.layout.verification_runs_lock_path(&scope_id);
-        crate::jsonl::mutate_jsonl_locked(
+        let run = crate::jsonl::mutate_jsonl_locked(
             &path,
             &lock_path,
             |records: &mut Vec<VerificationRun>| {
@@ -99,7 +108,9 @@ impl StateStore {
                 });
                 Ok(run)
             },
-        )
+        )?;
+        self.clear_requirement_reviews(&run.scope_id, &run.rule_id, &run.id, run.started_at)?;
+        Ok(run)
     }
 
     pub fn complete_verification(
@@ -168,9 +179,4 @@ fn next_run_id(records: &[VerificationRun], started_at: i64) -> anyhow::Result<S
             .ok_or_else(|| anyhow::anyhow!("verification run id suffix overflow"))?;
     }
     StableId::new(candidate)
-}
-
-fn now_millis() -> anyhow::Result<i64> {
-    let duration = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?;
-    i64::try_from(duration.as_millis()).map_err(Into::into)
 }

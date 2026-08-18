@@ -23,13 +23,17 @@ fn init_repo() -> tempfile::TempDir {
     fs::create_dir(directory.path().join("src")).unwrap();
     fs::write(
         directory.path().join("src/runtime.ts"),
-        "export function startWorkflow(): void {}\n",
+        "export function startWorkflow(): void {}\nexport class WorkflowRunner {}\n",
     )
     .unwrap();
     directory
 }
 
 fn spec(implementation_file: &str, statement: &str) -> Value {
+    spec_with_symbol(implementation_file, "startWorkflow", statement)
+}
+
+fn spec_with_symbol(implementation_file: &str, symbol: &str, statement: &str) -> Value {
     json!({
         "schema_version": 1,
         "spec": "workflow-runtime",
@@ -47,10 +51,41 @@ fn spec(implementation_file: &str, statement: &str) -> Value {
             "statement": statement,
             "implementation": {
                 "file": implementation_file,
-                "symbol": "startWorkflow"
+                "symbol": symbol
             }
         }]
     })
+}
+
+#[test]
+fn apply_materializes_an_exported_class_as_the_canonical_binding() {
+    let directory = init_repo();
+    let repo = directory.path().to_str().unwrap();
+    let target = directory.path().join("src/runtime.ts");
+
+    let applied = sdk(
+        repo,
+        "apply",
+        &spec_with_symbol(
+            target.to_str().unwrap(),
+            "WorkflowRunner",
+            "Accepted workflows run",
+        ),
+    )
+    .unwrap();
+
+    assert_eq!(
+        applied["implementation_bindings"].as_array().unwrap().len(),
+        1
+    );
+    assert_eq!(
+        applied["implementation_bindings"][0]["file"],
+        "src/runtime.ts"
+    );
+    assert_eq!(
+        applied["implementation_bindings"][0]["symbol"],
+        "WorkflowRunner"
+    );
 }
 
 fn sdk(repo: &str, command: &str, input: &Value) -> Result<Value, String> {

@@ -66,6 +66,13 @@ pub fn verification_bindings_path(layout: &ProvenanceLayout, scope: &ScopeId) ->
         .join("verifications/binding.jsonl")
 }
 
+pub fn requirement_reviews_path(layout: &ProvenanceLayout, scope: &ScopeId) -> Utf8PathBuf {
+    layout
+        .scopes_dir()
+        .join(scope.as_str())
+        .join("requirements/review.jsonl")
+}
+
 pub fn implementation_bindings_path(layout: &ProvenanceLayout, scope: &ScopeId) -> Utf8PathBuf {
     layout
         .scopes_dir()

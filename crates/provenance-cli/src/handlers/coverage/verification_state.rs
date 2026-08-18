@@ -36,7 +36,7 @@ pub(super) fn load_validation_state(
         scans,
         known.iter().cloned(),
     ));
-    let implementations = store.list_implementation_bindings(&scope)?;
+    let implementations = store.active_implementation_bindings(&scope)?;
     for site in provenance_scanner::source_sites(scans).filter(|site| {
         site.role() == provenance_scanner::SourceSiteRole::Implementation
             && implementations.iter().any(|binding| {
@@ -56,7 +56,7 @@ pub(super) fn load_validation_state(
     }
     Ok(ValidationState {
         rules,
-        bindings: store.list_verification_bindings(&scope)?,
+        bindings: store.active_verification_bindings(&scope)?,
         implementations,
         warnings: warnings
             .into_iter()
@@ -111,7 +111,7 @@ pub(super) fn unverified_rule_warnings(
     );
     rules
         .iter()
-        .filter(|rule| rule.status == provenance_core::RuleStatus::Active)
+        .filter(|rule| rule.status == provenance_core::RuleStatus::Active && !rule.retired)
         .filter(|rule| !verified.contains(rule.id.as_str()))
         .map(|rule| provenance_core::coverage::ValidationWarning {
             rule_id: rule.id.as_str().to_string(),

@@ -217,6 +217,9 @@ pub enum TypedResourceKind {
 pub enum ReconcileState {
     Created,
     Updated,
+    Moved,
+    Retired,
+    Conflict,
     Unchanged,
 }
 
@@ -259,6 +262,9 @@ pub struct TypedSpecResult {
     pub declared_by: String,
     pub created: usize,
     pub updated: usize,
+    pub moved: usize,
+    pub retired: usize,
+    pub conflicts: usize,
     pub unchanged: usize,
     pub resources: Vec<ReconciledResource>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

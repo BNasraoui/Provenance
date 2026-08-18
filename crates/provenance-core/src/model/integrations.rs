@@ -4,6 +4,11 @@ use std::{fmt, str::FromStr};
 
 use super::{SchemaVersion, ScopeId, StableId};
 
+#[allow(clippy::trivially_copy_pass_by_ref)]
+const fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 /// How a verification binding supports its Rule.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -132,9 +137,33 @@ pub struct VerificationBinding {
     pub key: String,
     pub method: VerificationMethod,
     pub declared_by: String,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub retired: bool,
     pub file: Utf8PathBuf,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub symbol: Option<String>,
+}
+
+/// One record of a Rule whose evidence needs review because the Requirement
+/// it serves was restated.
+///
+/// The record keeps why review was asked for. A verification run arriving
+/// after the change clears it in place rather than removing the reason.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RequirementReview {
+    pub schema_version: SchemaVersion,
+    pub scope_id: ScopeId,
+    pub id: StableId,
+    pub rule_id: StableId,
+    pub requirement_id: StableId,
+    pub field: String,
+    pub before: String,
+    pub after: String,
+    pub changed_at: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cleared_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cleared_by_run: Option<StableId>,
 }
 
 /// One canonical primary implementation relationship from an exported
@@ -146,6 +175,8 @@ pub struct ImplementationBinding {
     pub id: StableId,
     pub rule_id: StableId,
     pub declared_by: String,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub retired: bool,
     pub file: Utf8PathBuf,
     pub symbol: String,
 }

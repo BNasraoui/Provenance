@@ -30,23 +30,27 @@ fn provenance_links(page: &RulePage) -> Vec<PageLink> {
     links
 }
 
-/// The binding sections have three states, and the page must not blur them.
-/// Without a scan it shows neither section and says so: "No implementation bound"
-/// on a page nobody scanned would read as a scan that found nothing.
+/// The binding sections keep canonical relationships visible while making the
+/// absence of scanner evidence explicit.
 fn push_code_scan(main: &mut String, page: &RulePage) {
     let Some(scan) = &page.code_scan else {
-        if page.verifications.is_empty() {
+        if page.implementations.is_empty() && page.verifications.is_empty() {
             main.push_str(
                 "<section>\n<p class=\"scan-note\">No code scan was supplied to this build; \
                  bindings and verification are not shown.</p>\n</section>\n",
             );
         } else {
-            main.push_str("<section>\n<p class=\"scan-note\">No code scan was supplied to this build; implementation bindings are not shown.</p>\n</section>\n");
-            push_verifications(main, page, None);
+            if !page.implementations.is_empty() {
+                push_implementations(main, page);
+            }
+            main.push_str("<section>\n<p class=\"scan-note\">No code scan was supplied to this build; scanner-discovered bindings are not shown.</p>\n</section>\n");
+            if !page.verifications.is_empty() {
+                push_verifications(main, page, None);
+            }
         }
         return;
     };
-    push_implementation(main, page);
+    push_implementations(main, page);
     push_verifications(main, page, Some(scan));
 }
 
@@ -65,18 +69,20 @@ fn push_scan_note(main: &mut String, scan: &CodeScan) {
     }
 }
 
-fn push_implementation(main: &mut String, page: &RulePage) {
+fn push_implementations(main: &mut String, page: &RulePage) {
     push_section_open(main, "sh-rule", None, "Implementation");
-    if let Some(binding) = &page.implementation {
-        writeln!(
-            main,
-            "<p class=\"code-site\"><code>{}</code><span class=\"site-separator\"> — </span>{}</p>",
-            escape_html(binding.symbol.as_deref().unwrap_or("Unknown symbol")),
-            evidence_html(&binding.location),
-        )
-        .expect("writing to a String should not fail");
-    } else {
+    if page.implementations.is_empty() {
         main.push_str("<p class=\"empty-state\">No implementation bound</p>\n");
+    } else {
+        for binding in &page.implementations {
+            writeln!(
+                main,
+                "<p class=\"code-site\"><code>{}</code><span class=\"site-separator\"> — </span>{}</p>",
+                escape_html(binding.symbol.as_deref().unwrap_or("Unknown symbol")),
+                evidence_html(&binding.location),
+            )
+            .expect("writing to a String should not fail");
+        }
     }
     main.push_str("</section>\n");
 }

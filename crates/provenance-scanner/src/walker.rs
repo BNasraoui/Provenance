@@ -84,7 +84,10 @@ pub fn scan_path(path: &Utf8Path) -> anyhow::Result<Vec<FileScan>> {
 
 pub fn scan_path_with_content(path: &Utf8Path) -> anyhow::Result<Vec<FileScanWithContent>> {
     let mut scans = Vec::new();
-    for entry in walkdir::WalkDir::new(path) {
+    for entry in walkdir::WalkDir::new(path)
+        .into_iter()
+        .filter_entry(|entry| entry.depth() == 0 || !is_ignored_directory(entry))
+    {
         let entry = entry?;
         if !entry.file_type().is_file() {
             continue;
@@ -104,6 +107,14 @@ pub fn scan_path_with_content(path: &Utf8Path) -> anyhow::Result<Vec<FileScanWit
     }
     scans.sort_by(|a, b| a.scan.file_path.cmp(&b.scan.file_path));
     Ok(scans)
+}
+
+fn is_ignored_directory(entry: &walkdir::DirEntry) -> bool {
+    entry.file_type().is_dir()
+        && matches!(
+            entry.file_name().to_str(),
+            Some(".git" | "node_modules" | "target")
+        )
 }
 
 /// Walks a file line by line, feeding two channels: bindings (`#[rule]`,

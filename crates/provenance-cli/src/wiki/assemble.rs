@@ -126,6 +126,10 @@ fn load_coverage_report(path: &Utf8Path, repo: &Utf8Path) -> anyhow::Result<Cove
         binding.file_path =
             repository_relative_path(&binding.file_path, repo, canonical_repo.as_deref());
     }
+    for annotation in &mut report.report.annotations {
+        annotation.file_path =
+            repository_relative_path(&annotation.file_path, repo, canonical_repo.as_deref());
+    }
     for file in &mut report.scanned_files {
         file.file_path = repository_relative_path(&file.file_path, repo, canonical_repo.as_deref());
     }

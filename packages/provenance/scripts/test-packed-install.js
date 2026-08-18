@@ -75,16 +75,68 @@ const localEngine = join(
 execFileSync(localEngine, ["init", "--path", application, "--scope", "default", "--path-prefix", "."]);
 writeFileSync(join(application, "runtime.mjs"), `
 export function startWorkflow() {}
+export class WorkflowRunner {
+  static constructions = 0;
+  constructor() { WorkflowRunner.constructions += 1; }
+}
+`);
+writeFileSync(join(application, "runtime-types.ts"), `
+export class WorkflowRunner {}
+`);
+writeFileSync(join(application, "helpers.ts"), `
+import type {
+  RequirementDeclaration,
+  RuleDeclaration,
+  SourceDeclaration,
+  SpecAuthoring,
+} from "@quality-sh/provenance";
+
+export function guide<const Spec extends string>(
+  author: SpecAuthoring<Spec>,
+): SourceDeclaration<Spec, "guide"> {
+  return author.source("guide").name("Packed SDK guide").document("README.md");
+}
+
+export function installed<const Spec extends string>(
+  author: SpecAuthoring<Spec>,
+  source: SourceDeclaration<Spec, "guide">,
+): RequirementDeclaration<Spec, "installed"> {
+  return author.requirement("installed")
+    .statement("The packed SDK exposes spec-bound TypeScript declarations")
+    .description("Exercises emitted fluent metadata types")
+    .from(source);
+}
+
+export function invocation<
+  const Spec extends string,
+  const RequirementKey extends string,
+>(
+  requirement: RequirementDeclaration<Spec, RequirementKey>,
+): RuleDeclaration<Spec, "invocation", RequirementKey> {
+  return requirement.rule("invocation")
+    .statement("A direct Rule handle remains typed across module boundaries");
+}
+export function bindClass<
+  const Spec extends string,
+  const Key extends string,
+  const RequirementKey extends string | undefined,
+>(
+  declaration: RuleDeclaration<Spec, Key, RequirementKey>,
+  target: abstract new (...args: never[]) => unknown,
+): RuleDeclaration<Spec, Key, RequirementKey> {
+  return declaration.implementedBy(target);
+}
 `);
 writeFileSync(join(application, "consumer.ts"), `
 import { defineSpec } from "@quality-sh/provenance";
+import { WorkflowRunner } from "./runtime-types.js";
+import { bindClass, guide, installed, invocation as declareInvocation } from "./helpers.js";
 
 const provenance = defineSpec("packed-typescript-consumer");
-const installed = provenance.requirement("installed")
-  .statement("The packed SDK exposes spec-bound TypeScript declarations");
-export const invocation = installed.rule("invocation")
-  .statement("A direct Rule handle remains typed across module boundaries");
-export const spec = provenance.build(installed.rules(invocation));
+const packedGuide = guide(provenance);
+const packedInstallation = installed(provenance, packedGuide);
+export const invocation = bindClass(declareInvocation(packedInstallation), WorkflowRunner);
+export const spec = provenance.build(packedInstallation.rules(invocation));
 
 void invocation.verify("packed-consumer", () => undefined);
 `);
@@ -97,15 +149,15 @@ writeFileSync(join(application, "tsconfig.json"), JSON.stringify({
     noEmit: true,
     skipLibCheck: true,
   },
-  include: ["consumer.ts"],
+  include: ["*.ts"],
 }));
 execFileSync(process.execPath, [
   join(application, "node_modules", "typescript", "bin", "tsc"),
   "-p", join(application, "tsconfig.json"),
 ], { cwd: application, stdio: "pipe" });
 writeFileSync(join(application, "verify.mjs"), `
-import { apply, defineSpec, plan } from "@quality-sh/provenance";
-import { startWorkflow } from "./runtime.mjs";
+import { apply, defineSpec, plan, requirement, rule, source } from "@quality-sh/provenance";
+import { startWorkflow, WorkflowRunner } from "./runtime.mjs";
 const spec = defineSpec("packed-install", ({ requirement }) => {
   const installed = requirement("installed", {
     statement: "The installed SDK invokes its package-supplied engine"
@@ -124,22 +176,43 @@ await spec.handles.invocation.verify("packed-install", () => undefined, {
   symbol: "packedInstall"
 });
 
-const provenance = defineSpec("packed-implemented-by");
-const typedStart = provenance.rule("typed-start")
-  .statement("Installed typed specs resolve imported production implementations")
-  .implementedBy(startWorkflow);
-const typedRequirement = provenance.requirement("typed-implementation")
-  .statement("Installed typed specs retain implementation links")
-  .rules(typedStart);
-const typedSpec = provenance.build(typedRequirement);
+const typedSpec = defineSpec("packed-implemented-by")
+  .requirements(
+    requirement("typed-implementation")
+      .statement("Installed typed specs retain implementation links")
+      .from(source("packed-guide").name("Packed guide").document("README.md"))
+      .rules(
+        rule("typed-start")
+          .statement("Installed typed specs resolve imported production implementations")
+          .implementedBy(startWorkflow),
+        rule("typed-runner")
+          .statement("Installed typed specs resolve imported production classes")
+          .implementedBy(WorkflowRunner),
+      ),
+  )
+  .build();
 const typedResult = await apply(typedSpec);
-if (typedResult.implementation_bindings?.[0]?.file !== "runtime.mjs") {
-  throw new Error("implementedBy did not survive the packed install");
+if (typedResult.implementation_bindings?.some(
+  ({ file, symbol }) => file === "runtime.mjs" && symbol === "startWorkflow"
+) !== true) {
+  throw new Error("implementedBy did not survive the packed install: " + JSON.stringify(typedResult));
 }
-await typedStart.verify("packed-direct-rule", () => undefined, {
-  file: "verify.mjs",
-  symbol: "packedDirectRule"
-});
+if (typedResult.implementation_bindings?.some(
+  ({ file, symbol }) => file === "runtime.mjs" && symbol === "WorkflowRunner"
+) !== true) {
+  throw new Error("class implementedBy did not survive the packed install: " + JSON.stringify(typedResult));
+}
+if (WorkflowRunner.constructions !== 0) {
+  throw new Error("implementedBy constructed the packed class target");
+}
+if (typedResult.resources?.some(({ kind }) => kind === "source") !== true) {
+  throw new Error("Requirement.from Source was not collected by build");
+}
+await typedSpec.requirements["typed-implementation"].rules["typed-start"].verify(
+  "packed-direct-rule",
+  () => undefined,
+  { file: "verify.mjs", symbol: "packedDirectRule" },
+);
 `);
 
 const { PROVENANCE_BIN: _removed, ...environment } = process.env;

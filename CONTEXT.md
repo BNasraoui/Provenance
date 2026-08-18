@@ -18,7 +18,7 @@ An identified atomic behavioural obligation that refines one or more Requirement
 
 ## Implementation binding
 
-A relationship from a Rule to production code that realizes it. A Rule without an Implementation binding is unimplemented, but remains a Rule.
+A durable relationship from a Rule to production code that realizes it. A retired Implementation binding preserves a former claim as history but does not implement the Rule in active views. A Rule without an active Implementation binding is unimplemented, but remains a Rule.
 
 ## Verification
 
@@ -26,7 +26,7 @@ Evidence supporting belief that a Rule holds. A Rule can have no Verification; t
 
 ## Verification binding
 
-A durable relationship from an owner-local test key and repository code location to a canonical Rule. It records what is intended to verify the Rule, not whether an execution passed.
+A durable relationship from an owner-local test key and repository code location to a canonical Rule. It records what is intended to verify the Rule, not whether an execution passed. A retired Verification binding preserves a former relationship as history but does not verify the Rule in active views.
 
 ## Verification run
 
@@ -103,6 +103,10 @@ The integration URI allowed to reconcile a Source, Requirement, or Rule definiti
 ## Declaration address
 
 An owner-local hierarchical identity for one typed declaration. Equal child keys under different parents have distinct addresses. The address is not the canonical Stable ID.
+
+## Retired declaration
+
+A Source, Requirement, or Rule owned by a typed spec but omitted from that spec's next complete desired-state document. Retirement preserves the canonical record, Stable ID, owner, address, and historical relationships while removing the declaration from active graph and assurance checks. Declaring it again reactivates the same record. Retirement is not deletion.
 
 ## Commit-then-issue
 

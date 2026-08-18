@@ -1,3 +1,3 @@
-import { expiry } from "./provenance.spec.js";
+import { shareLinks } from "./provenance.spec.js";
 
-void expiry.verify("share-link-expiry", () => undefined);
+void shareLinks.requirements.sharing.rules.expiry.verify("share-link-expiry", () => undefined);

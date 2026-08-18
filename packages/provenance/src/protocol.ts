@@ -44,7 +44,13 @@ export interface TypedSpecDocument {
 }
 
 export type ResourceKind = "source" | "requirement" | "rule";
-export type ReconcileState = "created" | "updated" | "unchanged";
+export type ReconcileState =
+  | "created"
+  | "updated"
+  | "moved"
+  | "retired"
+  | "conflict"
+  | "unchanged";
 
 export interface ReconciledResource {
   kind: ResourceKind;
@@ -66,6 +72,9 @@ export interface ApplyResult {
   declared_by: string;
   created: number;
   updated: number;
+  moved: number;
+  retired: number;
+  conflicts: number;
   unchanged: number;
   resources: ReconciledResource[];
   diagnostics?: TypedSpecDiagnostic[];
@@ -88,6 +97,7 @@ export interface ImplementationBinding {
   id: string;
   rule_id: string;
   declared_by: string;
+  retired?: boolean;
   file: string;
   symbol: string;
 }
@@ -107,10 +117,24 @@ export interface VerificationSite {
   symbol?: string;
 }
 
+export interface ReviewReason {
+  requirement: string;
+  field: string;
+  before: string;
+  after: string;
+  changed_at?: number;
+}
+
+export interface RuleEvidence {
+  review_required: boolean;
+  reasons?: ReviewReason[];
+}
+
 export interface AffectedRule {
   id: string;
   implementations: ImplementationSite[];
   verifications: VerificationSite[];
+  evidence?: RuleEvidence;
 }
 
 export interface PlanResult extends ApplyResult {

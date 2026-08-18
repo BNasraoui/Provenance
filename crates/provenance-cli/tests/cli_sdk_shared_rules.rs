@@ -352,8 +352,12 @@ fn merging_multiple_local_candidates_requires_an_explicit_existing_id() {
             .join(".provenance/state/scopes/default/rules/rule.jsonl"),
     );
     assert_eq!(records.len(), 2);
-    assert!(records.iter().any(|record| record["id"] == sharing_id));
-    assert!(records.iter().any(|record| record["id"] == sessions_id));
+    assert!(records
+        .iter()
+        .any(|record| record["id"] == sharing_id && record.get("retired").is_none()));
+    assert!(records
+        .iter()
+        .any(|record| record["id"] == sessions_id && record["retired"] == true));
     let edges = read_jsonl(
         &directory
             .path()
