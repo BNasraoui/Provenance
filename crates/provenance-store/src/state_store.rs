@@ -174,7 +174,11 @@ impl StateStore {
         &self,
         scope: &ScopeId,
     ) -> anyhow::Result<Vec<VerificationBinding>> {
-        self.list_verification_bindings(scope)
+        Ok(self
+            .list_verification_bindings(scope)?
+            .into_iter()
+            .filter(|binding| !binding.retired)
+            .collect())
     }
     pub fn list_implementation_bindings(
         &self,

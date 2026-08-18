@@ -134,7 +134,7 @@ fn graph_evidence_locked(
     references.dedup();
     Ok(GraphEvidence {
         verification_bindings: store
-            .list_verification_bindings(scope)?
+            .active_verification_bindings(scope)?
             .into_iter()
             .filter(|binding| rule_ids.contains(binding.rule_id.as_str()))
             .collect(),
