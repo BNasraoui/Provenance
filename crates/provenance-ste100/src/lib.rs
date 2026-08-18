@@ -4,6 +4,7 @@ mod contracted_verbs;
 mod dictionary;
 mod paragraph;
 mod protected_spans;
+mod vocabulary;
 
 pub use dictionary::{
     import_dictionary, load_dictionary_index, store_dictionary_index, DictionaryEntry,
@@ -24,6 +25,7 @@ const SEMICOLON_MESSAGE: &str = "Do not use semicolons in descriptive text.";
 const CONTRACTED_VERB_MESSAGE: &str = "Use the full verb form in descriptive text.";
 const SENTENCE_LENGTH_MESSAGE: &str = "This descriptive sentence has more than 25 words.";
 const PARAGRAPH_LENGTH_MESSAGE: &str = "This paragraph has more than six sentences.";
+const UNAPPROVED_WORD_MESSAGE: &str = "Do not use unapproved dictionary words in descriptive text.";
 
 /// A report from the fixed ASD-STE100 Issue 9 analyzer.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -79,6 +81,8 @@ pub struct Finding {
 /// An ASD-STE100 Issue 9 rule implemented by this analyzer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum RuleNumber {
+    #[serde(rename = "1.1")]
+    OneOne,
     #[serde(rename = "4.2")]
     FourTwo,
     #[serde(rename = "6.3")]
@@ -101,6 +105,26 @@ pub enum FindingKind {
 pub struct Span {
     pub start: usize,
     pub end: usize,
+}
+
+/// One word or phrase classified against the imported dictionary.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct WordUse {
+    pub span: Span,
+    pub category: VocabularyCategory,
+}
+
+/// Dictionary membership for one word or phrase.
+///
+/// Membership cannot settle a restricted meaning or part of speech, so an
+/// approved word can still break Rule 1.2 or Rule 1.3.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VocabularyCategory {
+    Approved,
+    Unapproved,
+    Unknown,
+    Uncertain,
 }
 
 /// Reports implemented, determinate ASD-STE100 violations in descriptive text.
@@ -136,18 +160,7 @@ pub fn check_descriptive(text: &str) -> Report {
     );
     findings.extend(sentence_length_findings(text, &protected));
     findings.extend(paragraph_sentence_findings(text, &protected));
-    findings.sort_by_key(|finding| {
-        (
-            finding.span.start,
-            finding.span.end,
-            match finding.rule {
-                RuleNumber::FourTwo => 0,
-                RuleNumber::SixThree => 1,
-                RuleNumber::SixSix => 2,
-                RuleNumber::EightOne => 3,
-            },
-        )
-    });
+    sort_findings(&mut findings);
 
     Report {
         standard: Standard::AsdSte100,
@@ -155,6 +168,59 @@ pub fn check_descriptive(text: &str) -> Report {
         analyzer_version: ANALYZER_VERSION.to_owned(),
         findings,
     }
+}
+
+/// Reports determinate violations, with Rule 1.1 vocabulary findings from the
+/// imported dictionary added to the data-free checks.
+pub fn check_descriptive_with_dictionary(text: &str, dictionary: &DictionaryImport) -> Report {
+    let mut report = check_descriptive(text);
+    let protected = protected_spans::analyze(text);
+    report
+        .findings
+        .extend(unapproved_word_findings(text, &protected, dictionary));
+    sort_findings(&mut report.findings);
+    report
+}
+
+/// Reports each word whose imported dictionary forms are all unapproved.
+#[rule("rule_ste_dictionary_unapproved_word")]
+fn unapproved_word_findings(
+    text: &str,
+    protected: &protected_spans::ProtectedSpans,
+    dictionary: &DictionaryImport,
+) -> Vec<Finding> {
+    vocabulary::classify(text, protected, dictionary)
+        .into_iter()
+        .filter(|word_use| word_use.category == VocabularyCategory::Unapproved)
+        .map(|word_use| Finding {
+            rule: RuleNumber::OneOne,
+            kind: FindingKind::Violation,
+            span: word_use.span,
+            message: UNAPPROVED_WORD_MESSAGE.to_owned(),
+        })
+        .collect()
+}
+
+fn sort_findings(findings: &mut [Finding]) {
+    findings.sort_by_key(|finding| {
+        (
+            finding.span.start,
+            finding.span.end,
+            match finding.rule {
+                RuleNumber::OneOne => 0,
+                RuleNumber::FourTwo => 1,
+                RuleNumber::SixThree => 2,
+                RuleNumber::SixSix => 3,
+                RuleNumber::EightOne => 4,
+            },
+        )
+    });
+}
+
+/// Classifies every word outside protected text against the imported dictionary.
+pub fn classify_vocabulary(text: &str, dictionary: &DictionaryImport) -> Vec<WordUse> {
+    let protected = protected_spans::analyze(text);
+    vocabulary::classify(text, &protected, dictionary)
 }
 
 /// Reports each paragraph with clear boundaries that has more than six sentences.
