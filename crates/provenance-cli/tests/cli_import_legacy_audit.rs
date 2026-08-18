@@ -4,14 +4,18 @@ use assert_cmd::Command;
 fn altered_replaced_or_omitted_shipped_disposition_audit_is_rejected() {
     let dir = tempfile::tempdir().unwrap();
     let baseline = export_shipped(&dir);
+    let audited = audited_proposal_ids(&baseline);
     for attack in ["altered", "replaced", "omitted"] {
         let mut value = baseline.clone();
         let dispositions = value["dispositions"].as_array_mut().unwrap();
         // Attack a row of the frozen shipped audit, not one of the repo's
-        // modern tournament dispositions that share the array.
+        // modern tournament dispositions that share the array. The audit is
+        // the set of rows that dispose of a terminal proposal, so ask that
+        // question directly. A name pattern goes stale as the repository
+        // gains modern rows.
         let target = dispositions
             .iter()
-            .position(|row| !row["id"].as_str().unwrap().contains("wiki_homepage"))
+            .position(|row| audited.contains(row["proposal_id"].as_str().unwrap()))
             .unwrap();
         match attack {
             "altered" => {
@@ -205,6 +209,21 @@ fn pre_service_family_removal_exports_name_the_re_export_remedy() {
                 "this export predates the service family removal; re-export from current provenance",
             ));
     }
+}
+
+/// The proposal ids the frozen shipped-v1 disposition audit covers.
+///
+/// A disposition belongs to the audit when the proposal it disposes of is in a
+/// terminal state. Modern tournament dispositions share the exported array and
+/// point at proposals that are still proposed.
+fn audited_proposal_ids(export: &serde_json::Value) -> std::collections::BTreeSet<String> {
+    export["proposal_cards"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|proposal| proposal["promotion_state"].as_str() != Some("proposed"))
+        .map(|proposal| proposal["id"].as_str().unwrap().to_string())
+        .collect()
 }
 
 fn export_shipped(dir: &tempfile::TempDir) -> serde_json::Value {
