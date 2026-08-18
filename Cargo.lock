@@ -2061,6 +2061,7 @@ dependencies = [
  "fs_at",
  "insta",
  "jsonschema",
+ "pdf_oxide",
  "predicates",
  "provenance-core",
  "provenance-macros",

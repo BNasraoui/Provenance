@@ -1,3 +1,4 @@
+pub mod dictionary;
 pub mod graph;
 pub mod ideation;
 pub mod knowledge;
@@ -49,6 +50,10 @@ pub enum Command {
     Docs {
         #[command(subcommand)]
         command: workspace::DocsCommand,
+    },
+    Dictionary {
+        #[command(subcommand)]
+        command: dictionary::DictionaryCommand,
     },
     Wiki {
         #[command(subcommand)]
