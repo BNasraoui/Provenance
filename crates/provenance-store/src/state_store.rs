@@ -170,6 +170,12 @@ impl StateStore {
     ) -> anyhow::Result<Vec<VerificationBinding>> {
         read_jsonl(&shards::verification_bindings_path(&self.layout, scope))
     }
+    pub fn active_verification_bindings(
+        &self,
+        scope: &ScopeId,
+    ) -> anyhow::Result<Vec<VerificationBinding>> {
+        self.list_verification_bindings(scope)
+    }
     pub fn list_implementation_bindings(
         &self,
         scope: &ScopeId,

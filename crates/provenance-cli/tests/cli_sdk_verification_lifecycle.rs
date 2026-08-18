@@ -259,3 +259,79 @@ fn one_owner_cannot_retire_a_verification_binding_declared_by_another() {
     assert_eq!(stored.len(), 2);
     assert!(binding(&stored, &untouched).get("retired").is_none());
 }
+
+fn unverified_rules(repo: &std::path::Path) -> String {
+    let output = provenance()
+        .args([
+            "coverage",
+            "scan",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--path",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--validate-rules",
+            "--format",
+            "json",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    String::from_utf8(output.stdout).unwrap()
+}
+
+fn exported_bindings(repo: &std::path::Path) -> Vec<Value> {
+    let output = provenance()
+        .args([
+            "export",
+            "--repo",
+            repo.to_str().unwrap(),
+            "--scope",
+            "default",
+            "--format",
+            "json",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    serde_json::from_slice::<Value>(&output.stdout).unwrap()["verification_bindings"]
+        .as_array()
+        .unwrap()
+        .clone()
+}
+
+#[test]
+fn a_retired_binding_leaves_its_rule_unverified_but_stays_canonical_history() {
+    let directory = init_repo();
+    let start = rule_id(directory.path(), "start");
+    let resume = rule_id(directory.path(), "resume");
+    let retired = verify(
+        directory.path(),
+        Verification {
+            rule: &start,
+            key: "expiry",
+            owner: "ci://typescript",
+            file: "tests/expiry.test.ts",
+        },
+    );
+    let unverified = format!("active rule `{start}` has no verification");
+    assert!(!unverified_rules(directory.path()).contains(&unverified));
+
+    verify(
+        directory.path(),
+        Verification {
+            rule: &resume,
+            key: "expiry",
+            owner: "ci://typescript",
+            file: "tests/expiry.test.ts",
+        },
+    );
+
+    let report = unverified_rules(directory.path());
+    assert!(report.contains(&unverified), "{report}");
+    assert_eq!(
+        binding(&exported_bindings(directory.path()), &retired)["retired"],
+        true
+    );
+}

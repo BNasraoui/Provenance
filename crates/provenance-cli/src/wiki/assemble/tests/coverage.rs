@@ -241,6 +241,20 @@ fn typed_verification_binding_is_visible_without_a_code_scan() {
 }
 
 #[test]
+fn retired_typed_verification_is_not_presented_as_current() {
+    let resolver = LinkResolver::new(Some("git@github.com:exampleorg/ex-api.git"));
+    let mut state = fixture_state();
+    let mut retired = typed_binding();
+    retired.retired = true;
+    state.verification_bindings.push(retired);
+
+    let corpus = build_corpus_with_coverage(&state, &resolver, None);
+    let page = rule_page(&corpus, "rule_001");
+
+    assert!(page.verifications.is_empty());
+}
+
+#[test]
 fn comment_annotations_become_implementation_and_verification_sites() {
     let report = CoverageScan {
         report: CoverageReport::new(
