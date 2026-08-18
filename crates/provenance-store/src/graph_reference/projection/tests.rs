@@ -215,6 +215,7 @@ fn verification_binding_record(scope: &ScopeId) -> VerificationBinding {
         key: "pinned-check".into(),
         method: provenance_core::VerificationMethod::Examples,
         declared_by: "ci://typescript".into(),
+        retired: false,
         file: "tests/pinned.test.ts".into(),
         symbol: Some("pinned check".into()),
     }

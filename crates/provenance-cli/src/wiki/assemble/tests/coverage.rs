@@ -61,6 +61,7 @@ fn typed_binding() -> VerificationBinding {
         key: "share-link-expiry".to_string(),
         method: VerificationMethod::Examples,
         declared_by: "ci://typescript".to_string(),
+        retired: false,
         file: Utf8PathBuf::from("tests/share-links.test.ts"),
         symbol: Some("share links expire".to_string()),
     }
