@@ -18,19 +18,22 @@ export const shareLinks = defineSpec("share-links")
     requirement("sharing")
       .statement("Users can securely share documentation")
       .from(source("sharing-policy").document("docs/sharing-policy.md"))
-      .rules(rule("expiry").statement("Share links must expire within 30 days")),
+      .rules(
+        rule("expiry").statement("Share links must expire within 30 days"),
+      ),
   )
   .build();
 ```
 
 An explicit entry point calls `apply(shareLinks)`. Importing the declaration
 module only constructs and freezes values in memory. Tests import `shareLinks`
-and call `shareLinks.requirements.sharing.rules.expiry.verify("share-link-expiry", callback)`.
-The local key gives the durable
-Verification binding a stable identity; the Rule itself remains a real typed
-reference. The callback never crosses the process seam. Node
-runs it between Rust-backed begin and complete commands. On failure, the SDK
-sends a serialized error and rethrows the exact value caught from the callback.
+and call
+`shareLinks.requirements.sharing.rules.expiry.verify("share-link-expiry", callback)`.
+The local key gives the durable Verification binding a stable identity; the
+Rule itself remains a real typed reference. The callback never crosses the
+process seam. Node runs it between Rust-backed begin and complete commands. On
+failure, the SDK sends a serialized error and rethrows the exact value caught
+from the callback.
 
 ## Process protocol
 

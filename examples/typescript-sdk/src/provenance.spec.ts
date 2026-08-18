@@ -6,12 +6,7 @@ export const shareLinks = defineSpec("share-links")
   .requirements(
     requirement("sharing")
       .statement("Users can securely share documentation")
-      .description("Controls for links shared outside the organization")
-      .from(
-        source("sharing-policy")
-          .name("Sharing policy")
-          .document("docs/sharing-policy.md"),
-      )
+      .from(source("sharing-policy").document("docs/sharing-policy.md"))
       .rules(
         rule("expiry")
           .statement("Share links must expire within 30 days")
@@ -19,5 +14,3 @@ export const shareLinks = defineSpec("share-links")
       ),
   )
   .build();
-
-export default shareLinks;

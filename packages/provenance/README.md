@@ -18,12 +18,7 @@ export const shareLinks = defineSpec("share-links")
   .requirements(
     requirement("sharing")
       .statement("Users can securely share documentation")
-      .description("Controls for links shared outside the organization")
-      .from(
-        source("sharing-policy")
-          .name("Sharing policy")
-          .document("docs/sharing-policy.md"),
-      )
+      .from(source("sharing-policy").document("docs/sharing-policy.md"))
       .rules(
         rule("expiry")
           .statement("Share links must expire within 30 days")
@@ -36,14 +31,12 @@ export const shareLinks = defineSpec("share-links")
 Each fluent call returns a new immutable declaration. `build()` validates and
 finalizes the desired-state document and collects Sources linked with
 `Requirement.from(...)`; they do not need to be repeated in `.sources(...)`.
-Construction is synchronous,
-deterministic, and in-memory: importing this module does not write state or
-start a process. `build()` returns the frozen, typed objects that tests import.
-The built spec exposes typed Requirement and Rule paths directly while keeping
-the same objects under `.handles` for compatibility. Source `.name(...)`
-overrides the key-derived canonical display name, and
-Requirement `.description(...)` can replace the canonical description on a
-later apply. Rust remains responsible for reconciling those desired values.
+Construction is synchronous and in-memory: importing this module does not write
+state or start a process. `build()` returns the frozen, typed objects that tests
+import. Rust remains responsible for reconciling them.
+
+Sources can add a display name with `.name(...)`; Requirements can add more
+context with `.description(...)`.
 
 ## Compatibility helpers
 
@@ -121,15 +114,15 @@ Materialize only this spec at a deliberate entry point:
 
 ```ts
 import { apply, plan } from "@quality-sh/provenance";
-import spec from "./provenance.spec.js";
+import { shareLinks } from "./provenance.spec.js";
 
-await apply(spec);
+await apply(shareLinks);
 ```
 
 Preview the same reconciliation without writing canonical state:
 
 ```ts
-const proposed = await plan(spec);
+const proposed = await plan(shareLinks);
 ```
 
 Updated resources include field-level `before` and `after` values. Affected
