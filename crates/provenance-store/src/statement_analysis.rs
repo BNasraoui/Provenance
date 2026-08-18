@@ -3,7 +3,8 @@
 use provenance_core::{Requirement, Rule, ScopeId};
 use provenance_macros::rule;
 use provenance_ste100::{
-    check_descriptive, FindingKind, RuleNumber, Span, Standard, StandardIssue,
+    check_descriptive, check_descriptive_with_dictionary, DictionaryImport, FindingKind,
+    RuleNumber, Span, Standard, StandardIssue,
 };
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -52,6 +53,7 @@ pub fn analyze_changed_statements(
     base_rules: &[Rule],
     candidate_requirements: &[Requirement],
     candidate_rules: &[Rule],
+    dictionary: Option<&DictionaryImport>,
 ) -> Vec<StatementDiagnostic> {
     let requirement_base = statements_by_id(base_requirements, |record| {
         (
@@ -79,6 +81,7 @@ pub fn analyze_changed_statements(
                 record.statement.as_str(),
             )
         }),
+        dictionary,
         &mut diagnostics,
     );
     analyze_records(
@@ -91,6 +94,7 @@ pub fn analyze_changed_statements(
                 record.statement.as_str(),
             )
         }),
+        dictionary,
         &mut diagnostics,
     );
     diagnostics.sort_by(|left, right| {
@@ -127,6 +131,7 @@ fn analyze_records<'a>(
     kind: StatementRecordKind,
     base: &BTreeMap<(&str, &str), &str>,
     candidates: impl Iterator<Item = (&'a ScopeId, &'a str, &'a str)>,
+    dictionary: Option<&DictionaryImport>,
     diagnostics: &mut Vec<StatementDiagnostic>,
 ) {
     for (scope_id, id, statement) in candidates {
@@ -136,7 +141,10 @@ fn analyze_records<'a>(
         {
             continue;
         }
-        let report = check_descriptive(statement);
+        let report = match dictionary {
+            Some(dictionary) => check_descriptive_with_dictionary(statement, dictionary),
+            None => check_descriptive(statement),
+        };
         diagnostics.extend(
             report
                 .findings

@@ -30,8 +30,16 @@ impl std::error::Error for StatementWriteError {}
 
 /// Prevents direct statement writes that have deterministic ASD-STE100 violations.
 #[rule("rule_ste_direct_statement_write_gate")]
-pub(super) fn ensure_statement_is_writable(statement: &str) -> Result<(), StatementWriteError> {
-    let report = provenance_ste100::check_descriptive(statement);
+pub(super) fn ensure_statement_is_writable(
+    layout: &crate::layout::ProvenanceLayout,
+    statement: &str,
+) -> Result<(), StatementWriteError> {
+    let report = match crate::dictionary_reference::load_project_dictionary(layout) {
+        Some(dictionary) => {
+            provenance_ste100::check_descriptive_with_dictionary(statement, &dictionary)
+        }
+        None => provenance_ste100::check_descriptive(statement),
+    };
     if report.findings.is_empty() {
         return Ok(());
     }

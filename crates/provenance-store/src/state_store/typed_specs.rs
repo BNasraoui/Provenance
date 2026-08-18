@@ -183,10 +183,12 @@ impl StateStore {
             rule_resources,
             implementation_bindings,
         );
+        let dictionary = crate::dictionary_reference::load_project_dictionary(&self.layout);
         result.diagnostics = super::typed_statement_policy::analyze_typed_statements(
             &result.resources,
             &requirements,
             &rules,
+            dictionary.as_ref(),
         );
 
         if matches!(mode, ReconcileMode::Apply) {

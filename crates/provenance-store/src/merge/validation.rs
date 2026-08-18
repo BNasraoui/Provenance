@@ -124,12 +124,14 @@ pub fn changed_statement_diagnostics(
             &[],
             &deserialize_records(candidate, "requirement")?,
             &[],
+            None,
         )),
         ShardFamily::Rules => Ok(analyze_changed_statements(
             &[],
             &deserialize_records(base, "rule")?,
             &[],
             &deserialize_records(candidate, "rule")?,
+            None,
         )),
         _ => Ok(Vec::new()),
     }

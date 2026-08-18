@@ -295,11 +295,13 @@ fn ensure_changed_statements_are_clean(
 ) -> anyhow::Result<()> {
     let live = StateStore::new(live_layout.clone());
     let staged = StateStore::new(staged_layout.clone());
+    let dictionary = provenance_store::dictionary_reference::load_project_dictionary(live_layout);
     let diagnostics = analyze_changed_statements(
         &live.list_requirements(scope_id)?,
         &live.list_rules(scope_id)?,
         &staged.list_requirements(scope_id)?,
         &staged.list_rules(scope_id)?,
+        dictionary.as_ref(),
     );
     if diagnostics.is_empty() {
         Ok(())

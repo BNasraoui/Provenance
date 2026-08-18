@@ -35,11 +35,14 @@ pub(super) fn changed_statements_from_head(
         candidate_requirements.extend(store.list_requirements(&scope.id)?);
         candidate_rules.extend(store.list_rules(&scope.id)?);
     }
+    let layout = provenance_store::layout::ProvenanceLayout::new(repo.to_owned());
+    let dictionary = provenance_store::dictionary_reference::load_project_dictionary(&layout);
     Ok(analyze_changed_statements(
         &base_requirements,
         &base_rules,
         &candidate_requirements,
         &candidate_rules,
+        dictionary.as_ref(),
     ))
 }
 

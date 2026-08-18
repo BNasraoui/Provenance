@@ -106,7 +106,7 @@ impl StateStore {
             origin_thread,
             origin_message,
         } = input;
-        super::statement_policy::ensure_statement_is_writable(&statement)?;
+        super::statement_policy::ensure_statement_is_writable(&self.layout, &statement)?;
         if let Some(requirement_id) = &requirement_id {
             anyhow::ensure!(
                 self.list_requirements(&scope_id)?

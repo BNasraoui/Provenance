@@ -37,13 +37,19 @@ pub(super) fn analyze_typed_statements(
     resources: &[ReconciledResource],
     requirements: &[Requirement],
     rules: &[Rule],
+    dictionary: Option<&provenance_ste100::DictionaryImport>,
 ) -> Vec<TypedSpecDiagnostic> {
     resources
         .iter()
         .filter(|resource| needs_analysis(resource))
         .flat_map(|resource| {
             let statement = statement_for(resource, requirements, rules);
-            let report = provenance_ste100::check_descriptive(statement);
+            let report = match dictionary {
+                Some(dictionary) => {
+                    provenance_ste100::check_descriptive_with_dictionary(statement, dictionary)
+                }
+                None => provenance_ste100::check_descriptive(statement),
+            };
             report
                 .findings
                 .into_iter()
