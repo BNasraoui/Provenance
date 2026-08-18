@@ -36,7 +36,7 @@ pub(super) fn load_validation_state(
         scans,
         known.iter().cloned(),
     ));
-    let implementations = store.list_implementation_bindings(&scope)?;
+    let implementations = store.active_implementation_bindings(&scope)?;
     for site in provenance_scanner::source_sites(scans).filter(|site| {
         site.role() == provenance_scanner::SourceSiteRole::Implementation
             && implementations.iter().any(|binding| {

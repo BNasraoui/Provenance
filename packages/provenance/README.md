@@ -138,6 +138,13 @@ replaces its active owned Requirement edge. Plan returns ownership conflicts as
 data; apply refuses them. Hard deletion and ownership transfer are separate and
 are not part of this API.
 
+Removing `.implementedBy(...)` from an active Rule also retires only that
+spec's canonical implementation binding. Plan reports the Rule as updated with
+the old implementation and `null` as its field-level before/after values. Adding
+the link back reactivates the same binding ID, while changing the imported
+symbol updates it in place. Retired bindings remain in canonical exports as
+history but no longer make the Rule appear implemented.
+
 A test imports the actual rule handle and runs its callback in Node:
 
 ```ts

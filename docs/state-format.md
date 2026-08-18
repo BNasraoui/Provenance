@@ -26,7 +26,17 @@ remain an equal source of verification relationships. No shard stores a
 `verified` boolean: Unverified is derived only when neither source supplies a
 live binding.
 
-A Rule with no implementation binding is a valid unimplemented Rule. This
+Typed implementation relationships live in
+`scopes/<scope>/implementations/binding.jsonl`. Removing `implementedBy` from
+an otherwise active typed Rule sets the owned binding's `retired` field instead
+of deleting the row. Reintroducing it clears retirement on the same binding ID;
+changing its exported target updates that row. Active coverage, wiki, stale,
+health, and plan views exclude retired bindings. Export, import, checking, and
+exact graph references preserve them as canonical history. Applying one spec
+does not retire bindings attached to Rules declared by another spec, even when
+both specs use the same declaration owner.
+
+A Rule with no active implementation binding is a valid unimplemented Rule. This
 semantic change does not alter the version `1` record shape: existing source
 fields remain citations and do not count as implementation, so existing
 records need no migration.
