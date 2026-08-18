@@ -150,7 +150,7 @@ pub fn check_descriptive(text: &str) -> Report {
     }
 }
 
-/// Reports each determinate paragraph that has more than six sentences.
+/// Reports each paragraph with clear boundaries that has more than six sentences.
 #[rule("rule_ste100_paragraph_sentence_limit")]
 fn paragraph_sentence_findings(
     text: &str,

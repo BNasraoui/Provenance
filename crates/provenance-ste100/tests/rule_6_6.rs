@@ -39,7 +39,7 @@ fn a_paragraph_permits_six_sentences_and_reports_seven() {
 }
 
 #[test]
-fn sentence_counts_restart_at_determinate_paragraph_boundaries() {
+fn sentence_counts_restart_at_clear_paragraph_boundaries() {
     let text = format!("{}\n\n{}", sentence_sequence(6), sentence_sequence(6));
     assert!(rule_6_6_spans(&text).is_empty());
 
