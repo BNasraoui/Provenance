@@ -15,7 +15,10 @@ pub(super) fn stale_rule_warnings(
     let stale = rules
         .iter()
         .filter_map(|rule| {
-            stale_status(&rule.status).map(|status| (rule.id.as_str().to_string(), status))
+            rule.retired
+                .then_some("retired")
+                .or_else(|| stale_status(&rule.status))
+                .map(|status| (rule.id.as_str().to_string(), status))
         })
         .collect::<BTreeMap<_, _>>();
 

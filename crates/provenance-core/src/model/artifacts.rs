@@ -7,6 +7,11 @@ use super::validation::{
     validate_resolution_input_content,
 };
 
+#[allow(clippy::trivially_copy_pass_by_ref)]
+const fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SourceType {
     #[serde(rename = "policy")]
@@ -206,6 +211,8 @@ pub struct Source {
     pub declared_by: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub declaration_address: Option<super::DeclarationAddress>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub retired: bool,
     pub name: String,
     #[serde(alias = "sourceType")]
     pub source_type: SourceType,
@@ -264,6 +271,8 @@ pub struct Requirement {
     pub declared_by: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub declaration_address: Option<super::DeclarationAddress>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub retired: bool,
     pub statement: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -382,6 +391,8 @@ pub struct Rule {
     pub declared_by: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub declaration_address: Option<super::DeclarationAddress>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub retired: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

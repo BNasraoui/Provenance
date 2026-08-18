@@ -10,6 +10,7 @@ use super::super::{
     TypedRuleInput, TypedSourceInput,
 };
 use super::identity::{requirement_address, source_address};
+use super::lifecycle::{retire_omitted_requirements, retire_omitted_rules, retire_omitted_sources};
 use super::rule_addresses::{local_parent, rule_address};
 
 pub(super) fn reconcile_sources(
@@ -31,6 +32,7 @@ pub(super) fn reconcile_sources(
             id: id.clone(),
             declared_by: Some(owner.to_string()),
             declaration_address: Some(address.clone()),
+            retired: false,
             name: declaration.name,
             source_type,
             url: declaration.url,
@@ -53,6 +55,7 @@ pub(super) fn reconcile_sources(
             changes,
         ));
     }
+    retire_omitted_sources(&mut records, &mut resources, spec, owner, ids);
     records.sort_by(|left, right| left.id.as_str().cmp(right.id.as_str()));
     Ok((records, resources))
 }
@@ -75,12 +78,16 @@ fn upsert_source(
     let before = existing.clone();
     existing.declared_by = desired.declared_by;
     existing.declaration_address = desired.declaration_address;
+    existing.retired = false;
     existing.name = desired.name;
     existing.source_type = desired.source_type;
     existing.url = desired.url;
     existing.reference = desired.reference;
     let changes = source_changes(&before, existing);
-    (state_after_change(existing, &before), changes)
+    (
+        state_after_change(before.declaration_address.as_ref(), existing, &before),
+        changes,
+    )
 }
 
 pub(super) fn reconcile_requirements(
@@ -110,6 +117,7 @@ pub(super) fn reconcile_requirements(
             id: id.clone(),
             declared_by: Some(owner.to_string()),
             declaration_address: Some(address.clone()),
+            retired: false,
             statement: declaration.statement,
             description: declaration.description,
             fog: None,
@@ -130,6 +138,7 @@ pub(super) fn reconcile_requirements(
             changes,
         ));
     }
+    retire_omitted_requirements(&mut records, &mut resources, spec, owner, ids);
     records.sort_by(|left, right| left.id.as_str().cmp(right.id.as_str()));
     Ok((records, resources))
 }
@@ -145,6 +154,7 @@ fn upsert_requirement(
     let before = existing.clone();
     existing.declared_by = desired.declared_by;
     existing.declaration_address = desired.declaration_address;
+    existing.retired = false;
     existing.statement = desired.statement;
     if desired.description.is_some() {
         existing.description = desired.description;
@@ -161,7 +171,10 @@ fn upsert_requirement(
             .then(left.clause.cmp(&right.clause))
     });
     let changes = requirement_changes(&before, existing);
-    (state_after_change(existing, &before), changes)
+    (
+        state_after_change(before.declaration_address.as_ref(), existing, &before),
+        changes,
+    )
 }
 
 pub(super) fn reconcile_rules(
@@ -183,6 +196,7 @@ pub(super) fn reconcile_rules(
             id: id.clone(),
             declared_by: Some(owner.to_string()),
             declaration_address: Some(address.clone()),
+            retired: false,
             name: declaration.name,
             description: declaration.description,
             statement: declaration.statement,
@@ -204,6 +218,7 @@ pub(super) fn reconcile_rules(
             changes,
         ));
     }
+    retire_omitted_rules(&mut records, &mut resources, spec, owner, ids);
     records.sort_by(|left, right| left.id.as_str().cmp(right.id.as_str()));
     Ok((records, resources))
 }
@@ -216,6 +231,7 @@ fn upsert_rule(records: &mut Vec<Rule>, desired: Rule) -> (ReconcileState, Vec<T
     let before = existing.clone();
     existing.declared_by = desired.declared_by;
     existing.declaration_address = desired.declaration_address;
+    existing.retired = false;
     existing.statement = desired.statement;
     if desired.name.is_some() {
         existing.name = desired.name;
@@ -224,11 +240,21 @@ fn upsert_rule(records: &mut Vec<Rule>, desired: Rule) -> (ReconcileState, Vec<T
         existing.description = desired.description;
     }
     let changes = rule_changes(&before, existing);
-    (state_after_change(existing, &before), changes)
+    (
+        state_after_change(before.declaration_address.as_ref(), existing, &before),
+        changes,
+    )
 }
 
 fn source_changes(before: &Source, after: &Source) -> Vec<TypedFieldChange> {
     let mut changes = Vec::new();
+    changed(
+        &mut changes,
+        "address",
+        &before.declaration_address,
+        &after.declaration_address,
+    );
+    changed(&mut changes, "retired", &before.retired, &after.retired);
     changed(&mut changes, "name", &before.name, &after.name);
     changed(
         &mut changes,
@@ -248,6 +274,13 @@ fn source_changes(before: &Source, after: &Source) -> Vec<TypedFieldChange> {
 
 fn requirement_changes(before: &Requirement, after: &Requirement) -> Vec<TypedFieldChange> {
     let mut changes = Vec::new();
+    changed(
+        &mut changes,
+        "address",
+        &before.declaration_address,
+        &after.declaration_address,
+    );
+    changed(&mut changes, "retired", &before.retired, &after.retired);
     changed(
         &mut changes,
         "statement",
@@ -271,6 +304,13 @@ fn requirement_changes(before: &Requirement, after: &Requirement) -> Vec<TypedFi
 
 fn rule_changes(before: &Rule, after: &Rule) -> Vec<TypedFieldChange> {
     let mut changes = Vec::new();
+    changed(
+        &mut changes,
+        "address",
+        &before.declaration_address,
+        &after.declaration_address,
+    );
+    changed(&mut changes, "retired", &before.retired, &after.retired);
     changed(
         &mut changes,
         "statement",
@@ -302,11 +342,39 @@ fn changed<T: PartialEq + serde::Serialize>(
     }
 }
 
-fn state_after_change<T: PartialEq>(changed: &T, before: &T) -> ReconcileState {
+fn state_after_change<T: PartialEq + DeclarationRecord>(
+    previous_address: Option<&provenance_core::DeclarationAddress>,
+    changed: &T,
+    before: &T,
+) -> ReconcileState {
     if changed == before {
         ReconcileState::Unchanged
+    } else if previous_address != changed.declaration_address() {
+        ReconcileState::Moved
     } else {
         ReconcileState::Updated
+    }
+}
+
+trait DeclarationRecord {
+    fn declaration_address(&self) -> Option<&provenance_core::DeclarationAddress>;
+}
+
+impl DeclarationRecord for Source {
+    fn declaration_address(&self) -> Option<&provenance_core::DeclarationAddress> {
+        self.declaration_address.as_ref()
+    }
+}
+
+impl DeclarationRecord for Requirement {
+    fn declaration_address(&self) -> Option<&provenance_core::DeclarationAddress> {
+        self.declaration_address.as_ref()
+    }
+}
+
+impl DeclarationRecord for Rule {
+    fn declaration_address(&self) -> Option<&provenance_core::DeclarationAddress> {
+        self.declaration_address.as_ref()
     }
 }
 

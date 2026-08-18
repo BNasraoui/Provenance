@@ -29,27 +29,35 @@ impl StateStore {
         let rule_id = match (input.rule, input.declaration) {
             (Some(rule), None) => {
                 let rule_id = StableId::new(rule)?;
-                anyhow::ensure!(
-                    rules.iter().any(|rule| rule.id == rule_id),
-                    "rule `{}` does not exist",
-                    rule_id.as_str()
-                );
+                let rule = rules
+                    .iter()
+                    .find(|rule| rule.id == rule_id)
+                    .ok_or_else(|| anyhow::anyhow!("rule `{}` does not exist", rule_id.as_str()))?;
+                anyhow::ensure!(!rule.retired, "rule `{}` is retired", rule_id.as_str());
                 rule_id
             }
-            (None, Some(declaration)) => rules
-                .iter()
-                .find(|rule| {
-                    rule.declared_by.as_deref() == Some(declaration.declared_by.as_str())
-                        && rule.declaration_address.as_ref() == Some(&declaration.address)
-                })
-                .map(|rule| rule.id.clone())
-                .ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "declaration owned by `{}` at `{}` has not been applied",
-                        declaration.declared_by,
-                        declaration.address.segments().join("/")
-                    )
-                })?,
+            (None, Some(declaration)) => {
+                let rule = rules
+                    .iter()
+                    .find(|rule| {
+                        rule.declared_by.as_deref() == Some(declaration.declared_by.as_str())
+                            && rule.declaration_address.as_ref() == Some(&declaration.address)
+                    })
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "declaration owned by `{}` at `{}` has not been applied",
+                            declaration.declared_by,
+                            declaration.address.segments().join("/")
+                        )
+                    })?;
+                anyhow::ensure!(
+                    !rule.retired,
+                    "declaration owned by `{}` at `{}` is retired",
+                    declaration.declared_by,
+                    declaration.address.segments().join("/")
+                );
+                rule.id.clone()
+            }
             (Some(_), Some(_)) => {
                 anyhow::bail!("begin verification accepts either rule or declaration, not both")
             }

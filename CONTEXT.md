@@ -96,6 +96,10 @@ The integration URI allowed to reconcile a Source, Requirement, or Rule definiti
 
 An owner-local hierarchical identity for one typed declaration. Equal child keys under different parents have distinct addresses. The address is not the canonical Stable ID.
 
+## Retired declaration
+
+A Source, Requirement, or Rule owned by a typed spec but omitted from that spec's next complete desired-state document. Retirement preserves the canonical record, Stable ID, owner, address, and historical relationships while removing the declaration from active graph and assurance checks. Declaring it again reactivates the same record. Retirement is not deletion.
+
 ## Commit-then-issue
 
 The handoff in which canonical graph changes are committed before a graph reference is issued, so issuance does not create new canonical state.

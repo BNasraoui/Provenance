@@ -107,8 +107,8 @@ not import Provenance.
 Moving a local Rule to a shared declaration, or back, preserves its canonical
 ID when Rust finds exactly one owned candidate. If several local Rules could
 become the shared Rule, apply fails instead of guessing. An immutable
-`.id(existingId)` call can choose the canonical record, but this lifecycle slice
-is additive: it does not retire the other Rule or remove old graph edges.
+`.id(existingId)` call can choose the canonical record. Other declarations
+omitted from that complete spec are retired, not deleted.
 
 Materialize only this spec at a deliberate entry point:
 
@@ -129,6 +129,14 @@ Updated resources include field-level `before` and `after` values. Affected
 Rules also list the implementation and verification sites that may need
 review. Provenance computes both `plan` and `apply` through the same Rust
 reconciliation path.
+
+The result classifies each declaration as `created`, `updated`, `moved`,
+`retired`, `conflict`, or `unchanged`. Omission retires only records owned by
+that same spec. Their Stable IDs and history remain, active checks ignore them,
+and adding the declaration back reactivates the same record. A Rule move
+replaces its active owned Requirement edge. Plan returns ownership conflicts as
+data; apply refuses them. Hard deletion and ownership transfer are separate and
+are not part of this API.
 
 A test imports the actual rule handle and runs its callback in Node:
 

@@ -58,7 +58,10 @@ async function rejectsIncompatibleEngineBeforeCommand(): Promise<void> {
       state_schema_version: 1,
       repository: "/project",
     },
-    plan: { created: 0, updated: 0, unchanged: 0, resources: [], affected_rules: [] },
+    plan: {
+      created: 0, updated: 0, moved: 0, retired: 0, conflicts: 0, unchanged: 0,
+      resources: [], affected_rules: [],
+    },
   });
   configure({ engine: recorder.engine, repository: "/project" });
 
@@ -72,7 +75,7 @@ async function leavesRepositoryDiscoveryToRust(): Promise<void> {
   const recorder = recordingEngine({
     info: {
       engine_version: "0.1.0",
-      protocol_version: 2,
+      protocol_version: 3,
       state_schema_version: 1,
       repository: "/project",
     },
@@ -80,6 +83,9 @@ async function leavesRepositoryDiscoveryToRust(): Promise<void> {
       declared_by: "spec://typescript",
       created: 0,
       updated: 0,
+      moved: 0,
+      retired: 0,
+      conflicts: 0,
       unchanged: 1,
       resources: [],
       affected_rules: [],
