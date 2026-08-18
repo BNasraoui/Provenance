@@ -34,12 +34,10 @@ pub(super) fn ensure_statement_is_writable(
     layout: &crate::layout::ProvenanceLayout,
     statement: &str,
 ) -> Result<(), StatementWriteError> {
-    let report = match crate::dictionary_reference::load_project_dictionary(layout) {
-        Some(dictionary) => {
-            provenance_ste100::check_descriptive_with_dictionary(statement, &dictionary)
-        }
-        None => provenance_ste100::check_descriptive(statement),
-    };
+    let report = crate::dictionary_reference::load_project_dictionary(layout).map_or_else(
+        || provenance_ste100::check_descriptive(statement),
+        |dictionary| provenance_ste100::check_descriptive_with_dictionary(statement, &dictionary),
+    );
     if report.findings.is_empty() {
         return Ok(());
     }

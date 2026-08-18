@@ -141,10 +141,10 @@ fn analyze_records<'a>(
         {
             continue;
         }
-        let report = match dictionary {
-            Some(dictionary) => check_descriptive_with_dictionary(statement, dictionary),
-            None => check_descriptive(statement),
-        };
+        let report = dictionary.map_or_else(
+            || check_descriptive(statement),
+            |dictionary| check_descriptive_with_dictionary(statement, dictionary),
+        );
         diagnostics.extend(
             report
                 .findings
