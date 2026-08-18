@@ -36,6 +36,10 @@ A volatile observation from one execution of a Verification binding. It records 
 
 A structured diagnostic that identifies where descriptive text does not conform to a specified issue and rule of ASD-STE100 Simplified Technical English.
 
+## STE dictionary import
+
+Local data that Provenance extracts from a verified official ASD-STE100 PDF. Its identity contains the ASD issue, source digest, extracted-data digest, and extractor version. It is not canonical graph state and is not distributed with Provenance.
+
 ## Engine protocol
 
 The versioned, language-neutral request and response contract through which an SDK invokes the Rust engine. It carries declarations, plans, queries, and verification outcomes; it never carries host-language callbacks or a mirror of Rust objects.
