@@ -1,6 +1,7 @@
 //! Deterministic descriptive-text checks from ASD-STE100 Issue 9.
 
 mod contracted_verbs;
+mod paragraph;
 mod protected_spans;
 
 use provenance_macros::rule;
@@ -15,6 +16,7 @@ pub const ANALYZER_VERSION: &str = env!("CARGO_PKG_VERSION");
 const SEMICOLON_MESSAGE: &str = "Do not use semicolons in descriptive text.";
 const CONTRACTED_VERB_MESSAGE: &str = "Use the full verb form in descriptive text.";
 const SENTENCE_LENGTH_MESSAGE: &str = "This descriptive sentence has more than 25 words.";
+const PARAGRAPH_LENGTH_MESSAGE: &str = "This paragraph has more than six sentences.";
 
 /// A report from the fixed ASD-STE100 Issue 9 analyzer.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -74,6 +76,8 @@ pub enum RuleNumber {
     FourTwo,
     #[serde(rename = "6.3")]
     SixThree,
+    #[serde(rename = "6.6")]
+    SixSix,
     #[serde(rename = "8.1")]
     EightOne,
 }
@@ -124,6 +128,7 @@ pub fn check_descriptive(text: &str) -> Report {
             }),
     );
     findings.extend(sentence_length_findings(text, &protected));
+    findings.extend(paragraph_sentence_findings(text, &protected));
     findings.sort_by_key(|finding| {
         (
             finding.span.start,
@@ -131,7 +136,8 @@ pub fn check_descriptive(text: &str) -> Report {
             match finding.rule {
                 RuleNumber::FourTwo => 0,
                 RuleNumber::SixThree => 1,
-                RuleNumber::EightOne => 2,
+                RuleNumber::SixSix => 2,
+                RuleNumber::EightOne => 3,
             },
         )
     });
@@ -142,6 +148,35 @@ pub fn check_descriptive(text: &str) -> Report {
         analyzer_version: ANALYZER_VERSION.to_owned(),
         findings,
     }
+}
+
+/// Reports each paragraph with clear boundaries that has more than six sentences.
+#[rule("rule_ste100_paragraph_sentence_limit")]
+fn paragraph_sentence_findings(
+    text: &str,
+    protected: &protected_spans::ProtectedSpans,
+) -> Vec<Finding> {
+    let Some(paragraphs) = paragraph::scan(text, protected) else {
+        return Vec::new();
+    };
+
+    paragraphs
+        .into_iter()
+        .filter_map(|paragraph| {
+            let sentences = sentence::scan_range(text, protected, paragraph.clone());
+            (sentences.len() > 6 && sentences.iter().all(|sentence| !sentence.indeterminate)).then(
+                || Finding {
+                    rule: RuleNumber::SixSix,
+                    kind: FindingKind::Violation,
+                    span: Span {
+                        start: paragraph.start,
+                        end: paragraph.end,
+                    },
+                    message: PARAGRAPH_LENGTH_MESSAGE.to_owned(),
+                },
+            )
+        })
+        .collect()
 }
 
 /// Reports each determinate descriptive sentence that has more than 25 words.
