@@ -7,6 +7,7 @@ mod inputs;
 mod proposal_surfaces;
 mod proposal_writers;
 pub(crate) mod readers;
+mod requirement_reviews;
 mod rule_writers;
 mod shaping_writers;
 mod thread_writers;
@@ -32,6 +33,7 @@ pub use inputs::{
     TypedSpecResult, UpdateQuestionInput,
 };
 pub use proposal_surfaces::{ProposalDemand, ProposalSurfaceReason, SurfacedProposal, TopicClaim};
+pub use requirement_reviews::{requirement_statement_changes, RequirementStatementChange};
 
 use crate::{layout::ProvenanceLayout, shards};
 use ideation_batches::overlay_records;

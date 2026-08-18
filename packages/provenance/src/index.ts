@@ -100,7 +100,13 @@ export interface RuleHandle {
   ): Promise<void>;
 }
 
-export type { ApplyResult, PlanResult } from "./protocol.js";
+export type {
+  AffectedRule,
+  ApplyResult,
+  PlanResult,
+  ReviewReason,
+  RuleEvidence,
+} from "./protocol.js";
 export type {
   RequirementHandle as SpecRequirement,
   RuleHandle as SpecRule,
