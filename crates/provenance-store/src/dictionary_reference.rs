@@ -43,7 +43,11 @@ pub fn index_directory() -> Option<PathBuf> {
     if let Some(directory) = std::env::var_os("PROVENANCE_STE100_INDEX_DIR") {
         return Some(PathBuf::from(directory));
     }
-    Some(data_directory()?.join("provenance").join("ste100-dictionary"))
+    Some(
+        data_directory()?
+            .join("provenance")
+            .join("ste100-dictionary"),
+    )
 }
 
 #[cfg(target_os = "windows")]

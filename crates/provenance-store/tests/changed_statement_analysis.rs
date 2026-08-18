@@ -67,8 +67,13 @@ fn comparison_checks_additions_and_statement_byte_changes_only() {
         rule("rule_changed", "New; invalid"),
     ];
 
-    let diagnostics =
-        analyze_changed_statements(&old_requirements, &old_rules, &new_requirements, &new_rules);
+    let diagnostics = analyze_changed_statements(
+        &old_requirements,
+        &old_rules,
+        &new_requirements,
+        &new_rules,
+        None,
+    );
 
     let identities = diagnostics
         .iter()
@@ -92,7 +97,7 @@ fn diagnostics_preserve_ste_report_fields_utf8_spans_and_stable_order() {
     let candidate_rules = vec![rule("rule_a", "雪;")];
 
     let diagnostics =
-        analyze_changed_statements(&[], &[], &candidate_requirements, &candidate_rules);
+        analyze_changed_statements(&[], &[], &candidate_requirements, &candidate_rules, None);
 
     let ordered = diagnostics
         .iter()
@@ -145,7 +150,9 @@ fn non_statement_changes_and_clean_changed_statements_have_no_findings() {
     metadata_change.description = Some("Unrelated metadata".to_owned());
     let clean = requirement("req_clean", "Clean statement");
 
-    assert!(analyze_changed_statements(&[base], &[], &[metadata_change, clean], &[],).is_empty());
+    assert!(
+        analyze_changed_statements(&[base], &[], &[metadata_change, clean], &[], None).is_empty()
+    );
 }
 
 #[test]
@@ -158,7 +165,7 @@ fn scope_is_part_of_identity_and_diagnostic_order() {
         requirement_in("alpha", "req_same", "A; changed"),
     ];
 
-    let diagnostics = analyze_changed_statements(&base, &[], &candidates, &[]);
+    let diagnostics = analyze_changed_statements(&base, &[], &candidates, &[], None);
 
     assert_eq!(
         diagnostics

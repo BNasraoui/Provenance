@@ -5,6 +5,7 @@ mod check;
 mod common;
 mod contributions;
 mod coverage;
+mod dictionary;
 mod dispositions;
 mod docs;
 mod domains;
@@ -66,6 +67,9 @@ pub(super) async fn dispatch(command: Command, quiet: bool) -> anyhow::Result<()
         }
         Command::Docs { command } => {
             docs::handle(command).await?;
+        }
+        Command::Dictionary { command } => {
+            dictionary::handle(command)?;
         }
         Command::Wiki { command } => {
             wiki::handle(command).await?;

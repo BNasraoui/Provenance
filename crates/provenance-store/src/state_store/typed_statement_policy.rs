@@ -44,12 +44,12 @@ pub(super) fn analyze_typed_statements(
         .filter(|resource| needs_analysis(resource))
         .flat_map(|resource| {
             let statement = statement_for(resource, requirements, rules);
-            let report = match dictionary {
-                Some(dictionary) => {
+            let report = dictionary.map_or_else(
+                || provenance_ste100::check_descriptive(statement),
+                |dictionary| {
                     provenance_ste100::check_descriptive_with_dictionary(statement, dictionary)
-                }
-                None => provenance_ste100::check_descriptive(statement),
-            };
+                },
+            );
             report
                 .findings
                 .into_iter()
