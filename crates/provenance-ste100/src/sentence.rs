@@ -56,7 +56,8 @@ pub fn scan_range(text: &str, protected: &ProtectedSpans, range: Range<usize>) -
                     && (character != '.' || !is_decimal_point(text, offset)) =>
             {
                 let end = offset + character.len_utf8();
-                let unclear_period = character == '.' && is_unclear_period_boundary(text, end);
+                let unclear_period =
+                    character == '.' && is_unclear_period_boundary(text, end, range.end);
                 push_trimmed(
                     text,
                     sentence_start,
@@ -128,8 +129,8 @@ fn is_decimal_point(text: &str, offset: usize) -> bool {
             .is_some_and(|character| character.is_ascii_digit())
 }
 
-fn is_unclear_period_boundary(text: &str, after_period: usize) -> bool {
-    let remainder = &text[after_period..];
+fn is_unclear_period_boundary(text: &str, after_period: usize, range_end: usize) -> bool {
+    let remainder = &text[after_period..range_end];
     let Some(next) = remainder.chars().next() else {
         return false;
     };

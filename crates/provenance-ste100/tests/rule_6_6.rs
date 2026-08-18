@@ -64,6 +64,28 @@ fn sentence_counts_restart_at_determinate_paragraph_boundaries() {
 }
 
 #[test]
+fn lowercase_text_in_the_next_paragraph_does_not_change_the_first_paragraph() {
+    let first = sentence_sequence(7);
+    let second = format!("lowercase start. {}", sentence_sequence(6));
+    let text = format!("{first}\n\n{second}");
+    let second_start = first.len() + "\n\n".len();
+
+    assert_eq!(
+        rule_6_6_spans(&text),
+        vec![
+            Span {
+                start: 0,
+                end: first.len(),
+            },
+            Span {
+                start: second_start,
+                end: text.len(),
+            },
+        ]
+    );
+}
+
+#[test]
 fn one_line_break_does_not_end_a_paragraph() {
     let text = format!("{}\n{}", sentence_sequence(3), sentence_sequence(4));
     assert_eq!(
