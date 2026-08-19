@@ -192,15 +192,28 @@ the link back reactivates the same binding ID, while changing the imported
 symbol updates it in place. Retired bindings remain in canonical exports as
 history but no longer make the Rule appear implemented.
 
-A test imports the actual rule handle and runs its callback in Node:
+A test imports the actual rule handle and runs its callback:
 
 ```ts
 import { shareLinks } from "./provenance.spec.js";
 
-await shareLinks.requirements.sharing.rules.expiry.verify("share-link-expiry", async () => {
-  // Exercise ordinary production code with the test runner of your choice.
-});
+await shareLinks.requirements.sharing.rules.expiry.verify(
+  "share-link-expiry",
+  async () => {
+    // Exercise ordinary production code with the test runner of your choice.
+  },
+  import.meta,
+);
 ```
+
+Every verification binding names the file the test runs in. Node and Deno report
+the calling file, so the third argument is optional there. Bun does not always
+report it: JavaScriptCore takes proper tail calls, so a test written as
+`test("...", () => rule.verify(key, callback))` leaves the SDK a stack of SDK
+frames and nothing else. Passing `import.meta` states the file on every runtime.
+`{ file: import.meta.url }` says the same thing and leaves room for `method` and
+`symbol`; under Bun `{ file: import.meta.path }` also works. A call that can
+name no file fails before the callback runs and says what to add.
 
 Pointing an owner-local verification key at a different Rule from the same
 test file retires the binding that key previously named. Calling it again

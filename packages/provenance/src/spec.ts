@@ -28,9 +28,12 @@ export interface RuleOptions {
   description?: string;
 }
 
+// `file` and `url` both say which file the verification runs in. Pass
+// `import.meta` for the whole option, or state one of them yourself.
 export interface VerifyOptions {
   method?: "exhaustion" | "property" | "examples" | "conformance" | "construction" | "proof";
   file?: string;
+  url?: string;
   symbol?: string;
 }
 

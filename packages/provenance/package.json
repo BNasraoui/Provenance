@@ -34,6 +34,7 @@
     "test": "npm run build && npm run test:runtime && npm run test:types && npm run test:packed",
     "test:runtime": "tsc -p tsconfig.test.json && node --test .test-dist/*.test.js scripts/*.test.js",
     "test:types": "node scripts/typecheck-fixtures.mjs",
+    "test:bun": "npm run build && bun test test/bun/tail-call.test.ts",
     "test:packed": "node scripts/test-packed-install.js"
   },
   "devDependencies": {

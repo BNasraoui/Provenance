@@ -50,6 +50,7 @@ import {
   type SpecHandle,
 } from "./spec.js";
 import type { DeclarationAddress } from "./protocol.js";
+import { verificationFile } from "./verification-file.js";
 
 export type VerificationMethod =
   | "exhaustion"
@@ -89,9 +90,12 @@ export interface RuleOptions {
   description?: string;
 }
 
+// `file` and `url` both say which file the verification runs in. Pass
+// `import.meta` for the whole option, or state one of them yourself.
 export interface VerifyOptions {
   method?: VerificationMethod;
   file?: string;
+  url?: string;
   symbol?: string;
 }
 
@@ -173,13 +177,13 @@ export type {
 } from "./bound-spec.js";
 
 const registry = new DeclarationRegistry();
-const moduleFile = fileURLToPath(import.meta.url);
-const specModuleFile = fileURLToPath(new URL("./spec.js", import.meta.url));
-const boundSpecModuleFile = fileURLToPath(new URL("./bound-spec.js", import.meta.url));
-const fluentSpecModuleFile = fileURLToPath(new URL("./fluent-spec.js", import.meta.url));
-const boundDeclarationsModuleFile = fileURLToPath(
-  new URL("./bound-declarations.js", import.meta.url),
-);
+const sdkFiles = [
+  "./index.js",
+  "./spec.js",
+  "./bound-spec.js",
+  "./fluent-spec.js",
+  "./bound-declarations.js",
+].map((module) => fileURLToPath(new URL(module, import.meta.url)));
 let settings = defaults();
 
 interface SdkSettings {
@@ -360,11 +364,11 @@ class Rule extends DeclaredHandle implements RuleHandle {
     callback: () => unknown | Promise<unknown>,
     options: VerifyOptions = {},
   ): Promise<void> {
-    const location = options.file === undefined ? callerLocation() : undefined;
+    const file = verificationFile(key, options, sdkFiles);
     if (registry.dirty) {
       await apply();
     }
-    await runVerification({ rule: this.id }, key, callback, options, location);
+    await runVerification({ rule: this.id }, key, callback, options, file);
   }
 }
 
@@ -386,13 +390,13 @@ async function verifyDeclaration(
   callback: () => unknown | Promise<unknown>,
   options: VerifyOptions = {},
 ): Promise<void> {
-  const location = options.file === undefined ? callerLocation() : undefined;
+  const file = verificationFile(key, options, sdkFiles);
   await runVerification(
     { declaration: { declared_by: settings.owner, address } },
     key,
     callback,
     options,
-    location,
+    file,
   );
 }
 
@@ -405,7 +409,7 @@ async function runVerification(
   key: string,
   callback: () => unknown | Promise<unknown>,
   options: VerifyOptions,
-  location?: { file: string },
+  file: string,
 ): Promise<void> {
   const run = await invokeEngine<VerificationRun>(
     engineSettings(),
@@ -415,7 +419,7 @@ async function runVerification(
       key,
       method: options.method ?? "examples",
       declared_by: settings.verificationOwner,
-      file: options.file ?? location?.file,
+      file,
       symbol: options.symbol,
     },
   );
@@ -444,32 +448,6 @@ function serializeError(error: unknown): string {
   } catch {
     return String(error);
   }
-}
-
-function callerLocation(): { file: string } | undefined {
-  const stack = new Error().stack?.split("\n").slice(1) ?? [];
-  for (const line of stack) {
-    const openParenthesis = line.lastIndexOf("(");
-    const framed = openParenthesis >= 0
-      ? line.slice(openParenthesis + 1, line.endsWith(")") ? -1 : undefined)
-      : line.trim().split(/\s+/).at(-1);
-    const match = framed?.match(/^(.*):\d+:\d+$/);
-    if (match?.[1] !== undefined) {
-      const file = match[1].startsWith("file:")
-        ? fileURLToPath(match[1])
-        : match[1];
-      if (
-        file !== moduleFile &&
-        file !== specModuleFile &&
-        file !== boundSpecModuleFile &&
-        file !== fluentSpecModuleFile &&
-        file !== boundDeclarationsModuleFile
-      ) {
-        return { file };
-      }
-    }
-  }
-  return undefined;
 }
 
 function defaults(): SdkSettings {
