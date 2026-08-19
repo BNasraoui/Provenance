@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +17,26 @@ import {
 const engine = fileURLToPath(
   new URL("../../../target/debug/provenance", import.meta.url),
 );
+
+// Captured from Bun 1.3.14 running `test("...", () => rule.verify(key, callback))`
+// against the published dist. Bun eliminates the calling frame of a tail call, so
+// the stack holds SDK frames only. `test/bun/tail-call.test.ts` runs the same shape
+// under Bun itself. SDK_DIRECTORY stands in for the directory these tests load the
+// SDK from, so the recorded frames name the running SDK modules.
+const bunTailCallStack = readFileSync(
+  fileURLToPath(new URL("../test/bun/tail-call.stack", import.meta.url)),
+  "utf8",
+).replaceAll("SDK_DIRECTORY", fileURLToPath(new URL(".", import.meta.url)).replace(/[/\\]$/, ""));
+
+function whileStackIs<T>(stack: string, call: () => T): T {
+  const prepare = Error.prepareStackTrace;
+  Error.prepareStackTrace = () => stack;
+  try {
+    return call();
+  } finally {
+    Error.prepareStackTrace = prepare;
+  }
+}
 
 function repository(): string {
   const repo = mkdtempSync(join(tmpdir(), "provenance-ts-sdk-"));
@@ -113,7 +133,7 @@ if (Object.hasOwn(responses, command)) {
   return {
     engine: executable,
     requests: () =>
-      readFileSync(log, "utf8")
+      (existsSync(log) ? readFileSync(log, "utf8") : "")
         .trim()
         .split("\n")
         .filter(Boolean)
@@ -528,4 +548,113 @@ test("verify records a failed callback and rethrows the original error", async (
   ]) as Array<{ status: string; error?: string }>;
   assert.equal(runs.at(-1)?.status, "failed");
   assert.match(runs.at(-1)?.error ?? "", /expiry assertion failed/);
+});
+
+function shareLinksSpec() {
+  return defineSpec("share-links", ({ requirement }) => {
+    const sharing = requirement("sharing", {
+      statement: "Users can securely share documentation",
+    });
+    return {
+      expiry: sharing.rule("expiry", {
+        statement: "Share links expire within 30 days",
+      }),
+    };
+  });
+}
+
+function beginVerification(
+  requests: Array<{ command: string; args: string[]; input: unknown }>,
+): Array<{ file?: string }> {
+  return requests
+    .filter(({ command }) => command === "begin-verification")
+    .map(({ input }) => input as { file?: string });
+}
+
+test("verify names import.meta when the runtime hides the calling file", async () => {
+  const recorder = recordingEngine();
+  configure({ engine: recorder.engine, repository: repository() });
+  const spec = shareLinksSpec();
+  let called = false;
+
+  const pending = whileStackIs(bunTailCallStack, () =>
+    spec.handles.expiry.verify("share-link-expiry", () => {
+      called = true;
+    }),
+  );
+
+  await assert.rejects(pending, /import\.meta\.path/);
+  await assert.rejects(pending, /share-link-expiry/);
+  assert.equal(called, false);
+  assert.deepEqual(beginVerification(recorder.requests()), []);
+});
+
+test("verify fails before applying when the stack holds no frames", async () => {
+  const recorder = recordingEngine();
+  configure({ engine: recorder.engine, repository: repository() });
+  const sharing = requirement("sharing", {
+    statement: "Users can securely share documentation",
+  });
+  const expiry = sharing.rule("expiry", { statement: "Share links expire within 30 days" });
+  let called = false;
+
+  const pending = whileStackIs("Error", () =>
+    expiry.verify("share-link-expiry", () => {
+      called = true;
+    }),
+  );
+
+  await assert.rejects(pending, /import\.meta\.path/);
+  assert.equal(called, false);
+  assert.deepEqual(recorder.requests().map(({ command }) => command), []);
+});
+
+test("verify accepts import.meta as the file the test runs in", async () => {
+  const recorder = recordingEngine();
+  configure({ engine: recorder.engine, repository: repository() });
+  const spec = shareLinksSpec();
+
+  await whileStackIs(bunTailCallStack, () =>
+    spec.handles.expiry.verify("share-link-expiry", () => undefined, import.meta),
+  );
+
+  assert.deepEqual(
+    beginVerification(recorder.requests()).map(({ file }) => file),
+    [fileURLToPath(import.meta.url)],
+  );
+});
+
+test("verify prefers the module URL over Bun's bare file name", async () => {
+  const recorder = recordingEngine();
+  configure({ engine: recorder.engine, repository: repository() });
+  const spec = shareLinksSpec();
+  // Bun's import.meta carries `url` alongside a `file` holding the file name alone.
+  const bunImportMeta = { url: import.meta.url, file: "index.test.js" };
+
+  await whileStackIs(bunTailCallStack, () =>
+    spec.handles.expiry.verify("share-link-expiry", () => undefined, bunImportMeta),
+  );
+
+  assert.deepEqual(
+    beginVerification(recorder.requests()).map(({ file }) => file),
+    [fileURLToPath(import.meta.url)],
+  );
+});
+
+test("verify accepts a module URL as the stated file", async () => {
+  const recorder = recordingEngine();
+  configure({ engine: recorder.engine, repository: repository() });
+  const spec = shareLinksSpec();
+
+  await whileStackIs(bunTailCallStack, () =>
+    spec.handles.expiry.verify("share-link-expiry", () => undefined, {
+      file: import.meta.url,
+      method: "property",
+    }),
+  );
+
+  assert.deepEqual(
+    beginVerification(recorder.requests()).map(({ file }) => file),
+    [fileURLToPath(import.meta.url)],
+  );
 });
