@@ -34,7 +34,7 @@ fn impact_reports_hop_distance_and_direction() {
 #[test]
 fn graph_evidence_lists_the_fixture_rule() {
     let (_dir, layout, scope) = seeded_layout();
-    let evidence = graph_evidence(&layout, &scope).unwrap();
+    let evidence = graph_evidence(&layout, &scope, false).unwrap();
     assert!(evidence.rule_ids.contains("rule_schads_pay_001"));
 }
 
@@ -56,7 +56,10 @@ fn retired_declarations_are_absent_from_active_health_and_gap_views() {
     assert_eq!(health.requirements.total, 0);
     assert_eq!(health.rules.total, 0);
     assert_eq!(health.gaps.total, 0);
-    assert!(graph_evidence(&layout, &scope).unwrap().rule_ids.is_empty());
+    assert!(graph_evidence(&layout, &scope, false)
+        .unwrap()
+        .rule_ids
+        .is_empty());
     assert!(prime_context(&layout, &scope, false)
         .unwrap()
         .rules

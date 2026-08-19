@@ -3,25 +3,25 @@ use camino::{Utf8Path, Utf8PathBuf};
 use std::process::{Command, Output};
 
 #[derive(Debug)]
-pub(super) struct RevisionFile {
+pub struct RevisionFile {
     pub path: Utf8PathBuf,
     pub content: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct LineSpan {
+pub struct LineSpan {
     pub start: usize,
     pub count: usize,
 }
 
 impl LineSpan {
-    pub(super) const fn intersects(self, start: usize, end: usize) -> bool {
+    pub const fn intersects(self, start: usize, end: usize) -> bool {
         self.count > 0 && self.start <= end && start < self.start + self.count
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum ChangeKind {
+pub enum ChangeKind {
     Added,
     Modified,
     Deleted,
@@ -29,7 +29,7 @@ pub(super) enum ChangeKind {
 }
 
 #[derive(Debug)]
-pub(super) struct ChangedFile {
+pub struct ChangedFile {
     pub old_path: Utf8PathBuf,
     pub new_path: Utf8PathBuf,
     pub kind: ChangeKind,
@@ -37,7 +37,7 @@ pub(super) struct ChangedFile {
     pub new_lines: Vec<LineSpan>,
 }
 
-pub(super) fn resolve_range(
+pub fn resolve_range(
     repo: &Utf8Path,
     base: Option<String>,
     head: Option<String>,
@@ -53,7 +53,7 @@ pub(super) fn resolve_range(
     Ok((resolve_commit(repo, &base)?, resolve_commit(repo, &head)?))
 }
 
-pub(super) fn revision_files(repo: &Utf8Path, revision: &str) -> anyhow::Result<Vec<RevisionFile>> {
+pub fn revision_files(repo: &Utf8Path, revision: &str) -> anyhow::Result<Vec<RevisionFile>> {
     let output = git(repo, &["ls-tree", "-rz", "--name-only", revision])?;
     let mut files = Vec::new();
     for raw_path in output.stdout.split(|byte| *byte == 0) {
@@ -78,11 +78,7 @@ pub(super) fn revision_files(repo: &Utf8Path, revision: &str) -> anyhow::Result<
     Ok(files)
 }
 
-pub(super) fn changed_files(
-    repo: &Utf8Path,
-    base: &str,
-    head: &str,
-) -> anyhow::Result<Vec<ChangedFile>> {
+pub fn changed_files(repo: &Utf8Path, base: &str, head: &str) -> anyhow::Result<Vec<ChangedFile>> {
     let output = git(
         repo,
         &["diff", "--name-status", "-z", "--find-renames", base, head],

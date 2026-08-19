@@ -151,6 +151,40 @@ replaces its active owned Requirement edge. Plan returns ownership conflicts as
 data; apply refuses them. Hard deletion and ownership transfer are separate and
 are not part of this API.
 
+Ask the engine what a change reaches before making it:
+
+```ts
+import { evidence, impact, neighbors, trace } from "@quality-sh/provenance";
+
+const reached = await impact({ id: sharing.id });
+const behind = await evidence({ rule: expiry.id, base: "origin/main" });
+```
+
+`impact` answers the Rules a Source or Requirement reaches, each with the
+implementation and verification sites behind it. `evidence` answers one Rule's
+`implementation_bindings`, `verification_bindings`, `verification_runs`,
+`latest_verification_run`, `review_required` with the `reviews` that raised it,
+and `stale`. Stale is read from a diff, so `stale` is null unless the request
+names a `base` commit.
+
+`get`, `search`, `neighbors`, `trace`, and `resolveSymbol` answer the rest:
+one record by id, records whose text contains a phrase, the records one edge
+away, a bounded walk outward, and the Rules bound to a code site. `stale`
+answers the evidence sites a commit range disturbed.
+
+```ts
+import { get, resolveSymbol, search, stale } from "@quality-sh/provenance";
+
+const around = await neighbors({ id: expiry.id, direction: "in" });
+const walked = await trace({ id: retention.id, direction: "out", max_depth: 2 });
+```
+
+Every answer opens with `protocol_version` and `operation`. Every request takes
+`include_retired`, false by default, and every answer that can hold more than
+one record takes `limit`, 50 by default and 200 at most, and reports `limit`
+and `has_more`. These functions send their request to the engine and return its
+answer unchanged: walking, filtering, and paging all happen in Rust.
+
 Removing `.implementedBy(...)` from an active Rule also retires only that
 spec's canonical implementation binding. Plan reports the Rule as updated with
 the old implementation and `null` as its field-level before/after values. Adding

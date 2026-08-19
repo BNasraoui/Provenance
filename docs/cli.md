@@ -50,6 +50,68 @@ the language callback itself runs in Node and never crosses into Rust. See
 [`typescript-sdk-poc.md`](typescript-sdk-poc.md) for the package interface,
 identity rules, limits, and experiment results.
 
+## Structured engine queries
+
+Eight read-only commands answer the questions an agent asks between a plan and
+an apply. Each one is a named operation that reads a JSON request on stdin and
+writes one bounded JSON answer, so nothing here is a query language and nothing
+needs a daemon:
+
+```sh
+printf '%s' '{"node_type":"rule","id":"<rule-id>"}' | provenance sdk get --repo . --scope default --format json
+printf '%s' '{"text":"time bounded","limit":20}' | provenance sdk search --repo . --scope default --format json
+printf '%s' '{"id":"<rule-id>","direction":"in"}' | provenance sdk neighbors --repo . --scope default --format json
+printf '%s' '{"id":"<source-id>","direction":"out","max_depth":2}' | provenance sdk trace --repo . --scope default --format json
+printf '%s' '{"id":"<requirement-id>"}' | provenance sdk impact --repo . --scope default --format json
+printf '%s' '{"rule":"<rule-id>","base":"<commit>"}' | provenance sdk evidence --repo . --scope default --format json
+printf '%s' '{"base":"<commit>","rules":["<rule-id>"]}' | provenance sdk stale --repo . --scope default --format json
+printf '%s' '{"file":"src/share-links.ts","symbol":"createShareLink"}' | provenance sdk resolve-symbol --repo . --scope default --format json
+```
+
+Every answer opens with `protocol_version` and `operation`, so a recorded
+response says which contract produced it. `sdk info` still reports the version
+the engine speaks; a request may name `protocol_version` itself, and the engine
+refuses a request written for another one. Every request accepts
+`include_retired`, false by default: active views leave retired records and
+retired bindings out, and this flag is the only way to see them. Every request
+that can match more than one record accepts `limit`, 50 by default and 200 at
+most, and its answer carries `limit` and `has_more`.
+
+`get` takes `node_type` and `id` and answers `found` plus the canonical record
+under `node`, tagged with the same `node_type`. `search` takes `text`, an
+optional `node_types` filter, and answers `nodes`: records whose id, statement,
+name, description, title, or question contains the phrase.
+
+`neighbors` takes `id`, an optional `node_type`, a `direction` of `out`, `in`,
+or `both`, and an optional `edge_types` filter. It reads exactly one edge and
+answers `neighbors`, each carrying `edge_type`, the `direction` the edge was
+read in, and the record at the other end. A Rule's neighbours are the
+Requirements that produce it; a Requirement's are its Rules and its Sources.
+`trace` takes the same parameters plus `max_depth`, 3 by default and 10 at
+most, and answers `nodes`, each carrying the `depth` it was reached at. Tracing
+out from a Source reaches its Requirements at depth 1 and the Rules they
+produce at depth 2.
+
+`impact` takes `id` and answers `affected_rules`: every Rule the record
+reaches, each with the `implementations` and `verifications` that stand behind
+it, in the same shape `plan` already reports. `resolve-symbol` takes `file` and
+an optional `symbol` or `line` and answers `rules`, the Rule records bound to
+that code site.
+
+`evidence` takes `rule` and answers what stands behind it, kept apart by kind:
+`implementation_bindings`, `verification_bindings`, `verification_runs`,
+`latest_verification_run`, `review_required` with the `reviews` that raised it,
+and `stale`. Review required means the Requirement the Rule serves was
+restated; stale means the code carrying the evidence changed. Stale is read
+from a diff and never guessed, so `stale` is null unless the request names a
+`base` commit, with `head` defaulting to the current commit.
+
+`stale` takes `base`, an optional `head`, and an optional `rules` filter, and
+answers the disturbed evidence `sites` with a `summary` counting them. It uses
+the same `touched`, `moved`, and `gone` words as [the diff evidence
+gate](#diff-evidence-gate), and reports the same sites for a named set of Rules
+instead of the whole graph.
+
 ## Rule coverage
 
 A Rule's record states the behavioural obligation; code bindings name the Rule back. In

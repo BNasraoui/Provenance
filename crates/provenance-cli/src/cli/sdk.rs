@@ -1,6 +1,17 @@
 use crate::output::OutputFormat;
 use camino::Utf8PathBuf;
-use clap::Subcommand;
+use clap::{Args, Subcommand};
+
+/// What every structured query primitive needs besides its stdin request.
+#[derive(Args)]
+pub struct QueryArgs {
+    #[arg(long)]
+    pub repo: Option<Utf8PathBuf>,
+    #[arg(long, default_value = "default")]
+    pub scope: String,
+    #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
+    pub format: OutputFormat,
+}
 
 #[derive(Subcommand)]
 pub enum SdkCommand {
@@ -62,6 +73,46 @@ pub enum SdkCommand {
         rule: Option<String>,
         #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
         format: OutputFormat,
+    },
+    /// Read one canonical record named by a JSON request on stdin.
+    Get {
+        #[command(flatten)]
+        query: QueryArgs,
+    },
+    /// Find canonical records whose text contains a phrase.
+    Search {
+        #[command(flatten)]
+        query: QueryArgs,
+    },
+    /// Read the canonical records one edge away from a record.
+    Neighbors {
+        #[command(flatten)]
+        query: QueryArgs,
+    },
+    /// Walk outward from a record for a bounded number of hops.
+    Trace {
+        #[command(flatten)]
+        query: QueryArgs,
+    },
+    /// Read the Rules a record reaches and the code standing behind them.
+    Impact {
+        #[command(flatten)]
+        query: QueryArgs,
+    },
+    /// Read the bindings, runs, review, and stale report for one Rule.
+    Evidence {
+        #[command(flatten)]
+        query: QueryArgs,
+    },
+    /// Read which evidence sites a commit range disturbed.
+    Stale {
+        #[command(flatten)]
+        query: QueryArgs,
+    },
+    /// Read the Rules bound to one code site.
+    ResolveSymbol {
+        #[command(flatten)]
+        query: QueryArgs,
     },
     /// List durable typed verification relationships.
     VerificationBindings {

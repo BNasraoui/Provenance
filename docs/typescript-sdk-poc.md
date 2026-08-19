@@ -49,6 +49,11 @@ stdin/stdout:
   evidence record.
 - `provenance sdk complete-verification` records passed or failed.
 - `provenance sdk verification-runs` queries that evidence, optionally by rule.
+- `provenance sdk get`, `search`, `neighbors`, `trace`, `impact`, `evidence`,
+  `stale`, and `resolve-symbol` answer structured questions about the graph.
+  Each is one named operation with a bounded answer, described in
+  [`cli.md`](cli.md). The TypeScript functions over them add no traversal or
+  filtering of their own.
 
 No daemon, socket, native addon, FFI object graph, or callback bridge is used
 in this POC. Each verification uses two short-lived Rust processes. Published

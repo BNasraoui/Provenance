@@ -46,7 +46,7 @@ fn write_rules(out: &mut String, rules: &[AffectedRule]) {
     }
     let _ = writeln!(out, "\nRules that deserve attention: {}", rules.len());
     for rule in rules {
-        let _ = writeln!(out, "\n  {}", rule.id.as_str());
+        let _ = writeln!(out, "\n  {}", rule.id().as_str());
         if rule.evidence.review_required() {
             out.push_str("    review required, because the requirement it serves changed:\n");
             for reason in rule.evidence.reasons() {
@@ -68,19 +68,19 @@ fn write_rules(out: &mut String, rules: &[AffectedRule]) {
 }
 
 fn write_sites(out: &mut String, rule: &AffectedRule) {
-    if rule.implementations.is_empty() {
+    if rule.implementations().is_empty() {
         out.push_str("    no implementation recorded\n");
     } else {
         out.push_str("    implemented at:\n");
-        for site in &rule.implementations {
+        for site in rule.implementations() {
             let _ = writeln!(out, "      {}", site.location());
         }
     }
-    if rule.verifications.is_empty() {
+    if rule.verifications().is_empty() {
         out.push_str("    no verification recorded\n");
     } else {
         out.push_str("    verified at:\n");
-        for site in &rule.verifications {
+        for site in rule.verifications() {
             let _ = writeln!(out, "      {}", site.location());
         }
     }
