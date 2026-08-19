@@ -16,7 +16,7 @@ struct RevisionScan {
     spans: BTreeMap<(Utf8PathBuf, usize), usize>,
 }
 
-pub(super) fn report(
+pub fn report(
     repo: &Utf8Path,
     base: String,
     head: String,

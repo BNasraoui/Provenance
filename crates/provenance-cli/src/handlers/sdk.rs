@@ -14,6 +14,8 @@ use provenance_store::{
 
 mod check_statement;
 mod plan;
+mod query;
+mod sites;
 
 pub(super) fn handle(command: SdkCommand) -> anyhow::Result<()> {
     match command {
@@ -88,6 +90,16 @@ pub(super) fn handle(command: SdkCommand) -> anyhow::Result<()> {
                 .filter(|run| rule.as_ref().is_none_or(|rule| &run.rule_id == rule))
                 .collect::<Vec<_>>();
             output::print(format, &runs)?;
+        }
+        SdkCommand::Get { query } => query::handle(query::Operation::Get, query)?,
+        SdkCommand::Search { query } => query::handle(query::Operation::Search, query)?,
+        SdkCommand::Neighbors { query } => query::handle(query::Operation::Neighbors, query)?,
+        SdkCommand::Trace { query } => query::handle(query::Operation::Trace, query)?,
+        SdkCommand::Impact { query } => query::handle(query::Operation::Impact, query)?,
+        SdkCommand::Evidence { query } => query::handle(query::Operation::Evidence, query)?,
+        SdkCommand::Stale { query } => query::handle(query::Operation::Stale, query)?,
+        SdkCommand::ResolveSymbol { query } => {
+            query::handle(query::Operation::ResolveSymbol, query)?;
         }
         SdkCommand::VerificationBindings {
             repo,

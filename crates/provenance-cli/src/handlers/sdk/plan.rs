@@ -1,13 +1,13 @@
-use camino::{Utf8Path, Utf8PathBuf};
-use provenance_core::{EdgeType, ImplementationBinding, NodeType, StableId, VerificationBinding};
-use provenance_scanner::{source_sites, SourceSiteRole};
+use camino::Utf8Path;
+use provenance_core::{EdgeType, NodeType, StableId};
 use provenance_store::{
     layout::ProvenanceLayout,
     state_store::{ReconcileState, StateStore, TypedResourceKind, TypedSpecInput, TypedSpecResult},
 };
 use serde::Serialize;
 use std::collections::BTreeMap;
-use std::fmt::Write as _;
+
+use super::sites;
 
 mod evidence;
 mod human;
@@ -23,60 +23,22 @@ pub(super) struct TypedSpecPlan {
 
 #[derive(Serialize)]
 pub(super) struct AffectedRule {
-    id: StableId,
-    implementations: Vec<ImplementationSite>,
-    verifications: Vec<VerificationSite>,
+    #[serde(flatten)]
+    rule: provenance_core::protocol::AffectedRule,
     evidence: evidence::RuleEvidence,
 }
 
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Serialize)]
-pub(super) struct ImplementationSite {
-    file: Utf8PathBuf,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    line: Option<usize>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    symbol: Option<String>,
-}
-
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Serialize)]
-pub(super) struct VerificationSite {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    key: Option<String>,
-    method: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    declared_by: Option<String>,
-    file: Utf8PathBuf,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    line: Option<usize>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    symbol: Option<String>,
-}
-
-impl ImplementationSite {
-    /// Names where a reader should look, as precisely as the record allows.
-    fn location(&self) -> String {
-        match (self.line, self.symbol.as_deref()) {
-            (Some(line), _) => format!("{}:{line}", self.file),
-            (None, Some(symbol)) => format!("{} ({symbol})", self.file),
-            (None, None) => self.file.to_string(),
-        }
+impl AffectedRule {
+    pub(super) const fn id(&self) -> &StableId {
+        &self.rule.id
     }
-}
 
-impl VerificationSite {
-    /// Names the test site and how it checks the Rule.
-    fn location(&self) -> String {
-        let mut location = self.line.map_or_else(
-            || self.file.to_string(),
-            |line| format!("{}:{line}", self.file),
-        );
-        if let Some(symbol) = &self.symbol {
-            let _ = write!(location, " ({symbol})");
-        }
-        self.key.as_ref().map_or_else(
-            || format!("{location} [{}]", self.method),
-            |key| format!("{location} [{key}, {}]", self.method),
-        )
+    pub(super) fn implementations(&self) -> &[provenance_core::protocol::ImplementationSite] {
+        &self.rule.implementations
+    }
+
+    pub(super) fn verifications(&self) -> &[provenance_core::protocol::VerificationSite] {
+        &self.rule.verifications
     }
 }
 
@@ -115,11 +77,16 @@ pub(super) fn typed_spec(
         .collect::<BTreeMap<_, _>>()
         .into_values()
         .collect::<Vec<_>>();
+    let evidence = sites::Evidence {
+        scans: &scans,
+        verifications: &bindings,
+        implementations: &implementations,
+    };
     let affected_rules = changed_rules
         .into_iter()
-        .map(|id| {
-            let rule_evidence = reviews.evidence(&id);
-            affected_rule(repo, id, &scans, &bindings, &implementations, rule_evidence)
+        .map(|id| AffectedRule {
+            evidence: reviews.evidence(&id),
+            rule: evidence.affected_rule(repo, id),
         })
         .collect();
     Ok(TypedSpecPlan {
@@ -185,79 +152,4 @@ fn push_unique(ids: &mut Vec<StableId>, id: StableId) {
     if !ids.contains(&id) {
         ids.push(id);
     }
-}
-
-fn affected_rule(
-    repo: &Utf8Path,
-    id: StableId,
-    scans: &[provenance_scanner::FileScan],
-    bindings: &[VerificationBinding],
-    typed_implementations: &[ImplementationBinding],
-    evidence: evidence::RuleEvidence,
-) -> AffectedRule {
-    let mut implementations = source_sites(scans)
-        .filter(|site| site.rule_id() == id.as_str())
-        .filter(|site| site.role() == SourceSiteRole::Implementation)
-        .map(|site| ImplementationSite {
-            file: relative(repo, site.file_path()),
-            line: Some(site.line()),
-            symbol: None,
-        })
-        .chain(
-            typed_implementations
-                .iter()
-                .filter(|binding| !binding.retired && binding.rule_id == id)
-                .map(|binding| ImplementationSite {
-                    file: binding.file.clone(),
-                    line: None,
-                    symbol: Some(binding.symbol.clone()),
-                }),
-        )
-        .collect::<Vec<_>>();
-    implementations.sort();
-    implementations.dedup();
-
-    let mut verifications = source_sites(scans)
-        .filter(|site| site.rule_id() == id.as_str())
-        .filter_map(|site| {
-            site.verification().map(|method| VerificationSite {
-                key: None,
-                method: method.to_string(),
-                declared_by: None,
-                file: relative(repo, site.file_path()),
-                line: Some(site.line()),
-                symbol: None,
-            })
-        })
-        .chain(
-            bindings
-                .iter()
-                .filter(|binding| binding.rule_id == id)
-                .map(typed_verification),
-        )
-        .collect::<Vec<_>>();
-    verifications.sort();
-    verifications.dedup();
-    AffectedRule {
-        id,
-        implementations,
-        verifications,
-        evidence,
-    }
-}
-
-fn typed_verification(binding: &VerificationBinding) -> VerificationSite {
-    VerificationSite {
-        key: Some(binding.key.clone()),
-        method: binding.method.to_string(),
-        declared_by: Some(binding.declared_by.clone()),
-        file: binding.file.clone(),
-        line: None,
-        symbol: binding.symbol.clone(),
-    }
-}
-
-fn relative(repo: &Utf8Path, file: &Utf8Path) -> Utf8PathBuf {
-    file.strip_prefix(repo)
-        .map_or_else(|_| file.to_path_buf(), Utf8Path::to_path_buf)
 }

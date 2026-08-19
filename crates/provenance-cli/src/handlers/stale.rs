@@ -5,8 +5,8 @@ use provenance_core::ScopeId;
 use provenance_store::{cache, layout::ProvenanceLayout};
 use std::fmt::Write;
 
-mod gate;
-mod git;
+pub(super) mod gate;
+pub(super) mod git;
 
 pub(super) fn handle(
     repo: &Utf8Path,
@@ -18,7 +18,7 @@ pub(super) fn handle(
     format: OutputFormat,
 ) -> anyhow::Result<()> {
     let (base, head) = git::resolve_range(repo, base, head, since)?;
-    let graph = cache::graph_evidence(&ProvenanceLayout::new(repo), &ScopeId::new(scope)?)?;
+    let graph = cache::graph_evidence(&ProvenanceLayout::new(repo), &ScopeId::new(scope)?, false)?;
     let base_files = git::revision_files(repo, &base)?;
     let head_files = git::revision_files(repo, &head)?;
     let changes = git::changed_files(repo, &base, &head)?;
