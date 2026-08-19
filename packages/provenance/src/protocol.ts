@@ -77,7 +77,20 @@ export interface ApplyResult {
   conflicts: number;
   unchanged: number;
   resources: ReconciledResource[];
+  diagnostics?: TypedSpecDiagnostic[];
   implementation_bindings?: ImplementationBinding[];
+}
+
+export interface TypedSpecDiagnostic {
+  address: string[];
+  resource_kind: "requirement" | "rule";
+  field: "statement";
+  standard: "ASD-STE100";
+  issue: 9;
+  rule: "8.1";
+  disposition: "violation";
+  span: { start: number; end: number };
+  message: string;
 }
 
 export interface ImplementationBinding {

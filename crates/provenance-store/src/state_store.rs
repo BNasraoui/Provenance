@@ -10,8 +10,10 @@ pub(crate) mod readers;
 mod requirement_reviews;
 mod rule_writers;
 mod shaping_writers;
+mod statement_policy;
 mod thread_writers;
 pub(super) mod typed_specs;
+mod typed_statement_policy;
 mod verification_bindings;
 mod verification_runs;
 mod writers;
@@ -29,11 +31,12 @@ pub use inputs::{
     CreateSynthesisPacketInput, CreateTopicInput, DeclarationReferenceInput,
     MaterializeImplementationBindingInput, MaterializeVerificationBindingInput, PostMessageInput,
     ReconcileState, ReconciledResource, TypedFieldChange, TypedImplementationInput,
-    TypedRequirementInput, TypedResourceKind, TypedRuleInput, TypedSourceInput, TypedSpecInput,
-    TypedSpecResult, UpdateQuestionInput,
+    TypedRequirementInput, TypedResourceKind, TypedRuleInput, TypedSourceInput,
+    TypedSpecDiagnostic, TypedSpecInput, TypedSpecResult, UpdateQuestionInput,
 };
 pub use proposal_surfaces::{ProposalDemand, ProposalSurfaceReason, SurfacedProposal, TopicClaim};
 pub use requirement_reviews::{requirement_statement_changes, RequirementStatementChange};
+pub use typed_statement_policy::TypedSpecWriteError;
 
 use crate::{layout::ProvenanceLayout, shards};
 use ideation_batches::overlay_records;

@@ -1,0 +1,14 @@
+[package]
+name = "provenance-ste100"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+pdf_oxide = { version = "=0.3.77", default-features = false, features = ["legacy-crypto"] }
+provenance-macros = { path = "../provenance-macros" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true

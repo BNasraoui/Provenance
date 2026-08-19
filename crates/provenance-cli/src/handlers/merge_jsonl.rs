@@ -1,8 +1,11 @@
 use crate::output;
 use camino::{Utf8Path, Utf8PathBuf};
+use provenance_macros::rule;
 use provenance_store::merge::{
-    merge_records, read_jsonl_records_for_shard, validate_merged_records, MergeOutcome,
+    changed_statement_diagnostics, merge_records, read_jsonl_records_for_shard,
+    validate_merged_records, MergeOutcome,
 };
+use provenance_store::statement_analysis::violation_error;
 
 /// Merges one JSONL shard and, when asked, writes the result.
 ///
@@ -42,6 +45,13 @@ pub(super) fn handle(
     };
     if let Some(shard_path) = target_path {
         validate_merged_records(shard_path, records)?;
+        if let Err(error) = ensure_changed_statements_are_clean(shard_path, &base_records, records)
+        {
+            if matches!(outcome, MergeOutcome::Conflicted { .. }) {
+                output::print(format, &outcome)?;
+            }
+            return Err(error);
+        }
     }
     if let Some(output_path) = output_path {
         provenance_store::jsonl::write_jsonl_atomic(&output_path, records)?;
@@ -59,4 +69,18 @@ pub(super) fn handle(
         );
     }
     Ok(())
+}
+
+#[rule("rule_ste_merge_changed_statement_gate")]
+fn ensure_changed_statements_are_clean(
+    shard_path: &Utf8Path,
+    base: &[serde_json::Value],
+    candidate: &[serde_json::Value],
+) -> anyhow::Result<()> {
+    let diagnostics = changed_statement_diagnostics(shard_path, base, candidate)?;
+    if diagnostics.is_empty() {
+        Ok(())
+    } else {
+        Err(violation_error(&diagnostics))
+    }
 }

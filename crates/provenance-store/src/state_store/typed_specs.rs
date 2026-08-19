@@ -177,8 +177,23 @@ impl StateStore {
             &rules,
         )?;
         attach_implementation_changes(&mut rule_resources, &implementation_reconciliation.changes);
+        let mut result = spec_result(
+            input.declared_by.clone(),
+            source_resources,
+            requirement_resources.clone(),
+            rule_resources.clone(),
+            implementation_reconciliation.active,
+        );
+        let dictionary = crate::dictionary_reference::load_project_dictionary(&self.layout);
+        result.diagnostics = super::typed_statement_policy::analyze_typed_statements(
+            &result.resources,
+            &requirements,
+            &rules,
+            dictionary.as_ref(),
+        );
 
         if matches!(mode, ReconcileMode::Apply) {
+            super::typed_statement_policy::ensure_typed_spec_is_writable(&result)?;
             replace_records(self, &shards::sources_path(&self.layout, scope_id), sources)?;
             replace_records(
                 self,
@@ -207,13 +222,7 @@ impl StateStore {
             self.raise_requirement_reviews(scope_id, &requirement_resources, &rule_resources)?;
         }
 
-        Ok(spec_result(
-            input.declared_by,
-            source_resources,
-            requirement_resources,
-            rule_resources,
-            implementation_reconciliation.active,
-        ))
+        Ok(result)
     }
 
     /// Puts the evidence of every Rule under a restated Requirement up for review.
@@ -349,6 +358,7 @@ fn spec_result(
         conflicts: count_state(&resources, ReconcileState::Conflict),
         unchanged: count_state(&resources, ReconcileState::Unchanged),
         resources,
+        diagnostics: Vec::new(),
         implementation_bindings,
     }
 }

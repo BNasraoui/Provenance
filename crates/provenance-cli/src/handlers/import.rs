@@ -9,6 +9,7 @@ use provenance_store::state_store::{
     ensure_asserted_contribution_unchanged, ensure_asserted_synthesis_unchanged, StateStore,
     CONTRIBUTION_KIND, SYNTHESIS_KIND,
 };
+use provenance_store::statement_analysis::{analyze_changed_statements, violation_error};
 use serde::Serialize;
 
 mod scope_writer;
@@ -233,6 +234,7 @@ fn apply_import(
     }
     write_scope(&layout, scope_id, exported)?;
     super::check::validate_repository(staged_repo)?;
+    ensure_changed_statements_are_clean(live_layout, &layout, scope_id)?;
     if !dry_run {
         provenance_store::publication::sync_tree(&layout.state_dir())?;
         let backup = transaction.join("backup-state");
@@ -283,6 +285,29 @@ fn apply_import(
     std::fs::remove_dir_all(&transaction)
         .map_err(|error| anyhow::anyhow!("remove import transaction {transaction}: {error}"))?;
     Ok(())
+}
+
+#[rule("rule_ste_import_changed_statement_gate")]
+fn ensure_changed_statements_are_clean(
+    live_layout: &ProvenanceLayout,
+    staged_layout: &ProvenanceLayout,
+    scope_id: &ScopeId,
+) -> anyhow::Result<()> {
+    let live = StateStore::new(live_layout.clone());
+    let staged = StateStore::new(staged_layout.clone());
+    let dictionary = provenance_store::dictionary_reference::load_project_dictionary(live_layout);
+    let diagnostics = analyze_changed_statements(
+        &live.list_requirements(scope_id)?,
+        &live.list_rules(scope_id)?,
+        &staged.list_requirements(scope_id)?,
+        &staged.list_rules(scope_id)?,
+        dictionary.as_ref(),
+    );
+    if diagnostics.is_empty() {
+        Ok(())
+    } else {
+        Err(violation_error(&diagnostics))
+    }
 }
 
 fn create_import_transaction(

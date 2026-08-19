@@ -15,17 +15,29 @@ provenance check --format json
 
 Agent-facing commands support JSON output for deterministic parsing.
 
+`provenance check --format json` reports `diagnostics` for new Requirement and
+Rule records and for records whose statement differs from Git HEAD. These
+ASD-STE100 findings are informational, so the command still exits successfully.
+The array is empty when no Git HEAD is available. This reporting contract does
+not set a repository-wide STE enforcement policy.
+
 ## Typed SDK protocol (POC)
 
-The TypeScript package named `provenance` uses four one-shot commands. Apply,
-begin, and complete read one JSON document from stdin; all four write JSON:
+The SDK protocol uses one-shot commands that read or write JSON:
 
 ```sh
+printf '%s' '{"statement":"Install the cover."}' | provenance sdk check-statement --format json
 provenance sdk apply --repo . --scope default --format json < declarations.json
 provenance sdk begin-verification --repo . --scope default --format json < begin.json
 provenance sdk complete-verification --repo . --scope default --format json < complete.json
 provenance sdk verification-runs --repo . --scope default --rule <canonical-rule-id> --format json
 ```
+
+`check-statement` accepts exactly one object with a string `statement` field. It
+does not resolve a repository. It writes the authoritative
+`provenance-ste100::check_descriptive` Report unchanged, including UTF-8 byte
+spans, so a later editor adapter can transport the result without implementing
+ASD-STE100 rules.
 
 `apply` creates missing records and updates records whose `declared_by` matches
 the document. It refuses unowned and foreign-owned collisions before writing,
@@ -210,8 +222,11 @@ would not survive a direct write, and git then leaves the path unmerged for a
 human. Merging is a write, so the merged records face the write-time checks:
 the edges shard is re-checked against the edge endpoint table and a merge that
 would store an invalid edge fails naming that edge, rather than storing it for
-`provenance check` to find later. Per-scope families (requirements, rules,
-sources, and the rest) merge without typed validation today.
+`provenance check` to find later. Requirement and Rule shards are deserialized
+as their record types. Their selected merge result is compared with the merge
+ancestor, and a new or statement-changed record with an ASD-STE100 Issue 9 Rule
+8.1 finding is rejected before the result path is written. Other per-scope
+families merge without typed validation today.
 
 The JSON report names each conflicting record, its kind (`add_add`,
 `divergent_edit`, or `delete_modify`), and the base, ours, and theirs

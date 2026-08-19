@@ -243,6 +243,20 @@ pub struct TypedFieldChange {
     pub after: serde_json::Value,
 }
 
+/// One ASD-STE100 violation attached to its typed declaration site.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct TypedSpecDiagnostic {
+    pub address: DeclarationAddress,
+    pub resource_kind: TypedResourceKind,
+    pub field: String,
+    pub standard: provenance_ste100::Standard,
+    pub issue: provenance_ste100::StandardIssue,
+    pub rule: provenance_ste100::RuleNumber,
+    pub disposition: provenance_ste100::FindingKind,
+    pub span: provenance_ste100::Span,
+    pub message: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct TypedSpecResult {
     pub declared_by: String,
@@ -253,6 +267,8 @@ pub struct TypedSpecResult {
     pub conflicts: usize,
     pub unchanged: usize,
     pub resources: Vec<ReconciledResource>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<TypedSpecDiagnostic>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub implementation_bindings: Vec<provenance_core::ImplementationBinding>,
 }

@@ -115,8 +115,8 @@ fn merge_refuses_to_write_an_edge_that_violates_the_endpoint_table() {
 
 #[test]
 fn merge_leaves_families_without_typed_validation_alone() {
-    // Honest scope: only the edges shard is checked today. The same records
-    // under a path that names no known family merge through unchecked.
+    // Records under a path that names no recognized family merge through
+    // unchecked.
     let directory = tempfile::tempdir().unwrap();
     let sides = Sides::write(
         directory.path(),
@@ -126,7 +126,7 @@ fn merge_leaves_families_without_typed_validation_alone() {
     );
 
     sides
-        .merge(".provenance/state/scopes/default/requirements/req.jsonl")
+        .merge(".provenance/state/scopes/default/sources/source.jsonl")
         .assert()
         .success();
     assert!(sides.output.exists());

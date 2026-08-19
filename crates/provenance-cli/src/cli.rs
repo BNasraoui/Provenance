@@ -1,3 +1,4 @@
+pub mod dictionary;
 pub mod graph;
 pub mod ideation;
 pub mod knowledge;
@@ -11,7 +12,6 @@ pub use ideation::{IdeationArtifactKind, SchemaCommand};
 use crate::output::OutputFormat;
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};
-use serde::Serialize;
 
 #[derive(Parser)]
 #[command(name = "provenance", version)]
@@ -50,6 +50,10 @@ pub enum Command {
     Docs {
         #[command(subcommand)]
         command: workspace::DocsCommand,
+    },
+    Dictionary {
+        #[command(subcommand)]
+        command: dictionary::DictionaryCommand,
     },
     Wiki {
         #[command(subcommand)]
@@ -270,9 +274,4 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t = OutputFormat::Json)]
         format: OutputFormat,
     },
-}
-
-#[derive(Serialize)]
-pub struct Status<'a> {
-    pub status: &'a str,
 }

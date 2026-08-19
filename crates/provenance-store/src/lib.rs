@@ -1,4 +1,5 @@
 pub mod cache;
+pub mod dictionary_reference;
 pub mod graph_reference;
 pub mod jsonl;
 pub mod layout;
@@ -7,3 +8,4 @@ pub mod migrations;
 pub mod publication;
 pub mod shards;
 pub mod state_store;
+pub mod statement_analysis;
