@@ -12,7 +12,23 @@ import {
 } from "./bound-spec.js";
 import type {
   ApplyResult,
+  EvidenceRequest,
+  EvidenceResponse,
+  GetRequest,
+  GetResponse,
+  ImpactRequest,
+  ImpactResponse,
+  NeighborsRequest,
+  NeighborsResponse,
   PlanResult,
+  ResolveSymbolRequest,
+  ResolveSymbolResponse,
+  SearchRequest,
+  SearchResponse,
+  StaleRequest,
+  StaleResponse,
+  TraceRequest,
+  TraceResponse,
   VerificationRun,
 } from "./protocol.js";
 import { DeclarationRegistry } from "./registry.js";
@@ -103,9 +119,40 @@ export interface RuleHandle {
 export type {
   AffectedRule,
   ApplyResult,
+  Direction,
+  EdgeType,
+  EvidenceDiffSite,
+  EvidenceDiffState,
+  EvidenceDiffSummary,
+  EvidenceRequest,
+  EvidenceResponse,
+  EvidenceSiteKind,
+  GetRequest,
+  GetResponse,
+  GraphNode,
+  ImpactRequest,
+  ImpactResponse,
+  Neighbor,
+  NeighborsRequest,
+  NeighborsResponse,
+  NodeType,
   PlanResult,
+  QueryEnvelope,
+  RequirementReview,
+  ResolveSymbolRequest,
+  ResolveSymbolResponse,
   ReviewReason,
   RuleEvidence,
+  SearchRequest,
+  SearchResponse,
+  StaleEvidence,
+  StaleRequest,
+  StaleResponse,
+  TraceRequest,
+  TraceResponse,
+  TracedNode,
+  VerificationBinding,
+  VerificationRun,
 } from "./protocol.js";
 export type {
   RequirementHandle as SpecRequirement,
@@ -231,6 +278,43 @@ export async function plan(
     "plan",
     specDocument(spec, settings.owner),
   );
+}
+
+// Structured queries. Each one sends its request to the engine and returns
+// the answer unchanged: traversal, filtering, and paging all happen in Rust.
+
+export async function get(request: GetRequest): Promise<GetResponse> {
+  return invokeEngine<GetResponse>(engineSettings(), "get", request);
+}
+
+export async function search(request: SearchRequest): Promise<SearchResponse> {
+  return invokeEngine<SearchResponse>(engineSettings(), "search", request);
+}
+
+export async function neighbors(request: NeighborsRequest): Promise<NeighborsResponse> {
+  return invokeEngine<NeighborsResponse>(engineSettings(), "neighbors", request);
+}
+
+export async function trace(request: TraceRequest): Promise<TraceResponse> {
+  return invokeEngine<TraceResponse>(engineSettings(), "trace", request);
+}
+
+export async function impact(request: ImpactRequest): Promise<ImpactResponse> {
+  return invokeEngine<ImpactResponse>(engineSettings(), "impact", request);
+}
+
+export async function evidence(request: EvidenceRequest): Promise<EvidenceResponse> {
+  return invokeEngine<EvidenceResponse>(engineSettings(), "evidence", request);
+}
+
+export async function stale(request: StaleRequest): Promise<StaleResponse> {
+  return invokeEngine<StaleResponse>(engineSettings(), "stale", request);
+}
+
+export async function resolveSymbol(
+  request: ResolveSymbolRequest,
+): Promise<ResolveSymbolResponse> {
+  return invokeEngine<ResolveSymbolResponse>(engineSettings(), "resolve-symbol", request);
 }
 
 class DeclaredHandle implements SourceHandle {
