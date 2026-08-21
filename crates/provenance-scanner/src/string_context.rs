@@ -48,7 +48,7 @@ pub fn marker_is_inside_quoted_region(text: &str, marker: usize) -> bool {
     }
 }
 
-fn quote_end(bytes: &[u8], mut index: usize, quote: u8) -> Option<usize> {
+const fn quote_end(bytes: &[u8], mut index: usize, quote: u8) -> Option<usize> {
     while index < bytes.len() {
         match bytes[index] {
             b'\\' if quote != b'`' => index += 2,
