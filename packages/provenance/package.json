@@ -6,9 +6,13 @@
   "type": "module",
   "sideEffects": false,
   "files": [
+    "bin",
     "dist",
     "README.md"
   ],
+  "bin": {
+    "provenance": "bin/provenance.mjs"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
